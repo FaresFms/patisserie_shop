@@ -1,0 +1,16 @@
+<Solution>
+    <Configurations>
+        <Platform Name="Any CPU" />
+    </Configurations>
+
+    <Folder Name="/src/">
+        <Project Path="src/Operations.Domain.Shared/Operations.Domain.Shared.csproj" />
+        <Project Path="src/Operations.Domain/Operations.Domain.csproj" />
+        <Project Path="src/Operations.Application.Contracts/Operations.Application.Contracts.csproj" />
+        <Project Path="src/Operations.Application/Operations.Application.csproj" />
+        <Project Path="src/Operations.EntityFrameworkCore/Operations.EntityFrameworkCore.csproj" />
+        <Project Path="src/Operations.HttpApi/Operations.HttpApi.csproj" />
+        <Project Path="src/Operations.HttpApi.Client/Operations.HttpApi.Client.csproj" />
+        <Project Path="src/Operations.Installer/Operations.Installer.csproj" />
+    </Folder>
+</Solution>

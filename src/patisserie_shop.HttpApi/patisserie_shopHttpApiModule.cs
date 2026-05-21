@@ -1,0 +1,43 @@
+using Operations;
+using Intelligence;
+using Localization.Resources.AbpUi;
+using patisserie_shop.Localization;
+using Volo.Abp.Account;
+using Volo.Abp.SettingManagement;
+using Volo.Abp.FeatureManagement;
+using Volo.Abp.Identity;
+using Volo.Abp.Modularity;
+using Volo.Abp.PermissionManagement.HttpApi;
+using Volo.Abp.Localization;
+
+namespace patisserie_shop;
+
+ [DependsOn(
+    typeof(OperationsHttpApiModule),
+    typeof(IntelligenceHttpApiModule),
+    typeof(patisserie_shopApplicationContractsModule),
+    typeof(AbpPermissionManagementHttpApiModule),
+    typeof(AbpSettingManagementHttpApiModule),
+    typeof(AbpAccountHttpApiModule),
+    typeof(AbpIdentityHttpApiModule),
+    typeof(AbpFeatureManagementHttpApiModule)
+    )]
+public class patisserie_shopHttpApiModule : AbpModule
+{
+    public override void ConfigureServices(ServiceConfigurationContext context)
+    {
+        ConfigureLocalization();
+    }
+
+    private void ConfigureLocalization()
+    {
+        Configure<AbpLocalizationOptions>(options =>
+        {
+            options.Resources
+                .Get<patisserie_shopResource>()
+                .AddBaseTypes(
+                    typeof(AbpUiResource)
+                );
+        });
+    }
+}

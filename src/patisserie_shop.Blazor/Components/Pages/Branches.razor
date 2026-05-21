@@ -1,0 +1,504 @@
+@page "/inventory/branches"
+@attribute [Authorize(InventoryPermissions.Branches.Default)]
+@using System.Threading
+@using System.Threading.Tasks
+@using Microsoft.AspNetCore.Authorization
+@using Volo.Abp.Application.Dtos
+@using Volo.Abp.AspNetCore.Components.Web.Theming.Layout
+@using Volo.Abp.Identity
+@using Inventory.Branches
+@using Inventory.Permissions
+@using Inventory.Localization
+@using Color = MudBlazor.Color
+@using Variant = MudBlazor.Variant
+@using Size = MudBlazor.Size
+@using Margin = MudBlazor.Margin
+@inherits patisserie_shopComponentBase
+@inject IBranchAppService BranchAppService
+@inject IIdentityUserAppService IdentityUserAppService
+@inject PageLayout PageLayout
+@inject ISnackbar Snackbar
+@inject IStringLocalizer<InventoryResource> InvL
+
+@{
+    PageLayout.Title = InvL["Branches"];
+}
+
+<SoftCard Elevation="2" Class="pa-2">
+    <SoftCardHeader>
+        <CardHeaderContent>
+            <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                <SoftIcon Icon="@Icons.Material.Filled.Storefront" Color="Color.Primary" Size="Size.Large" />
+                <SoftText Typo="Typo.h5">@InvL["Branches"]</SoftText>
+            </SoftStack>
+        </CardHeaderContent>
+        <CardHeaderActions>
+            <SoftButton Variant="Variant.Filled"
+                        Color="Color.Primary"
+                        StartIcon="@Icons.Material.Filled.Add"
+                        OnClick="OpenCreateDialog"
+                        Disabled="!_canManage">
+                @InvL["NewBranch"]
+            </SoftButton>
+        </CardHeaderActions>
+    </SoftCardHeader>
+    <SoftCardContent>
+        <SoftStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Class="mb-4">
+            <SoftTextField T="string"
+                           Placeholder="@InvL["Filter"]"
+                           @bind-Value="_filter"
+                           Variant="Variant.Outlined"
+                           Margin="Margin.Dense"
+                           Adornment="Adornment.Start"
+                           AdornmentIcon="@Icons.Material.Filled.Search"
+                           OnKeyUp="OnFilterKeyUpAsync"
+                           Immediate="true"
+                           Style="max-width: 320px;" />
+            <SoftButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="ReloadAsync" StartIcon="@Icons.Material.Filled.Refresh">
+                @L["Refresh"]
+            </SoftButton>
+        </SoftStack>
+
+        <SoftDataGrid T="BranchDto"
+                      @ref="_grid"
+                      ServerData="LoadServerData"
+                      Dense="true"
+                      Hover="true"
+                      Bordered="false"
+                      Striped="true"
+                      Loading="_loading"
+                      SortMode="SortMode.Single">
+            <Columns>
+                <PropertyColumn T="BranchDto" TProperty="string" Property="x => x.Name" Title="@InvL["Name"]" />
+                <PropertyColumn T="BranchDto" TProperty="string" Property="x => x.Address!" Title="@InvL["Address"]" Sortable="false" />
+                <PropertyColumn T="BranchDto" TProperty="string" Property="x => x.Phone!" Title="@InvL["Phone"]" Sortable="false" />
+                <PropertyColumn T="BranchDto" TProperty="string" Property="x => x.Email!" Title="@InvL["Email"]" Sortable="false" />
+                <TemplateColumn T="BranchDto" Title="@InvL["Manager"]" Sortable="false">
+                    <CellTemplate>
+                        <SoftText Typo="Typo.body2">@GetManagerName(context.Item.ManagerUserId)</SoftText>
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn T="BranchDto" Title="@InvL["IsActive"]" Sortable="true" SortBy="x => x.IsActive">
+                    <CellTemplate>
+                        @if (context.Item.IsActive)
+                        {
+                            <SoftChip T="string" Color="Color.Success" Size="Size.Small" Variant="Variant.Filled">@InvL["IsActive"]</SoftChip>
+                        }
+                        else
+                        {
+                            <SoftChip T="string" Color="Color.Default" Size="Size.Small" Variant="Variant.Outlined">-</SoftChip>
+                        }
+                    </CellTemplate>
+                </TemplateColumn>
+                <PropertyColumn T="BranchDto" TProperty="DateTime" Property="x => x.CreationTime" Title="@InvL["CreationTime"]" Format="g" />
+                <TemplateColumn T="BranchDto" Title="@InvL["Actions"]" Sortable="false">
+                    <CellTemplate>
+                        <SoftStack Row="true" Spacing="1">
+                            <SoftIconButton Icon="@Icons.Material.Filled.Edit"
+                                            Color="Color.Primary"
+                                            Size="Size.Small"
+                                            OnClick="() => OpenEditDialog(context.Item)"
+                                            Disabled="!_canManage" />
+                            <SoftIconButton Icon="@Icons.Material.Filled.Delete"
+                                            Color="Color.Error"
+                                            Size="Size.Small"
+                                            OnClick="() => DeleteAsync(context.Item)"
+                                            Disabled="!_canManage" />
+                        </SoftStack>
+                    </CellTemplate>
+                </TemplateColumn>
+            </Columns>
+            <PagerContent>
+                <MudDataGridPager T="BranchDto" />
+            </PagerContent>
+        </SoftDataGrid>
+    </SoftCardContent>
+</SoftCard>
+
+@if (_dialogVisible)
+{
+    <div class="soft-modal-backdrop" @onclick="CloseDialog">
+        <div class="soft-modal-container soft-modal-container--md" @onclick:stopPropagation="true">
+            <SoftCard Elevation="24" Class="soft-modal-card">
+                <SoftCardHeader Class="pa-4">
+                    <CardHeaderContent>
+                        <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <SoftIcon Icon="@(_editingId.HasValue ? Icons.Material.Filled.Edit : Icons.Material.Filled.AddCircle)"
+                                      Color="Color.Primary" Size="Size.Medium" />
+                            <SoftText Typo="Typo.h6">
+                                @(_editingId.HasValue ? InvL["EditBranch"] : InvL["NewBranch"])
+                            </SoftText>
+                        </SoftStack>
+                    </CardHeaderContent>
+                    <CardHeaderActions>
+                        <SoftIconButton Icon="@Icons.Material.Filled.Close"
+                                        Size="Size.Small"
+                                        OnClick="CloseDialog" />
+                    </CardHeaderActions>
+                </SoftCardHeader>
+                <SoftDivider />
+                <SoftCardContent Class="pa-4 soft-modal-body">
+                    <SoftStack Spacing="4">
+                        <div>
+                            <SoftText Typo="Typo.overline" Color="Color.Primary">@InvL["BasicInfo"]</SoftText>
+                            <SoftDivider Class="mb-3" />
+                            <SoftStack Spacing="3">
+                                <SoftTextField T="string"
+                                               Label="@InvL["Name"]"
+                                               @bind-Value="_editName"
+                                               Variant="Variant.Outlined"
+                                               MaxLength="128"
+                                               Required="true"
+                                               Immediate="true"
+                                               Adornment="Adornment.Start"
+                                               AdornmentIcon="@Icons.Material.Filled.Storefront" />
+                                <SoftLookupSelect TItem="IdentityUserDto" TValue="Guid?"
+                                                  Items="_users"
+                                                  ToValue="@(u => (Guid?)u.Id)"
+                                                  ToLabel="@(u => FormatUser(u))"
+                                                  Value="_editManagerUserId"
+                                                  ValueChanged="@(v => _editManagerUserId = v)"
+                                                  Label="@InvL["Manager"]"
+                                                  Placeholder="@InvL["SelectManager"]"
+                                                  Clearable="true"
+                                                  AdornmentIcon="@Icons.Material.Filled.Person" />
+                            </SoftStack>
+                        </div>
+
+                        <div>
+                            <SoftText Typo="Typo.overline" Color="Color.Primary">@InvL["Location"]</SoftText>
+                            <SoftDivider Class="mb-3" />
+                            <SoftTextField T="string"
+                                           Label="@InvL["Address"]"
+                                           @bind-Value="_editAddress"
+                                           Variant="Variant.Outlined"
+                                           Lines="2"
+                                           MaxLength="512"
+                                           Adornment="Adornment.Start"
+                                           AdornmentIcon="@Icons.Material.Filled.LocationOn" />
+                        </div>
+
+                        <div>
+                            <SoftText Typo="Typo.overline" Color="Color.Primary">@InvL["ContactInfo"]</SoftText>
+                            <SoftDivider Class="mb-3" />
+                            <SoftStack Row="true" Spacing="2">
+                                <SoftTextField T="string"
+                                               Label="@InvL["Phone"]"
+                                               @bind-Value="_editPhone"
+                                               Variant="Variant.Outlined"
+                                               MaxLength="32"
+                                               Adornment="Adornment.Start"
+                                               AdornmentIcon="@Icons.Material.Filled.Phone" />
+                                <SoftTextField T="string"
+                                               Label="@InvL["Email"]"
+                                               @bind-Value="_editEmail"
+                                               Variant="Variant.Outlined"
+                                               InputType="InputType.Email"
+                                               MaxLength="256"
+                                               Adornment="Adornment.Start"
+                                               AdornmentIcon="@Icons.Material.Filled.Email" />
+                            </SoftStack>
+                            <SoftCheckBox T="bool" @bind-Value="_editIsActive" Label="@InvL["IsActive"]" Color="Color.Primary" Class="mt-3" />
+                        </div>
+                    </SoftStack>
+                </SoftCardContent>
+                <SoftDivider />
+                <div class="pa-3 d-flex justify-end" style="gap: 8px;">
+                    <SoftButton Variant="Variant.Text" OnClick="CloseDialog">@L["Cancel"]</SoftButton>
+                    <SoftButton Variant="Variant.Filled"
+                                Color="Color.Primary"
+                                StartIcon="@Icons.Material.Filled.Save"
+                                OnClick="SaveAsync"
+                                Disabled="_saving">
+                        @L["Save"]
+                    </SoftButton>
+                </div>
+            </SoftCard>
+        </div>
+    </div>
+}
+
+@if (_confirmVisible)
+{
+    <div class="soft-modal-backdrop" @onclick="() => _confirmVisible = false">
+        <div class="soft-modal-container soft-modal-container--sm" @onclick:stopPropagation="true">
+            <SoftCard Elevation="24" Class="soft-modal-card">
+                <SoftCardHeader Class="pa-4">
+                    <CardHeaderContent>
+                        <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <SoftIcon Icon="@Icons.Material.Filled.Warning" Color="Color.Error" Size="Size.Medium" />
+                            <SoftText Typo="Typo.h6">@L["AreYouSure"]</SoftText>
+                        </SoftStack>
+                    </CardHeaderContent>
+                </SoftCardHeader>
+                <SoftDivider />
+                <SoftCardContent Class="pa-4">
+                    <SoftText>@L["AreYouSureToDelete"]</SoftText>
+                </SoftCardContent>
+                <SoftDivider />
+                <div class="pa-3 d-flex justify-end" style="gap: 8px;">
+                    <SoftButton Variant="Variant.Text" OnClick="() => _confirmVisible = false">@L["Cancel"]</SoftButton>
+                    <SoftButton Variant="Variant.Filled"
+                                Color="Color.Error"
+                                StartIcon="@Icons.Material.Filled.Delete"
+                                OnClick="ConfirmDeleteAsync">
+                        @L["Yes"]
+                    </SoftButton>
+                </div>
+            </SoftCard>
+        </div>
+    </div>
+}
+
+<style>
+    .soft-modal-backdrop {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 1400;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 16px;
+        animation: soft-modal-fade-in 0.15s ease-out;
+    }
+
+    .soft-modal-container {
+        width: 100%;
+        max-width: 560px;
+        animation: soft-modal-scale-in 0.18s ease-out;
+    }
+
+    .soft-modal-container--sm { max-width: 420px; }
+    .soft-modal-container--md { max-width: 640px; }
+
+    .soft-modal-card {
+        border-radius: 12px;
+        overflow: hidden;
+    }
+
+    .soft-modal-body {
+        max-height: 70vh;
+        overflow-y: auto;
+    }
+
+    @@keyframes soft-modal-fade-in {
+        from { opacity: 0; }
+        to { opacity: 1; }
+    }
+
+    @@keyframes soft-modal-scale-in {
+        from { opacity: 0; transform: scale(0.96); }
+        to { opacity: 1; transform: scale(1); }
+    }
+</style>
+
+@code {
+    private SoftDataGrid<BranchDto> _grid = null!;
+    private bool _loading;
+    private bool _saving;
+    private string? _filter;
+    private bool _canManage;
+
+    private List<IdentityUserDto> _users = new();
+    private Dictionary<Guid, string> _userNames = new();
+
+    private bool _dialogVisible;
+    private Guid? _editingId;
+    private string _editName = string.Empty;
+    private string? _editAddress;
+    private string? _editPhone;
+    private string? _editEmail;
+    private Guid? _editManagerUserId;
+    private bool _editIsActive = true;
+
+    private bool _confirmVisible;
+    private BranchDto? _pendingDelete;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _canManage = await AuthorizationService.IsGrantedAsync(InventoryPermissions.Branches.Manage);
+        await LoadUsersAsync();
+    }
+
+    private async Task LoadUsersAsync()
+    {
+        try
+        {
+            var result = await IdentityUserAppService.GetListAsync(new GetIdentityUsersInput
+            {
+                MaxResultCount = 1000,
+                Sorting = nameof(IdentityUserDto.UserName)
+            });
+            _users = result.Items.ToList();
+            _userNames = _users.ToDictionary(u => u.Id, FormatUser);
+        }
+        catch (Exception ex)
+        {
+            await HandleErrorAsync(ex);
+        }
+    }
+
+    private static string FormatUser(IdentityUserDto u)
+    {
+        var display = !string.IsNullOrWhiteSpace(u.Name) || !string.IsNullOrWhiteSpace(u.Surname)
+            ? $"{u.Name} {u.Surname}".Trim()
+            : u.UserName;
+        return string.IsNullOrWhiteSpace(display) ? u.UserName : $"{display} ({u.UserName})";
+    }
+
+    private string GetManagerName(Guid? id)
+    {
+        if (!id.HasValue) return InvL["Unassigned"];
+        return _userNames.TryGetValue(id.Value, out var name) ? name : "-";
+    }
+
+    private async Task<GridData<BranchDto>> LoadServerData(GridState<BranchDto> state, CancellationToken cancellationToken)
+    {
+        _loading = true;
+        try
+        {
+            string? sorting = null;
+            var sort = state.SortDefinitions.FirstOrDefault();
+            if (sort != null)
+            {
+                sorting = $"{sort.SortBy} {(sort.Descending ? "desc" : "asc")}";
+            }
+
+            var result = await BranchAppService.GetListAsync(new GetBranchesInput
+            {
+                Filter = _filter,
+                SkipCount = state.Page * state.PageSize,
+                MaxResultCount = state.PageSize,
+                Sorting = sorting
+            });
+
+            return new GridData<BranchDto>
+            {
+                Items = result.Items,
+                TotalItems = (int)result.TotalCount
+            };
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task OnFilterKeyUpAsync(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await ReloadAsync();
+        }
+    }
+
+    private async Task ReloadAsync()
+    {
+        if (_grid != null)
+        {
+            await _grid.ReloadServerData();
+        }
+    }
+
+    private void OpenCreateDialog()
+    {
+        _editingId = null;
+        _editName = string.Empty;
+        _editAddress = null;
+        _editPhone = null;
+        _editEmail = null;
+        _editManagerUserId = null;
+        _editIsActive = true;
+        _dialogVisible = true;
+    }
+
+    private void OpenEditDialog(BranchDto b)
+    {
+        _editingId = b.Id;
+        _editName = b.Name;
+        _editAddress = b.Address;
+        _editPhone = b.Phone;
+        _editEmail = b.Email;
+        _editManagerUserId = b.ManagerUserId;
+        _editIsActive = b.IsActive;
+        _dialogVisible = true;
+    }
+
+    private void CloseDialog()
+    {
+        _dialogVisible = false;
+    }
+
+    private async Task SaveAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_editName))
+        {
+            Snackbar.Add(L["ThisFieldIsRequired", InvL["Name"]], Severity.Warning);
+            return;
+        }
+
+        _saving = true;
+        try
+        {
+            if (_editingId.HasValue)
+            {
+                await BranchAppService.UpdateAsync(_editingId.Value, new UpdateBranchDto
+                {
+                    Name = _editName,
+                    Address = _editAddress,
+                    Phone = _editPhone,
+                    Email = _editEmail,
+                    ManagerUserId = _editManagerUserId,
+                    IsActive = _editIsActive
+                });
+            }
+            else
+            {
+                await BranchAppService.CreateAsync(new CreateBranchDto
+                {
+                    Name = _editName,
+                    Address = _editAddress,
+                    Phone = _editPhone,
+                    Email = _editEmail,
+                    ManagerUserId = _editManagerUserId,
+                    IsActive = _editIsActive
+                });
+            }
+            Snackbar.Add(L["SuccessfullySaved"], Severity.Success);
+            _dialogVisible = false;
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            await HandleErrorAsync(ex);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private void DeleteAsync(BranchDto b)
+    {
+        _pendingDelete = b;
+        _confirmVisible = true;
+    }
+
+    private async Task ConfirmDeleteAsync()
+    {
+        if (_pendingDelete == null) return;
+        try
+        {
+            await BranchAppService.DeleteAsync(_pendingDelete.Id);
+            Snackbar.Add(L["SuccessfullyDeleted"], Severity.Success);
+            _confirmVisible = false;
+            _pendingDelete = null;
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            await HandleErrorAsync(ex);
+        }
+    }
+}

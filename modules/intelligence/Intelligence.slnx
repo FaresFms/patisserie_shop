@@ -1,0 +1,16 @@
+<Solution>
+    <Configurations>
+        <Platform Name="Any CPU" />
+    </Configurations>
+
+    <Folder Name="/src/">
+        <Project Path="src/Intelligence.Domain.Shared/Intelligence.Domain.Shared.csproj" />
+        <Project Path="src/Intelligence.Domain/Intelligence.Domain.csproj" />
+        <Project Path="src/Intelligence.Application.Contracts/Intelligence.Application.Contracts.csproj" />
+        <Project Path="src/Intelligence.Application/Intelligence.Application.csproj" />
+        <Project Path="src/Intelligence.EntityFrameworkCore/Intelligence.EntityFrameworkCore.csproj" />
+        <Project Path="src/Intelligence.HttpApi/Intelligence.HttpApi.csproj" />
+        <Project Path="src/Intelligence.HttpApi.Client/Intelligence.HttpApi.Client.csproj" />
+        <Project Path="src/Intelligence.Installer/Intelligence.Installer.csproj" />
+    </Folder>
+</Solution>

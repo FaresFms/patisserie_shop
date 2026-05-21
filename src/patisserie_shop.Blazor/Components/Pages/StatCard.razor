@@ -1,0 +1,20 @@
+@using MudBlazor
+@using Size = MudBlazor.Size
+
+<div class="bi-stat-card accent-@AccentColor @(Highlight ? "highlight" : "")">
+    <div class="bi-stat-icon">
+        <MudIcon Icon="@Icon" Size="Size.Medium" />
+    </div>
+    <div>
+        <div class="bi-stat-value">@Value</div>
+        <div class="bi-stat-label">@Label</div>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Icon { get; set; } = default!;
+    [Parameter, EditorRequired] public string Label { get; set; } = default!;
+    [Parameter, EditorRequired] public string Value { get; set; } = default!;
+    [Parameter] public string AccentColor { get; set; } = "primary";
+    [Parameter] public bool Highlight { get; set; }
+}

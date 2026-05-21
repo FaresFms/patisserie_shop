@@ -1,0 +1,16 @@
+<Solution>
+    <Configurations>
+        <Platform Name="Any CPU" />
+    </Configurations>
+
+    <Folder Name="/src/">
+        <Project Path="src/Inventory.Domain.Shared/Inventory.Domain.Shared.csproj" />
+        <Project Path="src/Inventory.Domain/Inventory.Domain.csproj" />
+        <Project Path="src/Inventory.Application.Contracts/Inventory.Application.Contracts.csproj" />
+        <Project Path="src/Inventory.Application/Inventory.Application.csproj" />
+        <Project Path="src/Inventory.EntityFrameworkCore/Inventory.EntityFrameworkCore.csproj" />
+        <Project Path="src/Inventory.HttpApi/Inventory.HttpApi.csproj" />
+        <Project Path="src/Inventory.HttpApi.Client/Inventory.HttpApi.Client.csproj" />
+        <Project Path="src/Inventory.Installer/Inventory.Installer.csproj" />
+    </Folder>
+</Solution>

@@ -1,0 +1,20 @@
+@using MudBlazor
+@using Size = MudBlazor.Size
+
+<div class="sm-type-stat c-@Color @(Strong ? "strong" : "")">
+    <div class="sm-stat-icon">
+        <MudIcon Icon="@Icon" Size="Size.Small" />
+    </div>
+    <div>
+        <div class="sm-stat-value">@Value</div>
+        <div class="sm-stat-label">@Label</div>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Icon { get; set; } = default!;
+    [Parameter, EditorRequired] public string Label { get; set; } = default!;
+    [Parameter, EditorRequired] public int Value { get; set; }
+    [Parameter] public string Color { get; set; } = "default";
+    [Parameter] public bool Strong { get; set; }
+}

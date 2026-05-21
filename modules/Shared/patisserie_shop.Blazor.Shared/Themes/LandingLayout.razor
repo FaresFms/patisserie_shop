@@ -1,0 +1,14 @@
+@using patisserie_shop.Blazor.Shared.Themes.MudTheme
+@namespace patisserie_shop.Blazor.Shared.Themes
+@inherits LayoutComponentBase
+
+<MudThemeProvider Theme="@_theme" />
+<MudPopoverProvider />
+<MudDialogProvider />
+<MudSnackbarProvider />
+
+@Body
+
+@code {
+    private MudBlazor.MudTheme _theme = MyTheme.Create();
+}

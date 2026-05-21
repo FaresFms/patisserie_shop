@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls \"c:/Users/fares/OneDrive/Documents/Projects/patisserie_shop/\")",
+      "Read(//c/Users/fares/OneDrive/Documents/Projects/patisserie_shop/**)",
+      "Bash(dotnet build *)",
+      "Bash(xargs grep -l \"IDesignTimeDbContextFactory\")",
+      "Bash(dotnet ef *)"
+    ]
+  }
+}

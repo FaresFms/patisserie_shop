@@ -1,0 +1,81 @@
+@namespace patisserie_shop.Blazor.Shared.Themes
+@using Volo.Abp.DependencyInjection
+@using Volo.Abp.UI.Navigation
+
+@inherits Volo.Abp.AspNetCore.Components.Web.LeptonXLiteTheme.Themes.LeptonXLite.Navigation.MainMenu
+@attribute [ExposeServices(typeof(Volo.Abp.AspNetCore.Components.Web.LeptonXLiteTheme.Themes.LeptonXLite.Navigation.MainMenu))]
+@attribute [Dependency(ReplaceServices = true)]
+
+@inject IMenuManager MenuManager
+
+<SoftNavMenu>
+    @if (_menu != null)
+    {
+        @foreach (var item in _menu.Items)
+        {
+            @if (!item.Items.Any())
+            {
+                <SoftNavLink Href="@item.Url" Icon="@MapIcon(item.Icon)">
+                    @item.DisplayName
+                </SoftNavLink>
+            }
+            else
+            {
+                <SoftNavGroup Title="@item.DisplayName" Icon="@MapIcon(item.Icon)" Expanded="true">
+                    @foreach (var child in item.Items)
+                    {
+                        <SoftNavLink Href="@child.Url" Icon="@MapIcon(child.Icon)">
+                            @child.DisplayName
+                        </SoftNavLink>
+                    }
+                </SoftNavGroup>
+            }
+        }
+    }
+</SoftNavMenu>
+
+@code {
+    private ApplicationMenu? _menu;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _menu = await MenuManager.GetAsync(StandardMenus.Main);
+    }
+
+    private static string MapIcon(string? icon) => icon switch
+    {
+        "fas fa-home"          or "fa fa-home" => Icons.Material.Filled.Home,
+        "fas fa-cog"           or "fa fa-cog"  => Icons.Material.Filled.Settings,
+        "fas fa-user"          or "fa fa-user" => Icons.Material.Filled.Person,
+        "fas fa-users"                         => Icons.Material.Filled.Group,
+        "fas fa-money-bill-alt"                => Icons.Material.Filled.Payments,
+        "fas fa-exchange-alt"                  => Icons.Material.Filled.SwapHoriz,
+        "fas fa-receipt"                       => Icons.Material.Filled.Receipt,
+        "fas fa-history"                       => Icons.Material.Filled.History,
+        "fas fa-wallet"                        => Icons.Material.Filled.AccountBalanceWallet,
+        "fas fa-briefcase"                     => Icons.Material.Filled.BusinessCenter,
+        "fas fa-user-tie"                      => Icons.Material.Filled.SupportAgent,
+        "fas fa-store"                         => Icons.Material.Filled.Store,
+        "fas fa-cogs"                          => Icons.Material.Filled.Tune,
+        "fas fa-sitemap"                       => Icons.Material.Filled.AccountTree,
+        "fas fa-book"                          => Icons.Material.Filled.MenuBook,
+        "fas fa-money-bill-wave"               => Icons.Material.Filled.AttachMoney,
+        "fas fa-id-card"                       => Icons.Material.Filled.Badge,
+        "fas fa-building"                      => Icons.Material.Filled.Business,
+        "fas fa-truck-moving"                  => Icons.Material.Filled.LocalShipping,
+        "fas fa-university"                    => Icons.Material.Filled.AccountBalance,
+        "fas fa-hand-holding-usd"              => Icons.Material.Filled.RequestQuote,
+        "fas fa-gavel"                         => Icons.Material.Filled.Gavel,
+        "fas fa-chart-line"                    => Icons.Material.Filled.ShowChart,
+        "fas fa-paper-plane"                   => Icons.Material.Filled.Send,
+        "fas fa-sliders-h"                     => Icons.Material.Filled.Tune,
+        "fas fa-clipboard-list"                => Icons.Material.Filled.Assignment,
+        "fas fa-piggy-bank"                    => Icons.Material.Filled.Savings,
+        "fas fa-percentage"                    => Icons.Material.Filled.Percent,
+        "fas fa-arrow-up"                      => Icons.Material.Filled.ArrowUpward,
+        "fas fa-lock"                          => Icons.Material.Filled.Lock,
+        "fas fa-headset"                       => Icons.Material.Filled.HeadsetMic,
+        "fas fa-file-invoice-dollar"           => Icons.Material.Filled.ReceiptLong,
+        _                                      => Icons.Material.Filled.FiberManualRecord
+    };
+}

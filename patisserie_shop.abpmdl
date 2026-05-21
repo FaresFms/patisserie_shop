@@ -1,0 +1,115 @@
+{
+  "template": "app",
+  "imports": {
+    "Volo.Abp.LeptonXLiteTheme": {
+      "version": "5.1.1",
+      "isInstalled": true,
+      "creationTime": "05/14/2026 19:09:02 +00:00"
+    },
+    "Volo.Abp.Account": {
+      "version": "10.1.1",
+      "isInstalled": true,
+      "creationTime": "05/14/2026 19:09:02 +00:00"
+    },
+    "Volo.Abp.OpenIddict": {
+      "version": "10.1.1",
+      "isInstalled": true,
+      "creationTime": "05/14/2026 19:09:02 +00:00"
+    },
+    "Volo.Abp.Identity": {
+      "version": "10.1.1",
+      "isInstalled": true,
+      "creationTime": "05/14/2026 19:09:02 +00:00"
+    },
+    "Volo.Abp.SettingManagement": {
+      "version": "10.1.1",
+      "isInstalled": true,
+      "creationTime": "05/14/2026 19:09:02 +00:00"
+    },
+    "Volo.Abp.PermissionManagement": {
+      "version": "10.1.1",
+      "isInstalled": true,
+      "creationTime": "05/14/2026 19:09:02 +00:00"
+    },
+    "Volo.Abp.FeatureManagement": {
+      "version": "10.1.1",
+      "isInstalled": true,
+      "creationTime": "05/14/2026 19:09:02 +00:00"
+    },
+    "Intelligence": {
+      "path": "modules/intelligence/Intelligence.abpmdl",
+      "isInstalled": true
+    },
+    "Operations": {
+      "path": "modules/operations/Operations.abpmdl",
+      "isInstalled": true
+    },
+    "Inventory": {
+      "path": "modules/inventory/Inventory.abpmdl"
+    }
+  },
+  "folders": {
+    "items": {
+      "src": {},
+      "test": {}
+    }
+  },
+  "packages": {
+    "patisserie_shop.Application": {
+      "path": "src/patisserie_shop.Application/patisserie_shop.Application.abppkg",
+      "folder": "src"
+    },
+    "patisserie_shop.Application.Tests": {
+      "path": "test/patisserie_shop.Application.Tests/patisserie_shop.Application.Tests.abppkg",
+      "folder": "test"
+    },
+    "patisserie_shop.Domain.Shared": {
+      "path": "src/patisserie_shop.Domain.Shared/patisserie_shop.Domain.Shared.abppkg",
+      "folder": "src"
+    },
+    "patisserie_shop.Application.Contracts": {
+      "path": "src/patisserie_shop.Application.Contracts/patisserie_shop.Application.Contracts.abppkg",
+      "folder": "src"
+    },
+    "patisserie_shop.HttpApi": {
+      "path": "src/patisserie_shop.HttpApi/patisserie_shop.HttpApi.abppkg",
+      "folder": "src"
+    },
+    "patisserie_shop.HttpApi.Client": {
+      "path": "src/patisserie_shop.HttpApi.Client/patisserie_shop.HttpApi.Client.abppkg",
+      "folder": "src"
+    },
+    "patisserie_shop.EntityFrameworkCore.Tests": {
+      "path": "test/patisserie_shop.EntityFrameworkCore.Tests/patisserie_shop.EntityFrameworkCore.Tests.abppkg",
+      "folder": "test"
+    },
+    "patisserie_shop.EntityFrameworkCore": {
+      "path": "src/patisserie_shop.EntityFrameworkCore/patisserie_shop.EntityFrameworkCore.abppkg",
+      "folder": "src"
+    },
+    "patisserie_shop.TestBase": {
+      "path": "test/patisserie_shop.TestBase/patisserie_shop.TestBase.abppkg",
+      "folder": "test"
+    },
+    "patisserie_shop.Domain.Tests": {
+      "path": "test/patisserie_shop.Domain.Tests/patisserie_shop.Domain.Tests.abppkg",
+      "folder": "test"
+    },
+    "patisserie_shop.HttpApi.Client.ConsoleTestApp": {
+      "path": "test/patisserie_shop.HttpApi.Client.ConsoleTestApp/patisserie_shop.HttpApi.Client.ConsoleTestApp.abppkg",
+      "folder": "test"
+    },
+    "patisserie_shop.DbMigrator": {
+      "path": "src/patisserie_shop.DbMigrator/patisserie_shop.DbMigrator.abppkg",
+      "folder": "src"
+    },
+    "patisserie_shop.Blazor": {
+      "path": "src/patisserie_shop.Blazor/patisserie_shop.Blazor.abppkg",
+      "folder": "src"
+    },
+    "patisserie_shop.Domain": {
+      "path": "src/patisserie_shop.Domain/patisserie_shop.Domain.abppkg",
+      "folder": "src"
+    }
+  }
+}

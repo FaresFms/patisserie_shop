@@ -1,0 +1,660 @@
+@page "/inventory/products"
+@attribute [Authorize(InventoryPermissions.Products.Default)]
+@using System.Threading
+@using System.Threading.Tasks
+@using Microsoft.AspNetCore.Authorization
+@using Volo.Abp.Application.Dtos
+@using Volo.Abp.AspNetCore.Components.Web.Theming.Layout
+@using Inventory.Categories
+@using Inventory.Suppliers
+@using Inventory.Products
+@using Inventory.Permissions
+@using Inventory.Localization
+@using Color = MudBlazor.Color
+@using Variant = MudBlazor.Variant
+@using Size = MudBlazor.Size
+@using Margin = MudBlazor.Margin
+@inherits patisserie_shopComponentBase
+@inject IProductAppService ProductAppService
+@inject ICategoryAppService CategoryAppService
+@inject ISupplierAppService SupplierAppService
+@inject PageLayout PageLayout
+@inject ISnackbar Snackbar
+@inject IStringLocalizer<InventoryResource> InvL
+
+@{
+    PageLayout.Title = InvL["Products"];
+}
+
+<SoftCard Elevation="2" Class="pa-2">
+    <SoftCardHeader>
+        <CardHeaderContent>
+            <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                <SoftIcon Icon="@Icons.Material.Filled.Inventory2" Color="Color.Primary" Size="Size.Large" />
+                <SoftText Typo="Typo.h5">@InvL["Products"]</SoftText>
+            </SoftStack>
+        </CardHeaderContent>
+        <CardHeaderActions>
+            <SoftButton Variant="Variant.Filled"
+                        Color="Color.Primary"
+                        StartIcon="@Icons.Material.Filled.Add"
+                        OnClick="OpenCreateDialog"
+                        Disabled="!_canManage">
+                @InvL["NewProduct"]
+            </SoftButton>
+        </CardHeaderActions>
+    </SoftCardHeader>
+    <SoftCardContent>
+        <SoftStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Class="mb-4 flex-wrap">
+            <SoftTextField T="string"
+                           Placeholder="@InvL["Filter"]"
+                           @bind-Value="_filter"
+                           Variant="Variant.Outlined"
+                           Margin="Margin.Dense"
+                           Adornment="Adornment.Start"
+                           AdornmentIcon="@Icons.Material.Filled.Search"
+                           OnKeyUp="OnFilterKeyUpAsync"
+                           Immediate="true"
+                           Style="min-width: 240px; max-width: 320px;" />
+
+            <div style="min-width: 220px;">
+                <SoftLookupSelect TItem="CategoryDto" TValue="Guid?"
+                                  Items="_categories"
+                                  ToValue="@(c => (Guid?)c.Id)"
+                                  ToLabel="@(c => c.Name)"
+                                  Value="_filterCategoryId"
+                                  ValueChanged="OnFilterCategoryChangedAsync"
+                                  Label="@InvL["AllCategories"]"
+                                  Margin="Margin.Dense"
+                                  Clearable="true"
+                                  Dense="true"
+                                  AdornmentIcon="@Icons.Material.Filled.Category" />
+            </div>
+
+            <div style="min-width: 220px;">
+                <SoftLookupSelect TItem="SupplierDto" TValue="Guid?"
+                                  Items="_suppliers"
+                                  ToValue="@(s => (Guid?)s.Id)"
+                                  ToLabel="@(s => s.Name)"
+                                  Value="_filterSupplierId"
+                                  ValueChanged="OnFilterSupplierChangedAsync"
+                                  Label="@InvL["AllSuppliers"]"
+                                  Margin="Margin.Dense"
+                                  Clearable="true"
+                                  Dense="true"
+                                  AdornmentIcon="@Icons.Material.Filled.LocalShipping" />
+            </div>
+
+            <SoftButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="ReloadAsync" StartIcon="@Icons.Material.Filled.Refresh">
+                @L["Refresh"]
+            </SoftButton>
+        </SoftStack>
+
+        <SoftDataGrid T="ProductDto"
+                      @ref="_grid"
+                      ServerData="LoadServerData"
+                      Dense="true"
+                      Hover="true"
+                      Bordered="false"
+                      Striped="true"
+                      Loading="_loading"
+                      SortMode="SortMode.Single">
+            <Columns>
+                <PropertyColumn T="ProductDto" TProperty="string" Property="x => x.SKU" Title="@InvL["SKU"]" />
+                <PropertyColumn T="ProductDto" TProperty="string" Property="x => x.Name" Title="@InvL["Name"]" />
+                <TemplateColumn T="ProductDto" Title="@InvL["Category"]" Sortable="false">
+                    <CellTemplate>
+                        <SoftText Typo="Typo.body2">@GetCategoryName(context.Item.CategoryId)</SoftText>
+                    </CellTemplate>
+                </TemplateColumn>
+                <PropertyColumn T="ProductDto" TProperty="string" Property="x => x.Unit" Title="@InvL["Unit"]" Sortable="false" />
+                <TemplateColumn T="ProductDto" Title="@InvL["SalePrice"]" SortBy="x => x.SalePrice">
+                    <CellTemplate>
+                        <SoftText>@FormatMoney(context.Item.SalePrice, context.Item.Currency)</SoftText>
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn T="ProductDto" Title="@InvL["IsActive"]" Sortable="true" SortBy="x => x.IsActive">
+                    <CellTemplate>
+                        @if (context.Item.IsActive)
+                        {
+                            <SoftChip T="string" Color="Color.Success" Size="Size.Small" Variant="Variant.Filled">@InvL["IsActive"]</SoftChip>
+                        }
+                        else
+                        {
+                            <SoftChip T="string" Color="Color.Default" Size="Size.Small" Variant="Variant.Outlined">-</SoftChip>
+                        }
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn T="ProductDto" Title="@InvL["Actions"]" Sortable="false">
+                    <CellTemplate>
+                        <SoftStack Row="true" Spacing="1">
+                            <SoftIconButton Icon="@Icons.Material.Filled.Edit"
+                                            Color="Color.Primary"
+                                            Size="Size.Small"
+                                            OnClick="() => OpenEditDialog(context.Item)"
+                                            Disabled="!_canManage" />
+                            <SoftIconButton Icon="@Icons.Material.Filled.Delete"
+                                            Color="Color.Error"
+                                            Size="Size.Small"
+                                            OnClick="() => DeleteAsync(context.Item)"
+                                            Disabled="!_canManage" />
+                        </SoftStack>
+                    </CellTemplate>
+                </TemplateColumn>
+            </Columns>
+            <PagerContent>
+                <MudDataGridPager T="ProductDto" />
+            </PagerContent>
+        </SoftDataGrid>
+    </SoftCardContent>
+</SoftCard>
+
+@if (_dialogVisible)
+{
+    <div class="soft-modal-backdrop" @onclick="CloseDialog">
+        <div class="soft-modal-container soft-modal-container--lg" @onclick:stopPropagation="true">
+            <SoftCard Elevation="24" Class="soft-modal-card">
+                <SoftCardHeader Class="pa-4">
+                    <CardHeaderContent>
+                        <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <SoftIcon Icon="@(_editingId.HasValue ? Icons.Material.Filled.Edit : Icons.Material.Filled.AddCircle)"
+                                      Color="Color.Primary" Size="Size.Medium" />
+                            <SoftText Typo="Typo.h6">
+                                @(_editingId.HasValue ? InvL["EditProduct"] : InvL["NewProduct"])
+                            </SoftText>
+                        </SoftStack>
+                    </CardHeaderContent>
+                    <CardHeaderActions>
+                        <SoftIconButton Icon="@Icons.Material.Filled.Close"
+                                        Size="Size.Small"
+                                        OnClick="CloseDialog" />
+                    </CardHeaderActions>
+                </SoftCardHeader>
+                <SoftDivider />
+                <SoftCardContent Class="pa-4 soft-modal-body">
+                    <SoftStack Spacing="4">
+                        <div>
+                            <SoftText Typo="Typo.overline" Color="Color.Primary">@InvL["BasicInfo"]</SoftText>
+                            <SoftDivider Class="mb-3" />
+                            <SoftStack Spacing="3">
+                                <SoftStack Row="true" Spacing="2">
+                                    <SoftTextField T="string"
+                                                   Label="@InvL["Name"]"
+                                                   @bind-Value="_editName"
+                                                   Variant="Variant.Outlined"
+                                                   MaxLength="128"
+                                                   Required="true"
+                                                   Immediate="true"
+                                                   Adornment="Adornment.Start"
+                                                   AdornmentIcon="@Icons.Material.Filled.LocalDining" />
+                                    <SoftTextField T="string"
+                                                   Label="@InvL["SKU"]"
+                                                   @bind-Value="_editSku"
+                                                   Variant="Variant.Outlined"
+                                                   MaxLength="64"
+                                                   Required="true"
+                                                   Immediate="true"
+                                                   Adornment="Adornment.Start"
+                                                   AdornmentIcon="@Icons.Material.Filled.QrCode" />
+                                </SoftStack>
+                                <SoftStack Row="true" Spacing="2">
+                                    <SoftLookupSelect TItem="CategoryDto" TValue="Guid?"
+                                                      Items="_categories"
+                                                      ToValue="@(c => (Guid?)c.Id)"
+                                                      ToLabel="@(c => c.Name)"
+                                                      Value="_editCategoryId"
+                                                      ValueChanged="@(v => _editCategoryId = v)"
+                                                      Label="@InvL["Category"]"
+                                                      Placeholder="@InvL["SelectCategory"]"
+                                                      Required="true"
+                                                      AdornmentIcon="@Icons.Material.Filled.Category" />
+                                    <SoftLookupSelect TItem="SupplierDto" TValue="Guid?"
+                                                      Items="_suppliers"
+                                                      ToValue="@(s => (Guid?)s.Id)"
+                                                      ToLabel="@(s => s.Name)"
+                                                      Value="_editSupplierId"
+                                                      ValueChanged="@(v => _editSupplierId = v)"
+                                                      Label="@InvL["DefaultSupplier"]"
+                                                      Placeholder="@InvL["SelectSupplier"]"
+                                                      Clearable="true"
+                                                      AdornmentIcon="@Icons.Material.Filled.LocalShipping" />
+                                </SoftStack>
+                                <SoftTextField T="string"
+                                               Label="@InvL["Description"]"
+                                               @bind-Value="_editDescription"
+                                               Variant="Variant.Outlined"
+                                               Lines="2"
+                                               MaxLength="1024" />
+                            </SoftStack>
+                        </div>
+
+                        <div>
+                            <SoftText Typo="Typo.overline" Color="Color.Primary">@InvL["Pricing"]</SoftText>
+                            <SoftDivider Class="mb-3" />
+                            <SoftStack Row="true" Spacing="2">
+                                <SoftTextField T="string"
+                                               Label="@InvL["Unit"]"
+                                               @bind-Value="_editUnit"
+                                               Variant="Variant.Outlined"
+                                               MaxLength="32"
+                                               Required="true"
+                                               Adornment="Adornment.Start"
+                                               AdornmentIcon="@Icons.Material.Filled.Straighten" />
+                                <SoftNumericField T="decimal"
+                                                  Label="@InvL["CostPrice"]"
+                                                  @bind-Value="_editCostPrice"
+                                                  Variant="Variant.Outlined"
+                                                  Min="0"
+                                                  Adornment="Adornment.Start"
+                                                  AdornmentIcon="@Icons.Material.Filled.AttachMoney" />
+                                <SoftNumericField T="decimal"
+                                                  Label="@InvL["SalePrice"]"
+                                                  @bind-Value="_editSalePrice"
+                                                  Variant="Variant.Outlined"
+                                                  Min="0"
+                                                  Adornment="Adornment.Start"
+                                                  AdornmentIcon="@Icons.Material.Filled.Sell" />
+                                <SoftTextField T="string"
+                                               Label="@InvL["Currency"]"
+                                               @bind-Value="_editCurrency"
+                                               Variant="Variant.Outlined"
+                                               MaxLength="3"
+                                               Required="true"
+                                               Style="max-width: 110px;" />
+                            </SoftStack>
+                        </div>
+
+                        <div>
+                            <SoftText Typo="Typo.overline" Color="Color.Primary">@InvL["Stock"]</SoftText>
+                            <SoftDivider Class="mb-3" />
+                            <SoftStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                                <SoftNumericField T="int"
+                                                  Label="@InvL["ReorderLevel"]"
+                                                  @bind-Value="_editReorderLevel"
+                                                  Variant="Variant.Outlined"
+                                                  Min="0"
+                                                  Adornment="Adornment.Start"
+                                                  AdornmentIcon="@Icons.Material.Filled.Warning"
+                                                  Style="max-width: 200px;" />
+                                <SoftTextField T="string"
+                                               Label="@InvL["ImageUrl"]"
+                                               @bind-Value="_editImageUrl"
+                                               Variant="Variant.Outlined"
+                                               MaxLength="512"
+                                               Adornment="Adornment.Start"
+                                               AdornmentIcon="@Icons.Material.Filled.Image" />
+                                <SoftCheckBox T="bool" @bind-Value="_editIsActive" Label="@InvL["IsActive"]" Color="Color.Primary" />
+                            </SoftStack>
+                        </div>
+                    </SoftStack>
+                </SoftCardContent>
+                <SoftDivider />
+                <div class="pa-3 d-flex justify-end" style="gap: 8px;">
+                    <SoftButton Variant="Variant.Text" OnClick="CloseDialog">@L["Cancel"]</SoftButton>
+                    <SoftButton Variant="Variant.Filled"
+                                Color="Color.Primary"
+                                StartIcon="@Icons.Material.Filled.Save"
+                                OnClick="SaveAsync"
+                                Disabled="_saving">
+                        @L["Save"]
+                    </SoftButton>
+                </div>
+            </SoftCard>
+        </div>
+    </div>
+}
+
+@if (_confirmVisible)
+{
+    <div class="soft-modal-backdrop" @onclick="() => _confirmVisible = false">
+        <div class="soft-modal-container soft-modal-container--sm" @onclick:stopPropagation="true">
+            <SoftCard Elevation="24" Class="soft-modal-card">
+                <SoftCardHeader Class="pa-4">
+                    <CardHeaderContent>
+                        <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <SoftIcon Icon="@Icons.Material.Filled.Warning" Color="Color.Error" Size="Size.Medium" />
+                            <SoftText Typo="Typo.h6">@L["AreYouSure"]</SoftText>
+                        </SoftStack>
+                    </CardHeaderContent>
+                </SoftCardHeader>
+                <SoftDivider />
+                <SoftCardContent Class="pa-4">
+                    <SoftText>@L["AreYouSureToDelete"]</SoftText>
+                </SoftCardContent>
+                <SoftDivider />
+                <div class="pa-3 d-flex justify-end" style="gap: 8px;">
+                    <SoftButton Variant="Variant.Text" OnClick="() => _confirmVisible = false">@L["Cancel"]</SoftButton>
+                    <SoftButton Variant="Variant.Filled"
+                                Color="Color.Error"
+                                StartIcon="@Icons.Material.Filled.Delete"
+                                OnClick="ConfirmDeleteAsync">
+                        @L["Yes"]
+                    </SoftButton>
+                </div>
+            </SoftCard>
+        </div>
+    </div>
+}
+
+<style>
+    .soft-modal-backdrop {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 1400;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 16px;
+        animation: soft-modal-fade-in 0.15s ease-out;
+    }
+
+    .soft-modal-container {
+        width: 100%;
+        max-width: 560px;
+        animation: soft-modal-scale-in 0.18s ease-out;
+    }
+
+    .soft-modal-container--sm { max-width: 420px; }
+    .soft-modal-container--md { max-width: 640px; }
+    .soft-modal-container--lg { max-width: 880px; }
+
+    .soft-modal-card {
+        border-radius: 12px;
+        overflow: hidden;
+    }
+
+    .soft-modal-body {
+        max-height: 70vh;
+        overflow-y: auto;
+    }
+
+    @@keyframes soft-modal-fade-in {
+        from { opacity: 0; }
+        to { opacity: 1; }
+    }
+
+    @@keyframes soft-modal-scale-in {
+        from { opacity: 0; transform: scale(0.96); }
+        to { opacity: 1; transform: scale(1); }
+    }
+</style>
+
+@code {
+    private SoftDataGrid<ProductDto> _grid = null!;
+    private bool _loading;
+    private bool _saving;
+    private string? _filter;
+    private Guid? _filterCategoryId;
+    private Guid? _filterSupplierId;
+    private bool _canManage;
+
+    private List<CategoryDto> _categories = new();
+    private List<SupplierDto> _suppliers = new();
+    private Dictionary<Guid, string> _categoryNames = new();
+
+    private bool _dialogVisible;
+    private Guid? _editingId;
+    private string _editName = string.Empty;
+    private string _editSku = string.Empty;
+    private string? _editDescription;
+    private Guid? _editCategoryId;
+    private Guid? _editSupplierId;
+    private string _editUnit = "pcs";
+    private decimal _editCostPrice;
+    private decimal _editSalePrice;
+    private string _editCurrency = "USD";
+    private int _editReorderLevel = 5;
+    private string? _editImageUrl;
+    private bool _editIsActive = true;
+
+    private bool _confirmVisible;
+    private ProductDto? _pendingDelete;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _canManage = await AuthorizationService.IsGrantedAsync(InventoryPermissions.Products.Manage);
+        await LoadLookupsAsync();
+    }
+
+    private async Task LoadLookupsAsync()
+    {
+        try
+        {
+            var cats = await CategoryAppService.GetListAsync(new GetCategoriesInput
+            {
+                IsActive = true,
+                MaxResultCount = 1000,
+                Sorting = nameof(CategoryDto.Name)
+            });
+            _categories = cats.Items.ToList();
+            _categoryNames = _categories.ToDictionary(c => c.Id, c => c.Name);
+
+            var sups = await SupplierAppService.GetListAsync(new GetSuppliersInput
+            {
+                IsActive = true,
+                MaxResultCount = 1000,
+                Sorting = nameof(SupplierDto.Name)
+            });
+            _suppliers = sups.Items.ToList();
+        }
+        catch (Exception ex)
+        {
+            await HandleErrorAsync(ex);
+        }
+    }
+
+    private string GetCategoryName(Guid id) => _categoryNames.TryGetValue(id, out var n) ? n : "-";
+
+    private static string FormatMoney(decimal amount, string currency)
+    {
+        return $"{amount:N2} {currency}";
+    }
+
+    private async Task<GridData<ProductDto>> LoadServerData(GridState<ProductDto> state, CancellationToken cancellationToken)
+    {
+        _loading = true;
+        try
+        {
+            string? sorting = null;
+            var sort = state.SortDefinitions.FirstOrDefault();
+            if (sort != null)
+            {
+                sorting = $"{sort.SortBy} {(sort.Descending ? "desc" : "asc")}";
+            }
+
+            var result = await ProductAppService.GetListAsync(new GetProductsInput
+            {
+                Filter = _filter,
+                CategoryId = _filterCategoryId,
+                DefaultSupplierId = _filterSupplierId,
+                SkipCount = state.Page * state.PageSize,
+                MaxResultCount = state.PageSize,
+                Sorting = sorting
+            });
+
+            return new GridData<ProductDto>
+            {
+                Items = result.Items,
+                TotalItems = (int)result.TotalCount
+            };
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task OnFilterKeyUpAsync(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await ReloadAsync();
+        }
+    }
+
+    private async Task OnFilterCategoryChangedAsync(Guid? value)
+    {
+        _filterCategoryId = value;
+        await ReloadAsync();
+    }
+
+    private async Task OnFilterSupplierChangedAsync(Guid? value)
+    {
+        _filterSupplierId = value;
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        if (_grid != null)
+        {
+            await _grid.ReloadServerData();
+        }
+    }
+
+    private void OpenCreateDialog()
+    {
+        _editingId = null;
+        _editName = string.Empty;
+        _editSku = string.Empty;
+        _editDescription = null;
+        _editCategoryId = null;
+        _editSupplierId = null;
+        _editUnit = "pcs";
+        _editCostPrice = 0m;
+        _editSalePrice = 0m;
+        _editCurrency = "USD";
+        _editReorderLevel = 5;
+        _editImageUrl = null;
+        _editIsActive = true;
+        _dialogVisible = true;
+    }
+
+    private void OpenEditDialog(ProductDto p)
+    {
+        _editingId = p.Id;
+        _editName = p.Name;
+        _editSku = p.SKU;
+        _editDescription = p.Description;
+        _editCategoryId = p.CategoryId;
+        _editSupplierId = p.DefaultSupplierId;
+        _editUnit = p.Unit;
+        _editCostPrice = p.CostPrice;
+        _editSalePrice = p.SalePrice;
+        _editCurrency = p.Currency;
+        _editReorderLevel = p.ReorderLevel;
+        _editImageUrl = p.ImageUrl;
+        _editIsActive = p.IsActive;
+        _dialogVisible = true;
+    }
+
+    private void CloseDialog()
+    {
+        _dialogVisible = false;
+    }
+
+    private async Task SaveAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_editName))
+        {
+            Snackbar.Add(L["ThisFieldIsRequired", InvL["Name"]], Severity.Warning);
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(_editSku))
+        {
+            Snackbar.Add(L["ThisFieldIsRequired", InvL["SKU"]], Severity.Warning);
+            return;
+        }
+        if (!_editCategoryId.HasValue)
+        {
+            Snackbar.Add(L["ThisFieldIsRequired", InvL["Category"]], Severity.Warning);
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(_editUnit))
+        {
+            Snackbar.Add(L["ThisFieldIsRequired", InvL["Unit"]], Severity.Warning);
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(_editCurrency) || _editCurrency.Length != 3)
+        {
+            Snackbar.Add(L["ThisFieldIsRequired", InvL["Currency"]], Severity.Warning);
+            return;
+        }
+
+        _saving = true;
+        try
+        {
+            if (_editingId.HasValue)
+            {
+                await ProductAppService.UpdateAsync(_editingId.Value, new UpdateProductDto
+                {
+                    CategoryId = _editCategoryId.Value,
+                    DefaultSupplierId = _editSupplierId,
+                    Name = _editName,
+                    SKU = _editSku,
+                    Description = _editDescription,
+                    Unit = _editUnit,
+                    CostPrice = _editCostPrice,
+                    SalePrice = _editSalePrice,
+                    Currency = _editCurrency.ToUpper(),
+                    ReorderLevel = _editReorderLevel,
+                    ImageUrl = _editImageUrl,
+                    IsActive = _editIsActive
+                });
+            }
+            else
+            {
+                await ProductAppService.CreateAsync(new CreateProductDto
+                {
+                    CategoryId = _editCategoryId.Value,
+                    DefaultSupplierId = _editSupplierId,
+                    Name = _editName,
+                    SKU = _editSku,
+                    Description = _editDescription,
+                    Unit = _editUnit,
+                    CostPrice = _editCostPrice,
+                    SalePrice = _editSalePrice,
+                    Currency = _editCurrency.ToUpper(),
+                    ReorderLevel = _editReorderLevel,
+                    ImageUrl = _editImageUrl,
+                    IsActive = _editIsActive
+                });
+            }
+            Snackbar.Add(L["SuccessfullySaved"], Severity.Success);
+            _dialogVisible = false;
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            await HandleErrorAsync(ex);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private void DeleteAsync(ProductDto p)
+    {
+        _pendingDelete = p;
+        _confirmVisible = true;
+    }
+
+    private async Task ConfirmDeleteAsync()
+    {
+        if (_pendingDelete == null) return;
+        try
+        {
+            await ProductAppService.DeleteAsync(_pendingDelete.Id);
+            Snackbar.Add(L["SuccessfullyDeleted"], Severity.Success);
+            _confirmVisible = false;
+            _pendingDelete = null;
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            await HandleErrorAsync(ex);
+        }
+    }
+}

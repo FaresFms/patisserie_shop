@@ -1,0 +1,427 @@
+@page "/inventory/stock-movements"
+@attribute [Authorize(InventoryPermissions.StockMovements.Default)]
+@using System.Threading
+@using System.Threading.Tasks
+@using Microsoft.AspNetCore.Authorization
+@using Volo.Abp.Application.Dtos
+@using Volo.Abp.AspNetCore.Components.Web.Theming.Layout
+@using Inventory
+@using Inventory.Branches
+@using Inventory.Products
+@using Inventory.StockMovements
+@using Inventory.Permissions
+@using Inventory.Localization
+@using Color = MudBlazor.Color
+@using Variant = MudBlazor.Variant
+@using Size = MudBlazor.Size
+@using Margin = MudBlazor.Margin
+@inherits patisserie_shopComponentBase
+@inject IStockMovementAppService MovementAppService
+@inject IBranchAppService BranchAppService
+@inject IProductAppService ProductAppService
+@inject PageLayout PageLayout
+@inject IStringLocalizer<InventoryResource> InvL
+
+@{
+    PageLayout.Title = InvL["StockMovements"];
+}
+
+<SoftStack Spacing="3">
+
+    <SoftCard Elevation="2" Class="pa-2">
+        <SoftCardHeader>
+            <CardHeaderContent>
+                <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <SoftIcon Icon="@Icons.Material.Filled.History" Color="Color.Primary" Size="Size.Large" />
+                    <div>
+                        <SoftText Typo="Typo.h5">@InvL["AuditLog"]</SoftText>
+                        <SoftText Typo="Typo.caption" Color="Color.Default">@InvL["AuditLogSubtitle"]</SoftText>
+                    </div>
+                </SoftStack>
+            </CardHeaderContent>
+            <CardHeaderActions>
+                <SoftChip T="string" Icon="@Icons.Material.Filled.Lock" Color="Color.Default" Size="Size.Small" Variant="Variant.Outlined">
+                    @L["ReadOnly"]
+                </SoftChip>
+            </CardHeaderActions>
+        </SoftCardHeader>
+        <SoftCardContent>
+
+            <SoftStack Row="true" Spacing="1" Class="mb-3 flex-wrap">
+                <SoftButton Size="Size.Small" Variant="@(GetRangeVariant("today"))" Color="Color.Primary"
+                            OnClick="@(() => ApplyRangeAsync("today"))">@InvL["Range:Today"]</SoftButton>
+                <SoftButton Size="Size.Small" Variant="@(GetRangeVariant("7"))" Color="Color.Primary"
+                            OnClick="@(() => ApplyRangeAsync("7"))">@InvL["Range:7Days"]</SoftButton>
+                <SoftButton Size="Size.Small" Variant="@(GetRangeVariant("30"))" Color="Color.Primary"
+                            OnClick="@(() => ApplyRangeAsync("30"))">@InvL["Range:30Days"]</SoftButton>
+                <SoftButton Size="Size.Small" Variant="@(GetRangeVariant("all"))" Color="Color.Primary"
+                            OnClick="@(() => ApplyRangeAsync("all"))">@InvL["Range:All"]</SoftButton>
+            </SoftStack>
+
+            <SoftStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Class="mb-3 flex-wrap">
+                <SoftTextField T="string"
+                               Placeholder="@InvL["Filter"]"
+                               @bind-Value="_filter"
+                               Variant="Variant.Outlined"
+                               Margin="Margin.Dense"
+                               Adornment="Adornment.Start"
+                               AdornmentIcon="@Icons.Material.Filled.Search"
+                               OnKeyUp="OnFilterKeyUpAsync"
+                               Immediate="true"
+                               Style="min-width: 220px; max-width: 320px;" />
+
+                <div style="min-width: 200px;">
+                    <SoftLookupSelect TItem="BranchLookupDto" TValue="Guid?"
+                                      Items="_branches"
+                                      ToValue="@(b => (Guid?)b.Id)"
+                                      ToLabel="@(b => b.Name)"
+                                      Value="_branchId"
+                                      ValueChanged="OnBranchChangedAsync"
+                                      Label="@InvL["AllBranches"]"
+                                      Margin="Margin.Dense"
+                                      Clearable="true"
+                                      Dense="true"
+                                      AdornmentIcon="@Icons.Material.Filled.Store" />
+                </div>
+
+                <div style="min-width: 240px;">
+                    <SoftLookupSelect TItem="ProductLookupDto" TValue="Guid?"
+                                      Items="_products"
+                                      ToValue="@(p => (Guid?)p.Id)"
+                                      ToLabel="@(p => $"{p.SKU} — {p.Name}")"
+                                      Value="_productId"
+                                      ValueChanged="OnProductChangedAsync"
+                                      Label="@InvL["AllProducts"]"
+                                      Margin="Margin.Dense"
+                                      Clearable="true"
+                                      Dense="true"
+                                      AdornmentIcon="@Icons.Material.Filled.LocalDining" />
+                </div>
+
+                <div style="min-width: 200px;">
+                    <SoftLookupSelect TItem="MoveTypeOption" TValue="string"
+                                      Items="_typeOptions"
+                                      ToValue="@(o => o.Value)"
+                                      ToLabel="@(o => o.Label)"
+                                      Value="_movementType"
+                                      ValueChanged="OnTypeChangedAsync"
+                                      Label="@InvL["AllMovementTypes"]"
+                                      Margin="Margin.Dense"
+                                      Clearable="true"
+                                      Dense="true"
+                                      AdornmentIcon="@Icons.Material.Filled.Sync" />
+                </div>
+
+                <SoftButton Variant="Variant.Outlined" Color="Color.Primary"
+                            OnClick="ReloadAsync" StartIcon="@Icons.Material.Filled.Refresh">
+                    @L["Refresh"]
+                </SoftButton>
+            </SoftStack>
+
+            <div class="sm-type-strip">
+                <TypeStat Color="success" Icon="@Icons.Material.Filled.ShoppingCart"
+                          Label="@InvL["MovementType:Purchase"]" Value="@_summary.PurchaseCount" />
+                <TypeStat Color="info" Icon="@Icons.Material.Filled.PointOfSale"
+                          Label="@InvL["MovementType:Sale"]" Value="@_summary.SaleCount" />
+                <TypeStat Color="tertiary" Icon="@Icons.Material.Filled.CallReceived"
+                          Label="@InvL["MovementType:TransferIn"]" Value="@_summary.TransferInCount" />
+                <TypeStat Color="warning" Icon="@Icons.Material.Filled.CallMade"
+                          Label="@InvL["MovementType:TransferOut"]" Value="@_summary.TransferOutCount" />
+                <TypeStat Color="default" Icon="@Icons.Material.Filled.Tune"
+                          Label="@InvL["MovementType:ManualAdjustment"]" Value="@_summary.ManualAdjustmentCount" />
+                <TypeStat Color="primary" Icon="@Icons.Material.Filled.Functions"
+                          Label="@L["Total"]" Value="@_summary.TotalCount" Strong="true" />
+            </div>
+
+        </SoftCardContent>
+    </SoftCard>
+
+    <SoftCard Elevation="2" Class="pa-2">
+        <SoftCardContent>
+            <SoftDataGrid T="StockMovementDto"
+                          @ref="_grid"
+                          ServerData="LoadServerData"
+                          Dense="true"
+                          Hover="true"
+                          Bordered="false"
+                          Loading="_loading"
+                          SortMode="SortMode.Single">
+                <Columns>
+                    <TemplateColumn T="StockMovementDto" Title="@InvL["DateTime"]" SortBy="x => x.CreationTime">
+                        <CellTemplate>
+                            <SoftStack Spacing="0">
+                                <SoftText Typo="Typo.body2" Style="font-weight:500;">@context.Item.CreationTime.ToString("MMM d, yyyy")</SoftText>
+                                <SoftText Typo="Typo.caption" Color="Color.Default">@context.Item.CreationTime.ToString("HH:mm:ss")</SoftText>
+                            </SoftStack>
+                        </CellTemplate>
+                    </TemplateColumn>
+                    <PropertyColumn T="StockMovementDto" TProperty="string" Property="x => x.BranchName" Title="@InvL["Branch"]" />
+                    <TemplateColumn T="StockMovementDto" Title="@InvL["Product"]" SortBy="x => x.ProductName">
+                        <CellTemplate>
+                            <SoftStack Spacing="0">
+                                <SoftText Typo="Typo.body2" Style="font-weight:500;">@context.Item.ProductName</SoftText>
+                                <SoftText Typo="Typo.caption" Color="Color.Default">@context.Item.ProductSKU</SoftText>
+                            </SoftStack>
+                        </CellTemplate>
+                    </TemplateColumn>
+                    <TemplateColumn T="StockMovementDto" Title="@InvL["MovementType"]" SortBy="x => x.MovementType">
+                        <CellTemplate>
+                            <div class="@($"sm-type-chip sm-type-{context.Item.MovementType.ToLower()}")">
+                                <MudIcon Icon="@MovementIcon(context.Item.MovementType)" Size="Size.Small" />
+                                <span>@MovementLabel(context.Item.MovementType)</span>
+                            </div>
+                        </CellTemplate>
+                    </TemplateColumn>
+                    <TemplateColumn T="StockMovementDto" Title="@InvL["Delta"]" SortBy="x => x.Quantity">
+                        <CellTemplate>
+                            @{
+                                var q = context.Item.Quantity;
+                                var color = q > 0 ? Color.Success : (q < 0 ? Color.Error : Color.Default);
+                                var sign = q > 0 ? "+" : "";
+                            }
+                            <SoftChip T="string" Color="@color" Size="Size.Small" Variant="Variant.Filled">
+                                @sign@q @context.Item.ProductUnit
+                            </SoftChip>
+                        </CellTemplate>
+                    </TemplateColumn>
+                    <PropertyColumn T="StockMovementDto" TProperty="int" Property="x => x.QuantityBefore" Title="@InvL["Before"]" />
+                    <PropertyColumn T="StockMovementDto" TProperty="int" Property="x => x.QuantityAfter" Title="@InvL["After"]" />
+                    <TemplateColumn T="StockMovementDto" Title="@InvL["Notes"]" Sortable="false">
+                        <CellTemplate>
+                            @if (!string.IsNullOrWhiteSpace(context.Item.Notes))
+                            {
+                                <SoftText Typo="Typo.body2" Style="max-width: 320px; display:inline-block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+                                    @context.Item.Notes
+                                </SoftText>
+                            }
+                            else
+                            {
+                                <SoftText Typo="Typo.caption" Color="Color.Default">—</SoftText>
+                            }
+                        </CellTemplate>
+                    </TemplateColumn>
+                </Columns>
+                <NoRecordsContent>
+                    <SoftStack AlignItems="AlignItems.Center" Spacing="2" Class="pa-6">
+                        <SoftIcon Icon="@Icons.Material.Outlined.Inbox" Style="font-size: 56px; opacity: 0.4;" />
+                        <SoftText Typo="Typo.body1" Color="Color.Default">@InvL["NoMovements"]</SoftText>
+                    </SoftStack>
+                </NoRecordsContent>
+                <PagerContent>
+                    <MudDataGridPager T="StockMovementDto" />
+                </PagerContent>
+            </SoftDataGrid>
+        </SoftCardContent>
+    </SoftCard>
+</SoftStack>
+
+<style>
+    .sm-type-strip {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+        gap: 8px;
+        padding: 8px 0;
+    }
+    .sm-type-stat {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 12px;
+        border-radius: 10px;
+        border: 1px solid var(--mud-palette-lines-default);
+        background: var(--mud-palette-background);
+    }
+    .sm-type-stat .sm-stat-icon {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 34px; height: 34px;
+        border-radius: 8px;
+    }
+    .sm-type-stat .sm-stat-value { font-size: 1.1rem; font-weight: 700; line-height: 1; }
+    .sm-type-stat .sm-stat-label { font-size: 0.72rem; opacity: 0.75; }
+    .sm-type-stat.strong { box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+
+    .sm-type-stat.c-success .sm-stat-icon { background: rgba(76,175,80,0.15); color: #2e7d32; }
+    .sm-type-stat.c-info    .sm-stat-icon { background: rgba(3,169,244,0.15); color: #0277bd; }
+    .sm-type-stat.c-tertiary .sm-stat-icon { background: rgba(0,150,136,0.15); color: #00796b; }
+    .sm-type-stat.c-warning .sm-stat-icon { background: rgba(255,152,0,0.18); color: #e65100; }
+    .sm-type-stat.c-default .sm-stat-icon { background: rgba(120,120,120,0.15); color: #555; }
+    .sm-type-stat.c-primary .sm-stat-icon { background: rgba(var(--mud-palette-primary-rgb), 0.15); color: var(--mud-palette-primary); }
+
+    .sm-type-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 3px 10px;
+        border-radius: 999px;
+        font-size: 0.78rem;
+        font-weight: 500;
+        line-height: 1.4;
+    }
+    .sm-type-purchase         { background: rgba(76,175,80,0.15);  color: #2e7d32; }
+    .sm-type-sale             { background: rgba(3,169,244,0.15);  color: #0277bd; }
+    .sm-type-transferin       { background: rgba(0,150,136,0.15);  color: #00796b; }
+    .sm-type-transferout      { background: rgba(255,152,0,0.18);  color: #e65100; }
+    .sm-type-manualadjustment { background: rgba(120,120,120,0.18); color: #444; }
+</style>
+
+@code {
+    private SoftDataGrid<StockMovementDto> _grid = null!;
+    private bool _loading;
+
+    private string? _filter;
+    private Guid? _branchId;
+    private Guid? _productId;
+    private string? _movementType;
+    private DateTime? _fromDate;
+    private DateTime? _toDate;
+    private string _activeRange = "7";
+
+    private List<BranchLookupDto> _branches = new();
+    private List<ProductLookupDto> _products = new();
+    private List<MoveTypeOption> _typeOptions = new();
+    private StockMovementSummaryDto _summary = new();
+
+    public record MoveTypeOption(string Value, string Label);
+
+    protected override async Task OnInitializedAsync()
+    {
+        _typeOptions = new List<MoveTypeOption>
+        {
+            new(StockMovementTypes.Purchase, InvL["MovementType:Purchase"]),
+            new(StockMovementTypes.Sale, InvL["MovementType:Sale"]),
+            new(StockMovementTypes.TransferIn, InvL["MovementType:TransferIn"]),
+            new(StockMovementTypes.TransferOut, InvL["MovementType:TransferOut"]),
+            new(StockMovementTypes.ManualAdjustment, InvL["MovementType:ManualAdjustment"]),
+        };
+
+        ApplyRange(_activeRange);
+
+        try
+        {
+            _branches = await BranchAppService.GetLookupAsync();
+            _products = await ProductAppService.GetLookupAsync();
+        }
+        catch (Exception ex)
+        {
+            await HandleErrorAsync(ex);
+        }
+    }
+
+    private async Task<GridData<StockMovementDto>> LoadServerData(GridState<StockMovementDto> state, CancellationToken cancellationToken)
+    {
+        _loading = true;
+        try
+        {
+            string? sorting = null;
+            var sort = state.SortDefinitions.FirstOrDefault();
+            if (sort != null)
+            {
+                sorting = $"{sort.SortBy} {(sort.Descending ? "desc" : "asc")}";
+            }
+
+            var input = BuildInput(state.Page * state.PageSize, state.PageSize, sorting);
+
+            var listTask = MovementAppService.GetListAsync(input);
+            var summaryTask = MovementAppService.GetSummaryAsync(input);
+            await Task.WhenAll(listTask, summaryTask);
+
+            _summary = summaryTask.Result;
+            var result = listTask.Result;
+
+            return new GridData<StockMovementDto>
+            {
+                Items = result.Items,
+                TotalItems = (int)result.TotalCount
+            };
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private GetStockMovementsInput BuildInput(int skip, int take, string? sorting)
+    {
+        return new GetStockMovementsInput
+        {
+            Filter = _filter,
+            BranchId = _branchId,
+            ProductId = _productId,
+            MovementType = _movementType,
+            FromDate = _fromDate,
+            ToDate = _toDate,
+            SkipCount = skip,
+            MaxResultCount = take,
+            Sorting = sorting
+        };
+    }
+
+    private async Task OnFilterKeyUpAsync(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await ReloadAsync();
+    }
+
+    private async Task OnBranchChangedAsync(Guid? v) { _branchId = v; await ReloadAsync(); }
+    private async Task OnProductChangedAsync(Guid? v) { _productId = v; await ReloadAsync(); }
+    private async Task OnTypeChangedAsync(string? v) { _movementType = v; await ReloadAsync(); }
+
+    private async Task ReloadAsync()
+    {
+        if (_grid != null) await _grid.ReloadServerData();
+    }
+
+    private async Task ApplyRangeAsync(string range)
+    {
+        ApplyRange(range);
+        await ReloadAsync();
+    }
+
+    private void ApplyRange(string range)
+    {
+        _activeRange = range;
+        var now = DateTime.Now;
+        switch (range)
+        {
+            case "today":
+                _fromDate = now.Date;
+                _toDate = now.Date.AddDays(1).AddTicks(-1);
+                break;
+            case "7":
+                _fromDate = now.Date.AddDays(-6);
+                _toDate = null;
+                break;
+            case "30":
+                _fromDate = now.Date.AddDays(-29);
+                _toDate = null;
+                break;
+            default:
+                _fromDate = null;
+                _toDate = null;
+                break;
+        }
+    }
+
+    private Variant GetRangeVariant(string range) => _activeRange == range ? Variant.Filled : Variant.Outlined;
+
+    private static string MovementIcon(string type) => type switch
+    {
+        StockMovementTypes.Purchase => Icons.Material.Filled.ShoppingCart,
+        StockMovementTypes.Sale => Icons.Material.Filled.PointOfSale,
+        StockMovementTypes.TransferIn => Icons.Material.Filled.CallReceived,
+        StockMovementTypes.TransferOut => Icons.Material.Filled.CallMade,
+        StockMovementTypes.ManualAdjustment => Icons.Material.Filled.Tune,
+        _ => Icons.Material.Filled.SwapVert
+    };
+
+    private string MovementLabel(string type) => type switch
+    {
+        StockMovementTypes.Purchase => InvL["MovementType:Purchase"],
+        StockMovementTypes.Sale => InvL["MovementType:Sale"],
+        StockMovementTypes.TransferIn => InvL["MovementType:TransferIn"],
+        StockMovementTypes.TransferOut => InvL["MovementType:TransferOut"],
+        StockMovementTypes.ManualAdjustment => InvL["MovementType:ManualAdjustment"],
+        _ => type
+    };
+}

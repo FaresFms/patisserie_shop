@@ -1,0 +1,56 @@
+<Solution>
+    <Configurations>
+        <Platform Name="Any CPU" />
+    </Configurations>
+    <Folder Name="/src/">
+        <Project Path="src/patisserie_shop.Domain/patisserie_shop.Domain.csproj" />
+        <Project Path="src/patisserie_shop.Application/patisserie_shop.Application.csproj" />
+        <Project Path="src/patisserie_shop.EntityFrameworkCore/patisserie_shop.EntityFrameworkCore.csproj" />
+        <Project Path="src/patisserie_shop.Domain.Shared/patisserie_shop.Domain.Shared.csproj" />
+        <Project Path="src/patisserie_shop.Application.Contracts/patisserie_shop.Application.Contracts.csproj" />
+        <Project Path="src/patisserie_shop.HttpApi/patisserie_shop.HttpApi.csproj" />
+        <Project Path="src/patisserie_shop.HttpApi.Client/patisserie_shop.HttpApi.Client.csproj" />
+        <Project Path="src/patisserie_shop.DbMigrator/patisserie_shop.DbMigrator.csproj" />
+        <Project Path="src/patisserie_shop.Blazor/patisserie_shop.Blazor.csproj" />
+    </Folder>
+    <Folder Name="/modules/Shared/">
+        <Project Path="modules/Shared/patisserie_shop.Blazor.Shared/patisserie_shop.Blazor.Shared.csproj" />
+    </Folder>
+    <Folder Name="/modules/inventory/">
+        <Project Path="modules/inventory/src/Inventory.Domain.Shared/Inventory.Domain.Shared.csproj" />
+        <Project Path="modules/inventory/src/Inventory.Domain/Inventory.Domain.csproj" />
+        <Project Path="modules/inventory/src/Inventory.Application.Contracts/Inventory.Application.Contracts.csproj" />
+        <Project Path="modules/inventory/src/Inventory.Application/Inventory.Application.csproj" />
+        <Project Path="modules/inventory/src/Inventory.EntityFrameworkCore/Inventory.EntityFrameworkCore.csproj" />
+        <Project Path="modules/inventory/src/Inventory.HttpApi/Inventory.HttpApi.csproj" />
+        <Project Path="modules/inventory/src/Inventory.HttpApi.Client/Inventory.HttpApi.Client.csproj" />
+        <Project Path="modules/inventory/src/Inventory.Installer/Inventory.Installer.csproj" />
+    </Folder>
+    <Folder Name="/modules/operations/">
+        <Project Path="modules/operations/src/Operations.Domain.Shared/Operations.Domain.Shared.csproj" />
+        <Project Path="modules/operations/src/Operations.Domain/Operations.Domain.csproj" />
+        <Project Path="modules/operations/src/Operations.Application.Contracts/Operations.Application.Contracts.csproj" />
+        <Project Path="modules/operations/src/Operations.Application/Operations.Application.csproj" />
+        <Project Path="modules/operations/src/Operations.EntityFrameworkCore/Operations.EntityFrameworkCore.csproj" />
+        <Project Path="modules/operations/src/Operations.HttpApi/Operations.HttpApi.csproj" />
+        <Project Path="modules/operations/src/Operations.HttpApi.Client/Operations.HttpApi.Client.csproj" />
+        <Project Path="modules/operations/src/Operations.Installer/Operations.Installer.csproj" />
+    </Folder>
+    <Folder Name="/modules/intelligence/">
+        <Project Path="modules/intelligence/src/Intelligence.Domain.Shared/Intelligence.Domain.Shared.csproj" />
+        <Project Path="modules/intelligence/src/Intelligence.Domain/Intelligence.Domain.csproj" />
+        <Project Path="modules/intelligence/src/Intelligence.Application.Contracts/Intelligence.Application.Contracts.csproj" />
+        <Project Path="modules/intelligence/src/Intelligence.Application/Intelligence.Application.csproj" />
+        <Project Path="modules/intelligence/src/Intelligence.EntityFrameworkCore/Intelligence.EntityFrameworkCore.csproj" />
+        <Project Path="modules/intelligence/src/Intelligence.HttpApi/Intelligence.HttpApi.csproj" />
+        <Project Path="modules/intelligence/src/Intelligence.HttpApi.Client/Intelligence.HttpApi.Client.csproj" />
+        <Project Path="modules/intelligence/src/Intelligence.Installer/Intelligence.Installer.csproj" />
+    </Folder>
+    <Folder Name="/test/">
+        <Project Path="test/patisserie_shop.Application.Tests/patisserie_shop.Application.Tests.csproj" />
+        <Project Path="test/patisserie_shop.EntityFrameworkCore.Tests/patisserie_shop.EntityFrameworkCore.Tests.csproj" />
+        <Project Path="test/patisserie_shop.TestBase/patisserie_shop.TestBase.csproj" />
+        <Project Path="test/patisserie_shop.Domain.Tests/patisserie_shop.Domain.Tests.csproj" />
+        <Project Path="test/patisserie_shop.HttpApi.Client.ConsoleTestApp/patisserie_shop.HttpApi.Client.ConsoleTestApp.csproj" />
+    </Folder>
+</Solution>

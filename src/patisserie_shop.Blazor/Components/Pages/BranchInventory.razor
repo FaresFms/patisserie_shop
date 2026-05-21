@@ -1,0 +1,761 @@
+@page "/inventory/branch-inventory"
+@attribute [Authorize(InventoryPermissions.BranchInventory.Default)]
+@using System.Threading
+@using System.Threading.Tasks
+@using Microsoft.AspNetCore.Authorization
+@using Volo.Abp.Application.Dtos
+@using Volo.Abp.AspNetCore.Components.Web.Theming.Layout
+@using Inventory
+@using Inventory.Branches
+@using Inventory.BranchInventory
+@using Inventory.Products
+@using Inventory.Permissions
+@using Inventory.Localization
+@using Color = MudBlazor.Color
+@using Variant = MudBlazor.Variant
+@using Size = MudBlazor.Size
+@using Margin = MudBlazor.Margin
+@inherits patisserie_shopComponentBase
+@inject IBranchInventoryAppService InventoryAppService
+@inject IBranchAppService BranchAppService
+@inject IProductAppService ProductAppService
+@inject PageLayout PageLayout
+@inject ISnackbar Snackbar
+@inject IStringLocalizer<InventoryResource> InvL
+
+@{
+    PageLayout.Title = InvL["BranchInventory"];
+}
+
+<SoftStack Spacing="3">
+
+    <SoftCard Elevation="2" Class="pa-2">
+        <SoftCardContent>
+            <SoftStack Row="true" Spacing="3" AlignItems="AlignItems.Center" Class="flex-wrap">
+                <SoftIcon Icon="@Icons.Material.Filled.Warehouse" Color="Color.Primary" Size="Size.Large" />
+                <div style="min-width: 280px; flex: 1;">
+                    <SoftLookupSelect TItem="BranchLookupDto" TValue="Guid?"
+                                      Items="_accessibleBranches"
+                                      ToValue="@(b => (Guid?)b.Id)"
+                                      ToLabel="@(b => b.Name)"
+                                      Value="_branchId"
+                                      ValueChanged="OnBranchChangedAsync"
+                                      Label="@InvL["Branch"]"
+                                      Placeholder="@InvL["SelectBranchPrompt"]"
+                                      AdornmentIcon="@Icons.Material.Filled.Store" />
+                </div>
+                @if (_branchId.HasValue && _canInitialize)
+                {
+                    <SoftButton Variant="Variant.Filled"
+                                Color="Color.Primary"
+                                StartIcon="@Icons.Material.Filled.AddBox"
+                                OnClick="OpenInitializeDialog">
+                        @InvL["InitializeProduct"]
+                    </SoftButton>
+                }
+            </SoftStack>
+        </SoftCardContent>
+    </SoftCard>
+
+    @if (!_branchId.HasValue)
+    {
+        <SoftCard Elevation="0" Class="pa-6 d-flex align-items-center justify-content-center" Style="border: 2px dashed var(--mud-palette-lines-default); background: transparent;">
+            <SoftStack AlignItems="AlignItems.Center" Spacing="2">
+                <SoftIcon Icon="@Icons.Material.Outlined.Warehouse" Color="Color.Default" Style="font-size: 64px; opacity: 0.5;" />
+                <SoftText Typo="Typo.h6" Color="Color.Default">@InvL["SelectBranchPrompt"]</SoftText>
+                @if (_accessibleBranches.Count == 0)
+                {
+                    <SoftText Typo="Typo.body2" Color="Color.Warning">@InvL["NoBranchAccess"]</SoftText>
+                }
+            </SoftStack>
+        </SoftCard>
+    }
+    else
+    {
+        <div class="bi-stats-grid">
+            <StatCard Icon="@Icons.Material.Filled.Inventory" Label="@InvL["Stats:Total"]"
+                      Value="@_stats.TotalItems.ToString()" AccentColor="primary" />
+            <StatCard Icon="@Icons.Material.Filled.CheckCircle" Label="@InvL["Stats:Healthy"]"
+                      Value="@_stats.HealthyStockCount.ToString()" AccentColor="success" />
+            <StatCard Icon="@Icons.Material.Filled.WarningAmber" Label="@InvL["Stats:LowStock"]"
+                      Value="@_stats.LowStockCount.ToString()" AccentColor="warning"
+                      Highlight="_stats.LowStockCount > 0" />
+            <StatCard Icon="@Icons.Material.Filled.Cancel" Label="@InvL["Stats:OutOfStock"]"
+                      Value="@_stats.OutOfStockCount.ToString()" AccentColor="error"
+                      Highlight="_stats.OutOfStockCount > 0" />
+        </div>
+
+        <SoftCard Elevation="2" Class="pa-2">
+            <SoftCardContent>
+                <SoftStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Class="mb-4 flex-wrap">
+                    <SoftTextField T="string"
+                                   Placeholder="@InvL["Filter"]"
+                                   @bind-Value="_filter"
+                                   Variant="Variant.Outlined"
+                                   Margin="Margin.Dense"
+                                   Adornment="Adornment.Start"
+                                   AdornmentIcon="@Icons.Material.Filled.Search"
+                                   OnKeyUp="OnFilterKeyUpAsync"
+                                   Immediate="true"
+                                   Style="min-width: 240px; max-width: 320px;" />
+
+                    <SoftCheckBox T="bool" @bind-Value="_onlyLowStock"
+                                  Label="@InvL["OnlyLowStock"]"
+                                  Color="Color.Warning"
+                                  CheckedChanged="@(async () => await ReloadAsync())" />
+                    <SoftCheckBox T="bool" @bind-Value="_onlyOutOfStock"
+                                  Label="@InvL["OnlyOutOfStock"]"
+                                  Color="Color.Error"
+                                  CheckedChanged="@(async () => await ReloadAsync())" />
+                    <SoftCheckBox T="bool" @bind-Value="_includeInactive"
+                                  Label="@InvL["IncludeInactiveProducts"]"
+                                  Color="Color.Default"
+                                  CheckedChanged="@(async () => await ReloadAsync())" />
+
+                    <SoftButton Variant="Variant.Outlined" Color="Color.Primary"
+                                OnClick="ReloadAsync" StartIcon="@Icons.Material.Filled.Refresh">
+                        @L["Refresh"]
+                    </SoftButton>
+                </SoftStack>
+
+                <SoftDataGrid T="BranchInventoryDto"
+                              @ref="_grid"
+                              ServerData="LoadServerData"
+                              Dense="true"
+                              Hover="true"
+                              Bordered="false"
+                              Loading="_loading"
+                              SortMode="SortMode.Single"
+                              RowClassFunc="@RowClassFunc">
+                    <Columns>
+                        <PropertyColumn T="BranchInventoryDto" TProperty="string" Property="x => x.ProductSKU" Title="@InvL["SKU"]" />
+                        <PropertyColumn T="BranchInventoryDto" TProperty="string" Property="x => x.ProductName" Title="@InvL["Product"]" />
+                        <TemplateColumn T="BranchInventoryDto" Title="@InvL["QuantityOnHand"]" SortBy="x => x.QuantityOnHand">
+                            <CellTemplate>
+                                <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                    <SoftText Typo="Typo.body1" Style="font-weight:600;">@context.Item.QuantityOnHand</SoftText>
+                                    <SoftText Typo="Typo.caption" Color="Color.Default">@context.Item.ProductUnit</SoftText>
+                                    @if (context.Item.IsOutOfStock)
+                                    {
+                                        <SoftChip T="string" Color="Color.Error" Size="Size.Small" Variant="Variant.Filled">@InvL["OutOfStock"]</SoftChip>
+                                    }
+                                    else if (context.Item.IsLowStock)
+                                    {
+                                        <SoftChip T="string" Color="Color.Warning" Size="Size.Small" Variant="Variant.Filled">@InvL["LowStock"]</SoftChip>
+                                    }
+                                </SoftStack>
+                            </CellTemplate>
+                        </TemplateColumn>
+                        <PropertyColumn T="BranchInventoryDto" TProperty="int" Property="x => x.MinimumStock" Title="@InvL["MinimumStock"]" />
+                        <TemplateColumn T="BranchInventoryDto" Title="@InvL["MaximumStock"]" SortBy="x => x.MaximumStock ?? 0">
+                            <CellTemplate>
+                                <SoftText>@(context.Item.MaximumStock?.ToString() ?? "-")</SoftText>
+                            </CellTemplate>
+                        </TemplateColumn>
+                        <TemplateColumn T="BranchInventoryDto" Title="@InvL["LastRestocked"]" SortBy="x => x.LastRestockedDate ?? DateTime.MinValue">
+                            <CellTemplate>
+                                <SoftText Typo="Typo.body2">@(context.Item.LastRestockedDate?.ToString("g") ?? "-")</SoftText>
+                            </CellTemplate>
+                        </TemplateColumn>
+                        <TemplateColumn T="BranchInventoryDto" Title="@InvL["LastSold"]" SortBy="x => x.LastSoldDate ?? DateTime.MinValue">
+                            <CellTemplate>
+                                <SoftText Typo="Typo.body2">@(context.Item.LastSoldDate?.ToString("g") ?? "-")</SoftText>
+                            </CellTemplate>
+                        </TemplateColumn>
+                        <TemplateColumn T="BranchInventoryDto" Title="@InvL["Actions"]" Sortable="false">
+                            <CellTemplate>
+                                <SoftStack Row="true" Spacing="1">
+                                    <SoftButton Size="Size.Small"
+                                                Color="Color.Primary"
+                                                Variant="Variant.Filled"
+                                                StartIcon="@Icons.Material.Filled.SwapVert"
+                                                OnClick="() => OpenAdjustDialog(context.Item)"
+                                                Disabled="!_canAdjust">
+                                        @InvL["AdjustStock"]
+                                    </SoftButton>
+                                    @if (_canSetLimits)
+                                    {
+                                        <SoftIconButton Icon="@Icons.Material.Filled.Tune"
+                                                        Color="Color.Default"
+                                                        Size="Size.Small"
+                                                        OnClick="() => OpenLimitsDialog(context.Item)" />
+                                    }
+                                </SoftStack>
+                            </CellTemplate>
+                        </TemplateColumn>
+                    </Columns>
+                    <PagerContent>
+                        <MudDataGridPager T="BranchInventoryDto" />
+                    </PagerContent>
+                </SoftDataGrid>
+            </SoftCardContent>
+        </SoftCard>
+    }
+</SoftStack>
+
+@if (_adjustVisible && _adjustTarget != null)
+{
+    <div class="soft-modal-backdrop" @onclick="CloseAdjust">
+        <div class="soft-modal-container" @onclick:stopPropagation="true">
+            <SoftCard Elevation="24" Class="soft-modal-card">
+                <SoftCardHeader Class="pa-4">
+                    <CardHeaderContent>
+                        <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <SoftIcon Icon="@Icons.Material.Filled.SwapVert" Color="Color.Primary" Size="Size.Medium" />
+                            <div>
+                                <SoftText Typo="Typo.h6">@InvL["AdjustStock"]</SoftText>
+                                <SoftText Typo="Typo.caption" Color="Color.Default">
+                                    @_adjustTarget.ProductSKU • @_adjustTarget.ProductName
+                                </SoftText>
+                            </div>
+                        </SoftStack>
+                    </CardHeaderContent>
+                    <CardHeaderActions>
+                        <SoftIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="CloseAdjust" />
+                    </CardHeaderActions>
+                </SoftCardHeader>
+                <SoftDivider />
+                <SoftCardContent Class="pa-4">
+                    <SoftStack Spacing="3">
+                        <div class="bi-current-qty">
+                            <SoftText Typo="Typo.caption" Color="Color.Default">@InvL["QuantityOnHand"]</SoftText>
+                            <SoftText Typo="Typo.h4">
+                                @_adjustTarget.QuantityOnHand <span style="font-size:0.6em; opacity:0.7;">@_adjustTarget.ProductUnit</span>
+                            </SoftText>
+                        </div>
+
+                        <SoftNumericField T="int"
+                                          Label="@InvL["NewQuantity"]"
+                                          @bind-Value="_adjustNewQty"
+                                          Variant="Variant.Outlined"
+                                          Min="0"
+                                          Adornment="Adornment.Start"
+                                          AdornmentIcon="@Icons.Material.Filled.Numbers" />
+
+                        @{
+                            var delta = _adjustNewQty - _adjustTarget.QuantityOnHand;
+                            var deltaColor = delta > 0 ? Color.Success : (delta < 0 ? Color.Error : Color.Default);
+                            var deltaSign = delta > 0 ? "+" : "";
+                        }
+                        <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <SoftText Typo="Typo.caption">@InvL["Delta"]:</SoftText>
+                            <SoftChip T="string" Color="@deltaColor" Variant="Variant.Filled" Size="Size.Small">
+                                @deltaSign@delta
+                            </SoftChip>
+                        </SoftStack>
+
+                        <SoftLookupSelect TItem="MovementOption" TValue="string"
+                                          Items="_movementOptions"
+                                          ToValue="@(o => o.Value)"
+                                          ToLabel="@(o => o.Label)"
+                                          Value="_adjustMovementType"
+                                          ValueChanged="@(v => _adjustMovementType = v ?? StockMovementTypes.ManualAdjustment)"
+                                          Label="@InvL["MovementType"]"
+                                          AdornmentIcon="@Icons.Material.Filled.Sync" />
+
+                        <SoftTextField T="string"
+                                       Label="@InvL["Notes"]"
+                                       @bind-Value="_adjustNotes"
+                                       Variant="Variant.Outlined"
+                                       Lines="2"
+                                       MaxLength="512" />
+                    </SoftStack>
+                </SoftCardContent>
+                <SoftDivider />
+                <div class="pa-3 d-flex justify-end" style="gap: 8px;">
+                    <SoftButton Variant="Variant.Text" OnClick="CloseAdjust">@L["Cancel"]</SoftButton>
+                    <SoftButton Variant="Variant.Filled"
+                                Color="Color.Primary"
+                                StartIcon="@Icons.Material.Filled.Save"
+                                OnClick="ConfirmAdjustAsync"
+                                Disabled="_saving">
+                        @L["Save"]
+                    </SoftButton>
+                </div>
+            </SoftCard>
+        </div>
+    </div>
+}
+
+@if (_initVisible && _branchId.HasValue)
+{
+    <div class="soft-modal-backdrop" @onclick="CloseInitialize">
+        <div class="soft-modal-container" @onclick:stopPropagation="true">
+            <SoftCard Elevation="24" Class="soft-modal-card">
+                <SoftCardHeader Class="pa-4">
+                    <CardHeaderContent>
+                        <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <SoftIcon Icon="@Icons.Material.Filled.AddBox" Color="Color.Primary" Size="Size.Medium" />
+                            <SoftText Typo="Typo.h6">@InvL["InitializeProduct"]</SoftText>
+                        </SoftStack>
+                    </CardHeaderContent>
+                    <CardHeaderActions>
+                        <SoftIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="CloseInitialize" />
+                    </CardHeaderActions>
+                </SoftCardHeader>
+                <SoftDivider />
+                <SoftCardContent Class="pa-4">
+                    <SoftStack Spacing="3">
+                        <SoftLookupSelect TItem="ProductLookupDto" TValue="Guid?"
+                                          Items="_availableProducts"
+                                          ToValue="@(p => (Guid?)p.Id)"
+                                          ToLabel="@(p => $"{p.SKU} — {p.Name}")"
+                                          Value="_initProductId"
+                                          ValueChanged="@(v => _initProductId = v)"
+                                          Label="@InvL["Product"]"
+                                          Required="true"
+                                          AdornmentIcon="@Icons.Material.Filled.LocalDining" />
+                        <SoftStack Row="true" Spacing="2">
+                            <SoftNumericField T="int" Label="@InvL["InitialQuantity"]"
+                                              @bind-Value="_initQty"
+                                              Variant="Variant.Outlined" Min="0" />
+                            <SoftNumericField T="int" Label="@InvL["MinimumStock"]"
+                                              @bind-Value="_initMin"
+                                              Variant="Variant.Outlined" Min="0" />
+                            <SoftNumericField T="int?" Label="@InvL["MaximumStock"]"
+                                              @bind-Value="_initMax"
+                                              Variant="Variant.Outlined" Min="0" Clearable="true" />
+                        </SoftStack>
+                    </SoftStack>
+                </SoftCardContent>
+                <SoftDivider />
+                <div class="pa-3 d-flex justify-end" style="gap: 8px;">
+                    <SoftButton Variant="Variant.Text" OnClick="CloseInitialize">@L["Cancel"]</SoftButton>
+                    <SoftButton Variant="Variant.Filled" Color="Color.Primary"
+                                StartIcon="@Icons.Material.Filled.Save"
+                                OnClick="ConfirmInitializeAsync"
+                                Disabled="_saving">
+                        @L["Save"]
+                    </SoftButton>
+                </div>
+            </SoftCard>
+        </div>
+    </div>
+}
+
+@if (_limitsVisible && _limitsTarget != null)
+{
+    <div class="soft-modal-backdrop" @onclick="CloseLimits">
+        <div class="soft-modal-container soft-modal-container--sm" @onclick:stopPropagation="true">
+            <SoftCard Elevation="24" Class="soft-modal-card">
+                <SoftCardHeader Class="pa-4">
+                    <CardHeaderContent>
+                        <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <SoftIcon Icon="@Icons.Material.Filled.Tune" Color="Color.Primary" Size="Size.Medium" />
+                            <SoftText Typo="Typo.h6">@InvL["EditLimits"]</SoftText>
+                        </SoftStack>
+                    </CardHeaderContent>
+                    <CardHeaderActions>
+                        <SoftIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="CloseLimits" />
+                    </CardHeaderActions>
+                </SoftCardHeader>
+                <SoftDivider />
+                <SoftCardContent Class="pa-4">
+                    <SoftStack Spacing="3">
+                        <SoftText Typo="Typo.caption" Color="Color.Default">
+                            @_limitsTarget.ProductSKU • @_limitsTarget.ProductName
+                        </SoftText>
+                        <SoftNumericField T="int" Label="@InvL["MinimumStock"]"
+                                          @bind-Value="_limitsMin"
+                                          Variant="Variant.Outlined" Min="0" />
+                        <SoftNumericField T="int?" Label="@InvL["MaximumStock"]"
+                                          @bind-Value="_limitsMax"
+                                          Variant="Variant.Outlined" Min="0" Clearable="true" />
+                    </SoftStack>
+                </SoftCardContent>
+                <SoftDivider />
+                <div class="pa-3 d-flex justify-end" style="gap: 8px;">
+                    <SoftButton Variant="Variant.Text" OnClick="CloseLimits">@L["Cancel"]</SoftButton>
+                    <SoftButton Variant="Variant.Filled" Color="Color.Primary"
+                                StartIcon="@Icons.Material.Filled.Save"
+                                OnClick="ConfirmLimitsAsync"
+                                Disabled="_saving">
+                        @L["Save"]
+                    </SoftButton>
+                </div>
+            </SoftCard>
+        </div>
+    </div>
+}
+
+<style>
+    .soft-modal-backdrop {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 1400;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 16px;
+        animation: soft-modal-fade-in 0.15s ease-out;
+    }
+
+    .soft-modal-container {
+        width: 100%;
+        max-width: 520px;
+        animation: soft-modal-scale-in 0.18s ease-out;
+    }
+
+    .soft-modal-container--sm { max-width: 420px; }
+
+    .soft-modal-card {
+        border-radius: 12px;
+        overflow: hidden;
+    }
+
+    @@keyframes soft-modal-fade-in {
+        from { opacity: 0; }
+        to { opacity: 1; }
+    }
+
+    @@keyframes soft-modal-scale-in {
+        from { opacity: 0; transform: scale(0.96); }
+        to { opacity: 1; transform: scale(1); }
+    }
+
+    .bi-stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 12px;
+    }
+
+    .bi-stat-card {
+        position: relative;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 16px 18px;
+        border-radius: 12px;
+        background: var(--mud-palette-surface);
+        border: 1px solid var(--mud-palette-lines-default);
+        transition: transform 0.15s ease, box-shadow 0.15s ease;
+        overflow: hidden;
+    }
+    .bi-stat-card::before {
+        content: '';
+        position: absolute;
+        left: 0; top: 0; bottom: 0;
+        width: 4px;
+    }
+    .bi-stat-card.accent-primary::before { background: var(--mud-palette-primary); }
+    .bi-stat-card.accent-success::before { background: var(--mud-palette-success); }
+    .bi-stat-card.accent-warning::before { background: var(--mud-palette-warning); }
+    .bi-stat-card.accent-error::before   { background: var(--mud-palette-error); }
+
+    .bi-stat-card.highlight {
+        box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+        transform: translateY(-1px);
+    }
+    .bi-stat-card .bi-stat-icon {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 44px;
+        height: 44px;
+        border-radius: 10px;
+    }
+    .bi-stat-card.accent-primary .bi-stat-icon { background: rgba(var(--mud-palette-primary-rgb), 0.12); color: var(--mud-palette-primary); }
+    .bi-stat-card.accent-success .bi-stat-icon { background: rgba(var(--mud-palette-success-rgb), 0.12); color: var(--mud-palette-success); }
+    .bi-stat-card.accent-warning .bi-stat-icon { background: rgba(var(--mud-palette-warning-rgb), 0.15); color: var(--mud-palette-warning); }
+    .bi-stat-card.accent-error   .bi-stat-icon { background: rgba(var(--mud-palette-error-rgb), 0.15); color: var(--mud-palette-error); }
+
+    .bi-stat-value { font-size: 1.7rem; font-weight: 700; line-height: 1.1; }
+    .bi-stat-label { font-size: 0.78rem; opacity: 0.75; text-transform: uppercase; letter-spacing: 0.04em; }
+
+    .bi-current-qty {
+        background: var(--mud-palette-background-grey);
+        border-radius: 10px;
+        padding: 12px 16px;
+        text-align: center;
+    }
+
+    ::deep tr.row-low-stock { background: rgba(255, 167, 38, 0.10); }
+    ::deep tr.row-low-stock:hover { background: rgba(255, 167, 38, 0.18) !important; }
+    ::deep tr.row-out-of-stock { background: rgba(244, 67, 54, 0.12); }
+    ::deep tr.row-out-of-stock:hover { background: rgba(244, 67, 54, 0.20) !important; }
+    ::deep tr.row-inactive { opacity: 0.55; }
+</style>
+
+@code {
+    private SoftDataGrid<BranchInventoryDto> _grid = null!;
+    private bool _loading;
+    private bool _saving;
+
+    private List<BranchLookupDto> _accessibleBranches = new();
+    private Guid? _branchId;
+
+    private string? _filter;
+    private bool _onlyLowStock;
+    private bool _onlyOutOfStock;
+    private bool _includeInactive;
+
+    private BranchInventoryStatsDto _stats = new();
+
+    private bool _canAdjust;
+    private bool _canInitialize;
+    private bool _canSetLimits;
+
+    private bool _adjustVisible;
+    private BranchInventoryDto? _adjustTarget;
+    private int _adjustNewQty;
+    private string _adjustMovementType = StockMovementTypes.ManualAdjustment;
+    private string? _adjustNotes;
+
+    private bool _initVisible;
+    private List<ProductLookupDto> _availableProducts = new();
+    private Guid? _initProductId;
+    private int _initQty;
+    private int _initMin = 5;
+    private int? _initMax;
+
+    private bool _limitsVisible;
+    private BranchInventoryDto? _limitsTarget;
+    private int _limitsMin;
+    private int? _limitsMax;
+
+    private List<MovementOption> _movementOptions = new();
+
+    public record MovementOption(string Value, string Label);
+
+    protected override async Task OnInitializedAsync()
+    {
+        _canAdjust = await AuthorizationService.IsGrantedAsync(InventoryPermissions.BranchInventory.Adjust);
+        _canInitialize = await AuthorizationService.IsGrantedAsync(InventoryPermissions.BranchInventory.Initialize);
+        _canSetLimits = await AuthorizationService.IsGrantedAsync(InventoryPermissions.BranchInventory.SetLimits);
+
+        _movementOptions = new List<MovementOption>
+        {
+            new(StockMovementTypes.Purchase, InvL["MovementType:Purchase"]),
+            new(StockMovementTypes.Sale, InvL["MovementType:Sale"]),
+            new(StockMovementTypes.TransferIn, InvL["MovementType:TransferIn"]),
+            new(StockMovementTypes.TransferOut, InvL["MovementType:TransferOut"]),
+            new(StockMovementTypes.ManualAdjustment, InvL["MovementType:ManualAdjustment"]),
+        };
+
+        try
+        {
+            var ids = await InventoryAppService.GetAccessibleBranchIdsAsync();
+            if (ids.Count > 0)
+            {
+                var all = await BranchAppService.GetLookupAsync();
+                _accessibleBranches = all.Where(b => ids.Contains(b.Id)).ToList();
+            }
+        }
+        catch (Exception ex)
+        {
+            await HandleErrorAsync(ex);
+        }
+    }
+
+    private async Task OnBranchChangedAsync(Guid? branchId)
+    {
+        _branchId = branchId;
+        _filter = null;
+        _onlyLowStock = false;
+        _onlyOutOfStock = false;
+        if (branchId.HasValue)
+        {
+            await RefreshStatsAsync();
+            await ReloadAsync();
+        }
+    }
+
+    private async Task RefreshStatsAsync()
+    {
+        if (!_branchId.HasValue) return;
+        try
+        {
+            _stats = await InventoryAppService.GetStatsAsync(_branchId.Value);
+        }
+        catch (Exception ex)
+        {
+            await HandleErrorAsync(ex);
+        }
+    }
+
+    private async Task<GridData<BranchInventoryDto>> LoadServerData(GridState<BranchInventoryDto> state, CancellationToken cancellationToken)
+    {
+        if (!_branchId.HasValue)
+        {
+            return new GridData<BranchInventoryDto> { Items = Array.Empty<BranchInventoryDto>(), TotalItems = 0 };
+        }
+
+        _loading = true;
+        try
+        {
+            string? sorting = null;
+            var sort = state.SortDefinitions.FirstOrDefault();
+            if (sort != null)
+            {
+                sorting = $"{sort.SortBy} {(sort.Descending ? "desc" : "asc")}";
+            }
+
+            var result = await InventoryAppService.GetListAsync(new GetBranchInventoryInput
+            {
+                BranchId = _branchId.Value,
+                Filter = _filter,
+                OnlyLowStock = _onlyLowStock ? true : (bool?)null,
+                OnlyOutOfStock = _onlyOutOfStock ? true : (bool?)null,
+                IncludeInactiveProducts = _includeInactive ? true : (bool?)null,
+                SkipCount = state.Page * state.PageSize,
+                MaxResultCount = state.PageSize,
+                Sorting = sorting
+            });
+
+            return new GridData<BranchInventoryDto>
+            {
+                Items = result.Items,
+                TotalItems = (int)result.TotalCount
+            };
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private string RowClassFunc(BranchInventoryDto row, int index)
+    {
+        if (!row.ProductIsActive) return "row-inactive";
+        if (row.IsOutOfStock) return "row-out-of-stock";
+        if (row.IsLowStock) return "row-low-stock";
+        return string.Empty;
+    }
+
+    private async Task OnFilterKeyUpAsync(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        if (_grid != null) await _grid.ReloadServerData();
+        await RefreshStatsAsync();
+    }
+
+    private void OpenAdjustDialog(BranchInventoryDto row)
+    {
+        _adjustTarget = row;
+        _adjustNewQty = row.QuantityOnHand;
+        _adjustMovementType = StockMovementTypes.ManualAdjustment;
+        _adjustNotes = null;
+        _adjustVisible = true;
+    }
+
+    private void CloseAdjust() => _adjustVisible = false;
+
+    private async Task ConfirmAdjustAsync()
+    {
+        if (_adjustTarget == null) return;
+        _saving = true;
+        try
+        {
+            await InventoryAppService.AdjustStockAsync(_adjustTarget.Id, new AdjustStockDto
+            {
+                NewQuantity = _adjustNewQty,
+                MovementType = _adjustMovementType,
+                Notes = _adjustNotes,
+                ConcurrencyStamp = _adjustTarget.ConcurrencyStamp
+            });
+            Snackbar.Add(L["SuccessfullySaved"], Severity.Success);
+            _adjustVisible = false;
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            await HandleErrorAsync(ex);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task OpenInitializeDialog()
+    {
+        _initProductId = null;
+        _initQty = 0;
+        _initMin = 5;
+        _initMax = null;
+        try
+        {
+            _availableProducts = await ProductAppService.GetLookupAsync();
+        }
+        catch (Exception ex)
+        {
+            await HandleErrorAsync(ex);
+        }
+        _initVisible = true;
+    }
+
+    private void CloseInitialize() => _initVisible = false;
+
+    private async Task ConfirmInitializeAsync()
+    {
+        if (!_branchId.HasValue || !_initProductId.HasValue)
+        {
+            Snackbar.Add(L["ThisFieldIsRequired", InvL["Product"]], Severity.Warning);
+            return;
+        }
+        _saving = true;
+        try
+        {
+            await InventoryAppService.InitializeAsync(new InitializeBranchInventoryDto
+            {
+                BranchId = _branchId.Value,
+                ProductId = _initProductId.Value,
+                InitialQuantity = _initQty,
+                MinimumStock = _initMin,
+                MaximumStock = _initMax
+            });
+            Snackbar.Add(L["SuccessfullySaved"], Severity.Success);
+            _initVisible = false;
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            await HandleErrorAsync(ex);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private void OpenLimitsDialog(BranchInventoryDto row)
+    {
+        _limitsTarget = row;
+        _limitsMin = row.MinimumStock;
+        _limitsMax = row.MaximumStock;
+        _limitsVisible = true;
+    }
+
+    private void CloseLimits() => _limitsVisible = false;
+
+    private async Task ConfirmLimitsAsync()
+    {
+        if (_limitsTarget == null) return;
+        _saving = true;
+        try
+        {
+            await InventoryAppService.UpdateLimitsAsync(_limitsTarget.Id, new UpdateStockLimitsDto
+            {
+                MinimumStock = _limitsMin,
+                MaximumStock = _limitsMax,
+                ConcurrencyStamp = _limitsTarget.ConcurrencyStamp
+            });
+            Snackbar.Add(L["SuccessfullySaved"], Severity.Success);
+            _limitsVisible = false;
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            await HandleErrorAsync(ex);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}

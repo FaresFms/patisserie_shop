@@ -1,0 +1,76 @@
+@typeparam TItem
+@typeparam TValue
+@using MudBlazor
+@using Variant = MudBlazor.Variant
+@using Margin = MudBlazor.Margin
+@using Adornment = MudBlazor.Adornment
+@using Origin = MudBlazor.Origin
+
+<MudSelect T="TValue"
+           Value="Value"
+           ValueChanged="OnValueChanged"
+           Label="@Label"
+           Placeholder="@Placeholder"
+           Variant="@Variant"
+           Margin="@Margin"
+           Required="@Required"
+           Clearable="@Clearable"
+           Dense="@Dense"
+           AnchorOrigin="Origin.BottomCenter"
+           Disabled="@Disabled"
+           AdornmentIcon="@AdornmentIcon"
+           Adornment="@(string.IsNullOrEmpty(AdornmentIcon) ? Adornment.None : Adornment.Start)"
+           ToStringFunc="@ToStringFunc">
+    @if (Items != null)
+    {
+        @foreach (var item in Items)
+        {
+            <MudSelectItem T="TValue" Value="@ToValue(item)">@ToLabel(item)</MudSelectItem>
+        }
+    }
+</MudSelect>
+
+@code {
+    [Parameter, EditorRequired] public IEnumerable<TItem>? Items { get; set; }
+    [Parameter, EditorRequired] public Func<TItem, TValue> ToValue { get; set; } = default!;
+    [Parameter, EditorRequired] public Func<TItem, string> ToLabel { get; set; } = default!;
+
+    [Parameter] public TValue? Value { get; set; }
+    [Parameter] public EventCallback<TValue> ValueChanged { get; set; }
+
+    [Parameter] public string? Label { get; set; }
+    [Parameter] public string? Placeholder { get; set; }
+    [Parameter] public string? AdornmentIcon { get; set; }
+    [Parameter] public Variant Variant { get; set; } = Variant.Outlined;
+    [Parameter] public Margin Margin { get; set; } = Margin.None;
+    [Parameter] public bool Required { get; set; }
+    [Parameter] public bool Clearable { get; set; }
+    [Parameter] public bool Dense { get; set; }
+    [Parameter] public bool Disabled { get; set; }
+
+    private Func<TValue, string>? ToStringFunc =>
+        Items == null || ToValue == null || ToLabel == null
+            ? null
+            : (TValue v) =>
+            {
+                if (v == null) return string.Empty;
+                foreach (var item in Items)
+                {
+                    var iv = ToValue(item);
+                    if (EqualityComparer<TValue>.Default.Equals(iv, v))
+                    {
+                        return ToLabel(item);
+                    }
+                }
+                return string.Empty;
+            };
+
+    private async Task OnValueChanged(TValue value)
+    {
+        Value = value;
+        if (ValueChanged.HasDelegate)
+        {
+            await ValueChanged.InvokeAsync(value);
+        }
+    }
+}

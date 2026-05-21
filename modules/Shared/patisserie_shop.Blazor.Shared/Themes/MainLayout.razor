@@ -1,0 +1,329 @@
+@using patisserie_shop.Blazor.Shared.Themes.MudTheme
+@using Volo.Abp.UI.Navigation
+@using Volo.Abp.Users
+@using Volo.Abp.AspNetCore.Components.Web.Theming.Layout
+@namespace patisserie_shop.Blazor.Shared.Themes
+@using Volo.Abp.DependencyInjection
+@using System.Globalization
+@using Microsoft.Extensions.Localization
+@using patisserie_shop.Localization
+@inherits Volo.Abp.AspNetCore.Components.Web.LeptonXLiteTheme.Themes.LeptonXLite.MainLayout
+@attribute [ExposeServices(typeof(Volo.Abp.AspNetCore.Components.Web.LeptonXLiteTheme.Themes.LeptonXLite.MainLayout))]
+@attribute [Dependency(ReplaceServices = true)]
+@inject IMenuManager MenuManager
+@inject ICurrentUser CurrentUser
+@inject NavigationManager Navigation
+@inject PageLayout PageLayout
+@inject IJSRuntime JS
+
+
+<MudThemeProvider Theme="_theme" IsDarkMode="_isDarkMode" />
+<MudPopoverProvider />      @* 👈 this was missing! *@
+<MudDialogProvider />
+<MudSnackbarProvider />
+<SoftLayout>
+
+    <!-- ─── Top AppBar ─────────────────────────────────────────── -->
+    <SoftAppBar Elevation="1" Dense="true" Color="MudBlazor.Color.Primary">
+        <SoftIconButton Icon="@Icons.Material.Filled.Menu"
+                       Color="MudBlazor.Color.Inherit"
+                       Edge="Edge.Start"
+                       OnClick="ToggleDrawer" />
+
+        <SoftText Typo="Typo.h6" Class="ml-2">Patisserie Shop</SoftText>
+
+        <SoftSpacer />
+
+        @* ── Language toggle (AR / EN) ── *@
+        <SoftTooltip Text="@(_isArabic ? "Switch to English" : "التبديل إلى العربية")" Placement="MudBlazor.Placement.Bottom">
+            <SoftButton Variant="MudBlazor.Variant.Text"
+                        Color="MudBlazor.Color.Inherit"
+                        Size="MudBlazor.Size.Small"
+                        OnClick="ToggleLanguage"
+                        Style="min-width:42px; font-weight:700; letter-spacing:0.5px; margin-right:2px;">
+                @(_isArabic ? "EN" : "AR")
+            </SoftButton>
+        </SoftTooltip>
+
+        @* ── Dark / Light mode toggle ── *@
+        <SoftTooltip Text="@(_isDarkMode ? L["Nav:SwitchToLight"] : L["Nav:SwitchToDark"])" Placement="MudBlazor.Placement.Bottom">
+            <SoftIconButton Icon="@(_isDarkMode ? Icons.Material.Filled.LightMode : Icons.Material.Filled.DarkMode)"
+                           Color="MudBlazor.Color.Inherit"
+                           Size="MudBlazor.Size.Medium"
+                           OnClick="() => ToggleDarkMode()"
+                           Style="transition: transform 0.3s ease; margin-right: 4px;" />
+        </SoftTooltip>
+
+        @if (CurrentUser.IsAuthenticated)
+        {
+            <SoftMenu @ref="_userMenu"
+                     AnchorOrigin="Origin.BottomRight"
+                     TransformOrigin="Origin.TopRight"
+                     Dense="true">
+                <ActivatorContent>
+                    <SoftChip T="string"
+                             OnClick="@(() => _userMenu.OpenMenuAsync(null))"
+                             Color="MudBlazor.Color.Transparent"
+                             Class="cursor-pointer">
+                        <SoftAvatar Color="MudBlazor.Color.Secondary" Size="MudBlazor.Size.Small" Class="mr-1">
+                            @(CurrentUser.Name?.Length > 0 ? CurrentUser.Name[0].ToString().ToUpper() : "U")
+                        </SoftAvatar>
+                        @CurrentUser.UserName
+                        <SoftIcon Icon="@Icons.Material.Filled.ArrowDropDown" Size="MudBlazor.Size.Small" />
+                   </SoftChip>
+                </ActivatorContent>
+                <ChildContent>
+                    <SoftMenuItem Disabled="true">
+                        <SoftText Typo="Typo.caption" Color="MudBlazor.Color.Secondary">
+                            @CurrentUser.Email
+                        </SoftText>
+                  </SoftMenuItem>
+                    <SoftDivider />
+                    <SoftMenuItem OnClick="GoToProfile"
+                                 Icon="@Icons.Material.Filled.ManageAccounts">
+                        @L["Nav:MyAccount"]
+                  </SoftMenuItem>
+                    <SoftMenuItem OnClick="Logout"
+                                 Icon="@Icons.Material.Filled.Logout">
+                        @L["Nav:SignOut"]
+                  </SoftMenuItem>
+                </ChildContent>
+            </SoftMenu>
+        }
+        else
+        {
+           <SoftButton Color="MudBlazor.Color.Inherit" Href="/Account/Login" StartIcon="@Icons.Material.Filled.Login">
+                @L["Nav:SignIn"]
+            </SoftButton>
+        }
+    </SoftAppBar>
+
+    <!-- ─── Side Drawer ────────────────────────────────────────── -->
+    <SoftDrawer @bind-Open="_drawerOpen"
+               Elevation="2"
+               Variant="DrawerVariant.Responsive"
+               ClipMode="DrawerClipMode.Always">
+
+        <SoftDrawerHeader Class="pa-3">
+            <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                <SoftIcon Icon ="@Icons.Material.Filled.Apps" Color="MudBlazor.Color.Primary" />
+                <SoftText Typo="Typo.subtitle1" Color="MudBlazor.Color.Primary" Style="font-weight:600">
+                    @L["Nav:Navigation"]
+                </SoftText>
+            </SoftStack>
+        </SoftDrawerHeader>
+
+        <SoftDivider />
+
+        <SoftNavMenu Class="pa-2 app-drawer-nav">
+            @foreach (var item in _menuItems)
+            {
+                @if (item.Items.Any())
+                {
+                    <SoftNavGroup Title="@item.DisplayName"
+                                 Icon="@GetMaterialIcon(item.Icon, item.DisplayName)"
+                                 Expanded="false">
+                        @foreach (var child in item.Items)
+                        {
+                            @if (child.Items.Any())
+                            {
+                                <SoftNavGroup Title="@child.DisplayName"
+                                             Icon="@GetMaterialIcon(child.Icon, child.DisplayName)"
+                                             Expanded="false">
+                                    @foreach (var grandchild in child.Items)
+                                    {
+                                        <SoftNavLink Href="@grandchild.Url"
+                                                    Icon="@GetMaterialIcon(grandchild.Icon, grandchild.DisplayName)"
+                                                    Match="NavLinkMatch.Prefix">
+                                            @grandchild.DisplayName
+                                        </SoftNavLink>
+                                    }
+                                </SoftNavGroup>
+                            }
+                            else if (!string.IsNullOrWhiteSpace(child.Url))
+                            {
+                                <SoftNavLink Href="@child.Url"
+                                            Icon="@GetMaterialIcon(child.Icon, child.DisplayName)"
+                                            Match="NavLinkMatch.Prefix">
+                                    @child.DisplayName
+                                </SoftNavLink>
+                            }
+                        }
+                    </SoftNavGroup>
+                }
+                else if (!string.IsNullOrWhiteSpace(item.Url))
+                {
+                    <SoftNavLink Href="@item.Url"
+                                Icon="@GetMaterialIcon(item.Icon, item.DisplayName)"
+                                Match="@(item.Url == "/" ? NavLinkMatch.All : NavLinkMatch.Prefix)">
+                        @item.DisplayName
+                    </SoftNavLink>
+                }
+            }
+        </SoftNavMenu>
+    </SoftDrawer>
+
+    <!-- ─── Main Content ───────────────────────────────────────── -->
+    <SoftMainContent>
+        <SoftContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="pa-4 mt-2">
+            @Body
+        </SoftContainer>
+    </SoftMainContent>
+
+</SoftLayout>
+
+@code {
+    private MudMenu _userMenu = default!;
+    private MudBlazor.MudTheme _theme = MyTheme.Create();
+    private bool _drawerOpen = true;
+    private bool _isDarkMode = false;
+    private bool _isArabic = false;
+    private List<ApplicationMenuItem> _menuItems = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _isArabic = CultureInfo.CurrentCulture.Name.StartsWith("ar", StringComparison.OrdinalIgnoreCase);
+        var menu = await MenuManager.GetAsync(StandardMenus.Main);
+        _menuItems = menu.Items.ToList();
+        SanitizeMenuUrls(_menuItems);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            // Restore dark mode preference from localStorage
+            var isDarkModeStr = await JS.InvokeAsync<string>("localStorage.getItem", "ewallet-darkMode");
+            if (bool.TryParse(isDarkModeStr, out var isDarkMode))
+            {
+                _isDarkMode = isDarkMode;
+                if (_isDarkMode)
+                {
+                    await JS.InvokeVoidAsync("eval", "document.body.classList.add('dark-mode'); document.documentElement.classList.add('dark-mode');");
+                }
+                StateHasChanged();
+            }
+        }
+    }
+    private void SanitizeMenuUrls(List<ApplicationMenuItem> items)
+    {
+        foreach (var item in items)
+        {
+            // Fix the url
+            if (!string.IsNullOrWhiteSpace(item.Url))
+            {
+                item.Url = "/" + item.Url.TrimStart('~', '/');
+            }
+
+            // Recursively fix children too
+            if (item.Items.Any())
+            {
+                SanitizeMenuUrls(item.Items.ToList());
+            }
+        }
+    }
+    private void ToggleDrawer() => _drawerOpen = !_drawerOpen;
+
+    private void ToggleLanguage()
+    {
+        var targetCulture = _isArabic ? "en" : "ar";
+        var uri = new Uri(Navigation.Uri);
+        var returnUrl = Uri.EscapeDataString(uri.PathAndQuery);
+        Navigation.NavigateTo(
+            $"/Abp/Languages/Switch?culture={targetCulture}&uiCulture={targetCulture}&returnUrl={returnUrl}",
+            forceLoad: true);
+    }
+
+    private async Task ToggleDarkMode()
+    {
+        _isDarkMode = !_isDarkMode;
+        await JS.InvokeVoidAsync("localStorage.setItem", "ewallet-darkMode", _isDarkMode.ToString().ToLower());
+        await JS.InvokeVoidAsync("eval",
+            _isDarkMode
+                ? "document.body.classList.add('dark-mode'); document.documentElement.classList.add('dark-mode');"
+                : "document.body.classList.remove('dark-mode'); document.documentElement.classList.remove('dark-mode');");
+    }
+
+    private void Logout() =>
+        Navigation.NavigateTo("/account/logout", forceLoad: true);
+
+    private void GoToProfile() =>
+        Navigation.NavigateTo("/account/manage", forceLoad: true);
+
+    // Maps ABP Font Awesome icon strings to MudBlazor Material icons
+    private static string GetMaterialIcon(string? icon, string? displayName)
+    {
+        // 1) Handle specific ABP/FontAwesome strings if provided
+        if (!string.IsNullOrWhiteSpace(icon))
+        {
+            var i = icon.ToLowerInvariant();
+            if (i.Contains("home")) return Icons.Material.Filled.Home;
+            if (i.Contains("users")) return Icons.Material.Filled.People;
+            if (i.Contains("user-tie")) return Icons.Material.Filled.ManageAccounts;
+            if (i.Contains("user")) return Icons.Material.Filled.Person;
+            if (i.Contains("cog")) return Icons.Material.Filled.Settings;
+            if (i.Contains("briefcase")) return Icons.Material.Filled.BusinessCenter;
+            if (i.Contains("store")) return Icons.Material.Filled.Storefront;
+            if (i.Contains("exchange")) return Icons.Material.Filled.SyncAlt;
+            if (i.Contains("truck")) return Icons.Material.Filled.LocalShipping;
+            if (i.Contains("university")) return Icons.Material.Filled.AccountBalance;
+            if (i.Contains("hand-holding")) return Icons.Material.Filled.RequestQuote;
+            if (i.Contains("gavel")) return Icons.Material.Filled.Gavel;
+            if (i.Contains("chart-line")) return Icons.Material.Filled.ShowChart;
+            if (i.Contains("paper-plane")) return Icons.Material.Filled.Send;
+            if (i.Contains("sliders")) return Icons.Material.Filled.Tune;
+            if (i.Contains("clipboard")) return Icons.Material.Filled.Assignment;
+            if (i.Contains("piggy-bank")) return Icons.Material.Filled.Savings;
+            if (i.Contains("percentage")) return Icons.Material.Filled.Percent;
+            if (i.Contains("arrow-up")) return Icons.Material.Filled.ArrowUpward;
+            if (i.Contains("receipt")) return Icons.Material.Filled.Receipt;
+            if (i.Contains("history")) return Icons.Material.Filled.History;
+            if (i.Contains("wallet")) return Icons.Material.Filled.AccountBalanceWallet;
+            if (i.Contains("money-bill")) return Icons.Material.Filled.Payments;
+            if (i.Contains("id-card")) return Icons.Material.Filled.Badge;
+            if (i.Contains("building")) return Icons.Material.Filled.Business;
+            if (i.Contains("list")) return Icons.Material.Filled.List;
+            if (i.Contains("sitemap")) return Icons.Material.Filled.AccountTree;
+            if (i.Contains("book")) return Icons.Material.Filled.MenuBook;
+            if (i.Contains("role")) return Icons.Material.Filled.AdminPanelSettings;
+            if (i.Contains("setting")) return Icons.Material.Filled.Settings;
+            if (i.Contains("admin")) return Icons.Material.Filled.SupervisorAccount;
+            if (i.Contains("identit")) return Icons.Material.Filled.VerifiedUser;
+            if (i.Contains("feature")) return Icons.Material.Filled.ToggleOn;
+            if (i.Contains("permiss")) return Icons.Material.Filled.Lock;
+        }
+
+        // 2) Fallback to DisplayName matching if icon is missing or not matched
+        if (!string.IsNullOrWhiteSpace(displayName))
+        {
+            var name = displayName.ToLowerInvariant();
+            // English
+            if (name.Contains("home")) return Icons.Material.Filled.Home;
+            if (name.Contains("person") || name.Contains("customer") || name.Contains("أشخاص") || name.Contains("عملاء")) return Icons.Material.Filled.People;
+            if (name.Contains("merchant") || name.Contains("تجار")) return Icons.Material.Filled.Storefront;
+            if (name.Contains("agent") || name.Contains("وكيل") || name.Contains("بوابة الوكيل")) return Icons.Material.Filled.ManageAccounts;
+            if (name.Contains("business") || name.Contains("كيانات")) return Icons.Material.Filled.Business;
+            if (name.Contains("operation") || name.Contains("عمليات")) return Icons.Material.Filled.Payments;
+            if (name.Contains("cash in transit") || name.Contains("نقد في العبور")) return Icons.Material.Filled.LocalShipping;
+            if (name.Contains("cash in") || name.Contains("إيداع نقدي")) return Icons.Material.Filled.Payments;
+            if (name.Contains("kyc") || name.Contains("kyb")) return Icons.Material.Filled.Badge;
+            if (name.Contains("fee revenue") || name.Contains("إيرادات الرسوم")) return Icons.Material.Filled.Percent;
+            if (name.Contains("dispute") || name.Contains("نزاع")) return Icons.Material.Filled.Gavel;
+            if (name.Contains("pending withdrawal") || name.Contains("سحوبات معلقة")) return Icons.Material.Filled.RequestQuote;
+            if (name.Contains("user") || name.Contains("مستخدم")) return Icons.Material.Filled.Person;
+            if (name.Contains("bank") || name.Contains("بنك") || name.Contains("تحويلات بنكية")) return Icons.Material.Filled.AccountBalance;
+            if (name.Contains("wallet") || name.Contains("محافظ")) return Icons.Material.Filled.AccountBalanceWallet;
+            if (name.Contains("finance") || name.Contains("إعداد مالي")) return Icons.Material.Filled.AccountTree;
+            if (name.Contains("account type") || name.Contains("أنواع الحسابات")) return Icons.Material.Filled.AccountTree;
+            if (name.Contains("transaction") || name.Contains("معاملات")) return Icons.Material.Filled.ReceiptLong;
+            if (name.Contains("audit") || name.Contains("log") || name.Contains("تدقيق")) return Icons.Material.Filled.History;
+            if (name.Contains("admin") || name.Contains("إدارة")) return Icons.Material.Filled.AdminPanelSettings;
+            if (name.Contains("capital") || name.Contains("رأس مال")) return Icons.Material.Filled.MonetizationOn;
+            if (name.Contains("doc") || name.Contains("مستند")) return Icons.Material.Filled.Description;
+            if (name.Contains("identity") || name.Contains("role") || name.Contains("permission") || name.Contains("صلاحيات")) return Icons.Material.Filled.Security;
+            if (name.Contains("setting") || name.Contains("إعداد")) return Icons.Material.Filled.Settings;
+        }
+
+        return Icons.Material.Filled.FiberManualRecord;
+    }
+}

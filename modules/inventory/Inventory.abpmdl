@@ -1,0 +1,41 @@
+{
+  "folders": {
+    "items": {
+      "src": {}
+    }
+  },
+  "packages": {
+    "Inventory.Domain": {
+      "path": "src/Inventory.Domain/Inventory.Domain.abppkg",
+      "folder": "src"
+    },
+    "Inventory.Application.Contracts": {
+      "path": "src/Inventory.Application.Contracts/Inventory.Application.Contracts.abppkg",
+      "folder": "src"
+    },
+    "Inventory.Application": {
+      "path": "src/Inventory.Application/Inventory.Application.abppkg",
+      "folder": "src"
+    },
+    "Inventory.EntityFrameworkCore": {
+      "path": "src/Inventory.EntityFrameworkCore/Inventory.EntityFrameworkCore.abppkg",
+      "folder": "src"
+    },
+    "Inventory.HttpApi": {
+      "path": "src/Inventory.HttpApi/Inventory.HttpApi.abppkg",
+      "folder": "src"
+    },
+    "Inventory.HttpApi.Client": {
+      "path": "src/Inventory.HttpApi.Client/Inventory.HttpApi.Client.abppkg",
+      "folder": "src"
+    },
+    "Inventory.Domain.Shared": {
+      "path": "src/Inventory.Domain.Shared/Inventory.Domain.Shared.abppkg",
+      "folder": "src"
+    },
+    "Inventory.Installer": {
+       "path": "src/Inventory.Installer/Inventory.Installer.abppkg",
+       "folder": "src"
+    }
+  }
+}

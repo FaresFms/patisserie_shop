@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="..\..\common.props" />
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <RootNamespace>Intelligence</RootNamespace>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Volo.Abp.Ddd.Domain" Version="10.1.1"/>
+    <ProjectReference Include="..\Intelligence.Domain.Shared\Intelligence.Domain.Shared.csproj" />
+    <ProjectReference Include="..\..\..\inventory\src\Inventory.Domain.Shared\Inventory.Domain.Shared.csproj" />
+  </ItemGroup>
+
+</Project>

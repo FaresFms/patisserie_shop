@@ -1,0 +1,76 @@
+{
+  "id": "75fc6a94-3e6b-4593-ac16-6d9c6255319f",
+  "creationTime": "05/14/2026 19:09:02 +00:00",
+  "template": "app",
+  "versions": {
+    "AbpFramework": "10.1.1",
+    "AbpStudio": "2.2.4",
+    "TargetDotnetFramework": "net10.0"
+  },
+  "modules": {
+    "patisserie_shop": {
+      "path": "patisserie_shop.abpmdl",
+      "isMainApplication": true,
+      "folder": "main"
+    },
+    "Inventory": {
+      "path": "modules/inventory/Inventory.abpmdl",
+      "folder": "modules"
+    },
+    "Intelligence": {
+      "path": "modules/intelligence/Intelligence.abpmdl",
+      "folder": "modules"
+    },
+    "Operations": {
+      "path": "modules/operations/Operations.abpmdl",
+      "folder": "modules"
+    }
+  },
+  "runProfiles": {
+    "Default": {
+      "path": "etc/abp-studio/run-profiles/Default.abprun.json"
+    }
+  },
+  "options": {
+    "httpRequests": {
+      "ignoredUrls": []
+    }
+  },
+  "creatingStudioConfiguration": {
+    "template": "app",
+    "createdAbpStudioVersion": "2.2.4",
+    "creationTool": "ABP Studio UI",
+    "tiered": "false",
+    "runInstallLibs": "",
+    "useLocalReferences": "false",
+    "multiTenancy": "false",
+    "includeTests": "true",
+    "kubernetesConfiguration": "false",
+    "uiFramework": "blazor-server",
+    "mobileFramework": "none",
+    "distributedEventBus": "none",
+    "databaseProvider": "ef",
+    "runDbMigrator": "",
+    "databaseManagementSystem": "postgresql",
+    "separateTenantSchema": "false",
+    "createInitialMigration": "",
+    "theme": "leptonx-lite",
+    "themeStyle": "",
+    "themeMenuPlacement": "",
+    "publicWebsite": "false",
+    "socialLogin": "false",
+    "sampleCrudPage": "false",
+    "selectedLanguages": [
+      "Arabic",
+      "English"
+    ],
+    "defaultLanguage": "Arabic",
+    "createCommand": "abp new patisserie_shop -t app --ui-framework blazor-server --database-provider ef --database-management-system postgresql --theme leptonx-lite --skip-migration  --skip-migrator  --without-cms-kit --dont-run-install-libs --dont-run-bundling --no-multi-tenancy --no-social-logins -no-gdpr -no-openiddict-admin-ui -no-audit-logging -no-file-management -no-language-management -no-text-template-management"
+  },
+  "folders": {
+    "items": {
+      "main": {},
+      "modules": {}
+    }
+  }
+}
