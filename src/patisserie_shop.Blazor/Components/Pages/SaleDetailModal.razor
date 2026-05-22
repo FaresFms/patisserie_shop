@@ -1,0 +1,154 @@
+@using System.Threading
+@using System.Threading.Tasks
+@using Microsoft.AspNetCore.Components
+@using Operations.Sales
+@using Operations.Localization
+@using Color = MudBlazor.Color
+@using Variant = MudBlazor.Variant
+@using Size = MudBlazor.Size
+@using Margin = MudBlazor.Margin
+@inherits patisserie_shopComponentBase
+@inject ISaleAppService SaleAppService
+@inject IStringLocalizer<OperationsResource> OpsL
+
+@if (_sale == null) { return; }
+
+<div class="soft-modal-backdrop" @onclick="CloseAsync">
+    <div class="soft-modal-container soft-modal-container--lg" @onclick:stopPropagation="true">
+        <SoftCard Elevation="24" Class="soft-modal-card">
+
+            <SoftCardHeader Class="pa-4">
+                <CardHeaderContent>
+                    <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <SoftIcon Icon="@Icons.Material.Filled.Receipt" Color="Color.Primary" Size="Size.Medium" />
+                        <div>
+                            <SoftText Typo="Typo.h6">@_sale.InvoiceNumber</SoftText>
+                            <SoftText Typo="Typo.caption" Color="Color.Default">
+                                @($"{_sale.BranchName} • {_sale.SaleDate:MMM d, yyyy}")
+                            </SoftText>
+                        </div>
+                    </SoftStack>
+                </CardHeaderContent>
+                <CardHeaderActions>
+                    <SoftIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="CloseAsync" />
+                </CardHeaderActions>
+            </SoftCardHeader>
+            <SoftDivider />
+
+            <SoftCardContent Class="pa-4 sale-detail-body">
+                <SoftStack Spacing="4">
+
+                    @{
+                        var saleDateText = _sale.SaleDate.ToString("MMM d, yyyy");
+                        var totalText = $"{_sale.TotalAmount:N2} {_sale.Currency}";
+                        var recordedByText = _sale.CreatorUserName ?? "-";
+                    }
+
+                    <div>
+                        <SoftText Typo="Typo.overline" Color="Color.Primary">Sale info</SoftText>
+                        <SoftDivider Class="mb-3" />
+                        <div class="po-info-grid">
+                            <InfoRow Label="@OpsL["SaleDate"]" Value="@saleDateText" />
+                            <InfoRow Label="@OpsL["Branch"]" Value="@_sale.BranchName" />
+                            <InfoRow Label="@OpsL["TotalAmount"]" Value="@totalText" Strong="true" />
+                            <InfoRow Label="@OpsL["RecordedBy"]" Value="@recordedByText" />
+                            <InfoRow Label="@OpsL["Currency"]" Value="@_sale.Currency" />
+                        </div>
+                        @if (!string.IsNullOrWhiteSpace(_sale.Notes))
+                        {
+                            <div class="po-notes">
+                                <SoftText Typo="Typo.caption" Color="Color.Default">@OpsL["Notes"]</SoftText>
+                                <SoftText Typo="Typo.body2">@_sale.Notes</SoftText>
+                            </div>
+                        }
+                    </div>
+
+                    <div>
+                        <SoftText Typo="Typo.overline" Color="Color.Primary">
+                            @OpsL["SaleItems"] (@_sale.Items.Count)
+                        </SoftText>
+                        <SoftDivider Class="mb-3" />
+                        <MudTable T="SaleItemDto" Items="@_sale.Items" Dense="true" Hover="true" Bordered="false" Striped="true">
+                            <HeaderContent>
+                                <MudTh>@OpsL["Product"]</MudTh>
+                                <MudTh Style="text-align:right;">@OpsL["Quantity"]</MudTh>
+                                <MudTh Style="text-align:right;">@OpsL["UnitPrice"]</MudTh>
+                                <MudTh Style="text-align:right;">@OpsL["Subtotal"]</MudTh>
+                            </HeaderContent>
+                            <RowTemplate Context="item">
+                                <MudTd>
+                                    <SoftStack Spacing="0">
+                                        <SoftText Typo="Typo.body2" Style="font-weight:500;">@item.ProductName</SoftText>
+                                        <SoftText Typo="Typo.caption" Color="Color.Default">@item.ProductSKU</SoftText>
+                                    </SoftStack>
+                                </MudTd>
+                                <MudTd Style="text-align:right;">@item.Quantity @item.ProductUnit</MudTd>
+                                <MudTd Style="text-align:right;">@($"{item.UnitPrice:N2}")</MudTd>
+                                <MudTd Style="text-align:right;"><strong>@($"{item.Subtotal:N2}")</strong></MudTd>
+                            </RowTemplate>
+                            <FooterContent>
+                                <MudTd colspan="3" Style="text-align:right; font-weight:600;">@OpsL["TotalAmount"]</MudTd>
+                                <MudTd Style="text-align:right;">
+                                    <strong>@($"{_sale.TotalAmount:N2} {_sale.Currency}")</strong>
+                                </MudTd>
+                            </FooterContent>
+                        </MudTable>
+                    </div>
+
+                </SoftStack>
+            </SoftCardContent>
+
+            <SoftDivider />
+            <div class="pa-3 d-flex justify-end">
+                <SoftButton Variant="Variant.Filled" Color="Color.Default" OnClick="CloseAsync">@L["Close"]</SoftButton>
+            </div>
+
+        </SoftCard>
+    </div>
+</div>
+
+<style>
+    .soft-modal-backdrop {
+        position: fixed; inset: 0;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 1400;
+        display: flex; align-items: center; justify-content: center;
+        padding: 16px;
+        animation: soft-modal-fade-in 0.15s ease-out;
+    }
+    .soft-modal-container { width: 100%; max-width: 560px; animation: soft-modal-scale-in 0.18s ease-out; }
+    .soft-modal-container--lg { max-width: 760px; }
+    .soft-modal-card { border-radius: 12px; overflow: hidden; }
+    .sale-detail-body { max-height: 72vh; overflow-y: auto; }
+    .po-info-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 10px 24px;
+    }
+    .po-notes {
+        margin-top: 12px;
+        padding: 10px 12px;
+        background: var(--mud-palette-background-grey);
+        border-radius: 8px;
+    }
+    @@keyframes soft-modal-fade-in { from { opacity: 0; } to { opacity: 1; } }
+    @@keyframes soft-modal-scale-in { from { opacity: 0; transform: scale(0.96); } to { opacity: 1; transform: scale(1); } }
+</style>
+
+@code {
+    [Parameter, EditorRequired] public Guid SaleId { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private SaleDto? _sale;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try { _sale = await SaleAppService.GetAsync(SaleId); }
+        catch (Exception ex) { await HandleErrorAsync(ex); }
+    }
+
+    private async Task CloseAsync()
+    {
+        if (OnClose.HasDelegate) await OnClose.InvokeAsync();
+    }
+}

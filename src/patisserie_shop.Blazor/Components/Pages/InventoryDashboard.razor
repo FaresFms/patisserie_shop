@@ -1,0 +1,851 @@
+@page "/inventory/dashboard"
+@attribute [Authorize(InventoryPermissions.BranchInventory.Default)]
+@using System.Threading.Tasks
+@using Microsoft.AspNetCore.Authorization
+@using Inventory.Dashboard
+@using Inventory.BranchInventory
+@using Inventory.StockMovements
+@using Inventory.Permissions
+@using Inventory.Localization
+@using Volo.Abp.AspNetCore.Components.Web.Theming.Layout
+@using Color = MudBlazor.Color
+@using Size = MudBlazor.Size
+@inherits patisserie_shopComponentBase
+@inject IInventoryDashboardAppService DashboardAppService
+@inject PageLayout PageLayout
+@inject IStringLocalizer<InventoryResource> InvL
+
+@{
+    PageLayout.Title = "Inventory Dashboard";
+}
+
+<div class="dashboard-root">
+
+    @* ── Header Bar ── *@
+    <div class="dash-header mb-5">
+        <div class="dash-header-left">
+            <MudIcon Icon="@Icons.Material.Filled.Dashboard" Class="dash-header-icon" />
+            <div>
+                <MudText Typo="Typo.h5" Class="dash-title">Inventory Dashboard</MudText>
+                <MudText Typo="Typo.body2" Class="dash-subtitle">
+                    @if (_lastRefreshed.HasValue)
+                    {
+                        <span>Last updated @_lastRefreshed.Value.ToString("HH:mm:ss")</span>
+                    }
+                    else
+                    {
+                        <span>Loading data…</span>
+                    }
+                </MudText>
+            </div>
+        </div>
+        <MudButton Variant="Variant.Outlined"
+                   Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.Refresh"
+                   OnClick="RefreshAsync"
+                   Disabled="_loading"
+                   Class="dash-refresh-btn">
+            @(_loading ? "Refreshing…" : "Refresh")
+        </MudButton>
+    </div>
+
+    @if (_loading && _data == null)
+    {
+        <div class="dash-loading-wrap">
+            <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Large" />
+            <MudText Typo="Typo.body1" Class="mt-4" Style="opacity:.6">Loading dashboard…</MudText>
+        </div>
+    }
+    else if (_data != null)
+    {
+        @* ── KPI Cards Row ── *@
+        <div class="kpi-grid mb-5">
+            <div class="kpi-card kpi-blue">
+                <div class="kpi-icon-wrap"><MudIcon Icon="@Icons.Material.Filled.Inventory2" /></div>
+                <div class="kpi-body">
+                    <div class="kpi-value">@_data.TotalProducts</div>
+                    <div class="kpi-label">Total Products</div>
+                    <div class="kpi-sub">@_data.ActiveProducts active</div>
+                </div>
+            </div>
+
+            <div class="kpi-card kpi-purple">
+                <div class="kpi-icon-wrap"><MudIcon Icon="@Icons.Material.Filled.Store" /></div>
+                <div class="kpi-body">
+                    <div class="kpi-value">@_data.TotalBranches</div>
+                    <div class="kpi-label">Branches</div>
+                    <div class="kpi-sub">@_data.ActiveBranches active</div>
+                </div>
+            </div>
+
+            <div class="kpi-card kpi-teal">
+                <div class="kpi-icon-wrap"><MudIcon Icon="@Icons.Material.Filled.Warehouse" /></div>
+                <div class="kpi-body">
+                    <div class="kpi-value">@_data.TotalInventoryItems</div>
+                    <div class="kpi-label">Inventory Items</div>
+                    <div class="kpi-sub">@_data.HealthyStockCount healthy</div>
+                </div>
+            </div>
+
+            <div class="kpi-card @(_data.LowStockCount > 0 ? "kpi-orange" : "kpi-green")">
+                <div class="kpi-icon-wrap"><MudIcon Icon="@Icons.Material.Filled.TrendingDown" /></div>
+                <div class="kpi-body">
+                    <div class="kpi-value">@_data.LowStockCount</div>
+                    <div class="kpi-label">Low Stock</div>
+                    <div class="kpi-sub">needs attention</div>
+                </div>
+            </div>
+
+            <div class="kpi-card @(_data.OutOfStockCount > 0 ? "kpi-red" : "kpi-green")">
+                <div class="kpi-icon-wrap"><MudIcon Icon="@Icons.Material.Filled.RemoveShoppingCart" /></div>
+                <div class="kpi-body">
+                    <div class="kpi-value">@_data.OutOfStockCount</div>
+                    <div class="kpi-label">Out of Stock</div>
+                    <div class="kpi-sub">@(_data.OutOfStockCount == 0 ? "all clear" : "critical")</div>
+                </div>
+            </div>
+
+            <div class="kpi-card kpi-indigo">
+                <div class="kpi-icon-wrap"><MudIcon Icon="@Icons.Material.Filled.Category" /></div>
+                <div class="kpi-body">
+                    <div class="kpi-value">@_data.TotalCategories</div>
+                    <div class="kpi-label">Categories</div>
+                    <div class="kpi-sub">@_data.TotalSuppliers suppliers</div>
+                </div>
+            </div>
+        </div>
+
+        @* ── Middle Row: Health Overview + Movement Summary ── *@
+        <div class="dash-row mb-5">
+
+            @* Stock Health Overview *@
+            <div class="dash-panel dash-panel--health">
+                <div class="panel-header">
+                    <MudIcon Icon="@Icons.Material.Filled.MonitorHeart" Class="panel-header-icon" />
+                    <MudText Typo="Typo.h6">Stock Health Overview</MudText>
+                </div>
+                <div class="panel-body">
+
+                    @{ var total = _data.TotalInventoryItems; }
+
+                    @* Healthy *@
+                    <div class="health-row mb-3">
+                        <div class="health-row-top">
+                            <div class="health-dot health-dot--green"></div>
+                            <span class="health-label">Healthy Stock</span>
+                            <span class="health-count health-count--green">@_data.HealthyStockCount</span>
+                        </div>
+                        <MudProgressLinear Color="Color.Success"
+                                           Value="@(total > 0 ? (double)_data.HealthyStockCount / total * 100 : 0)"
+                                           Rounded="true" Size="Size.Medium" Class="health-bar" />
+                        <span class="health-pct">@(total > 0 ? $"{(double)_data.HealthyStockCount / total * 100:F1}" : "0")%</span>
+                    </div>
+
+                    @* Low Stock *@
+                    <div class="health-row mb-3">
+                        <div class="health-row-top">
+                            <div class="health-dot health-dot--orange"></div>
+                            <span class="health-label">Low Stock</span>
+                            <span class="health-count health-count--orange">@_data.LowStockCount</span>
+                        </div>
+                        <MudProgressLinear Color="Color.Warning"
+                                           Value="@(total > 0 ? (double)_data.LowStockCount / total * 100 : 0)"
+                                           Rounded="true" Size="Size.Medium" Class="health-bar" />
+                        <span class="health-pct">@(total > 0 ? $"{(double)_data.LowStockCount / total * 100:F1}" : "0")%</span>
+                    </div>
+
+                    @* Out of Stock *@
+                    <div class="health-row">
+                        <div class="health-row-top">
+                            <div class="health-dot health-dot--red"></div>
+                            <span class="health-label">Out of Stock</span>
+                            <span class="health-count health-count--red">@_data.OutOfStockCount</span>
+                        </div>
+                        <MudProgressLinear Color="Color.Error"
+                                           Value="@(total > 0 ? (double)_data.OutOfStockCount / total * 100 : 0)"
+                                           Rounded="true" Size="Size.Medium" Class="health-bar" />
+                        <span class="health-pct">@(total > 0 ? $"{(double)_data.OutOfStockCount / total * 100:F1}" : "0")%</span>
+                    </div>
+
+                    @* Visual ring *@
+                    <div class="health-ring-wrap">
+                        <div class="health-ring" style="@BuildRingStyle()">
+                            <div class="health-ring-inner">
+                                <div class="health-ring-pct">@(total > 0 ? $"{(double)_data.HealthyStockCount / total * 100:F0}" : "0")%</div>
+                                <div class="health-ring-text">healthy</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            @* Movement Summary (last 30 days) *@
+            <div class="dash-panel dash-panel--movements">
+                <div class="panel-header">
+                    <MudIcon Icon="@Icons.Material.Filled.SwapHoriz" Class="panel-header-icon" />
+                    <MudText Typo="Typo.h6">Stock Movements</MudText>
+                    <span class="panel-badge">Last 30 days</span>
+                </div>
+                <div class="panel-body">
+                    <div class="movement-total mb-3">
+                        <span class="movement-total-num">@_data.MovementSummary.TotalCount</span>
+                        <span class="movement-total-label">total movements</span>
+                    </div>
+                    <div class="movement-cards">
+                        <div class="mv-card mv-purchase">
+                            <MudIcon Icon="@Icons.Material.Filled.ShoppingCart" Class="mv-icon" />
+                            <div class="mv-num">@_data.MovementSummary.PurchaseCount</div>
+                            <div class="mv-name">Purchases</div>
+                        </div>
+                        <div class="mv-card mv-sale">
+                            <MudIcon Icon="@Icons.Material.Filled.PointOfSale" Class="mv-icon" />
+                            <div class="mv-num">@_data.MovementSummary.SaleCount</div>
+                            <div class="mv-name">Sales</div>
+                        </div>
+                        <div class="mv-card mv-transfer-in">
+                            <MudIcon Icon="@Icons.Material.Filled.CallReceived" Class="mv-icon" />
+                            <div class="mv-num">@_data.MovementSummary.TransferInCount</div>
+                            <div class="mv-name">Transfer In</div>
+                        </div>
+                        <div class="mv-card mv-transfer-out">
+                            <MudIcon Icon="@Icons.Material.Filled.CallMade" Class="mv-icon" />
+                            <div class="mv-num">@_data.MovementSummary.TransferOutCount</div>
+                            <div class="mv-name">Transfer Out</div>
+                        </div>
+                        <div class="mv-card mv-adjust">
+                            <MudIcon Icon="@Icons.Material.Filled.Tune" Class="mv-icon" />
+                            <div class="mv-num">@_data.MovementSummary.ManualAdjustmentCount</div>
+                            <div class="mv-name">Adjustments</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        @* ── Branch Performance ── *@
+        @if (_data.BranchStats.Any())
+        {
+            <div class="dash-panel dash-panel--full mb-5">
+                <div class="panel-header">
+                    <MudIcon Icon="@Icons.Material.Filled.BusinessCenter" Class="panel-header-icon" />
+                    <MudText Typo="Typo.h6">Branch Performance</MudText>
+                </div>
+                <div class="panel-body pa-0">
+                    <table class="branch-table">
+                        <thead>
+                            <tr>
+                                <th>Branch</th>
+                                <th class="text-center">Total Items</th>
+                                <th class="text-center">Healthy</th>
+                                <th class="text-center">Low Stock</th>
+                                <th class="text-center">Out of Stock</th>
+                                <th style="min-width:180px">Health Score</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var branch in _data.BranchStats)
+                            {
+                                <tr class="@(!branch.IsActive ? "branch-row--inactive" : "")">
+                                    <td>
+                                        <div class="branch-name-cell">
+                                            <MudIcon Icon="@Icons.Material.Filled.Store"
+                                                     Style="font-size:16px; margin-right:6px; opacity:.6;" />
+                                            <span class="branch-name">@branch.BranchName</span>
+                                            @if (!branch.IsActive)
+                                            {
+                                                <span class="branch-inactive-badge">Inactive</span>
+                                            }
+                                        </div>
+                                    </td>
+                                    <td class="text-center">
+                                        <span class="branch-stat-chip">@branch.TotalItems</span>
+                                    </td>
+                                    <td class="text-center">
+                                        <span class="branch-stat-chip chip-green">@branch.HealthyStockCount</span>
+                                    </td>
+                                    <td class="text-center">
+                                        <span class="branch-stat-chip @(branch.LowStockCount > 0 ? "chip-orange" : "")">@branch.LowStockCount</span>
+                                    </td>
+                                    <td class="text-center">
+                                        <span class="branch-stat-chip @(branch.OutOfStockCount > 0 ? "chip-red" : "")">@branch.OutOfStockCount</span>
+                                    </td>
+                                    <td>
+                                        <div class="branch-health-bar-wrap">
+                                            <MudProgressLinear Color="@GetBranchHealthColor(branch)"
+                                                               Value="@branch.HealthPercentage"
+                                                               Rounded="true" Size="Size.Small"
+                                                               Class="branch-health-bar" />
+                                            <span class="branch-health-pct">@branch.HealthPercentage%</span>
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        }
+
+        @* ── Bottom Row: Critical Items + Recent Movements ── *@
+        <div class="dash-row mb-4">
+
+            @* Critical Stock Items *@
+            <div class="dash-panel dash-panel--critical">
+                <div class="panel-header">
+                    <MudIcon Icon="@Icons.Material.Filled.Warning" Class="panel-header-icon panel-header-icon--warning" />
+                    <MudText Typo="Typo.h6">Critical Stock Items</MudText>
+                    @if (_data.CriticalStockItems.Any())
+                    {
+                        <span class="panel-badge panel-badge--red">@_data.CriticalStockItems.Count</span>
+                    }
+                </div>
+                <div class="panel-body pa-0">
+                    @if (!_data.CriticalStockItems.Any())
+                    {
+                        <div class="empty-state">
+                            <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Class="empty-icon empty-icon--green" />
+                            <MudText Typo="Typo.body1">All items are well-stocked!</MudText>
+                        </div>
+                    }
+                    else
+                    {
+                        <table class="critical-table">
+                            <thead>
+                                <tr>
+                                    <th>Product</th>
+                                    <th class="text-center">On Hand</th>
+                                    <th class="text-center">Min Stock</th>
+                                    <th class="text-center">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var item in _data.CriticalStockItems)
+                                {
+                                    <tr>
+                                        <td>
+                                            <div class="product-name-cell">
+                                                <span class="product-name">@item.ProductName</span>
+                                                <span class="product-sku">@item.ProductSKU</span>
+                                            </div>
+                                        </td>
+                                        <td class="text-center">
+                                            <span class="@(item.IsOutOfStock ? "qty-out" : "qty-low")">@item.QuantityOnHand</span>
+                                        </td>
+                                        <td class="text-center">
+                                            <span class="qty-min">@item.MinimumStock</span>
+                                        </td>
+                                        <td class="text-center">
+                                            @if (item.IsOutOfStock)
+                                            {
+                                                <span class="status-badge status-out">Out of Stock</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="status-badge status-low">Low Stock</span>
+                                            }
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    }
+                </div>
+            </div>
+
+            @* Recent Movements *@
+            <div class="dash-panel dash-panel--recent">
+                <div class="panel-header">
+                    <MudIcon Icon="@Icons.Material.Filled.History" Class="panel-header-icon" />
+                    <MudText Typo="Typo.h6">Recent Movements</MudText>
+                    <span class="panel-badge">Last 30 days</span>
+                </div>
+                <div class="panel-body pa-0">
+                    @if (!_data.RecentMovements.Any())
+                    {
+                        <div class="empty-state">
+                            <MudIcon Icon="@Icons.Material.Outlined.Inbox" Class="empty-icon" />
+                            <MudText Typo="Typo.body1">No recent movements</MudText>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="movement-list">
+                            @foreach (var mv in _data.RecentMovements)
+                            {
+                                <div class="movement-item">
+                                    <div class="@($"mv-type-dot mv-dot-{mv.MovementType.ToLower()}")"></div>
+                                    <div class="mv-item-body">
+                                        <div class="mv-item-top">
+                                            <span class="mv-product">@mv.ProductName</span>
+                                            <span class="@($"mv-type-badge mv-badge-{mv.MovementType.ToLower()}")">@FormatMovementType(mv.MovementType)</span>
+                                        </div>
+                                        <div class="mv-item-bottom">
+                                            <span class="mv-branch">@mv.BranchName</span>
+                                            <span class="mv-qty">
+                                                @(mv.Quantity > 0 ? $"+{mv.Quantity}" : mv.Quantity.ToString()) @mv.ProductUnit
+                                            </span>
+                                            <span class="mv-time">@mv.CreationTime.ToString("MMM d, HH:mm")</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+
+        </div>
+    }
+</div>
+
+<style>
+    /* ─── Root ─────────────────────────────────────────── */
+    .dashboard-root {
+        padding: 4px 0;
+        max-width: 1400px;
+    }
+
+    /* ─── Header ────────────────────────────────────────── */
+    .dash-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 12px;
+    }
+    .dash-header-left {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+    }
+    .dash-header-icon {
+        font-size: 40px;
+        color: var(--mud-palette-primary);
+        opacity: .85;
+    }
+    .dash-title {
+        font-weight: 700;
+        line-height: 1.2;
+    }
+    .dash-subtitle {
+        opacity: .55;
+        font-size: .82rem;
+    }
+    .dash-refresh-btn {
+        border-radius: 8px !important;
+    }
+    .dash-loading-wrap {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-height: 300px;
+    }
+
+    /* ─── KPI Grid ──────────────────────────────────────── */
+    .kpi-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+        gap: 16px;
+    }
+    .kpi-card {
+        border-radius: 14px;
+        padding: 20px 18px;
+        display: flex;
+        align-items: flex-start;
+        gap: 14px;
+        box-shadow: 0 2px 8px rgba(0,0,0,.08);
+        transition: transform .15s, box-shadow .15s;
+        color: white;
+        position: relative;
+        overflow: hidden;
+    }
+    .kpi-card::after {
+        content: '';
+        position: absolute;
+        top: -20px; right: -20px;
+        width: 80px; height: 80px;
+        border-radius: 50%;
+        background: rgba(255,255,255,.12);
+    }
+    .kpi-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(0,0,0,.14);
+    }
+    .kpi-icon-wrap {
+        background: rgba(255,255,255,.22);
+        border-radius: 10px;
+        padding: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+    }
+    .kpi-icon-wrap .mud-icon-root { font-size: 24px; color: white; }
+    .kpi-body { flex: 1; }
+    .kpi-value { font-size: 2rem; font-weight: 700; line-height: 1; }
+    .kpi-label { font-size: .78rem; font-weight: 600; opacity: .85; margin-top: 4px; text-transform: uppercase; letter-spacing: .04em; }
+    .kpi-sub { font-size: .75rem; opacity: .7; margin-top: 2px; }
+
+    .kpi-blue   { background: linear-gradient(135deg, #1976d2, #42a5f5); }
+    .kpi-purple { background: linear-gradient(135deg, #7b1fa2, #ba68c8); }
+    .kpi-teal   { background: linear-gradient(135deg, #00796b, #4db6ac); }
+    .kpi-orange { background: linear-gradient(135deg, #e65100, #ffa726); }
+    .kpi-red    { background: linear-gradient(135deg, #c62828, #ef5350); }
+    .kpi-green  { background: linear-gradient(135deg, #2e7d32, #66bb6a); }
+    .kpi-indigo { background: linear-gradient(135deg, #283593, #5c6bc0); }
+
+    /* ─── Panels ────────────────────────────────────────── */
+    .dash-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+    }
+    @@media (max-width: 900px) { .dash-row { grid-template-columns: 1fr; } }
+
+    .dash-panel {
+        background: var(--mud-palette-surface);
+        border-radius: 14px;
+        box-shadow: 0 2px 8px rgba(0,0,0,.07);
+        overflow: hidden;
+    }
+    .dash-panel--full { width: 100%; }
+
+    .panel-header {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 16px 20px 12px;
+        border-bottom: 1px solid var(--mud-palette-lines-default);
+        flex-wrap: wrap;
+    }
+    .panel-header-icon {
+        font-size: 22px;
+        color: var(--mud-palette-primary);
+        opacity: .8;
+    }
+    .panel-header-icon--warning { color: #ff9800 !important; }
+    .panel-header .mud-typography-h6 { font-weight: 600; flex: 1; }
+    .panel-badge {
+        font-size: .7rem;
+        font-weight: 600;
+        background: var(--mud-palette-action-disabled-background);
+        color: var(--mud-palette-text-secondary);
+        padding: 2px 8px;
+        border-radius: 20px;
+        letter-spacing: .03em;
+    }
+    .panel-badge--red {
+        background: rgba(211,47,47,.12);
+        color: #d32f2f;
+    }
+    .panel-body { padding: 20px; }
+    .panel-body.pa-0 { padding: 0; }
+
+    /* ─── Health Panel ──────────────────────────────────── */
+    .health-row { }
+    .health-row-top {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 6px;
+    }
+    .health-dot {
+        width: 10px; height: 10px;
+        border-radius: 50%;
+        flex-shrink: 0;
+    }
+    .health-dot--green  { background: #4caf50; }
+    .health-dot--orange { background: #ff9800; }
+    .health-dot--red    { background: #f44336; }
+    .health-label { flex: 1; font-size: .88rem; font-weight: 500; }
+    .health-count {
+        font-size: .88rem;
+        font-weight: 700;
+        padding: 1px 8px;
+        border-radius: 12px;
+    }
+    .health-count--green  { background: rgba(76,175,80,.12);  color: #2e7d32; }
+    .health-count--orange { background: rgba(255,152,0,.12);  color: #e65100; }
+    .health-count--red    { background: rgba(244,67,54,.12);  color: #c62828; }
+    .health-bar { margin-bottom: 2px; }
+    .health-pct { font-size: .75rem; color: var(--mud-palette-text-secondary); display: block; text-align: right; }
+
+    .health-ring-wrap {
+        display: flex;
+        justify-content: center;
+        margin-top: 20px;
+    }
+    .health-ring {
+        width: 120px; height: 120px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .health-ring-inner {
+        width: 82px; height: 82px;
+        border-radius: 50%;
+        background: var(--mud-palette-surface);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+    }
+    .health-ring-pct { font-size: 1.3rem; font-weight: 700; line-height: 1; }
+    .health-ring-text { font-size: .65rem; opacity: .55; text-transform: uppercase; letter-spacing: .06em; }
+
+    /* ─── Movement Summary Panel ────────────────────────── */
+    .movement-total { text-align: center; padding-top: 4px; }
+    .movement-total-num { font-size: 2.4rem; font-weight: 700; color: var(--mud-palette-primary); }
+    .movement-total-label { font-size: .78rem; color: var(--mud-palette-text-secondary); margin-left: 6px; }
+
+    .movement-cards {
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        gap: 10px;
+        margin-top: 8px;
+    }
+    @@media (max-width: 600px) { .movement-cards { grid-template-columns: repeat(3, 1fr); } }
+    .mv-card {
+        border-radius: 12px;
+        padding: 14px 8px 10px;
+        text-align: center;
+        transition: transform .12s;
+    }
+    .mv-card:hover { transform: translateY(-2px); }
+    .mv-icon { font-size: 22px !important; margin-bottom: 6px; }
+    .mv-num { font-size: 1.4rem; font-weight: 700; line-height: 1; }
+    .mv-name { font-size: .68rem; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; margin-top: 3px; opacity: .75; }
+
+    .mv-purchase    { background: rgba(25,118,210,.08); color: #1565c0; }
+    .mv-sale        { background: rgba(46,125,50,.08);  color: #1b5e20; }
+    .mv-transfer-in { background: rgba(0,121,107,.08);  color: #004d40; }
+    .mv-transfer-out{ background: rgba(123,31,162,.08); color: #4a148c; }
+    .mv-adjust      { background: rgba(230,81,0,.08);   color: #bf360c; }
+
+    /* ─── Branch Performance Table ──────────────────────── */
+    .branch-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: .875rem;
+    }
+    .branch-table th {
+        padding: 10px 16px;
+        text-align: left;
+        font-size: .72rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: .05em;
+        color: var(--mud-palette-text-secondary);
+        border-bottom: 2px solid var(--mud-palette-lines-default);
+        white-space: nowrap;
+    }
+    .branch-table td {
+        padding: 12px 16px;
+        border-bottom: 1px solid var(--mud-palette-lines-default);
+        vertical-align: middle;
+    }
+    .branch-table tr:last-child td { border-bottom: none; }
+    .branch-table tr:hover td { background: var(--mud-palette-action-hover); }
+    .branch-row--inactive td { opacity: .55; }
+
+    .branch-name-cell { display: flex; align-items: center; }
+    .branch-name { font-weight: 600; }
+    .branch-inactive-badge {
+        margin-left: 8px;
+        font-size: .65rem;
+        background: rgba(0,0,0,.08);
+        padding: 1px 6px;
+        border-radius: 10px;
+        color: var(--mud-palette-text-secondary);
+    }
+    .branch-stat-chip {
+        display: inline-block;
+        min-width: 32px;
+        text-align: center;
+        padding: 3px 10px;
+        border-radius: 20px;
+        font-weight: 700;
+        font-size: .82rem;
+        background: var(--mud-palette-action-disabled-background);
+        color: var(--mud-palette-text-primary);
+    }
+    .chip-green  { background: rgba(76,175,80,.14);  color: #2e7d32; }
+    .chip-orange { background: rgba(255,152,0,.14);  color: #e65100; }
+    .chip-red    { background: rgba(244,67,54,.14);  color: #c62828; }
+
+    .branch-health-bar-wrap { display: flex; align-items: center; gap: 8px; }
+    .branch-health-bar { flex: 1; }
+    .branch-health-pct { font-size: .78rem; font-weight: 600; white-space: nowrap; min-width: 38px; text-align: right; }
+
+    /* ─── Critical Items Table ──────────────────────────── */
+    .critical-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: .875rem;
+    }
+    .critical-table th {
+        padding: 10px 16px;
+        text-align: left;
+        font-size: .72rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: .05em;
+        color: var(--mud-palette-text-secondary);
+        border-bottom: 2px solid var(--mud-palette-lines-default);
+    }
+    .critical-table td {
+        padding: 11px 16px;
+        border-bottom: 1px solid var(--mud-palette-lines-default);
+        vertical-align: middle;
+    }
+    .critical-table tr:last-child td { border-bottom: none; }
+    .critical-table tr:hover td { background: var(--mud-palette-action-hover); }
+
+    .product-name-cell { display: flex; flex-direction: column; gap: 2px; }
+    .product-name { font-weight: 600; font-size: .875rem; }
+    .product-sku  { font-size: .72rem; color: var(--mud-palette-text-secondary); }
+
+    .qty-out { color: #c62828; font-weight: 700; font-size: 1rem; }
+    .qty-low { color: #e65100; font-weight: 700; font-size: 1rem; }
+    .qty-min { color: var(--mud-palette-text-secondary); font-size: .875rem; }
+
+    .status-badge {
+        display: inline-block;
+        font-size: .7rem;
+        font-weight: 700;
+        padding: 3px 10px;
+        border-radius: 20px;
+        text-transform: uppercase;
+        letter-spacing: .04em;
+        white-space: nowrap;
+    }
+    .status-out { background: rgba(198,40,40,.12); color: #c62828; }
+    .status-low { background: rgba(230,81,0,.12);  color: #e65100; }
+
+    /* ─── Recent Movements List ─────────────────────────── */
+    .movement-list { padding: 8px 0; }
+    .movement-item {
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+        padding: 10px 16px;
+        transition: background .1s;
+    }
+    .movement-item:hover { background: var(--mud-palette-action-hover); }
+    .mv-type-dot {
+        width: 10px; height: 10px;
+        border-radius: 50%;
+        flex-shrink: 0;
+        margin-top: 5px;
+    }
+    .mv-dot-purchase     { background: #1976d2; }
+    .mv-dot-sale         { background: #2e7d32; }
+    .mv-dot-transferin   { background: #00796b; }
+    .mv-dot-transferout  { background: #7b1fa2; }
+    .mv-dot-manualadjustment { background: #e65100; }
+
+    .mv-item-body { flex: 1; min-width: 0; }
+    .mv-item-top { display: flex; align-items: center; gap: 8px; margin-bottom: 3px; flex-wrap: wrap; }
+    .mv-product { font-weight: 600; font-size: .875rem; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .mv-type-badge {
+        font-size: .65rem;
+        font-weight: 700;
+        padding: 2px 7px;
+        border-radius: 10px;
+        text-transform: uppercase;
+        letter-spacing: .04em;
+        white-space: nowrap;
+    }
+    .mv-badge-purchase     { background: rgba(25,118,210,.12);  color: #1565c0; }
+    .mv-badge-sale         { background: rgba(46,125,50,.12);   color: #1b5e20; }
+    .mv-badge-transferin   { background: rgba(0,121,107,.12);   color: #004d40; }
+    .mv-badge-transferout  { background: rgba(123,31,162,.12);  color: #4a148c; }
+    .mv-badge-manualadjustment { background: rgba(230,81,0,.12); color: #bf360c; }
+
+    .mv-item-bottom { display: flex; align-items: center; gap: 10px; font-size: .75rem; color: var(--mud-palette-text-secondary); flex-wrap: wrap; }
+    .mv-branch { opacity: .75; }
+    .mv-qty { font-weight: 700; color: var(--mud-palette-text-primary); }
+    .mv-time { margin-left: auto; white-space: nowrap; }
+
+    /* ─── Empty State ────────────────────────────────────── */
+    .empty-state {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 40px 20px;
+        gap: 12px;
+        opacity: .5;
+    }
+    .empty-icon { font-size: 48px !important; }
+    .empty-icon--green { color: #4caf50 !important; opacity: 1; }
+
+    /* ─── Text alignment helpers ─────────────────────────── */
+    .text-center { text-align: center; }
+</style>
+
+@code {
+    private InventoryDashboardDto? _data;
+    private bool _loading;
+    private DateTime? _lastRefreshed;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadDataAsync();
+    }
+
+    private async Task LoadDataAsync()
+    {
+        _loading = true;
+        try
+        {
+            _data = await DashboardAppService.GetAsync();
+            _lastRefreshed = DateTime.Now;
+        }
+        catch (Exception ex)
+        {
+            await HandleErrorAsync(ex);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task RefreshAsync() => await LoadDataAsync();
+
+    private Color GetBranchHealthColor(BranchDashboardStatsDto branch) => branch.HealthPercentage switch
+    {
+        >= 90 => Color.Success,
+        >= 70 => Color.Warning,
+        _     => Color.Error
+    };
+
+    private string BuildRingStyle()
+    {
+        if (_data == null) return "";
+        var total = _data.TotalInventoryItems;
+        if (total == 0) return "background: conic-gradient(#4caf50 0%, #e0e0e0 0%);";
+
+        double healthy = (double)_data.HealthyStockCount / total * 100;
+        double low = (double)_data.LowStockCount / total * 100;
+
+        return $"background: conic-gradient(" +
+               $"#4caf50 0% {healthy:F1}%, " +
+               $"#ff9800 {healthy:F1}% {healthy + low:F1}%, " +
+               $"#f44336 {healthy + low:F1}% 100%);";
+    }
+
+    private static string FormatMovementType(string type) => type switch
+    {
+        "Purchase"         => "Purchase",
+        "Sale"             => "Sale",
+        "TransferIn"       => "Transfer In",
+        "TransferOut"      => "Transfer Out",
+        "ManualAdjustment" => "Adjustment",
+        _                  => type
+    };
+}

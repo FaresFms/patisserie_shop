@@ -1,21 +1,27 @@
 using System;
+using Volo.Abp;
 using Volo.Abp.Domain.Entities;
 
 namespace Operations.Entities;
 
 public class AppSaleItem : Entity<Guid>
 {
-    public Guid SaleId { get; set; }
-    public Guid ProductId { get; set; }
-    public int Quantity { get; set; }
-    public decimal UnitPrice { get; set; }
-    public decimal Subtotal { get; set; }
+    public Guid SaleId { get; private set; }
+    public Guid ProductId { get; private set; }
+    public int Quantity { get; private set; }
+    public decimal UnitPrice { get; private set; }
+    public decimal Subtotal { get; private set; }
 
     protected AppSaleItem() { }
 
-    public AppSaleItem(Guid id, Guid saleId, Guid productId, int quantity, decimal unitPrice)
+    internal AppSaleItem(Guid id, Guid saleId, Guid productId, int quantity, decimal unitPrice)
         : base(id)
     {
+        if (quantity <= 0)
+            throw new BusinessException(OperationsErrorCodes.InvalidQuantity);
+        if (unitPrice < 0)
+            throw new BusinessException(OperationsErrorCodes.InvalidPrice);
+
         SaleId = saleId;
         ProductId = productId;
         Quantity = quantity;

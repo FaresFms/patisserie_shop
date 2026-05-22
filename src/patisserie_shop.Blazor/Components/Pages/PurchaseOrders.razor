@@ -1,0 +1,469 @@
+@page "/operations/purchase-orders"
+@attribute [Authorize(OperationsPermissions.PurchaseOrders.Default)]
+@using System.Threading
+@using System.Threading.Tasks
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components
+@using Volo.Abp.Application.Dtos
+@using Volo.Abp.AspNetCore.Components.Web.Theming.Layout
+@using Operations
+@using Operations.PurchaseOrders
+@using Operations.Permissions
+@using Operations.Localization
+@using Inventory.Branches
+@using Inventory.Suppliers
+@using Color = MudBlazor.Color
+@using Variant = MudBlazor.Variant
+@using Size = MudBlazor.Size
+@using Margin = MudBlazor.Margin
+@inherits patisserie_shopComponentBase
+@inject IPurchaseOrderAppService PurchaseOrderAppService
+@inject IBranchAppService BranchAppService
+@inject ISupplierAppService SupplierAppService
+@inject PageLayout PageLayout
+@inject ISnackbar Snackbar
+@inject IStringLocalizer<OperationsResource> OpsL
+
+@{
+    PageLayout.Title = OpsL["PurchaseOrders"];
+}
+
+<SoftCard Elevation="2" Class="pa-2">
+    <SoftCardHeader>
+        <CardHeaderContent>
+            <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                <SoftIcon Icon="@Icons.Material.Filled.RequestQuote" Color="Color.Primary" Size="Size.Large" />
+                <SoftText Typo="Typo.h5">@OpsL["PurchaseOrders"]</SoftText>
+            </SoftStack>
+        </CardHeaderContent>
+        <CardHeaderActions>
+            <SoftButton Variant="Variant.Filled"
+                        Color="Color.Primary"
+                        StartIcon="@Icons.Material.Filled.Add"
+                        OnClick="OpenCreateDialog"
+                        Disabled="!_canCreate">
+                @OpsL["NewPurchaseOrder"]
+            </SoftButton>
+        </CardHeaderActions>
+    </SoftCardHeader>
+    <SoftCardContent>
+        <SoftStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Class="mb-4 flex-wrap">
+            <SoftTextField T="string"
+                           Placeholder="@OpsL["Filter"]"
+                           @bind-Value="_filter"
+                           Variant="Variant.Outlined"
+                           Margin="Margin.Dense"
+                           Adornment="Adornment.Start"
+                           AdornmentIcon="@Icons.Material.Filled.Search"
+                           OnKeyUp="OnFilterKeyUpAsync"
+                           Immediate="true"
+                           Style="min-width: 220px; max-width: 320px;" />
+
+            <div style="min-width: 180px;">
+                <SoftLookupSelect TItem="StatusOption" TValue="string"
+                                  Items="_statusOptions"
+                                  ToValue="@(o => o.Value)"
+                                  ToLabel="@(o => o.Label)"
+                                  Value="_statusFilter"
+                                  ValueChanged="OnStatusChangedAsync"
+                                  Label="@OpsL["AllStatuses"]"
+                                  Margin="Margin.Dense"
+                                  Clearable="true"
+                                  Dense="true"
+                                  AdornmentIcon="@Icons.Material.Filled.FlagCircle" />
+            </div>
+
+            <div style="min-width: 200px;">
+                <SoftLookupSelect TItem="SupplierDto" TValue="Guid?"
+                                  Items="_suppliers"
+                                  ToValue="@(s => (Guid?)s.Id)"
+                                  ToLabel="@(s => s.Name)"
+                                  Value="_supplierFilter"
+                                  ValueChanged="OnSupplierChangedAsync"
+                                  Label="@OpsL["Supplier"]"
+                                  Margin="Margin.Dense"
+                                  Clearable="true"
+                                  Dense="true"
+                                  AdornmentIcon="@Icons.Material.Filled.LocalShipping" />
+            </div>
+
+            <div style="min-width: 200px;">
+                <SoftLookupSelect TItem="BranchLookupDto" TValue="Guid?"
+                                  Items="_branches"
+                                  ToValue="@(b => (Guid?)b.Id)"
+                                  ToLabel="@(b => b.Name)"
+                                  Value="_branchFilter"
+                                  ValueChanged="OnBranchChangedAsync"
+                                  Label="@OpsL["DestinationBranch"]"
+                                  Margin="Margin.Dense"
+                                  Clearable="true"
+                                  Dense="true"
+                                  AdornmentIcon="@Icons.Material.Filled.Store" />
+            </div>
+
+            <SoftButton Variant="Variant.Outlined" Color="Color.Primary"
+                        OnClick="ReloadAsync" StartIcon="@Icons.Material.Filled.Refresh">
+                @L["Refresh"]
+            </SoftButton>
+        </SoftStack>
+
+        <SoftDataGrid T="PurchaseOrderDto"
+                      @ref="_grid"
+                      ServerData="LoadServerData"
+                      Dense="true"
+                      Hover="true"
+                      Bordered="false"
+                      Loading="_loading"
+                      SortMode="SortMode.Single"
+                      RowClick="OnRowClick">
+            <Columns>
+                <PropertyColumn T="PurchaseOrderDto" TProperty="string" Property="x => x.PONumber" Title="@OpsL["PONumber"]" />
+                <PropertyColumn T="PurchaseOrderDto" TProperty="string" Property="x => x.SupplierName" Title="@OpsL["Supplier"]" />
+                <PropertyColumn T="PurchaseOrderDto" TProperty="string" Property="x => x.DestBranchName" Title="@OpsL["DestinationBranch"]" />
+                <TemplateColumn T="PurchaseOrderDto" Title="@OpsL["Status"]" SortBy="x => x.Status">
+                    <CellTemplate>
+                        <div class="@($"po-status po-status-{context.Item.Status.ToLower()}")">
+                            <MudIcon Icon="@StatusIcon(context.Item.Status)" Size="Size.Small" />
+                            <span>@OpsL[$"Status:{context.Item.Status}"]</span>
+                        </div>
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn T="PurchaseOrderDto" Title="@OpsL["OrderDate"]" SortBy="x => x.OrderDate">
+                    <CellTemplate>
+                        <SoftText Typo="Typo.body2">@context.Item.OrderDate.ToString("MMM d, yyyy")</SoftText>
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn T="PurchaseOrderDto" Title="@OpsL["ExpectedDeliveryDate"]" SortBy="x => x.ExpectedDeliveryDate ?? DateTime.MaxValue">
+                    <CellTemplate>
+                        <SoftText Typo="Typo.body2">@(context.Item.ExpectedDeliveryDate?.ToString("MMM d, yyyy") ?? "-")</SoftText>
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn T="PurchaseOrderDto" Title="@OpsL["TotalAmount"]" SortBy="x => x.TotalAmount">
+                    <CellTemplate>
+                        <SoftText Style="font-weight:600;">@($"{context.Item.TotalAmount:N2} {context.Item.Currency}")</SoftText>
+                    </CellTemplate>
+                </TemplateColumn>
+                <PropertyColumn T="PurchaseOrderDto" TProperty="string" Property="x => x.CreatorUserName!" Title="@OpsL["CreatedBy"]" Sortable="false" />
+                <TemplateColumn T="PurchaseOrderDto" Title="" Sortable="false">
+                    <CellTemplate>
+                        <SoftIconButton Icon="@Icons.Material.Filled.OpenInNew"
+                                        Color="Color.Primary"
+                                        Size="Size.Small"
+                                        OnClick="@(() => OpenDetail(context.Item.Id))" />
+                    </CellTemplate>
+                </TemplateColumn>
+            </Columns>
+            <NoRecordsContent>
+                <SoftStack AlignItems="AlignItems.Center" Spacing="2" Class="pa-6">
+                    <SoftIcon Icon="@Icons.Material.Outlined.Inbox" Style="font-size: 56px; opacity: 0.4;" />
+                    <SoftText Typo="Typo.body1" Color="Color.Default">@OpsL["NoPurchaseOrders"]</SoftText>
+                </SoftStack>
+            </NoRecordsContent>
+            <PagerContent>
+                <MudDataGridPager T="PurchaseOrderDto" />
+            </PagerContent>
+        </SoftDataGrid>
+    </SoftCardContent>
+</SoftCard>
+
+@if (_createVisible)
+{
+    <div class="soft-modal-backdrop" @onclick="CloseCreate">
+        <div class="soft-modal-container soft-modal-container--md" @onclick:stopPropagation="true">
+            <SoftCard Elevation="24" Class="soft-modal-card">
+                <SoftCardHeader Class="pa-4">
+                    <CardHeaderContent>
+                        <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <SoftIcon Icon="@Icons.Material.Filled.AddCircle" Color="Color.Primary" Size="Size.Medium" />
+                            <SoftText Typo="Typo.h6">@OpsL["NewPurchaseOrder"]</SoftText>
+                        </SoftStack>
+                    </CardHeaderContent>
+                    <CardHeaderActions>
+                        <SoftIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="CloseCreate" />
+                    </CardHeaderActions>
+                </SoftCardHeader>
+                <SoftDivider />
+                <SoftCardContent Class="pa-4">
+                    <SoftStack Spacing="3">
+                        <SoftAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+                            Step 1 of 2 — set up the order header. You'll add products in the next step.
+                        </SoftAlert>
+                        <SoftLookupSelect TItem="SupplierDto" TValue="Guid?"
+                                          Items="_suppliers"
+                                          ToValue="@(s => (Guid?)s.Id)"
+                                          ToLabel="@(s => s.Name)"
+                                          Value="_newSupplierId"
+                                          ValueChanged="@(v => _newSupplierId = v)"
+                                          Label="@OpsL["Supplier"]"
+                                          Required="true"
+                                          AdornmentIcon="@Icons.Material.Filled.LocalShipping" />
+                        <SoftLookupSelect TItem="BranchLookupDto" TValue="Guid?"
+                                          Items="_branches"
+                                          ToValue="@(b => (Guid?)b.Id)"
+                                          ToLabel="@(b => b.Name)"
+                                          Value="_newBranchId"
+                                          ValueChanged="@(v => _newBranchId = v)"
+                                          Label="@OpsL["DestinationBranch"]"
+                                          Required="true"
+                                          AdornmentIcon="@Icons.Material.Filled.Store" />
+                        <SoftStack Row="true" Spacing="2">
+                            <MudDatePicker Label="@OpsL["OrderDate"]" Variant="Variant.Outlined"
+                                           @bind-Date="_newOrderDate" />
+                            <MudDatePicker Label="@OpsL["ExpectedDeliveryDate"]" Variant="Variant.Outlined"
+                                           @bind-Date="_newExpectedDate" Clearable="true" />
+                            <SoftTextField T="string" Label="@OpsL["Currency"]"
+                                           @bind-Value="_newCurrency"
+                                           Variant="Variant.Outlined"
+                                           MaxLength="3"
+                                           Style="max-width: 110px;" />
+                        </SoftStack>
+                        <SoftTextField T="string"
+                                       Label="@OpsL["Notes"]"
+                                       @bind-Value="_newNotes"
+                                       Variant="Variant.Outlined"
+                                       Lines="2"
+                                       MaxLength="512" />
+                    </SoftStack>
+                </SoftCardContent>
+                <SoftDivider />
+                <div class="pa-3 d-flex justify-end" style="gap: 8px;">
+                    <SoftButton Variant="Variant.Text" OnClick="CloseCreate">@L["Cancel"]</SoftButton>
+                    <SoftButton Variant="Variant.Filled" Color="Color.Primary"
+                                EndIcon="@Icons.Material.Filled.ArrowForward"
+                                OnClick="ConfirmCreateAsync"
+                                Disabled="_saving">
+                        Save & add items
+                    </SoftButton>
+                </div>
+            </SoftCard>
+        </div>
+    </div>
+}
+
+@if (_detailId.HasValue)
+{
+    <PurchaseOrderDetailModal PurchaseOrderId="_detailId.Value"
+                              OnClose="CloseDetailAsync"
+                              Changed="OnDetailChangedAsync"
+                              @key="_detailId" />
+}
+
+<style>
+    .soft-modal-backdrop {
+        position: fixed; inset: 0;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 1400;
+        display: flex; align-items: center; justify-content: center;
+        padding: 16px;
+        animation: soft-modal-fade-in 0.15s ease-out;
+    }
+    .soft-modal-container { width: 100%; max-width: 560px; animation: soft-modal-scale-in 0.18s ease-out; }
+    .soft-modal-container--md { max-width: 640px; }
+    .soft-modal-card { border-radius: 12px; overflow: hidden; }
+    @@keyframes soft-modal-fade-in { from { opacity: 0; } to { opacity: 1; } }
+    @@keyframes soft-modal-scale-in { from { opacity: 0; transform: scale(0.96); } to { opacity: 1; transform: scale(1); } }
+
+    .po-status {
+        display: inline-flex; align-items: center; gap: 6px;
+        padding: 3px 10px; border-radius: 999px;
+        font-size: 0.78rem; font-weight: 500;
+    }
+    .po-status-draft           { background: rgba(120,120,120,0.18); color: #444; }
+    .po-status-submitted       { background: rgba(33,150,243,0.15);  color: #1565c0; }
+    .po-status-approved        { background: rgba(76,175,80,0.15);   color: #2e7d32; }
+    .po-status-partialreceived { background: rgba(255,167,38,0.18);  color: #b26a00; }
+    .po-status-received        { background: rgba(0,150,136,0.15);   color: #00695c; }
+    .po-status-cancelled       { background: rgba(244,67,54,0.15);   color: #c62828; }
+</style>
+
+@code {
+    private SoftDataGrid<PurchaseOrderDto> _grid = null!;
+    private bool _loading;
+    private bool _saving;
+    private bool _canCreate;
+
+    private string? _filter;
+    private string? _statusFilter;
+    private Guid? _supplierFilter;
+    private Guid? _branchFilter;
+
+    private List<SupplierDto> _suppliers = new();
+    private List<BranchLookupDto> _branches = new();
+    private List<StatusOption> _statusOptions = new();
+
+    private Guid? _detailId;
+
+    private bool _createVisible;
+    private Guid? _newSupplierId;
+    private Guid? _newBranchId;
+    private DateTime? _newOrderDate = DateTime.Today;
+    private DateTime? _newExpectedDate;
+    private string _newCurrency = "USD";
+    private string? _newNotes;
+
+    public record StatusOption(string Value, string Label);
+
+    protected override async Task OnInitializedAsync()
+    {
+        _canCreate = await AuthorizationService.IsGrantedAsync(OperationsPermissions.PurchaseOrders.Create);
+
+        _statusOptions = PurchaseOrderStatuses.All
+            .Select(s => new StatusOption(s, OpsL[$"Status:{s}"]))
+            .ToList();
+
+        try
+        {
+            var sups = await SupplierAppService.GetListAsync(new Inventory.Suppliers.GetSuppliersInput
+            {
+                IsActive = true,
+                MaxResultCount = 1000,
+                Sorting = nameof(SupplierDto.Name)
+            });
+            _suppliers = sups.Items.ToList();
+            _branches = await BranchAppService.GetLookupAsync();
+        }
+        catch (Exception ex)
+        {
+            await HandleErrorAsync(ex);
+        }
+    }
+
+    private async Task<GridData<PurchaseOrderDto>> LoadServerData(GridState<PurchaseOrderDto> state, CancellationToken cancellationToken)
+    {
+        _loading = true;
+        try
+        {
+            string? sorting = null;
+            var sort = state.SortDefinitions.FirstOrDefault();
+            if (sort != null)
+            {
+                sorting = $"{sort.SortBy} {(sort.Descending ? "desc" : "asc")}";
+            }
+
+            var result = await PurchaseOrderAppService.GetListAsync(new GetPurchaseOrdersInput
+            {
+                Filter = _filter,
+                Status = _statusFilter,
+                SupplierId = _supplierFilter,
+                DestBranchId = _branchFilter,
+                SkipCount = state.Page * state.PageSize,
+                MaxResultCount = state.PageSize,
+                Sorting = sorting
+            });
+
+            return new GridData<PurchaseOrderDto>
+            {
+                Items = result.Items,
+                TotalItems = (int)result.TotalCount
+            };
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task OnFilterKeyUpAsync(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await ReloadAsync();
+    }
+
+    private async Task OnStatusChangedAsync(string? v) { _statusFilter = v; await ReloadAsync(); }
+    private async Task OnSupplierChangedAsync(Guid? v) { _supplierFilter = v; await ReloadAsync(); }
+    private async Task OnBranchChangedAsync(Guid? v) { _branchFilter = v; await ReloadAsync(); }
+
+    private async Task ReloadAsync()
+    {
+        if (_grid != null) await _grid.ReloadServerData();
+    }
+
+    private void OnRowClick(DataGridRowClickEventArgs<PurchaseOrderDto> args)
+    {
+        OpenDetail(args.Item.Id);
+    }
+
+    private void OpenDetail(Guid id)
+    {
+        _detailId = id;
+    }
+
+    private async Task CloseDetailAsync()
+    {
+        _detailId = null;
+        await Task.CompletedTask;
+    }
+
+    private async Task OnDetailChangedAsync()
+    {
+        await ReloadAsync();
+    }
+
+    private void OpenCreateDialog()
+    {
+        _newSupplierId = null;
+        _newBranchId = null;
+        _newOrderDate = DateTime.Today;
+        _newExpectedDate = null;
+        _newCurrency = "USD";
+        _newNotes = null;
+        _createVisible = true;
+    }
+
+    private void CloseCreate() => _createVisible = false;
+
+    private async Task ConfirmCreateAsync()
+    {
+        if (!_newSupplierId.HasValue)
+        {
+            Snackbar.Add(L["ThisFieldIsRequired", OpsL["Supplier"]], Severity.Warning);
+            return;
+        }
+        if (!_newBranchId.HasValue)
+        {
+            Snackbar.Add(L["ThisFieldIsRequired", OpsL["DestinationBranch"]], Severity.Warning);
+            return;
+        }
+        if (!_newOrderDate.HasValue)
+        {
+            Snackbar.Add(L["ThisFieldIsRequired", OpsL["OrderDate"]], Severity.Warning);
+            return;
+        }
+
+        _saving = true;
+        try
+        {
+            var created = await PurchaseOrderAppService.CreateAsync(new CreatePurchaseOrderDto
+            {
+                SupplierId = _newSupplierId.Value,
+                DestBranchId = _newBranchId.Value,
+                OrderDate = _newOrderDate.Value,
+                ExpectedDeliveryDate = _newExpectedDate,
+                Currency = (_newCurrency ?? "USD").ToUpper(),
+                Notes = _newNotes
+            });
+            Snackbar.Add($"PO {created.PONumber} created — add items below to continue.", Severity.Success);
+            _createVisible = false;
+            _detailId = created.Id;
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            await HandleErrorAsync(ex);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private static string StatusIcon(string status) => status switch
+    {
+        PurchaseOrderStatuses.Draft => Icons.Material.Filled.EditNote,
+        PurchaseOrderStatuses.Submitted => Icons.Material.Filled.Send,
+        PurchaseOrderStatuses.Approved => Icons.Material.Filled.CheckCircle,
+        PurchaseOrderStatuses.PartialReceived => Icons.Material.Filled.HourglassBottom,
+        PurchaseOrderStatuses.Received => Icons.Material.Filled.TaskAlt,
+        PurchaseOrderStatuses.Cancelled => Icons.Material.Filled.Cancel,
+        _ => Icons.Material.Filled.HelpOutline
+    };
+}

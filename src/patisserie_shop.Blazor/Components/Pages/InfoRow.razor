@@ -1,0 +1,19 @@
+@using MudBlazor
+
+<div class="po-info-row">
+    <div class="po-info-label">@Label</div>
+    <div class="po-info-value @(Strong ? "po-info-strong" : "")">@Value</div>
+</div>
+
+<style>
+    .po-info-row { display: flex; flex-direction: column; gap: 2px; }
+    .po-info-label { font-size: 0.72rem; opacity: 0.7; text-transform: uppercase; letter-spacing: 0.04em; }
+    .po-info-value { font-size: 0.95rem; }
+    .po-info-strong { font-size: 1.05rem; font-weight: 700; }
+</style>
+
+@code {
+    [Parameter, EditorRequired] public string Label { get; set; } = default!;
+    [Parameter, EditorRequired] public string Value { get; set; } = default!;
+    [Parameter] public bool Strong { get; set; }
+}
