@@ -227,9 +227,12 @@
         align-items: center;
         gap: 10px;
         padding: 10px 12px;
-        border-radius: 10px;
-        border: 1px solid var(--mud-palette-lines-default);
-        background: var(--mud-palette-background);
+        border-radius: var(--glass-radius-sm);
+        border: var(--glass-border);
+        background: var(--glass-bg);
+        backdrop-filter: var(--glass-blur);
+        -webkit-backdrop-filter: var(--glass-blur);
+        color: var(--glass-text-primary);
     }
     .sm-type-stat .sm-stat-icon {
         display: flex;
@@ -259,11 +262,11 @@
         font-weight: 500;
         line-height: 1.4;
     }
-    .sm-type-purchase         { background: rgba(76,175,80,0.15);  color: #2e7d32; }
-    .sm-type-sale             { background: rgba(3,169,244,0.15);  color: #0277bd; }
-    .sm-type-transferin       { background: rgba(0,150,136,0.15);  color: #00796b; }
-    .sm-type-transferout      { background: rgba(255,152,0,0.18);  color: #e65100; }
-    .sm-type-manualadjustment { background: rgba(120,120,120,0.18); color: #444; }
+    .sm-type-purchase         { background: rgba( 34,197, 94, 0.20); border: 1px solid rgba( 34,197, 94, 0.40); color: #86efac; }
+    .sm-type-sale             { background: rgba( 59,130,246, 0.20); border: 1px solid rgba( 59,130,246, 0.40); color: #93c5fd; }
+    .sm-type-transferin       { background: rgba( 20,184,166, 0.20); border: 1px solid rgba( 20,184,166, 0.40); color: #5eead4; }
+    .sm-type-transferout      { background: rgba(251,191, 36, 0.20); border: 1px solid rgba(251,191, 36, 0.40); color: #fde68a; }
+    .sm-type-manualadjustment { background: rgba(255,255,255, 0.10); border: 1px solid rgba(255,255,255, 0.20); color: var(--glass-text-secondary); }
 </style>
 
 @code {

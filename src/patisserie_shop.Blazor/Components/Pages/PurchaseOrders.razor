@@ -168,9 +168,9 @@
 
 @if (_createVisible)
 {
-    <div class="soft-modal-backdrop" @onclick="CloseCreate">
-        <div class="soft-modal-container soft-modal-container--md" @onclick:stopPropagation="true">
-            <SoftCard Elevation="24" Class="soft-modal-card">
+    <div class="glass-modal-backdrop" @onclick="CloseCreate">
+        <div class="glass-modal-container glass-modal-container--md" @onclick:stopPropagation="true">
+            <SoftCard Elevation="24" Class="glass-modal">
                 <SoftCardHeader Class="pa-4">
                     <CardHeaderContent>
                         <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
@@ -249,31 +249,20 @@
 }
 
 <style>
-    .soft-modal-backdrop {
-        position: fixed; inset: 0;
-        background: rgba(0, 0, 0, 0.5);
-        z-index: 1400;
-        display: flex; align-items: center; justify-content: center;
-        padding: 16px;
-        animation: soft-modal-fade-in 0.15s ease-out;
-    }
-    .soft-modal-container { width: 100%; max-width: 560px; animation: soft-modal-scale-in 0.18s ease-out; }
-    .soft-modal-container--md { max-width: 640px; }
-    .soft-modal-card { border-radius: 12px; overflow: hidden; }
-    @@keyframes soft-modal-fade-in { from { opacity: 0; } to { opacity: 1; } }
-    @@keyframes soft-modal-scale-in { from { opacity: 0; transform: scale(0.96); } to { opacity: 1; transform: scale(1); } }
-
     .po-status {
         display: inline-flex; align-items: center; gap: 6px;
         padding: 3px 10px; border-radius: 999px;
-        font-size: 0.78rem; font-weight: 500;
+        font-size: 0.78rem; font-weight: 600;
+        border: 1px solid transparent;
+        backdrop-filter: var(--glass-blur);
+        -webkit-backdrop-filter: var(--glass-blur);
     }
-    .po-status-draft           { background: rgba(120,120,120,0.18); color: #444; }
-    .po-status-submitted       { background: rgba(33,150,243,0.15);  color: #1565c0; }
-    .po-status-approved        { background: rgba(76,175,80,0.15);   color: #2e7d32; }
-    .po-status-partialreceived { background: rgba(255,167,38,0.18);  color: #b26a00; }
-    .po-status-received        { background: rgba(0,150,136,0.15);   color: #00695c; }
-    .po-status-cancelled       { background: rgba(244,67,54,0.15);   color: #c62828; }
+    .po-status-draft           { background: rgba(255,255,255, 0.10); border-color: rgba(255,255,255, 0.20); color: var(--glass-text-secondary); }
+    .po-status-submitted       { background: rgba( 59,130,246, 0.20); border-color: rgba( 59,130,246, 0.40); color: #93c5fd; }
+    .po-status-approved        { background: rgba( 34,197, 94, 0.20); border-color: rgba( 34,197, 94, 0.40); color: #86efac; }
+    .po-status-partialreceived { background: rgba(251,191, 36, 0.20); border-color: rgba(251,191, 36, 0.40); color: #fde68a; }
+    .po-status-received        { background: rgba( 20,184,166, 0.20); border-color: rgba( 20,184,166, 0.40); color: #5eead4; }
+    .po-status-cancelled       { background: rgba(239, 68, 68, 0.20); border-color: rgba(239, 68, 68, 0.40); color: #fca5a5; }
 </style>
 
 @code {

@@ -43,6 +43,7 @@ public class CategoryAppService : InventoryAppService, ICategoryAppService
 
         var totalCount = await AsyncExecuter.CountAsync(queryable);
 
+
         var sorting = string.IsNullOrWhiteSpace(input.Sorting) ? nameof(AppCategory.Name) : input.Sorting;
         queryable = queryable.OrderBy(sorting).Skip(input.SkipCount).Take(input.MaxResultCount);
 

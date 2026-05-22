@@ -117,9 +117,9 @@
 
 @if (_dialogVisible)
 {
-    <div class="soft-modal-backdrop" @onclick="CloseDialog">
-        <div class="soft-modal-container soft-modal-container--md" @onclick:stopPropagation="true">
-            <SoftCard Elevation="24" Class="soft-modal-card">
+    <div class="glass-modal-backdrop" @onclick="CloseDialog">
+        <div class="glass-modal-container glass-modal-container--md" @onclick:stopPropagation="true">
+            <SoftCard Elevation="24" Class="glass-modal">
                 <SoftCardHeader Class="pa-4">
                     <CardHeaderContent>
                         <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
@@ -137,7 +137,7 @@
                     </CardHeaderActions>
                 </SoftCardHeader>
                 <SoftDivider />
-                <SoftCardContent Class="pa-4 soft-modal-body">
+                <SoftCardContent Class="pa-4 glass-modal-body">
                     <SoftStack Spacing="4">
                         <div>
                             <SoftText Typo="Typo.overline" Color="Color.Primary">@InvL["BasicInfo"]</SoftText>
@@ -220,9 +220,9 @@
 
 @if (_confirmVisible)
 {
-    <div class="soft-modal-backdrop" @onclick="() => _confirmVisible = false">
-        <div class="soft-modal-container soft-modal-container--sm" @onclick:stopPropagation="true">
-            <SoftCard Elevation="24" Class="soft-modal-card">
+    <div class="glass-modal-backdrop" @onclick="() => _confirmVisible = false">
+        <div class="glass-modal-container glass-modal-container--sm" @onclick:stopPropagation="true">
+            <SoftCard Elevation="24" Class="glass-modal">
                 <SoftCardHeader Class="pa-4">
                     <CardHeaderContent>
                         <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
@@ -249,49 +249,6 @@
         </div>
     </div>
 }
-
-<style>
-    .soft-modal-backdrop {
-        position: fixed;
-        inset: 0;
-        background: rgba(0, 0, 0, 0.5);
-        z-index: 1400;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        padding: 16px;
-        animation: soft-modal-fade-in 0.15s ease-out;
-    }
-
-    .soft-modal-container {
-        width: 100%;
-        max-width: 560px;
-        animation: soft-modal-scale-in 0.18s ease-out;
-    }
-
-    .soft-modal-container--sm { max-width: 420px; }
-    .soft-modal-container--md { max-width: 640px; }
-
-    .soft-modal-card {
-        border-radius: 12px;
-        overflow: hidden;
-    }
-
-    .soft-modal-body {
-        max-height: 70vh;
-        overflow-y: auto;
-    }
-
-    @@keyframes soft-modal-fade-in {
-        from { opacity: 0; }
-        to { opacity: 1; }
-    }
-
-    @@keyframes soft-modal-scale-in {
-        from { opacity: 0; transform: scale(0.96); }
-        to { opacity: 1; transform: scale(1); }
-    }
-</style>
 
 @code {
     private SoftDataGrid<BranchDto> _grid = null!;

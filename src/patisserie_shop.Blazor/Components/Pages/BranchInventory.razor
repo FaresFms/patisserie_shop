@@ -195,9 +195,9 @@
 
 @if (_adjustVisible && _adjustTarget != null)
 {
-    <div class="soft-modal-backdrop" @onclick="CloseAdjust">
-        <div class="soft-modal-container" @onclick:stopPropagation="true">
-            <SoftCard Elevation="24" Class="soft-modal-card">
+    <div class="glass-modal-backdrop" @onclick="CloseAdjust">
+        <div class="glass-modal-container" @onclick:stopPropagation="true">
+            <SoftCard Elevation="24" Class="glass-modal">
                 <SoftCardHeader Class="pa-4">
                     <CardHeaderContent>
                         <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
@@ -279,9 +279,9 @@
 
 @if (_initVisible && _branchId.HasValue)
 {
-    <div class="soft-modal-backdrop" @onclick="CloseInitialize">
-        <div class="soft-modal-container" @onclick:stopPropagation="true">
-            <SoftCard Elevation="24" Class="soft-modal-card">
+    <div class="glass-modal-backdrop" @onclick="CloseInitialize">
+        <div class="glass-modal-container" @onclick:stopPropagation="true">
+            <SoftCard Elevation="24" Class="glass-modal">
                 <SoftCardHeader Class="pa-4">
                     <CardHeaderContent>
                         <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
@@ -335,9 +335,9 @@
 
 @if (_limitsVisible && _limitsTarget != null)
 {
-    <div class="soft-modal-backdrop" @onclick="CloseLimits">
-        <div class="soft-modal-container soft-modal-container--sm" @onclick:stopPropagation="true">
-            <SoftCard Elevation="24" Class="soft-modal-card">
+    <div class="glass-modal-backdrop" @onclick="CloseLimits">
+        <div class="glass-modal-container glass-modal-container--sm" @onclick:stopPropagation="true">
+            <SoftCard Elevation="24" Class="glass-modal">
                 <SoftCardHeader Class="pa-4">
                     <CardHeaderContent>
                         <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
@@ -379,41 +379,6 @@
 }
 
 <style>
-    .soft-modal-backdrop {
-        position: fixed;
-        inset: 0;
-        background: rgba(0, 0, 0, 0.5);
-        z-index: 1400;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        padding: 16px;
-        animation: soft-modal-fade-in 0.15s ease-out;
-    }
-
-    .soft-modal-container {
-        width: 100%;
-        max-width: 520px;
-        animation: soft-modal-scale-in 0.18s ease-out;
-    }
-
-    .soft-modal-container--sm { max-width: 420px; }
-
-    .soft-modal-card {
-        border-radius: 12px;
-        overflow: hidden;
-    }
-
-    @@keyframes soft-modal-fade-in {
-        from { opacity: 0; }
-        to { opacity: 1; }
-    }
-
-    @@keyframes soft-modal-scale-in {
-        from { opacity: 0; transform: scale(0.96); }
-        to { opacity: 1; transform: scale(1); }
-    }
-
     .bi-stats-grid {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -426,9 +391,13 @@
         align-items: center;
         gap: 12px;
         padding: 16px 18px;
-        border-radius: 12px;
-        background: var(--mud-palette-surface);
-        border: 1px solid var(--mud-palette-lines-default);
+        border-radius: var(--glass-radius);
+        background: var(--glass-bg-card);
+        backdrop-filter: var(--glass-blur);
+        -webkit-backdrop-filter: var(--glass-blur);
+        border: var(--glass-border);
+        box-shadow: var(--glass-shadow);
+        color: var(--glass-text-primary);
         transition: transform 0.15s ease, box-shadow 0.15s ease;
         overflow: hidden;
     }
@@ -464,10 +433,14 @@
     .bi-stat-label { font-size: 0.78rem; opacity: 0.75; text-transform: uppercase; letter-spacing: 0.04em; }
 
     .bi-current-qty {
-        background: var(--mud-palette-background-grey);
-        border-radius: 10px;
+        background: var(--glass-bg-strong);
+        backdrop-filter: var(--glass-blur);
+        -webkit-backdrop-filter: var(--glass-blur);
+        border: var(--glass-border);
+        border-radius: var(--glass-radius-sm);
         padding: 12px 16px;
         text-align: center;
+        color: var(--glass-text-primary);
     }
 
     ::deep tr.row-low-stock { background: rgba(255, 167, 38, 0.10); }
