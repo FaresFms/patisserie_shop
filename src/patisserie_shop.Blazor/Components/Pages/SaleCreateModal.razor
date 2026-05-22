@@ -1,0 +1,321 @@
+@using System.Threading
+@using System.Threading.Tasks
+@using Microsoft.AspNetCore.Components
+@using Operations.Sales
+@using Operations.Localization
+@using Inventory.Branches
+@using Color = MudBlazor.Color
+@using Variant = MudBlazor.Variant
+@using Size = MudBlazor.Size
+@using Margin = MudBlazor.Margin
+@inherits patisserie_shopComponentBase
+@inject ISaleAppService SaleAppService
+@inject ISnackbar Snackbar
+@inject IStringLocalizer<OperationsResource> OpsL
+
+<div class="soft-modal-backdrop" @onclick="CloseAsync">
+    <div class="soft-modal-container soft-modal-container--xl" @onclick:stopPropagation="true">
+        <SoftCard Elevation="24" Class="soft-modal-card">
+
+            <SoftCardHeader Class="pa-4">
+                <CardHeaderContent>
+                    <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <SoftIcon Icon="@Icons.Material.Filled.PointOfSale" Color="Color.Primary" Size="Size.Medium" />
+                        <SoftText Typo="Typo.h6">@OpsL["NewSale"]</SoftText>
+                    </SoftStack>
+                </CardHeaderContent>
+                <CardHeaderActions>
+                    <SoftIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="CloseAsync" />
+                </CardHeaderActions>
+            </SoftCardHeader>
+            <SoftDivider />
+
+            <SoftCardContent Class="pa-4 sale-modal-body">
+                <SoftStack Spacing="4">
+
+                    <!-- Section 1: header -->
+                    <div>
+                        <SoftText Typo="Typo.overline" Color="Color.Primary">Sale info</SoftText>
+                        <SoftDivider Class="mb-3" />
+                        <SoftStack Spacing="3">
+                            <SoftStack Row="true" Spacing="2">
+                                <SoftLookupSelect TItem="BranchLookupDto" TValue="Guid?"
+                                                  Items="AccessibleBranches"
+                                                  ToValue="@(b => (Guid?)b.Id)"
+                                                  ToLabel="@(b => b.Name)"
+                                                  Value="_branchId"
+                                                  ValueChanged="OnBranchChangedAsync"
+                                                  Label="@OpsL["Branch"]"
+                                                  Required="true"
+                                                  Disabled="@(AccessibleBranches.Count == 1)"
+                                                  AdornmentIcon="@Icons.Material.Filled.Store" />
+                                <MudDatePicker Label="@OpsL["SaleDate"]" Variant="Variant.Outlined"
+                                               @bind-Date="_saleDate" />
+                            </SoftStack>
+                            <SoftStack Row="true" Spacing="2">
+                                <SoftTextField T="string"
+                                               Label="@OpsL["InvoiceNumber"]"
+                                               @bind-Value="_invoiceNumber"
+                                               HelperText="@OpsL["InvoiceNumberAutoHint"]"
+                                               Variant="Variant.Outlined"
+                                               MaxLength="64"
+                                               Adornment="Adornment.Start"
+                                               AdornmentIcon="@Icons.Material.Filled.Receipt" />
+                                <SoftTextField T="string" Label="@OpsL["Currency"]"
+                                               @bind-Value="_currency"
+                                               Variant="Variant.Outlined"
+                                               MaxLength="3"
+                                               Style="max-width: 110px;" />
+                            </SoftStack>
+                            <SoftTextField T="string"
+                                           Label="@OpsL["Notes"]"
+                                           @bind-Value="_notes"
+                                           Variant="Variant.Outlined"
+                                           Lines="2"
+                                           MaxLength="512" />
+                        </SoftStack>
+                    </div>
+
+                    <!-- Section 2: items -->
+                    <div>
+                        <SoftStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                            <SoftText Typo="Typo.overline" Color="Color.Primary">
+                                @OpsL["SaleItems"] (@_rows.Count)
+                            </SoftText>
+                            <SoftButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary"
+                                        StartIcon="@Icons.Material.Filled.Add"
+                                        Disabled="@(!_branchId.HasValue || _availableProducts.Count == 0)"
+                                        OnClick="AddRow">@OpsL["AddRow"]</SoftButton>
+                        </SoftStack>
+                        <SoftDivider Class="mb-3" />
+
+                        @if (!_branchId.HasValue)
+                        {
+                            <SoftAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+                                Pick a branch first to load available stock.
+                            </SoftAlert>
+                        }
+                        else if (_rows.Count == 0)
+                        {
+                            <SoftStack AlignItems="AlignItems.Center" Spacing="1" Class="pa-4">
+                                <SoftIcon Icon="@Icons.Material.Outlined.Inbox" Style="font-size:42px; opacity:0.4;" />
+                                <SoftText Typo="Typo.body2" Color="Color.Default">@OpsL["EmptyItemsHint"]</SoftText>
+                            </SoftStack>
+                        }
+                        else
+                        {
+                            <MudTable T="ItemRow" Items="_rows" Dense="true" Hover="true" Bordered="false">
+                                <HeaderContent>
+                                    <MudTh Style="width: 38%;">@OpsL["ProductPicker"]</MudTh>
+                                    <MudTh Style="width: 18%; text-align:right;">@OpsL["Quantity"]</MudTh>
+                                    <MudTh Style="width: 18%; text-align:right;">@OpsL["UnitPrice"]</MudTh>
+                                    <MudTh Style="width: 18%; text-align:right;">@OpsL["Subtotal"]</MudTh>
+                                    <MudTh Style="width: 8%;"></MudTh>
+                                </HeaderContent>
+                                <RowTemplate Context="row">
+                                    <MudTd>
+                                        <SoftLookupSelect TItem="SaleProductLookupDto" TValue="Guid?"
+                                                          Items="ProductsForRow(row)"
+                                                          ToValue="@(p => (Guid?)p.ProductId)"
+                                                          ToLabel="@(p => $"{p.SKU} — {p.Name} — {p.QuantityOnHand} {p.Unit}")"
+                                                          Value="@(row.ProductId == Guid.Empty ? (Guid?)null : row.ProductId)"
+                                                          ValueChanged="@(v => OnRowProductChanged(row, v))"
+                                                          Margin="Margin.Dense"
+                                                          Dense="true" />
+                                    </MudTd>
+                                    <MudTd Style="text-align:right;">
+                                        <SoftNumericField T="int" @bind-Value="row.Quantity"
+                                                          Variant="Variant.Outlined" Margin="Margin.Dense"
+                                                          Min="1" />
+                                        @{ var stock = row.AvailableStock; }
+                                        @if (row.ProductId != Guid.Empty && row.Quantity > stock)
+                                        {
+                                            <SoftText Typo="Typo.caption" Color="Color.Warning"
+                                                      Style="display:block; text-align:right;">
+                                                @string.Format(OpsL["InsufficientStockWarn"], stock)
+                                            </SoftText>
+                                        }
+                                    </MudTd>
+                                    <MudTd Style="text-align:right;">
+                                        <SoftNumericField T="decimal" @bind-Value="row.UnitPrice"
+                                                          Variant="Variant.Outlined" Margin="Margin.Dense"
+                                                          Min="0" />
+                                    </MudTd>
+                                    <MudTd Style="text-align:right;">
+                                        <strong>@($"{(row.Quantity * row.UnitPrice):N2}")</strong>
+                                    </MudTd>
+                                    <MudTd>
+                                        <SoftIconButton Icon="@Icons.Material.Filled.Delete"
+                                                        Color="Color.Error"
+                                                        Size="Size.Small"
+                                                        OnClick="@(() => RemoveRow(row))" />
+                                    </MudTd>
+                                </RowTemplate>
+                            </MudTable>
+
+                            <div class="sale-total">
+                                <SoftText Typo="Typo.caption" Color="Color.Default">@OpsL["RunningTotal"]:</SoftText>
+                                <SoftText Typo="Typo.h6" Style="font-weight:700;">
+                                    @($"{RunningTotal:N2} {(_currency ?? "USD").ToUpper()}")
+                                </SoftText>
+                            </div>
+                        }
+                    </div>
+
+                </SoftStack>
+            </SoftCardContent>
+
+            <SoftDivider />
+            <div class="pa-3 d-flex justify-end" style="gap: 8px;">
+                <SoftButton Variant="Variant.Text" OnClick="CloseAsync">@L["Cancel"]</SoftButton>
+                <SoftButton Variant="Variant.Filled" Color="Color.Primary"
+                            StartIcon="@Icons.Material.Filled.Save"
+                            OnClick="SaveAsync"
+                            Disabled="@(_saving || !CanSave)">
+                    @OpsL["RecordSale"]
+                </SoftButton>
+            </div>
+
+        </SoftCard>
+    </div>
+</div>
+
+<style>
+    .soft-modal-backdrop {
+        position: fixed; inset: 0;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 1400;
+        display: flex; align-items: center; justify-content: center;
+        padding: 16px;
+        animation: soft-modal-fade-in 0.15s ease-out;
+    }
+    .soft-modal-container { width: 100%; max-width: 560px; animation: soft-modal-scale-in 0.18s ease-out; }
+    .soft-modal-container--xl { max-width: 980px; }
+    .soft-modal-card { border-radius: 12px; overflow: hidden; }
+    .sale-modal-body { max-height: 72vh; overflow-y: auto; }
+    .sale-total {
+        display: flex; align-items: baseline; justify-content: flex-end;
+        gap: 10px; margin-top: 12px; padding: 8px 12px;
+        border-top: 1px solid var(--mud-palette-lines-default);
+    }
+    @@keyframes soft-modal-fade-in { from { opacity: 0; } to { opacity: 1; } }
+    @@keyframes soft-modal-scale-in { from { opacity: 0; transform: scale(0.96); } to { opacity: 1; transform: scale(1); } }
+</style>
+
+@code {
+    [Parameter, EditorRequired] public List<BranchLookupDto> AccessibleBranches { get; set; } = new();
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public EventCallback<SaleDto> Saved { get; set; }
+
+    private Guid? _branchId;
+    private string? _invoiceNumber;
+    private DateTime? _saleDate = DateTime.Today;
+    private string _currency = "USD";
+    private string? _notes;
+
+    private List<SaleProductLookupDto> _availableProducts = new();
+    private List<ItemRow> _rows = new();
+    private bool _saving;
+
+    public class ItemRow
+    {
+        public Guid ProductId { get; set; } = Guid.Empty;
+        public int Quantity { get; set; } = 1;
+        public decimal UnitPrice { get; set; }
+        public int AvailableStock { get; set; }
+        public string Unit { get; set; } = "";
+    }
+
+    private decimal RunningTotal => _rows.Sum(r => r.Quantity * r.UnitPrice);
+
+    private bool CanSave =>
+        _branchId.HasValue
+        && _saleDate.HasValue
+        && _rows.Count > 0
+        && _rows.All(r => r.ProductId != Guid.Empty && r.Quantity > 0 && r.Quantity <= r.AvailableStock);
+
+    protected override Task OnInitializedAsync()
+    {
+        // Branch manager with a single branch — preselect & lock it.
+        if (AccessibleBranches.Count == 1)
+        {
+            _ = OnBranchChangedAsync(AccessibleBranches[0].Id);
+        }
+        return Task.CompletedTask;
+    }
+
+    private async Task OnBranchChangedAsync(Guid? id)
+    {
+        _branchId = id;
+        _rows.Clear();
+        _availableProducts.Clear();
+        if (id.HasValue)
+        {
+            try
+            {
+                _availableProducts = await SaleAppService.GetAvailableProductsAsync(id.Value);
+            }
+            catch (Exception ex) { await HandleErrorAsync(ex); }
+        }
+    }
+
+    private IEnumerable<SaleProductLookupDto> ProductsForRow(ItemRow row)
+    {
+        var usedElsewhere = _rows.Where(r => r != row).Select(r => r.ProductId).ToHashSet();
+        return _availableProducts.Where(p => !usedElsewhere.Contains(p.ProductId));
+    }
+
+    private void AddRow()
+    {
+        _rows.Add(new ItemRow());
+    }
+
+    private void RemoveRow(ItemRow row)
+    {
+        _rows.Remove(row);
+    }
+
+    private void OnRowProductChanged(ItemRow row, Guid? productId)
+    {
+        if (!productId.HasValue) { row.ProductId = Guid.Empty; row.AvailableStock = 0; row.UnitPrice = 0; return; }
+        var p = _availableProducts.FirstOrDefault(x => x.ProductId == productId.Value);
+        if (p == null) return;
+        row.ProductId = p.ProductId;
+        row.AvailableStock = p.QuantityOnHand;
+        row.Unit = p.Unit;
+        row.UnitPrice = p.SalePrice;
+        if (row.Quantity < 1) row.Quantity = 1;
+    }
+
+    private async Task CloseAsync()
+    {
+        if (OnClose.HasDelegate) await OnClose.InvokeAsync();
+    }
+
+    private async Task SaveAsync()
+    {
+        if (!CanSave) return;
+        _saving = true;
+        try
+        {
+            var created = await SaleAppService.CreateAsync(new CreateSaleDto
+            {
+                BranchId = _branchId!.Value,
+                InvoiceNumber = string.IsNullOrWhiteSpace(_invoiceNumber) ? null : _invoiceNumber.Trim(),
+                SaleDate = _saleDate!.Value,
+                Currency = (_currency ?? "USD").ToUpper(),
+                Notes = _notes,
+                Items = _rows.Select(r => new CreateSaleItemDto
+                {
+                    ProductId = r.ProductId,
+                    Quantity = r.Quantity,
+                    UnitPrice = r.UnitPrice
+                }).ToList()
+            });
+
+            if (Saved.HasDelegate) await Saved.InvokeAsync(created);
+        }
+        catch (Exception ex) { await HandleErrorAsync(ex); }
+        finally { _saving = false; }
+    }
+}

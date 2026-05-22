@@ -6,10 +6,15 @@ public class patisserie_shopMenus
     public const string Home = Prefix + ".Home";
 
     public const string Inventory = Prefix + ".Inventory";
+    public const string InventoryDashboard = Inventory + ".Dashboard";
     public const string Categories = Inventory + ".Categories";
     public const string Suppliers = Inventory + ".Suppliers";
     public const string Products = Inventory + ".Products";
     public const string Branches = Inventory + ".Branches";
     public const string BranchInventory = Inventory + ".BranchInventory";
     public const string StockMovements = Inventory + ".StockMovements";
+
+    public const string Operations = Prefix + ".Operations";
+    public const string PurchaseOrders = Operations + ".PurchaseOrders";
+    public const string Sales = Operations + ".Sales";
 }

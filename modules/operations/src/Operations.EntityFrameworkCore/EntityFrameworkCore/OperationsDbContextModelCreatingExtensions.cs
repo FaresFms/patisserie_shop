@@ -39,11 +39,14 @@ public static class OperationsDbContextModelCreatingExtensions
             b.Property(x => x.Currency).HasMaxLength(3).HasDefaultValue("USD");
             b.Property(x => x.Notes).HasMaxLength(512);
             b.HasIndex(x => x.PONumber).IsUnique();
+            b.HasIndex(x => x.Status);
+            b.HasIndex(x => x.OrderDate);
 
             b.HasMany(x => x.Items)
                 .WithOne()
                 .HasForeignKey(i => i.PurchaseOrderId)
                 .OnDelete(DeleteBehavior.Cascade);
+            b.Navigation(x => x.Items).HasField("_items").UsePropertyAccessMode(PropertyAccessMode.Field);
         });
 
         builder.Entity<AppPurchaseOrderItem>(b =>
@@ -60,11 +63,14 @@ public static class OperationsDbContextModelCreatingExtensions
             b.Property(x => x.Currency).HasMaxLength(3).HasDefaultValue("USD");
             b.Property(x => x.Notes).HasMaxLength(512);
             b.HasIndex(x => x.InvoiceNumber).IsUnique();
+            b.HasIndex(x => x.BranchId);
+            b.HasIndex(x => x.SaleDate);
 
             b.HasMany(x => x.Items)
                 .WithOne()
                 .HasForeignKey(i => i.SaleId)
                 .OnDelete(DeleteBehavior.Cascade);
+            b.Navigation(x => x.Items).HasField("_items").UsePropertyAccessMode(PropertyAccessMode.Field);
         });
 
         builder.Entity<AppSaleItem>(b =>

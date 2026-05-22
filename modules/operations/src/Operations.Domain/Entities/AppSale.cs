@@ -1,26 +1,26 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Linq;
 using Operations.Events;
+using Volo.Abp;
 using Volo.Abp.Domain.Entities.Auditing;
 
 namespace Operations.Entities;
 
 public class AppSale : FullAuditedAggregateRoot<Guid>
 {
-    public Guid BranchId { get; set; }
-    public string InvoiceNumber { get; set; } = null!;
-    public DateTime SaleDate { get; set; }
-    public decimal TotalAmount { get; set; }
-    public string Currency { get; set; } = "USD";
-    public string? Notes { get; set; }
+    public Guid BranchId { get; private set; }
+    public string InvoiceNumber { get; private set; } = null!;
+    public DateTime SaleDate { get; private set; }
+    public decimal TotalAmount { get; private set; }
+    public string Currency { get; private set; } = "USD";
+    public string? Notes { get; private set; }
 
-    public ICollection<AppSaleItem> Items { get; private set; }
+    private readonly List<AppSaleItem> _items = new();
+    public IReadOnlyCollection<AppSaleItem> Items => new ReadOnlyCollection<AppSaleItem>(_items);
 
-    protected AppSale()
-    {
-        Items = new List<AppSaleItem>();
-    }
+    protected AppSale() { }
 
     public AppSale(
         Guid id,
@@ -32,26 +32,59 @@ public class AppSale : FullAuditedAggregateRoot<Guid>
         : base(id)
     {
         BranchId = branchId;
-        InvoiceNumber = invoiceNumber;
+        InvoiceNumber = Check.NotNullOrWhiteSpace(invoiceNumber, nameof(invoiceNumber));
         SaleDate = saleDate;
-        Currency = currency;
+        Currency = string.IsNullOrWhiteSpace(currency) ? "USD" : currency.ToUpper();
         Notes = notes;
-        Items = new List<AppSaleItem>();
         TotalAmount = 0m;
     }
 
-    public AppSaleItem AddItem(Guid productId, int qty, decimal unitPrice)
+    public AppSaleItem AddItem(Guid itemId, Guid productId, int quantity, decimal unitPrice)
     {
-        var item = new AppSaleItem(Guid.NewGuid(), Id, productId, qty, unitPrice);
-        Items.Add(item);
-        TotalAmount = Items.Sum(i => i.Subtotal);
+        if (_items.Any(i => i.ProductId == productId))
+        {
+            throw new BusinessException(OperationsErrorCodes.DuplicateProductInSale)
+                .WithData("ProductId", productId);
+        }
+        var item = new AppSaleItem(itemId, Id, productId, quantity, unitPrice);
+        _items.Add(item);
+        RecalculateTotal();
+        return item;
+    }
+
+    /// <summary>
+    /// Validates that each line has enough stock against the supplied snapshot
+    /// (BranchInventory.QuantityOnHand keyed by ProductId), then raises the
+    /// SaleRecordedEto distributed event. Called once after all items are added.
+    /// </summary>
+    public void Record(IReadOnlyDictionary<Guid, int> currentStocks)
+    {
+        if (_items.Count == 0)
+            throw new BusinessException(OperationsErrorCodes.CannotRecordEmptySale);
+
+        foreach (var item in _items)
+        {
+            if (!currentStocks.TryGetValue(item.ProductId, out var stock))
+            {
+                throw new BusinessException(OperationsErrorCodes.NoInventoryRow)
+                    .WithData("ProductId", item.ProductId)
+                    .WithData("BranchId", BranchId);
+            }
+            if (stock < item.Quantity)
+            {
+                throw new BusinessException(OperationsErrorCodes.InsufficientStock)
+                    .WithData("ProductId", item.ProductId)
+                    .WithData("Available", stock)
+                    .WithData("Requested", item.Quantity);
+            }
+        }
 
         AddDistributedEvent(new SaleRecordedEto
         {
             SaleId = Id,
             BranchId = BranchId
         });
-
-        return item;
     }
+
+    private void RecalculateTotal() => TotalAmount = _items.Sum(i => i.Subtotal);
 }

@@ -1,6 +1,8 @@
 using System.Threading.Tasks;
 using Inventory.Localization;
 using Inventory.Permissions;
+using Operations.Localization;
+using Operations.Permissions;
 using patisserie_shop.Localization;
 using patisserie_shop.Permissions;
 using patisserie_shop.MultiTenancy;
@@ -45,6 +47,14 @@ public class patisserie_shopMenuContributor : IMenuContributor
         );
 
         inventoryMenu.AddItem(new ApplicationMenuItem(
+            patisserie_shopMenus.InventoryDashboard,
+            "Dashboard",
+            "/inventory/dashboard",
+            icon: "fas fa-chart-pie",
+            order: 0
+        ).RequirePermissions(InventoryPermissions.BranchInventory.Default));
+
+        inventoryMenu.AddItem(new ApplicationMenuItem(
             patisserie_shopMenus.Categories,
             invL["Menu:Categories"],
             "/inventory/categories",
@@ -87,6 +97,27 @@ public class patisserie_shopMenuContributor : IMenuContributor
         ).RequirePermissions(InventoryPermissions.StockMovements.Default));
 
         context.Menu.AddItem(inventoryMenu);
+
+        var opsL = context.GetLocalizer<OperationsResource>();
+        var operationsMenu = new ApplicationMenuItem(
+            patisserie_shopMenus.Operations,
+            opsL["Menu:Operations"],
+            icon: "fas fa-clipboard-list",
+            order: 3
+        );
+        operationsMenu.AddItem(new ApplicationMenuItem(
+            patisserie_shopMenus.PurchaseOrders,
+            opsL["Menu:PurchaseOrders"],
+            "/operations/purchase-orders",
+            icon: "fas fa-file-invoice-dollar"
+        ).RequirePermissions(OperationsPermissions.PurchaseOrders.Default));
+        operationsMenu.AddItem(new ApplicationMenuItem(
+            patisserie_shopMenus.Sales,
+            opsL["Menu:Sales"],
+            "/operations/sales",
+            icon: "fas fa-cash-register"
+        ).RequirePermissions(OperationsPermissions.Sales.Default));
+        context.Menu.AddItem(operationsMenu);
 
         //Administration
         var administration = context.Menu.GetAdministration();

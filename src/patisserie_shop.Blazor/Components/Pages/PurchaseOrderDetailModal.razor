@@ -1,0 +1,638 @@
+@using System.Threading
+@using System.Threading.Tasks
+@using Microsoft.AspNetCore.Components
+@using Operations
+@using Operations.PurchaseOrders
+@using Operations.Permissions
+@using Operations.Localization
+@using Inventory.Products
+@using Color = MudBlazor.Color
+@using Variant = MudBlazor.Variant
+@using Size = MudBlazor.Size
+@using Margin = MudBlazor.Margin
+@inherits patisserie_shopComponentBase
+@inject IPurchaseOrderAppService PurchaseOrderAppService
+@inject IProductAppService ProductAppService
+@inject ISnackbar Snackbar
+@inject IStringLocalizer<OperationsResource> OpsL
+
+@if (_po == null)
+{
+    return;
+}
+
+<div class="soft-modal-backdrop" @onclick="CloseAsync">
+    <div class="soft-modal-container soft-modal-container--xl" @onclick:stopPropagation="true">
+        <SoftCard Elevation="24" Class="soft-modal-card">
+
+            <SoftCardHeader Class="pa-4">
+                <CardHeaderContent>
+                    <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <SoftIcon Icon="@Icons.Material.Filled.RequestQuote" Color="Color.Primary" Size="Size.Medium" />
+                        <div>
+                            <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                <SoftText Typo="Typo.h6">@_po.PONumber</SoftText>
+                                <div class="@($"po-status po-status-{_po.Status.ToLower()}")">
+                                    <MudIcon Icon="@StatusIcon(_po.Status)" Size="Size.Small" />
+                                    <span>@OpsL[$"Status:{_po.Status}"]</span>
+                                </div>
+                            </SoftStack>
+                            <SoftText Typo="Typo.caption" Color="Color.Default">
+                                @($"{_po.SupplierName} → {_po.DestBranchName}")
+                            </SoftText>
+                        </div>
+                    </SoftStack>
+                </CardHeaderContent>
+                <CardHeaderActions>
+                    <SoftIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="CloseAsync" />
+                </CardHeaderActions>
+            </SoftCardHeader>
+            <SoftDivider />
+
+            <SoftCardContent Class="pa-4 po-modal-body">
+                <SoftStack Spacing="4">
+
+                    <!-- Order info -->
+                    @{
+                        var orderDateText    = _po.OrderDate.ToString("MMM d, yyyy");
+                        var expectedDateText = _po.ExpectedDeliveryDate?.ToString("MMM d, yyyy") ?? "-";
+                        var actualDateText   = _po.ActualDeliveryDate?.ToString("MMM d, yyyy") ?? "-";
+                        var createdByText    = _po.CreatorUserName ?? "-";
+                        var totalText        = $"{_po.TotalAmount:N2} {_po.Currency}";
+                    }
+                    <div>
+                        <SoftText Typo="Typo.overline" Color="Color.Primary">@OpsL["OrderInfo"]</SoftText>
+                        <SoftDivider Class="mb-3" />
+                        <div class="po-info-grid">
+                            <InfoRow Label="@OpsL["OrderDate"]" Value="@orderDateText" />
+                            <InfoRow Label="@OpsL["ExpectedDeliveryDate"]" Value="@expectedDateText" />
+                            <InfoRow Label="@OpsL["ActualDeliveryDate"]" Value="@actualDateText" />
+                            <InfoRow Label="@OpsL["CreatedBy"]" Value="@createdByText" />
+                            <InfoRow Label="@OpsL["Currency"]" Value="@_po.Currency" />
+                            <InfoRow Label="@OpsL["TotalAmount"]" Value="@totalText" Strong="true" />
+                        </div>
+                        @if (!string.IsNullOrWhiteSpace(_po.Notes))
+                        {
+                            <div class="po-notes">
+                                <SoftText Typo="Typo.caption" Color="Color.Default">@OpsL["Notes"]</SoftText>
+                                <SoftText Typo="Typo.body2">@_po.Notes</SoftText>
+                            </div>
+                        }
+                    </div>
+
+                    <!-- Progress (when receiving) -->
+                    @if (_po.Status == PurchaseOrderStatuses.PartialReceived || _po.Status == PurchaseOrderStatuses.Received)
+                    {
+                        <div>
+                            <SoftText Typo="Typo.overline" Color="Color.Primary">@OpsL["Progress"]</SoftText>
+                            <SoftDivider Class="mb-3" />
+                            @{
+                                var totalOrdered = _po.Items.Sum(i => i.OrderedQuantity);
+                                var totalReceived = _po.Items.Sum(i => i.ReceivedQuantity);
+                                var pct = totalOrdered == 0 ? 0 : (int)(100.0 * totalReceived / totalOrdered);
+                            }
+                            <SoftStack Spacing="1">
+                                <SoftStack Row="true" Justify="Justify.SpaceBetween">
+                                    <SoftText Typo="Typo.body2">@totalReceived / @totalOrdered units received</SoftText>
+                                    <SoftText Typo="Typo.body2" Style="font-weight:600;">@pct%</SoftText>
+                                </SoftStack>
+                                <MudProgressLinear Color="Color.Success" Value="@pct" Class="po-progress" />
+                            </SoftStack>
+                        </div>
+                    }
+
+                    <!-- Items -->
+                    <div>
+                        <SoftStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                            <SoftText Typo="Typo.overline" Color="Color.Primary">@OpsL["Items"] (@_po.Items.Count)</SoftText>
+                            @if (_po.Status == PurchaseOrderStatuses.Draft && _canEdit)
+                            {
+                                <SoftButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary"
+                                            StartIcon="@Icons.Material.Filled.Add"
+                                            OnClick="OpenAddItem">@OpsL["AddProduct"]</SoftButton>
+                            }
+                        </SoftStack>
+                        <SoftDivider Class="mb-3" />
+
+                        @if (_po.Items.Count == 0)
+                        {
+                            <SoftStack AlignItems="AlignItems.Center" Spacing="1" Class="pa-4">
+                                <SoftIcon Icon="@Icons.Material.Outlined.Inbox" Style="font-size:42px; opacity:0.4;" />
+                                <SoftText Typo="Typo.body2" Color="Color.Default">No items yet</SoftText>
+                            </SoftStack>
+                        }
+                        else
+                        {
+                            <MudTable T="PurchaseOrderItemDto" Items="@_po.Items" Dense="true" Hover="true" Bordered="false" Striped="true">
+                                <HeaderContent>
+                                    <MudTh>@OpsL["Product"]</MudTh>
+                                    <MudTh Style="text-align:right;">@OpsL["OrderedQuantity"]</MudTh>
+                                    <MudTh Style="text-align:right;">@OpsL["ReceivedQuantity"]</MudTh>
+                                    <MudTh Style="text-align:right;">@OpsL["UnitPrice"]</MudTh>
+                                    <MudTh Style="text-align:right;">@OpsL["Subtotal"]</MudTh>
+                                    <MudTh></MudTh>
+                                </HeaderContent>
+                                <RowTemplate Context="item">
+                                    <MudTd>
+                                        <SoftStack Spacing="0">
+                                            <SoftText Typo="Typo.body2" Style="font-weight:500;">@item.ProductName</SoftText>
+                                            <SoftText Typo="Typo.caption" Color="Color.Default">@item.ProductSKU</SoftText>
+                                        </SoftStack>
+                                    </MudTd>
+                                    <MudTd Style="text-align:right;">@item.OrderedQuantity @item.ProductUnit</MudTd>
+                                    <MudTd Style="text-align:right;">
+                                        @if (item.ReceivedQuantity > 0 || _po.Status == PurchaseOrderStatuses.Received || _po.Status == PurchaseOrderStatuses.PartialReceived)
+                                        {
+                                            <SoftChip T="string"
+                                                      Color="@(item.IsFullyReceived ? Color.Success : Color.Warning)"
+                                                      Size="Size.Small"
+                                                      Variant="Variant.Filled">
+                                                @item.ReceivedQuantity / @item.OrderedQuantity
+                                            </SoftChip>
+                                        }
+                                        else
+                                        {
+                                            <SoftText Color="Color.Default">-</SoftText>
+                                        }
+                                    </MudTd>
+                                    <MudTd Style="text-align:right;">@($"{item.UnitPrice:N2}")</MudTd>
+                                    <MudTd Style="text-align:right;"><strong>@($"{item.Subtotal:N2}")</strong></MudTd>
+                                    <MudTd>
+                                        @if (_po.Status == PurchaseOrderStatuses.Draft && _canEdit)
+                                        {
+                                            <SoftIconButton Icon="@Icons.Material.Filled.Delete"
+                                                            Color="Color.Error"
+                                                            Size="Size.Small"
+                                                            OnClick="@(() => RemoveItemAsync(item))" />
+                                        }
+                                    </MudTd>
+                                </RowTemplate>
+                            </MudTable>
+                        }
+                    </div>
+
+                </SoftStack>
+            </SoftCardContent>
+
+            <SoftDivider />
+            <div class="pa-3 d-flex justify-end flex-wrap" style="gap: 8px;">
+                <SoftButton Variant="Variant.Text" OnClick="CloseAsync">@L["Close"]</SoftButton>
+
+                @if (_po.Status == PurchaseOrderStatuses.Draft && _po.Items.Count > 0 && _canSubmit)
+                {
+                    <SoftButton Variant="Variant.Filled" Color="Color.Primary"
+                                StartIcon="@Icons.Material.Filled.Send"
+                                OnClick="SubmitAsync" Disabled="_saving">@OpsL["SubmitOrder"]</SoftButton>
+                }
+                @if (_po.Status == PurchaseOrderStatuses.Submitted && _canApprove)
+                {
+                    <SoftButton Variant="Variant.Filled" Color="Color.Success"
+                                StartIcon="@Icons.Material.Filled.CheckCircle"
+                                OnClick="ApproveAsync" Disabled="_saving">@OpsL["Approve"]</SoftButton>
+                }
+                @if ((_po.Status == PurchaseOrderStatuses.Approved || _po.Status == PurchaseOrderStatuses.PartialReceived) && _canReceive)
+                {
+                    <SoftButton Variant="Variant.Filled" Color="Color.Tertiary"
+                                StartIcon="@Icons.Material.Filled.Inventory"
+                                OnClick="OpenReceiveDialog" Disabled="_saving">@OpsL["ReceiveItems"]</SoftButton>
+                }
+                @if (_po.Status != PurchaseOrderStatuses.Received && _po.Status != PurchaseOrderStatuses.Cancelled && _canCancel)
+                {
+                    <SoftButton Variant="Variant.Outlined" Color="Color.Error"
+                                StartIcon="@Icons.Material.Filled.Cancel"
+                                OnClick="CancelAsync" Disabled="_saving">@OpsL["Cancel"]</SoftButton>
+                }
+            </div>
+
+        </SoftCard>
+    </div>
+</div>
+
+<!-- ── Add Item dialog ── -->
+@if (_addItemVisible)
+{
+    <div class="soft-modal-backdrop" @onclick="CloseAddItem">
+        <div class="soft-modal-container" @onclick:stopPropagation="true">
+            <SoftCard Elevation="24" Class="soft-modal-card">
+                <SoftCardHeader Class="pa-4">
+                    <CardHeaderContent>
+                        <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <SoftIcon Icon="@Icons.Material.Filled.AddBox" Color="Color.Primary" Size="Size.Medium" />
+                            <SoftText Typo="Typo.h6">@OpsL["AddProduct"]</SoftText>
+                        </SoftStack>
+                    </CardHeaderContent>
+                    <CardHeaderActions>
+                        <SoftIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="CloseAddItem" />
+                    </CardHeaderActions>
+                </SoftCardHeader>
+                <SoftDivider />
+                <SoftCardContent Class="pa-4">
+                    <SoftStack Spacing="3">
+                        <SoftLookupSelect TItem="ProductLookupDto" TValue="Guid?"
+                                          Items="_availableProducts"
+                                          ToValue="@(p => (Guid?)p.Id)"
+                                          ToLabel="@(p => $"{p.SKU} — {p.Name}")"
+                                          Value="_newItemProductId"
+                                          ValueChanged="OnAddItemProductChanged"
+                                          Label="@OpsL["Product"]"
+                                          Required="true"
+                                          AdornmentIcon="@Icons.Material.Filled.LocalDining" />
+                        <SoftStack Row="true" Spacing="2">
+                            <SoftNumericField T="int" Label="@OpsL["OrderedQuantity"]"
+                                              @bind-Value="_newItemQty"
+                                              Variant="Variant.Outlined" Min="1" />
+                            <SoftNumericField T="decimal" Label="@OpsL["UnitPrice"]"
+                                              @bind-Value="_newItemPrice"
+                                              Variant="Variant.Outlined" Min="0"
+                                              Adornment="Adornment.Start"
+                                              AdornmentIcon="@Icons.Material.Filled.AttachMoney" />
+                        </SoftStack>
+                        @{
+                            var preview = _newItemQty * _newItemPrice;
+                        }
+                        <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                            <SoftText Typo="Typo.caption" Color="Color.Default">@OpsL["Subtotal"]:</SoftText>
+                            <SoftText Typo="Typo.body1" Style="font-weight:600;">@($"{preview:N2} {_po.Currency}")</SoftText>
+                        </SoftStack>
+                    </SoftStack>
+                </SoftCardContent>
+                <SoftDivider />
+                <div class="pa-3 d-flex justify-end" style="gap: 8px;">
+                    <SoftButton Variant="Variant.Text" OnClick="CloseAddItem">@L["Cancel"]</SoftButton>
+                    <SoftButton Variant="Variant.Filled" Color="Color.Primary"
+                                StartIcon="@Icons.Material.Filled.Save"
+                                OnClick="ConfirmAddItem" Disabled="_saving">@L["Save"]</SoftButton>
+                </div>
+            </SoftCard>
+        </div>
+    </div>
+}
+
+<!-- ── Receive Items dialog ── -->
+@if (_receiveVisible)
+{
+    <div class="soft-modal-backdrop" @onclick="CloseReceive">
+        <div class="soft-modal-container soft-modal-container--lg" @onclick:stopPropagation="true">
+            <SoftCard Elevation="24" Class="soft-modal-card">
+                <SoftCardHeader Class="pa-4">
+                    <CardHeaderContent>
+                        <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <SoftIcon Icon="@Icons.Material.Filled.Inventory" Color="Color.Tertiary" Size="Size.Medium" />
+                            <div>
+                                <SoftText Typo="Typo.h6">@OpsL["ReceiveItems"]</SoftText>
+                                <SoftText Typo="Typo.caption" Color="Color.Default">
+                                    Enter quantity received now for each item. Leave at 0 if nothing arrived for that line.
+                                </SoftText>
+                            </div>
+                        </SoftStack>
+                    </CardHeaderContent>
+                    <CardHeaderActions>
+                        <SoftIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="CloseReceive" />
+                    </CardHeaderActions>
+                </SoftCardHeader>
+                <SoftDivider />
+                <SoftCardContent Class="pa-4 po-modal-body">
+                    <MudTable T="ReceiveRow" Items="@_receiveRows" Dense="true" Hover="true" Bordered="false">
+                        <HeaderContent>
+                            <MudTh>@OpsL["Product"]</MudTh>
+                            <MudTh Style="text-align:right;">@OpsL["OrderedQuantity"]</MudTh>
+                            <MudTh Style="text-align:right;">@OpsL["ReceivedQuantity"]</MudTh>
+                            <MudTh Style="text-align:right;">@OpsL["Remaining"]</MudTh>
+                            <MudTh Style="text-align:center; min-width: 140px;">Receive now</MudTh>
+                        </HeaderContent>
+                        <RowTemplate Context="row">
+                            <MudTd>
+                                <SoftStack Spacing="0">
+                                    <SoftText Typo="Typo.body2" Style="font-weight:500;">@row.Item.ProductName</SoftText>
+                                    <SoftText Typo="Typo.caption" Color="Color.Default">@row.Item.ProductSKU</SoftText>
+                                </SoftStack>
+                            </MudTd>
+                            <MudTd Style="text-align:right;">@row.Item.OrderedQuantity</MudTd>
+                            <MudTd Style="text-align:right;">@row.Item.ReceivedQuantity</MudTd>
+                            <MudTd Style="text-align:right;">
+                                <strong>@(row.Item.OrderedQuantity - row.Item.ReceivedQuantity)</strong>
+                            </MudTd>
+                            <MudTd Style="text-align:center;">
+                                @if (row.Item.IsFullyReceived)
+                                {
+                                    <SoftChip T="string" Color="Color.Success" Size="Size.Small" Variant="Variant.Filled">
+                                        @OpsL["FullyReceived"]
+                                    </SoftChip>
+                                }
+                                else
+                                {
+                                    <SoftNumericField T="int" @bind-Value="row.ReceiveNow"
+                                                      Variant="Variant.Outlined" Min="0"
+                                                      Max="@(row.Item.OrderedQuantity - row.Item.ReceivedQuantity)"
+                                                      Margin="Margin.Dense" />
+                                }
+                            </MudTd>
+                        </RowTemplate>
+                    </MudTable>
+                </SoftCardContent>
+                <SoftDivider />
+                <div class="pa-3 d-flex justify-end" style="gap: 8px;">
+                    <SoftButton Variant="Variant.Text" OnClick="CloseReceive">@L["Cancel"]</SoftButton>
+                    <SoftButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="ReceiveAllRemaining">
+                        Receive all remaining
+                    </SoftButton>
+                    <SoftButton Variant="Variant.Filled" Color="Color.Tertiary"
+                                StartIcon="@Icons.Material.Filled.CheckCircle"
+                                OnClick="ConfirmReceive" Disabled="_saving">@OpsL["ConfirmReceive"]</SoftButton>
+                </div>
+            </SoftCard>
+        </div>
+    </div>
+}
+
+<style>
+    .soft-modal-container--xl { max-width: 980px; }
+    .soft-modal-container--lg { max-width: 760px; }
+
+    .po-modal-body {
+        max-height: 72vh;
+        overflow-y: auto;
+    }
+
+    .po-info-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 10px 24px;
+    }
+
+    .po-notes {
+        margin-top: 12px;
+        padding: 10px 12px;
+        background: var(--mud-palette-background-grey);
+        border-radius: 8px;
+    }
+
+    .po-progress {
+        height: 10px;
+        border-radius: 5px;
+    }
+
+    .po-status {
+        display: inline-flex; align-items: center; gap: 6px;
+        padding: 3px 10px; border-radius: 999px;
+        font-size: 0.78rem; font-weight: 500;
+    }
+    .po-status-draft           { background: rgba(120,120,120,0.18); color: #444; }
+    .po-status-submitted       { background: rgba(33,150,243,0.15);  color: #1565c0; }
+    .po-status-approved        { background: rgba(76,175,80,0.15);   color: #2e7d32; }
+    .po-status-partialreceived { background: rgba(255,167,38,0.18);  color: #b26a00; }
+    .po-status-received        { background: rgba(0,150,136,0.15);   color: #00695c; }
+    .po-status-cancelled       { background: rgba(244,67,54,0.15);   color: #c62828; }
+</style>
+
+@code {
+    [Parameter, EditorRequired] public Guid PurchaseOrderId { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public EventCallback Changed { get; set; }
+
+    private PurchaseOrderDto? _po;
+    private bool _saving;
+
+    private bool _canEdit;
+    private bool _canSubmit;
+    private bool _canApprove;
+    private bool _canCancel;
+    private bool _canReceive;
+
+    private bool _addItemVisible;
+    private List<ProductLookupDto> _availableProducts = new();
+    private Guid? _newItemProductId;
+    private int _newItemQty = 1;
+    private decimal _newItemPrice;
+
+    private bool _receiveVisible;
+    private List<ReceiveRow> _receiveRows = new();
+
+    public class ReceiveRow
+    {
+        public PurchaseOrderItemDto Item { get; set; } = null!;
+        public int ReceiveNow { get; set; }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        _canEdit    = await AuthorizationService.IsGrantedAsync(OperationsPermissions.PurchaseOrders.Edit);
+        _canSubmit  = await AuthorizationService.IsGrantedAsync(OperationsPermissions.PurchaseOrders.Submit);
+        _canApprove = await AuthorizationService.IsGrantedAsync(OperationsPermissions.PurchaseOrders.Approve);
+        _canCancel  = await AuthorizationService.IsGrantedAsync(OperationsPermissions.PurchaseOrders.Cancel);
+        _canReceive = await AuthorizationService.IsGrantedAsync(OperationsPermissions.PurchaseOrders.Receive);
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            _po = await PurchaseOrderAppService.GetAsync(PurchaseOrderId);
+        }
+        catch (Exception ex)
+        {
+            await HandleErrorAsync(ex);
+        }
+    }
+
+    private async Task CloseAsync()
+    {
+        if (OnClose.HasDelegate) await OnClose.InvokeAsync();
+    }
+
+    private async Task NotifyChanged()
+    {
+        if (Changed.HasDelegate) await Changed.InvokeAsync();
+    }
+
+    // ─── Item editing ───
+
+    private async Task OpenAddItem()
+    {
+        _newItemProductId = null;
+        _newItemQty = 1;
+        _newItemPrice = 0;
+        try
+        {
+            _availableProducts = await ProductAppService.GetLookupAsync();
+            // Filter out products already on the order
+            var existing = _po!.Items.Select(i => i.ProductId).ToHashSet();
+            _availableProducts = _availableProducts.Where(p => !existing.Contains(p.Id)).ToList();
+        }
+        catch (Exception ex)
+        {
+            await HandleErrorAsync(ex);
+        }
+        _addItemVisible = true;
+    }
+
+    private void OnAddItemProductChanged(Guid? id)
+    {
+        _newItemProductId = id;
+        if (id.HasValue)
+        {
+            var p = _availableProducts.FirstOrDefault(x => x.Id == id.Value);
+            if (p != null)
+            {
+                _newItemPrice = p.SalePrice;
+            }
+        }
+        else
+        {
+            _newItemPrice = 0;
+        }
+    }
+
+    private void CloseAddItem() => _addItemVisible = false;
+
+    private async Task ConfirmAddItem()
+    {
+        if (!_newItemProductId.HasValue || _newItemQty <= 0)
+        {
+            Snackbar.Add(L["ThisFieldIsRequired", OpsL["Product"]], Severity.Warning);
+            return;
+        }
+        _saving = true;
+        try
+        {
+            await PurchaseOrderAppService.AddItemAsync(PurchaseOrderId, new AddPurchaseOrderItemDto
+            {
+                ProductId = _newItemProductId.Value,
+                OrderedQuantity = _newItemQty,
+                UnitPrice = _newItemPrice
+            });
+            _addItemVisible = false;
+            await LoadAsync();
+            await NotifyChanged();
+        }
+        catch (Exception ex)
+        {
+            await HandleErrorAsync(ex);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task RemoveItemAsync(PurchaseOrderItemDto item)
+    {
+        try
+        {
+            await PurchaseOrderAppService.RemoveItemAsync(PurchaseOrderId, item.Id);
+            await LoadAsync();
+            await NotifyChanged();
+        }
+        catch (Exception ex)
+        {
+            await HandleErrorAsync(ex);
+        }
+    }
+
+    // ─── Status actions ───
+
+    private async Task SubmitAsync()
+    {
+        _saving = true;
+        try
+        {
+            var updated = await PurchaseOrderAppService.SubmitAsync(PurchaseOrderId);
+            Snackbar.Add($"PO {updated.PONumber} submitted for approval.", Severity.Success);
+            await NotifyChanged();
+            await CloseAsync();
+        }
+        catch (Exception ex) { await HandleErrorAsync(ex); }
+        finally { _saving = false; }
+    }
+
+    private async Task ApproveAsync()
+    {
+        _saving = true;
+        try
+        {
+            var updated = await PurchaseOrderAppService.ApproveAsync(PurchaseOrderId);
+            Snackbar.Add($"PO {updated.PONumber} approved.", Severity.Success);
+            await NotifyChanged();
+            await CloseAsync();
+        }
+        catch (Exception ex) { await HandleErrorAsync(ex); }
+        finally { _saving = false; }
+    }
+
+    private async Task CancelAsync()
+    {
+        _saving = true;
+        try
+        {
+            var updated = await PurchaseOrderAppService.CancelAsync(PurchaseOrderId);
+            Snackbar.Add($"PO {updated.PONumber} cancelled.", Severity.Warning);
+            await NotifyChanged();
+            await CloseAsync();
+        }
+        catch (Exception ex) { await HandleErrorAsync(ex); }
+        finally { _saving = false; }
+    }
+
+    // ─── Receive flow ───
+
+    private void OpenReceiveDialog()
+    {
+        _receiveRows = _po!.Items.Select(i => new ReceiveRow
+        {
+            Item = i,
+            ReceiveNow = 0
+        }).ToList();
+        _receiveVisible = true;
+    }
+
+    private void CloseReceive() => _receiveVisible = false;
+
+    private void ReceiveAllRemaining()
+    {
+        foreach (var row in _receiveRows)
+        {
+            row.ReceiveNow = row.Item.OrderedQuantity - row.Item.ReceivedQuantity;
+        }
+    }
+
+    private async Task ConfirmReceive()
+    {
+        var lines = _receiveRows
+            .Where(r => r.ReceiveNow > 0)
+            .Select(r => new ReceiveLineDto { ItemId = r.Item.Id, ReceivedQuantity = r.ReceiveNow })
+            .ToList();
+
+        if (lines.Count == 0)
+        {
+            Snackbar.Add("Enter at least one receive quantity.", Severity.Warning);
+            return;
+        }
+
+        _saving = true;
+        try
+        {
+            var updated = await PurchaseOrderAppService.ReceiveAsync(PurchaseOrderId, new ReceiveItemsDto { Lines = lines });
+            _receiveVisible = false;
+            var msg = updated.Status == PurchaseOrderStatuses.Received
+                ? $"PO {updated.PONumber} fully received."
+                : $"PO {updated.PONumber} partially received.";
+            Snackbar.Add(msg, Severity.Success);
+            await NotifyChanged();
+            await CloseAsync();
+        }
+        catch (Exception ex) { await HandleErrorAsync(ex); }
+        finally { _saving = false; }
+    }
+
+    private static string StatusIcon(string status) => status switch
+    {
+        PurchaseOrderStatuses.Draft => Icons.Material.Filled.EditNote,
+        PurchaseOrderStatuses.Submitted => Icons.Material.Filled.Send,
+        PurchaseOrderStatuses.Approved => Icons.Material.Filled.CheckCircle,
+        PurchaseOrderStatuses.PartialReceived => Icons.Material.Filled.HourglassBottom,
+        PurchaseOrderStatuses.Received => Icons.Material.Filled.TaskAlt,
+        PurchaseOrderStatuses.Cancelled => Icons.Material.Filled.Cancel,
+        _ => Icons.Material.Filled.HelpOutline
+    };
+}
