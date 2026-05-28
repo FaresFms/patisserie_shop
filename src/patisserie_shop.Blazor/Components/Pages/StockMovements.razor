@@ -28,23 +28,18 @@
 
 <SoftStack Spacing="3">
 
-    <SoftCard Elevation="2" Class="pa-2">
-        <SoftCardHeader>
-            <CardHeaderContent>
-                <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                    <SoftIcon Icon="@Icons.Material.Filled.History" Color="Color.Primary" Size="Size.Large" />
-                    <div>
-                        <SoftText Typo="Typo.h5">@InvL["AuditLog"]</SoftText>
-                        <SoftText Typo="Typo.caption" Color="Color.Default">@InvL["AuditLogSubtitle"]</SoftText>
-                    </div>
-                </SoftStack>
-            </CardHeaderContent>
-            <CardHeaderActions>
+    <SoftCard Elevation="2" Class="pa-2 page-flat">
+        <div class="page-head">
+            <div>
+                <h1 class="page-title">@InvL["AuditLog"]</h1>
+                <div class="page-sub">@InvL["AuditLogSubtitle"]</div>
+            </div>
+            <div class="page-head-actions">
                 <SoftChip T="string" Icon="@Icons.Material.Filled.Lock" Color="Color.Default" Size="Size.Small" Variant="Variant.Outlined">
                     @L["ReadOnly"]
                 </SoftChip>
-            </CardHeaderActions>
-        </SoftCardHeader>
+            </div>
+        </div>
         <SoftCardContent>
 
             <SoftStack Row="true" Spacing="1" Class="mb-3 flex-wrap">
@@ -58,7 +53,7 @@
                             OnClick="@(() => ApplyRangeAsync("all"))">@InvL["Range:All"]</SoftButton>
             </SoftStack>
 
-            <SoftStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Class="mb-3 flex-wrap">
+            <div class="toolbar">
                 <SoftTextField T="string"
                                Placeholder="@InvL["Filter"]"
                                @bind-Value="_filter"
@@ -68,9 +63,10 @@
                                AdornmentIcon="@Icons.Material.Filled.Search"
                                OnKeyUp="OnFilterKeyUpAsync"
                                Immediate="true"
+                               Class="toolbar-search"
                                Style="min-width: 220px; max-width: 320px;" />
 
-                <div style="min-width: 200px;">
+                <div class="filter-chip">
                     <SoftLookupSelect TItem="BranchLookupDto" TValue="Guid?"
                                       Items="_branches"
                                       ToValue="@(b => (Guid?)b.Id)"
@@ -80,11 +76,10 @@
                                       Label="@InvL["AllBranches"]"
                                       Margin="Margin.Dense"
                                       Clearable="true"
-                                      Dense="true"
-                                      AdornmentIcon="@Icons.Material.Filled.Store" />
+                                      Dense="true" />
                 </div>
 
-                <div style="min-width: 240px;">
+                <div class="filter-chip">
                     <SoftLookupSelect TItem="ProductLookupDto" TValue="Guid?"
                                       Items="_products"
                                       ToValue="@(p => (Guid?)p.Id)"
@@ -94,11 +89,10 @@
                                       Label="@InvL["AllProducts"]"
                                       Margin="Margin.Dense"
                                       Clearable="true"
-                                      Dense="true"
-                                      AdornmentIcon="@Icons.Material.Filled.LocalDining" />
+                                      Dense="true" />
                 </div>
 
-                <div style="min-width: 200px;">
+                <div class="filter-chip">
                     <SoftLookupSelect TItem="MoveTypeOption" TValue="string"
                                       Items="_typeOptions"
                                       ToValue="@(o => o.Value)"
@@ -108,15 +102,16 @@
                                       Label="@InvL["AllMovementTypes"]"
                                       Margin="Margin.Dense"
                                       Clearable="true"
-                                      Dense="true"
-                                      AdornmentIcon="@Icons.Material.Filled.Sync" />
+                                      Dense="true" />
                 </div>
 
-                <SoftButton Variant="Variant.Outlined" Color="Color.Primary"
-                            OnClick="ReloadAsync" StartIcon="@Icons.Material.Filled.Refresh">
-                    @L["Refresh"]
-                </SoftButton>
-            </SoftStack>
+                <div class="toolbar-right">
+                    <SoftButton Variant="Variant.Text" Color="Color.Primary"
+                                OnClick="ReloadAsync" StartIcon="@Icons.Material.Filled.Refresh">
+                        @L["Refresh"]
+                    </SoftButton>
+                </div>
+            </div>
 
             <div class="sm-type-strip">
                 <TypeStat Color="success" Icon="@Icons.Material.Filled.ShoppingCart"
@@ -136,7 +131,7 @@
         </SoftCardContent>
     </SoftCard>
 
-    <SoftCard Elevation="2" Class="pa-2">
+    <SoftCard Elevation="2" Class="pa-2 page-flat">
         <SoftCardContent>
             <SoftDataGrid T="StockMovementDto"
                           @ref="_grid"

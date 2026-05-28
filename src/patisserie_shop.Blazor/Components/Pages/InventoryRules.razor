@@ -1,0 +1,669 @@
+@page "/intelligence/inventory-rules"
+@attribute [Authorize(IntelligencePermissions.Rules.Default)]
+@using System.Threading
+@using System.Threading.Tasks
+@using Microsoft.AspNetCore.Authorization
+@using Volo.Abp.Application.Dtos
+@using Volo.Abp.AspNetCore.Components.Web.Theming.Layout
+@using Intelligence.Rules
+@using Intelligence.Permissions
+@using Intelligence.Localization
+@using Inventory.Products
+@using Inventory.Branches
+@using Color = MudBlazor.Color
+@using Variant = MudBlazor.Variant
+@using Size = MudBlazor.Size
+@using Margin = MudBlazor.Margin
+@inherits patisserie_shopComponentBase
+@inject IInventoryRuleAppService RuleAppService
+@inject IProductAppService ProductAppService
+@inject IBranchAppService BranchAppService
+@inject PageLayout PageLayout
+@inject ISnackbar Snackbar
+@inject IStringLocalizer<IntelligenceResource> IntL
+
+@{
+    PageLayout.Title = IntL["InventoryRules"];
+}
+
+<SoftCard Elevation="2" Class="pa-2 page-flat">
+    <div class="page-head">
+        <div>
+            <h1 class="page-title">@IntL["InventoryRules"]</h1>
+            <div class="page-sub">@IntL["InventoryRulesSubtitle"]</div>
+        </div>
+        <div class="page-head-actions">
+            <SoftButton Variant="Variant.Filled"
+                        Color="Color.Primary"
+                        StartIcon="@Icons.Material.Filled.Add"
+                        OnClick="OpenCreateDialog"
+                        Disabled="!_canManage">
+                @IntL["NewRule"]
+            </SoftButton>
+        </div>
+    </div>
+    <SoftCardContent>
+        <div class="toolbar">
+            <SoftTextField T="string"
+                           Placeholder="@IntL["Filter"]"
+                           @bind-Value="_filter"
+                           Variant="Variant.Outlined"
+                           Margin="Margin.Dense"
+                           Adornment="Adornment.Start"
+                           AdornmentIcon="@Icons.Material.Filled.Search"
+                           OnKeyUp="OnFilterKeyUpAsync"
+                           Immediate="true"
+                           Class="toolbar-search"
+                           Style="min-width: 220px; max-width: 320px;" />
+
+            <div class="filter-chip">
+                <SoftLookupSelect TItem="RuleTypeOption" TValue="string"
+                                  Items="_typeOptions"
+                                  ToValue="@(o => o.Value)"
+                                  ToLabel="@(o => o.Label)"
+                                  Value="_typeFilter"
+                                  ValueChanged="OnTypeFilterChangedAsync"
+                                  Label="@IntL["AllRuleTypes"]"
+                                  Margin="Margin.Dense"
+                                  Clearable="true"
+                                  Dense="true" />
+            </div>
+
+            <div class="filter-chip">
+                <SoftLookupSelect TItem="ActiveOption" TValue="string"
+                                  Items="_activeOptions"
+                                  ToValue="@(o => o.Value)"
+                                  ToLabel="@(o => o.Label)"
+                                  Value="_activeFilter"
+                                  ValueChanged="OnActiveFilterChangedAsync"
+                                  Label="@IntL["Status:All"]"
+                                  Margin="Margin.Dense"
+                                  Dense="true" />
+            </div>
+
+            <div class="toolbar-right">
+                <SoftButton Variant="Variant.Text" Color="Color.Primary"
+                            OnClick="ReloadAsync" StartIcon="@Icons.Material.Filled.Refresh">
+                    @L["Refresh"]
+                </SoftButton>
+            </div>
+        </div>
+
+        <SoftDataGrid T="InventoryRuleDto"
+                      @ref="_grid"
+                      ServerData="LoadServerData"
+                      Dense="true"
+                      Hover="true"
+                      Bordered="false"
+                      Loading="_loading"
+                      SortMode="SortMode.Single">
+            <Columns>
+                <TemplateColumn T="InventoryRuleDto" Title="@IntL["RuleName"]" SortBy="x => x.RuleName">
+                    <CellTemplate>
+                        <SoftText Typo="Typo.body2" Style="font-weight:600;">@context.Item.RuleName</SoftText>
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn T="InventoryRuleDto" Title="@IntL["RuleType"]" SortBy="x => x.RuleType">
+                    <CellTemplate>
+                        <SoftChip T="string" Size="Size.Small" Variant="Variant.Filled" Color="@TypeColor(context.Item.RuleType)">
+                            @IntL[$"RuleType:{context.Item.RuleType}"]
+                        </SoftChip>
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn T="InventoryRuleDto" Title="@IntL["Scope"]" Sortable="false">
+                    <CellTemplate>
+                        <SoftText Typo="Typo.body2">@ScopeText(context.Item)</SoftText>
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn T="InventoryRuleDto" Title="@IntL["Threshold"]" Sortable="false">
+                    <CellTemplate>
+                        <SoftText Typo="Typo.body2">@ThresholdText(context.Item)</SoftText>
+                    </CellTemplate>
+                </TemplateColumn>
+                <PropertyColumn T="InventoryRuleDto" TProperty="int" Property="x => x.Priority" Title="@IntL["Priority"]" />
+                <TemplateColumn T="InventoryRuleDto" Title="@IntL["IsActive"]" SortBy="x => x.IsActive">
+                    <CellTemplate>
+                        @if (context.Item.IsActive)
+                        {
+                            <SoftChip T="string" Color="Color.Success" Size="Size.Small" Variant="Variant.Filled">@IntL["IsActive"]</SoftChip>
+                        }
+                        else
+                        {
+                            <SoftChip T="string" Color="Color.Default" Size="Size.Small" Variant="Variant.Outlined">-</SoftChip>
+                        }
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn T="InventoryRuleDto" Title="@IntL["SuggestedAction"]" Sortable="false">
+                    <CellTemplate>
+                        @if (!string.IsNullOrWhiteSpace(context.Item.SuggestedAction))
+                        {
+                            <SoftText Typo="Typo.body2" Style="max-width: 280px; display:inline-block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+                                @context.Item.SuggestedAction
+                            </SoftText>
+                        }
+                        else
+                        {
+                            <SoftText Typo="Typo.caption" Color="Color.Default">—</SoftText>
+                        }
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn T="InventoryRuleDto" Title="@IntL["Actions"]" Sortable="false">
+                    <CellTemplate>
+                        <span class="row-actions">
+                            <SoftStack Row="true" Spacing="1">
+                                <SoftIconButton Icon="@Icons.Material.Filled.Edit"
+                                                Color="Color.Primary"
+                                                Size="Size.Small"
+                                                OnClick="() => OpenEditDialog(context.Item)"
+                                                Disabled="!_canManage" />
+                                <SoftIconButton Icon="@Icons.Material.Filled.Delete"
+                                                Color="Color.Error"
+                                                Size="Size.Small"
+                                                OnClick="() => DeleteAsync(context.Item)"
+                                                Disabled="!_canManage" />
+                            </SoftStack>
+                        </span>
+                    </CellTemplate>
+                </TemplateColumn>
+            </Columns>
+            <NoRecordsContent>
+                <SoftStack AlignItems="AlignItems.Center" Spacing="2" Class="pa-6">
+                    <SoftIcon Icon="@Icons.Material.Outlined.Rule" Style="font-size: 56px; opacity: 0.4;" />
+                    <SoftText Typo="Typo.body1" Color="Color.Default">@IntL["InventoryRules"]</SoftText>
+                </SoftStack>
+            </NoRecordsContent>
+            <PagerContent>
+                <MudDataGridPager T="InventoryRuleDto" />
+            </PagerContent>
+        </SoftDataGrid>
+    </SoftCardContent>
+</SoftCard>
+
+@if (_dialogVisible)
+{
+    <div class="glass-modal-backdrop" @onclick="CloseDialog">
+        <div class="glass-modal-container glass-modal-container--md" @onclick:stopPropagation="true">
+            <SoftCard Elevation="24" Class="glass-modal">
+                <SoftCardHeader Class="pa-4">
+                    <CardHeaderContent>
+                        <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <SoftIcon Icon="@(_editingId.HasValue ? Icons.Material.Filled.Edit : Icons.Material.Filled.AddCircle)"
+                                      Color="Color.Primary" Size="Size.Medium" />
+                            <SoftText Typo="Typo.h6">
+                                @(_editingId.HasValue ? IntL["EditRule"] : IntL["NewRule"])
+                            </SoftText>
+                        </SoftStack>
+                    </CardHeaderContent>
+                    <CardHeaderActions>
+                        <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <MudSwitch T="bool" @bind-Value="_editIsActive" Color="Color.Primary" Label="@IntL["IsActive"]" />
+                            <SoftIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="CloseDialog" />
+                        </SoftStack>
+                    </CardHeaderActions>
+                </SoftCardHeader>
+                <SoftDivider />
+                <SoftCardContent Class="pa-4 glass-modal-body">
+                    <SoftStack Spacing="4">
+                        <div>
+                            <SoftText Typo="Typo.overline" Color="Color.Primary">@IntL["RuleName"]</SoftText>
+                            <SoftDivider Class="mb-3" />
+                            <SoftStack Spacing="3">
+                                <SoftTextField T="string"
+                                               Label="@IntL["RuleName"]"
+                                               @bind-Value="_editName"
+                                               Variant="Variant.Outlined"
+                                               MaxLength="128"
+                                               Required="true"
+                                               Immediate="true" />
+                                <SoftStack Row="true" Spacing="2">
+                                    <SoftSelect T="string"
+                                                Label="@IntL["RuleType"]"
+                                                Value="_editType"
+                                                ValueChanged="OnEditTypeChanged"
+                                                Variant="Variant.Outlined"
+                                                Required="true">
+                                        @foreach (var t in InventoryRuleTypes.All)
+                                        {
+                                            <MudSelectItem T="string" Value="@t">@IntL[$"RuleType:{t}"]</MudSelectItem>
+                                        }
+                                    </SoftSelect>
+
+                                    @if (_editType == InventoryRuleTypes.DeadStock)
+                                    {
+                                        <SoftNumericField T="int?"
+                                                          Label="@IntL["DaysWithoutSale"]"
+                                                          @bind-Value="_editThresholdDays"
+                                                          Variant="Variant.Outlined"
+                                                          Min="0"
+                                                          HideSpinButtons="true" />
+                                    }
+                                    else
+                                    {
+                                        <SoftNumericField T="int?"
+                                                          Label="@IntL["StockQuantityThreshold"]"
+                                                          @bind-Value="_editThresholdValue"
+                                                          Variant="Variant.Outlined"
+                                                          Min="0"
+                                                          HideSpinButtons="true" />
+                                    }
+                                </SoftStack>
+                            </SoftStack>
+                        </div>
+
+                        <div>
+                            <SoftText Typo="Typo.overline" Color="Color.Primary">@IntL["Scope"]</SoftText>
+                            <SoftDivider Class="mb-3" />
+                            <SoftText Typo="Typo.caption" Color="Color.Default" Class="mb-2" Style="display:block;">
+                                @IntL["ScopeSectionHint"]
+                            </SoftText>
+                            <SoftStack Row="true" Spacing="2">
+                                <SoftLookupSelect TItem="ProductLookupDto" TValue="Guid?"
+                                                  Items="_products"
+                                                  ToValue="@(p => (Guid?)p.Id)"
+                                                  ToLabel="@(p => $"{p.SKU} — {p.Name}")"
+                                                  Value="_editProductId"
+                                                  ValueChanged="@(v => _editProductId = v)"
+                                                  Label="@IntL["Product"]"
+                                                  Placeholder="@IntL["AllProductsPlaceholder"]"
+                                                  Clearable="true" />
+                                <SoftLookupSelect TItem="BranchLookupDto" TValue="Guid?"
+                                                  Items="_branches"
+                                                  ToValue="@(b => (Guid?)b.Id)"
+                                                  ToLabel="@(b => b.Name)"
+                                                  Value="_editBranchId"
+                                                  ValueChanged="@(v => _editBranchId = v)"
+                                                  Label="@IntL["Branch"]"
+                                                  Placeholder="@IntL["AllBranchesPlaceholder"]"
+                                                  Clearable="true" />
+                            </SoftStack>
+                        </div>
+
+                        <div>
+                            <SoftText Typo="Typo.overline" Color="Color.Primary">@IntL["SuggestedAction"]</SoftText>
+                            <SoftDivider Class="mb-3" />
+                            <SoftStack Spacing="3">
+                                <SoftTextField T="string"
+                                               Label="@IntL["SuggestedAction"]"
+                                               @bind-Value="_editSuggestedAction"
+                                               Variant="Variant.Outlined"
+                                               MaxLength="256"
+                                               Placeholder="@IntL["SuggestedActionPlaceholder"]" />
+                                <SoftNumericField T="int"
+                                                  Label="@IntL["Priority"]"
+                                                  @bind-Value="_editPriority"
+                                                  Variant="Variant.Outlined"
+                                                  HideSpinButtons="true"
+                                                  HelperText="@IntL["PriorityHelper"]"
+                                                  Style="max-width: 240px;" />
+                            </SoftStack>
+                        </div>
+                    </SoftStack>
+                </SoftCardContent>
+                <SoftDivider />
+                <div class="pa-3 d-flex justify-end" style="gap: 8px;">
+                    <SoftButton Variant="Variant.Text" OnClick="CloseDialog">@L["Cancel"]</SoftButton>
+                    <SoftButton Variant="Variant.Filled"
+                                Color="Color.Primary"
+                                StartIcon="@Icons.Material.Filled.Save"
+                                OnClick="SaveAsync"
+                                Disabled="_saving">
+                        @L["Save"]
+                    </SoftButton>
+                </div>
+            </SoftCard>
+        </div>
+    </div>
+}
+
+@if (_confirmVisible)
+{
+    <div class="glass-modal-backdrop" @onclick="() => _confirmVisible = false">
+        <div class="glass-modal-container glass-modal-container--sm" @onclick:stopPropagation="true">
+            <SoftCard Elevation="24" Class="glass-modal">
+                <SoftCardHeader Class="pa-4">
+                    <CardHeaderContent>
+                        <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <SoftIcon Icon="@Icons.Material.Filled.Warning" Color="Color.Error" Size="Size.Medium" />
+                            <SoftText Typo="Typo.h6">@L["AreYouSure"]</SoftText>
+                        </SoftStack>
+                    </CardHeaderContent>
+                </SoftCardHeader>
+                <SoftDivider />
+                <SoftCardContent Class="pa-4">
+                    <SoftText>@IntL["DeleteRuleConfirmation"]</SoftText>
+                </SoftCardContent>
+                <SoftDivider />
+                <div class="pa-3 d-flex justify-end" style="gap: 8px;">
+                    <SoftButton Variant="Variant.Text" OnClick="() => _confirmVisible = false">@L["Cancel"]</SoftButton>
+                    <SoftButton Variant="Variant.Filled"
+                                Color="Color.Error"
+                                StartIcon="@Icons.Material.Filled.Delete"
+                                OnClick="ConfirmDeleteAsync">
+                        @L["Yes"]
+                    </SoftButton>
+                </div>
+            </SoftCard>
+        </div>
+    </div>
+}
+
+@code {
+    private SoftDataGrid<InventoryRuleDto> _grid = null!;
+    private bool _loading;
+    private bool _saving;
+    private bool _canManage;
+
+    private string? _filter;
+    private string? _typeFilter;
+    private string? _activeFilter = "all";
+
+    private List<ProductLookupDto> _products = new();
+    private List<BranchLookupDto> _branches = new();
+
+    private List<RuleTypeOption> _typeOptions = new();
+    private List<ActiveOption> _activeOptions = new();
+
+    private bool _dialogVisible;
+    private Guid? _editingId;
+    private string _editName = string.Empty;
+    private string _editType = InventoryRuleTypes.LowStock;
+    private Guid? _editProductId;
+    private Guid? _editBranchId;
+    private int? _editThresholdValue;
+    private int? _editThresholdDays;
+    private string? _editSuggestedAction;
+    private int _editPriority;
+    private bool _editIsActive = true;
+
+    private bool _confirmVisible;
+    private InventoryRuleDto? _pendingDelete;
+
+    public record RuleTypeOption(string Value, string Label);
+    public record ActiveOption(string Value, string Label);
+
+    protected override async Task OnInitializedAsync()
+    {
+        _canManage = await AuthorizationService.IsGrantedAsync(IntelligencePermissions.Rules.Manage);
+
+        _typeOptions = InventoryRuleTypes.All
+            .Select(t => new RuleTypeOption(t, IntL[$"RuleType:{t}"]))
+            .ToList();
+
+        _activeOptions = new List<ActiveOption>
+        {
+            new("all", IntL["Status:All"]),
+            new("active", IntL["Status:ActiveOnly"]),
+            new("inactive", IntL["Status:InactiveOnly"])
+        };
+
+        await LoadLookupsAsync();
+    }
+
+    private async Task LoadLookupsAsync()
+    {
+        try
+        {
+            _products = await ProductAppService.GetLookupAsync();
+            _branches = await BranchAppService.GetLookupAsync();
+        }
+        catch (Exception ex)
+        {
+            await HandleErrorAsync(ex);
+        }
+    }
+
+    private async Task<GridData<InventoryRuleDto>> LoadServerData(GridState<InventoryRuleDto> state, CancellationToken cancellationToken)
+    {
+        _loading = true;
+        try
+        {
+            string? sorting = null;
+            var sort = state.SortDefinitions.FirstOrDefault();
+            if (sort != null)
+            {
+                sorting = $"{sort.SortBy} {(sort.Descending ? "desc" : "asc")}";
+            }
+
+            bool? isActive = _activeFilter switch
+            {
+                "active" => true,
+                "inactive" => false,
+                _ => null
+            };
+
+            var result = await RuleAppService.GetListAsync(new GetInventoryRulesInput
+            {
+                Filter = _filter,
+                RuleType = _typeFilter,
+                IsActive = isActive,
+                SkipCount = state.Page * state.PageSize,
+                MaxResultCount = state.PageSize,
+                Sorting = sorting
+            });
+
+            return new GridData<InventoryRuleDto>
+            {
+                Items = result.Items,
+                TotalItems = (int)result.TotalCount
+            };
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task OnFilterKeyUpAsync(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await ReloadAsync();
+        }
+    }
+
+    private async Task OnTypeFilterChangedAsync(string? value)
+    {
+        _typeFilter = value;
+        await ReloadAsync();
+    }
+
+    private async Task OnActiveFilterChangedAsync(string? value)
+    {
+        _activeFilter = string.IsNullOrEmpty(value) ? "all" : value;
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        if (_grid != null)
+        {
+            await _grid.ReloadServerData();
+        }
+    }
+
+    private void OnEditTypeChanged(string value)
+    {
+        _editType = value;
+        // Keep only the threshold relevant to the selected type.
+        if (_editType == InventoryRuleTypes.DeadStock)
+        {
+            _editThresholdValue = null;
+        }
+        else
+        {
+            _editThresholdDays = null;
+        }
+    }
+
+    private void OpenCreateDialog()
+    {
+        _editingId = null;
+        _editName = string.Empty;
+        _editType = InventoryRuleTypes.LowStock;
+        _editProductId = null;
+        _editBranchId = null;
+        _editThresholdValue = null;
+        _editThresholdDays = null;
+        _editSuggestedAction = null;
+        _editPriority = 0;
+        _editIsActive = true;
+        _dialogVisible = true;
+    }
+
+    private void OpenEditDialog(InventoryRuleDto rule)
+    {
+        _editingId = rule.Id;
+        _editName = rule.RuleName;
+        _editType = rule.RuleType;
+        _editProductId = rule.ProductId;
+        _editBranchId = rule.BranchId;
+        _editThresholdValue = rule.ThresholdValue;
+        _editThresholdDays = rule.ThresholdDays;
+        _editSuggestedAction = rule.SuggestedAction;
+        _editPriority = rule.Priority;
+        _editIsActive = rule.IsActive;
+        _dialogVisible = true;
+    }
+
+    private void CloseDialog() => _dialogVisible = false;
+
+    private async Task SaveAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_editName))
+        {
+            Snackbar.Add(L["ThisFieldIsRequired", IntL["RuleName"]], Severity.Warning);
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(_editType))
+        {
+            Snackbar.Add(L["ThisFieldIsRequired", IntL["RuleType"]], Severity.Warning);
+            return;
+        }
+
+        if (_editType == InventoryRuleTypes.DeadStock)
+        {
+            if (!_editThresholdDays.HasValue)
+            {
+                Snackbar.Add(IntL["Intelligence:Rules:ThresholdDaysRequired"], Severity.Warning);
+                return;
+            }
+            _editThresholdValue = null;
+        }
+        else
+        {
+            if (!_editThresholdValue.HasValue)
+            {
+                Snackbar.Add(IntL["Intelligence:Rules:ThresholdValueRequired"], Severity.Warning);
+                return;
+            }
+            _editThresholdDays = null;
+        }
+
+        _saving = true;
+        try
+        {
+            if (_editingId.HasValue)
+            {
+                await RuleAppService.UpdateAsync(_editingId.Value, new UpdateInventoryRuleDto
+                {
+                    RuleName = _editName,
+                    RuleType = _editType,
+                    ProductId = _editProductId,
+                    BranchId = _editBranchId,
+                    ThresholdValue = _editThresholdValue,
+                    ThresholdDays = _editThresholdDays,
+                    SuggestedAction = _editSuggestedAction,
+                    Priority = _editPriority,
+                    IsActive = _editIsActive
+                });
+            }
+            else
+            {
+                await RuleAppService.CreateAsync(new CreateInventoryRuleDto
+                {
+                    RuleName = _editName,
+                    RuleType = _editType,
+                    ProductId = _editProductId,
+                    BranchId = _editBranchId,
+                    ThresholdValue = _editThresholdValue,
+                    ThresholdDays = _editThresholdDays,
+                    SuggestedAction = _editSuggestedAction,
+                    Priority = _editPriority,
+                    IsActive = _editIsActive
+                });
+            }
+            Snackbar.Add(L["SuccessfullySaved"], Severity.Success);
+            _dialogVisible = false;
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            await HandleErrorAsync(ex);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private void DeleteAsync(InventoryRuleDto rule)
+    {
+        _pendingDelete = rule;
+        _confirmVisible = true;
+    }
+
+    private async Task ConfirmDeleteAsync()
+    {
+        if (_pendingDelete == null) return;
+        try
+        {
+            await RuleAppService.DeleteAsync(_pendingDelete.Id);
+            Snackbar.Add(L["SuccessfullyDeleted"], Severity.Success);
+            _confirmVisible = false;
+            _pendingDelete = null;
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            await HandleErrorAsync(ex);
+        }
+    }
+
+    private static Color TypeColor(string ruleType) => ruleType switch
+    {
+        InventoryRuleTypes.LowStock => Color.Warning,
+        InventoryRuleTypes.ExcessStock => Color.Info,
+        InventoryRuleTypes.DeadStock => Color.Error,
+        InventoryRuleTypes.TransferSuggestion => Color.Tertiary,
+        _ => Color.Default
+    };
+
+    private string ScopeText(InventoryRuleDto rule)
+    {
+        var product = rule.ProductName ?? IntL["Product"];
+        var branch = rule.BranchName ?? IntL["Branch"];
+
+        if (!rule.ProductId.HasValue && !rule.BranchId.HasValue)
+        {
+            return IntL["Scope:Global"];
+        }
+        if (rule.ProductId.HasValue && !rule.BranchId.HasValue)
+        {
+            return IntL["Scope:ProductAllBranches", product];
+        }
+        if (!rule.ProductId.HasValue && rule.BranchId.HasValue)
+        {
+            return IntL["Scope:AllProductsInBranch", branch];
+        }
+        return IntL["Scope:ProductInBranch", product, branch];
+    }
+
+    private string ThresholdText(InventoryRuleDto rule)
+    {
+        if (rule.RuleType == InventoryRuleTypes.DeadStock)
+        {
+            return rule.ThresholdDays.HasValue ? $"{rule.ThresholdDays} {IntL["DaysSuffix"]}" : "—";
+        }
+        return rule.ThresholdValue?.ToString() ?? "—";
+    }
+}

@@ -23,6 +23,13 @@ public class OperationsPermissionDefinitionProvider : PermissionDefinitionProvid
         sales.AddChild(OperationsPermissions.Sales.Manage, L("Permission:Sales.Manage"));
         sales.AddChild(OperationsPermissions.Sales.Delete, L("Permission:Sales.Delete"));
         sales.AddChild(OperationsPermissions.Sales.ManageAll, L("Permission:Sales.ManageAll"));
+
+        var transfers = group.AddPermission(OperationsPermissions.Transfers.Default, L("Permission:Transfers"));
+        transfers.AddChild(OperationsPermissions.Transfers.Create, L("Permission:Transfers.Create"));
+        transfers.AddChild(OperationsPermissions.Transfers.Approve, L("Permission:Transfers.Approve"));
+        transfers.AddChild(OperationsPermissions.Transfers.Ship, L("Permission:Transfers.Ship"));
+        transfers.AddChild(OperationsPermissions.Transfers.Complete, L("Permission:Transfers.Complete"));
+        transfers.AddChild(OperationsPermissions.Transfers.Cancel, L("Permission:Transfers.Cancel"));
     }
 
     private static LocalizableString L(string name)

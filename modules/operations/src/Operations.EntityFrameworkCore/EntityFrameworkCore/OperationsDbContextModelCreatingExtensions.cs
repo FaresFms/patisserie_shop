@@ -22,6 +22,7 @@ public static class OperationsDbContextModelCreatingExtensions
                 .WithOne()
                 .HasForeignKey(i => i.StockTransferId)
                 .OnDelete(DeleteBehavior.Cascade);
+            b.Navigation(x => x.Items).HasField("_items").UsePropertyAccessMode(PropertyAccessMode.Field);
         });
 
         builder.Entity<AppStockTransferItem>(b =>

@@ -1,16 +1,19 @@
+using Intelligence.Entities;
+using Intelligence.Rules;
 using Riok.Mapperly.Abstractions;
 using Volo.Abp.Mapperly;
 
 namespace Intelligence;
 
-/*
-Write your mappings here...
-
-[Mapper(RequiredMappingStrategy = RequiredMappingStrategy.Target)]
-public partial class IntelligenceApplicationMappers : MapperBase<Book, BookDto>
+[Mapper]
+public partial class InventoryRuleToDtoMapper : MapperBase<AppInventoryRule, InventoryRuleDto>
 {
-    public override partial BookDto Map(Book source);
+    // ProductName / BranchName are joined data resolved manually by the app service.
+    [MapperIgnoreTarget(nameof(InventoryRuleDto.ProductName))]
+    [MapperIgnoreTarget(nameof(InventoryRuleDto.BranchName))]
+    public override partial InventoryRuleDto Map(AppInventoryRule source);
 
-    public override partial void Map(Book source, BookDto destination);
+    [MapperIgnoreTarget(nameof(InventoryRuleDto.ProductName))]
+    [MapperIgnoreTarget(nameof(InventoryRuleDto.BranchName))]
+    public override partial void Map(AppInventoryRule source, InventoryRuleDto destination);
 }
-*/

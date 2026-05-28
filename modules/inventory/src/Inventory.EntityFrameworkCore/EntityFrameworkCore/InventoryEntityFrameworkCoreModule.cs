@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+﻿using Inventory.Entities;
+using Microsoft.Extensions.DependencyInjection;
 using Volo.Abp.EntityFrameworkCore;
 using Volo.Abp.Modularity;
 
@@ -15,10 +16,11 @@ public class InventoryEntityFrameworkCoreModule : AbpModule
         context.Services.AddAbpDbContext<InventoryDbContext>(options =>
         {
             options.AddDefaultRepositories<IInventoryDbContext>();
-            
-            /* Add custom repositories here. Example:
-            * options.AddRepository<Question, EfCoreQuestionRepository>();
-            */
+            options.AddRepository<AppBranchInventory, BranchInventoryRepository>();
+            options.AddRepository<AppCategory, CategoryRepository>();
+            options.AddRepository<AppStockMovement, StockMovementRepository>();
+            options.AddRepository<AppProduct, ProductRepository>();
+            options.AddRepository<AppSupplier, SupplierRepository>();
         });
     }
 }

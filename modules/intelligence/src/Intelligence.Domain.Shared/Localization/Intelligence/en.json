@@ -1,7 +1,62 @@
 {
   "culture": "en",
   "texts": {
-    "MyAccount":  "My account",
-    "SamplePageMessage": "A sample page for the Intelligence module"
+    "MyAccount": "My account",
+    "SamplePageMessage": "A sample page for the Intelligence module",
+
+    "Permission:Intelligence": "Intelligence",
+    "Permission:Rules": "Inventory Rules",
+    "Permission:Rules.Manage": "Create, edit and delete rules",
+
+    "Menu:Intelligence": "Intelligence",
+    "Menu:InventoryRules": "Inventory Rules",
+
+    "InventoryRules": "Inventory Rules",
+    "InventoryRulesSubtitle": "Configure how the decision engine reacts to stock changes.",
+    "NewRule": "New Rule",
+    "EditRule": "Edit Rule",
+
+    "RuleName": "Rule Name",
+    "RuleType": "Rule Type",
+    "Scope": "Scope",
+    "Threshold": "Threshold",
+    "Priority": "Priority",
+    "SuggestedAction": "Suggested Action",
+    "IsActive": "Active",
+    "Product": "Product",
+    "Branch": "Branch",
+    "Actions": "Actions",
+    "Filter": "Search by rule name",
+    "AllRuleTypes": "All Types",
+
+    "RuleType:LowStock": "Low Stock",
+    "RuleType:ExcessStock": "Excess Stock",
+    "RuleType:DeadStock": "Dead Stock",
+    "RuleType:TransferSuggestion": "Transfer Suggestion",
+
+    "Status:All": "All",
+    "Status:ActiveOnly": "Active Only",
+    "Status:InactiveOnly": "Inactive Only",
+
+    "Scope:Global": "Global (all products, all branches)",
+    "Scope:ProductAllBranches": "{0} in all branches",
+    "Scope:AllProductsInBranch": "All products in {0}",
+    "Scope:ProductInBranch": "{0} in {1}",
+
+    "StockQuantityThreshold": "Stock Quantity Threshold",
+    "DaysWithoutSale": "Days Without Sale",
+    "DaysSuffix": "days",
+
+    "ScopeSectionHint": "Leave a field empty to apply the rule globally. Product + Branch can be combined for a specific match.",
+    "AllProductsPlaceholder": "All products (leave empty for global)",
+    "AllBranchesPlaceholder": "All branches (leave empty for global)",
+    "SuggestedActionPlaceholder": "e.g. Reorder from supplier / Transfer to Branch X / Discount 20%",
+    "PriorityHelper": "Higher number = evaluated first when multiple rules match",
+
+    "DeleteRuleConfirmation": "Are you sure you want to delete this rule? The engine will no longer evaluate it. Existing decision logs that reference this rule are kept as historical records and are not affected.",
+
+    "Intelligence:Rules:InvalidRuleType": "Invalid rule type.",
+    "Intelligence:Rules:ThresholdValueRequired": "A stock quantity threshold is required for this rule type.",
+    "Intelligence:Rules:ThresholdDaysRequired": "A days-without-sale value is required for Dead Stock rules."
   }
 }

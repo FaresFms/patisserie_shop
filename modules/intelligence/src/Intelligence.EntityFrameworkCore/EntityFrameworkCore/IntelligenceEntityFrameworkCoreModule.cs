@@ -1,4 +1,6 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+﻿using Intelligence.Entities;
+using Intelligence.Rules;
+using Microsoft.Extensions.DependencyInjection;
 using Volo.Abp.EntityFrameworkCore;
 using Volo.Abp.Modularity;
 
@@ -15,10 +17,8 @@ public class IntelligenceEntityFrameworkCoreModule : AbpModule
         context.Services.AddAbpDbContext<IntelligenceDbContext>(options =>
         {
             options.AddDefaultRepositories<IIntelligenceDbContext>();
-            
-            /* Add custom repositories here. Example:
-            * options.AddRepository<Question, EfCoreQuestionRepository>();
-            */
+
+            options.AddRepository<AppInventoryRule, InventoryRuleRepository>();
         });
     }
 }

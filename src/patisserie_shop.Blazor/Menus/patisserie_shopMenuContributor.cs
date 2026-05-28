@@ -1,6 +1,8 @@
 using System.Threading.Tasks;
 using Inventory.Localization;
 using Inventory.Permissions;
+using Intelligence.Localization;
+using Intelligence.Permissions;
 using Operations.Localization;
 using Operations.Permissions;
 using patisserie_shop.Localization;
@@ -117,7 +119,28 @@ public class patisserie_shopMenuContributor : IMenuContributor
             "/operations/sales",
             icon: "fas fa-cash-register"
         ).RequirePermissions(OperationsPermissions.Sales.Default));
+        operationsMenu.AddItem(new ApplicationMenuItem(
+            patisserie_shopMenus.StockTransfers,
+            opsL["Menu:StockTransfers"],
+            "/operations/stock-transfers",
+            icon: "fas fa-exchange-alt"
+        ).RequirePermissions(OperationsPermissions.Transfers.Default));
         context.Menu.AddItem(operationsMenu);
+
+        var intelL = context.GetLocalizer<IntelligenceResource>();
+        var intelligenceMenu = new ApplicationMenuItem(
+            patisserie_shopMenus.Intelligence,
+            intelL["Menu:Intelligence"],
+            icon: "fas fa-sliders-h",
+            order: 4
+        );
+        intelligenceMenu.AddItem(new ApplicationMenuItem(
+            patisserie_shopMenus.InventoryRules,
+            intelL["Menu:InventoryRules"],
+            "/intelligence/inventory-rules",
+            icon: "fas fa-gavel"
+        ).RequirePermissions(IntelligencePermissions.Rules.Default));
+        context.Menu.AddItem(intelligenceMenu);
 
         //Administration
         var administration = context.Menu.GetAdministration();

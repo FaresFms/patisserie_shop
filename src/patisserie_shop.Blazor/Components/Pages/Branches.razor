@@ -24,15 +24,13 @@
     PageLayout.Title = InvL["Branches"];
 }
 
-<SoftCard Elevation="2" Class="pa-2">
-    <SoftCardHeader>
-        <CardHeaderContent>
-            <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                <SoftIcon Icon="@Icons.Material.Filled.Storefront" Color="Color.Primary" Size="Size.Large" />
-                <SoftText Typo="Typo.h5">@InvL["Branches"]</SoftText>
-            </SoftStack>
-        </CardHeaderContent>
-        <CardHeaderActions>
+<SoftCard Elevation="2" Class="pa-2 page-flat">
+    <div class="page-head">
+        <div>
+            <h1 class="page-title">@InvL["Branches"]</h1>
+            <div class="page-sub">Store locations and their managers.</div>
+        </div>
+        <div class="page-head-actions">
             <SoftButton Variant="Variant.Filled"
                         Color="Color.Primary"
                         StartIcon="@Icons.Material.Filled.Add"
@@ -40,10 +38,10 @@
                         Disabled="!_canManage">
                 @InvL["NewBranch"]
             </SoftButton>
-        </CardHeaderActions>
-    </SoftCardHeader>
+        </div>
+    </div>
     <SoftCardContent>
-        <SoftStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Class="mb-4">
+        <div class="toolbar">
             <SoftTextField T="string"
                            Placeholder="@InvL["Filter"]"
                            @bind-Value="_filter"
@@ -53,11 +51,14 @@
                            AdornmentIcon="@Icons.Material.Filled.Search"
                            OnKeyUp="OnFilterKeyUpAsync"
                            Immediate="true"
+                           Class="toolbar-search"
                            Style="max-width: 320px;" />
-            <SoftButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="ReloadAsync" StartIcon="@Icons.Material.Filled.Refresh">
-                @L["Refresh"]
-            </SoftButton>
-        </SoftStack>
+            <div class="toolbar-right">
+                <SoftButton Variant="Variant.Text" Color="Color.Primary" OnClick="ReloadAsync" StartIcon="@Icons.Material.Filled.Refresh">
+                    @L["Refresh"]
+                </SoftButton>
+            </div>
+        </div>
 
         <SoftDataGrid T="BranchDto"
                       @ref="_grid"
@@ -93,18 +94,20 @@
                 <PropertyColumn T="BranchDto" TProperty="DateTime" Property="x => x.CreationTime" Title="@InvL["CreationTime"]" Format="g" />
                 <TemplateColumn T="BranchDto" Title="@InvL["Actions"]" Sortable="false">
                     <CellTemplate>
-                        <SoftStack Row="true" Spacing="1">
-                            <SoftIconButton Icon="@Icons.Material.Filled.Edit"
-                                            Color="Color.Primary"
-                                            Size="Size.Small"
-                                            OnClick="() => OpenEditDialog(context.Item)"
-                                            Disabled="!_canManage" />
-                            <SoftIconButton Icon="@Icons.Material.Filled.Delete"
-                                            Color="Color.Error"
-                                            Size="Size.Small"
-                                            OnClick="() => DeleteAsync(context.Item)"
-                                            Disabled="!_canManage" />
-                        </SoftStack>
+                        <span class="row-actions">
+                            <SoftStack Row="true" Spacing="1">
+                                <SoftIconButton Icon="@Icons.Material.Filled.Edit"
+                                                Color="Color.Primary"
+                                                Size="Size.Small"
+                                                OnClick="() => OpenEditDialog(context.Item)"
+                                                Disabled="!_canManage" />
+                                <SoftIconButton Icon="@Icons.Material.Filled.Delete"
+                                                Color="Color.Error"
+                                                Size="Size.Small"
+                                                OnClick="() => DeleteAsync(context.Item)"
+                                                Disabled="!_canManage" />
+                            </SoftStack>
+                        </span>
                     </CellTemplate>
                 </TemplateColumn>
             </Columns>
@@ -149,9 +152,7 @@
                                                Variant="Variant.Outlined"
                                                MaxLength="128"
                                                Required="true"
-                                               Immediate="true"
-                                               Adornment="Adornment.Start"
-                                               AdornmentIcon="@Icons.Material.Filled.Storefront" />
+                                               Immediate="true" />
                                 <SoftLookupSelect TItem="IdentityUserDto" TValue="Guid?"
                                                   Items="_users"
                                                   ToValue="@(u => (Guid?)u.Id)"
@@ -160,8 +161,7 @@
                                                   ValueChanged="@(v => _editManagerUserId = v)"
                                                   Label="@InvL["Manager"]"
                                                   Placeholder="@InvL["SelectManager"]"
-                                                  Clearable="true"
-                                                  AdornmentIcon="@Icons.Material.Filled.Person" />
+                                                  Clearable="true" />
                             </SoftStack>
                         </div>
 
@@ -173,9 +173,7 @@
                                            @bind-Value="_editAddress"
                                            Variant="Variant.Outlined"
                                            Lines="2"
-                                           MaxLength="512"
-                                           Adornment="Adornment.Start"
-                                           AdornmentIcon="@Icons.Material.Filled.LocationOn" />
+                                           MaxLength="512" />
                         </div>
 
                         <div>
@@ -186,17 +184,13 @@
                                                Label="@InvL["Phone"]"
                                                @bind-Value="_editPhone"
                                                Variant="Variant.Outlined"
-                                               MaxLength="32"
-                                               Adornment="Adornment.Start"
-                                               AdornmentIcon="@Icons.Material.Filled.Phone" />
+                                               MaxLength="32" />
                                 <SoftTextField T="string"
                                                Label="@InvL["Email"]"
                                                @bind-Value="_editEmail"
                                                Variant="Variant.Outlined"
                                                InputType="InputType.Email"
-                                               MaxLength="256"
-                                               Adornment="Adornment.Start"
-                                               AdornmentIcon="@Icons.Material.Filled.Email" />
+                                               MaxLength="256" />
                             </SoftStack>
                             <SoftCheckBox T="bool" @bind-Value="_editIsActive" Label="@InvL["IsActive"]" Color="Color.Primary" Class="mt-3" />
                         </div>

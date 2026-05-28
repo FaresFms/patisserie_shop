@@ -1,6 +1,8 @@
-﻿namespace Intelligence;
+namespace Intelligence;
 
 public static class IntelligenceErrorCodes
 {
-    //Add your business exception error codes here...
+    public const string InvalidRuleType = "Intelligence:Rules:InvalidRuleType";
+    public const string ThresholdValueRequired = "Intelligence:Rules:ThresholdValueRequired";
+    public const string ThresholdDaysRequired = "Intelligence:Rules:ThresholdDaysRequired";
 }

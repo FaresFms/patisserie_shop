@@ -22,12 +22,13 @@
     PageLayout.Title = InvL["Categories"];
 }
 
-<SoftCard Elevation="2" Class="pa-2">
-    <SoftCardHeader>
-        <CardHeaderContent>
-            <SoftText Typo="Typo.h5">@InvL["Categories"]</SoftText>
-        </CardHeaderContent>
-        <CardHeaderActions>
+<SoftCard Elevation="2" Class="pa-2 page-flat">
+    <div class="page-head">
+        <div>
+            <h1 class="page-title">@InvL["Categories"]</h1>
+            <div class="page-sub">Organize products into groups.</div>
+        </div>
+        <div class="page-head-actions">
             <SoftButton Variant="Variant.Filled"
                         Color="Color.Primary"
                         StartIcon="@Icons.Material.Filled.Add"
@@ -35,10 +36,10 @@
                         Disabled="!_canManage">
                 @InvL["NewCategory"]
             </SoftButton>
-        </CardHeaderActions>
-    </SoftCardHeader>
+        </div>
+    </div>
     <SoftCardContent>
-        <SoftStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Class="mb-4">
+        <div class="toolbar">
             <SoftTextField T="string"
                            Placeholder="@InvL["Filter"]"
                            @bind-Value="_filter"
@@ -48,11 +49,14 @@
                            AdornmentIcon="@Icons.Material.Filled.Search"
                            OnKeyUp="OnFilterKeyUpAsync"
                            Immediate="true"
+                           Class="toolbar-search"
                            Style="max-width: 320px;" />
-            <SoftButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="ReloadAsync">
-                @L["Refresh"]
-            </SoftButton>
-        </SoftStack>
+            <div class="toolbar-right">
+                <SoftButton Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Refresh" OnClick="ReloadAsync">
+                    @L["Refresh"]
+                </SoftButton>
+            </div>
+        </div>
 
         <SoftDataGrid T="CategoryDto"
                       @ref="_grid"
@@ -81,18 +85,20 @@
                 <PropertyColumn T="CategoryDto" TProperty="DateTime" Property="x => x.CreationTime" Title="@InvL["CreationTime"]" Format="g" />
                 <TemplateColumn T="CategoryDto" Title="@InvL["Actions"]" Sortable="false">
                     <CellTemplate>
-                        <SoftStack Row="true" Spacing="1">
-                            <SoftIconButton Icon="@Icons.Material.Filled.Edit"
-                                            Color="Color.Primary"
-                                            Size="Size.Small"
-                                            OnClick="() => OpenEditDialog(context.Item)"
-                                            Disabled="!_canManage" />
-                            <SoftIconButton Icon="@Icons.Material.Filled.Delete"
-                                            Color="Color.Error"
-                                            Size="Size.Small"
-                                            OnClick="() => DeleteAsync(context.Item)"
-                                            Disabled="!_canManage" />
-                        </SoftStack>
+                        <span class="row-actions">
+                            <SoftStack Row="true" Spacing="1">
+                                <SoftIconButton Icon="@Icons.Material.Filled.Edit"
+                                                Color="Color.Primary"
+                                                Size="Size.Small"
+                                                OnClick="() => OpenEditDialog(context.Item)"
+                                                Disabled="!_canManage" />
+                                <SoftIconButton Icon="@Icons.Material.Filled.Delete"
+                                                Color="Color.Error"
+                                                Size="Size.Small"
+                                                OnClick="() => DeleteAsync(context.Item)"
+                                                Disabled="!_canManage" />
+                            </SoftStack>
+                        </span>
                     </CellTemplate>
                 </TemplateColumn>
             </Columns>

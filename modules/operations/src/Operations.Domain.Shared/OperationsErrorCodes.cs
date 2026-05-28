@@ -18,4 +18,15 @@ public static class OperationsErrorCodes
     public const string DuplicateProductInSale = "Operations:Sales:DuplicateProduct";
     public const string InsufficientStock = "Operations:Sales:InsufficientStock";
     public const string NoInventoryRow = "Operations:Sales:NoInventoryRow";
+
+    // Stock transfers
+    public const string TransferInvalidStatusTransition = "Operations:Transfers:InvalidStatusTransition";
+    public const string CannotModifyTransferAfterDraft = "Operations:Transfers:CannotModifyAfterDraft";
+    public const string CannotSubmitEmptyTransfer = "Operations:Transfers:CannotSubmitEmptyTransfer";
+    public const string TransferItemNotFound = "Operations:Transfers:ItemNotFound";
+    public const string DuplicateProductInTransfer = "Operations:Transfers:DuplicateProduct";
+    public const string SameSourceAndDestination = "Operations:Transfers:SameBranch";
+    public const string InsufficientStockAtSource = "Operations:Transfers:InsufficientStock";
+    public const string TransferInvalidQuantity = "Operations:Transfers:InvalidQuantity";
+    public const string CannotApproveTransferItem = "Operations:Transfers:CannotApproveItem";
 }

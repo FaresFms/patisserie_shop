@@ -1,23 +1,24 @@
 using System;
-using System.Linq;
-using System.Linq.Dynamic.Core;
 using System.Threading.Tasks;
 using Inventory.Entities;
 using Inventory.Permissions;
 using Microsoft.AspNetCore.Authorization;
 using Volo.Abp.Application.Dtos;
-using Volo.Abp.Domain.Repositories;
 
 namespace Inventory.Categories;
 
 [Authorize(InventoryPermissions.Categories.Default)]
 public class CategoryAppService : InventoryAppService, ICategoryAppService
 {
-    private readonly IRepository<AppCategory, Guid> _categoryRepository;
+    private readonly ICategoryRepository _categoryRepository;
+    private readonly CategoryManager _categoryManager;
 
-    public CategoryAppService(IRepository<AppCategory, Guid> categoryRepository)
+    public CategoryAppService(
+        ICategoryRepository categoryRepository,
+        CategoryManager categoryManager)
     {
         _categoryRepository = categoryRepository;
+        _categoryManager = categoryManager;
     }
 
     public async Task<CategoryDto> GetAsync(Guid id)
@@ -28,42 +29,25 @@ public class CategoryAppService : InventoryAppService, ICategoryAppService
 
     public async Task<PagedResultDto<CategoryDto>> GetListAsync(GetCategoriesInput input)
     {
-        var queryable = await _categoryRepository.GetQueryableAsync();
+        var totalCount = await _categoryRepository.CountFilteredAsync(input.Filter, input.IsActive);
 
-        if (!string.IsNullOrWhiteSpace(input.Filter))
-        {
-            var filter = input.Filter.Trim().ToLower();
-            queryable = queryable.Where(c => c.Name.ToLower().Contains(filter));
-        }
-
-        if (input.IsActive.HasValue)
-        {
-            queryable = queryable.Where(c => c.IsActive == input.IsActive.Value);
-        }
-
-        var totalCount = await AsyncExecuter.CountAsync(queryable);
-
-
-        var sorting = string.IsNullOrWhiteSpace(input.Sorting) ? nameof(AppCategory.Name) : input.Sorting;
-        queryable = queryable.OrderBy(sorting).Skip(input.SkipCount).Take(input.MaxResultCount);
-
-        var items = await AsyncExecuter.ToListAsync(queryable);
+        var items = await _categoryRepository.GetFilteredListAsync(
+            input.Filter,
+            input.IsActive,
+            input.Sorting ?? string.Empty,
+            input.SkipCount,
+            input.MaxResultCount);
 
         return new PagedResultDto<CategoryDto>(
             totalCount,
-            items.Select(c => ObjectMapper.Map<AppCategory, CategoryDto>(c)).ToList()
-        );
+            [.. items.ConvertAll(c => ObjectMapper.Map<AppCategory, CategoryDto>(c))]);
     }
 
     [Authorize(InventoryPermissions.Categories.Manage)]
     public async Task<CategoryDto> CreateAsync(CreateCategoryDto input)
+
     {
-        var category = new AppCategory(
-            GuidGenerator.Create(),
-            input.Name,
-            input.Description,
-            input.IsActive
-        );
+        var category = await _categoryManager.CreateAsync(input.Name, input.Description, input.IsActive);
 
         await _categoryRepository.InsertAsync(category, autoSave: true);
         return ObjectMapper.Map<AppCategory, CategoryDto>(category);
@@ -73,9 +57,10 @@ public class CategoryAppService : InventoryAppService, ICategoryAppService
     public async Task<CategoryDto> UpdateAsync(Guid id, UpdateCategoryDto input)
     {
         var category = await _categoryRepository.GetAsync(id);
-        category.Name = input.Name;
-        category.Description = input.Description;
-        category.IsActive = input.IsActive;
+
+        await _categoryManager.ChangeNameAsync(category, input.Name);
+        category.UpdateInfo(input.Description, input.IsActive);
+
         await _categoryRepository.UpdateAsync(category, autoSave: true);
         return ObjectMapper.Map<AppCategory, CategoryDto>(category);
     }

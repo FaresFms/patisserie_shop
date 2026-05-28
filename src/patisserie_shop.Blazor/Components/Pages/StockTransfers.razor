@@ -1,0 +1,428 @@
+@page "/operations/stock-transfers"
+@attribute [Authorize(OperationsPermissions.Transfers.Default)]
+@using System.Threading
+@using System.Threading.Tasks
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components
+@using Volo.Abp.Application.Dtos
+@using Volo.Abp.AspNetCore.Components.Web.Theming.Layout
+@using Operations
+@using Operations.StockTransfers
+@using Operations.Permissions
+@using Operations.Localization
+@using Inventory.Branches
+@using Color = MudBlazor.Color
+@using Variant = MudBlazor.Variant
+@using Size = MudBlazor.Size
+@using Margin = MudBlazor.Margin
+@inherits patisserie_shopComponentBase
+@inject IStockTransferAppService StockTransferAppService
+@inject IBranchAppService BranchAppService
+@inject PageLayout PageLayout
+@inject ISnackbar Snackbar
+@inject IStringLocalizer<OperationsResource> OpsL
+
+@{
+    PageLayout.Title = OpsL["StockTransfers"];
+}
+
+<SoftCard Elevation="2" Class="pa-2 page-flat">
+    <div class="page-head">
+        <div>
+            <h1 class="page-title">@OpsL["StockTransfers"]</h1>
+            <div class="page-sub">Stock moved between branches.</div>
+        </div>
+        <div class="page-head-actions">
+            <SoftButton Variant="Variant.Filled"
+                        Color="Color.Primary"
+                        StartIcon="@Icons.Material.Filled.Add"
+                        OnClick="OpenCreateDialog"
+                        Disabled="!_canCreate">
+                @OpsL["NewTransfer"]
+            </SoftButton>
+        </div>
+    </div>
+    <SoftCardContent>
+        <div class="toolbar">
+            <SoftTextField T="string"
+                           Placeholder="@OpsL["Filter"]"
+                           @bind-Value="_filter"
+                           Variant="Variant.Outlined"
+                           Margin="Margin.Dense"
+                           Adornment="Adornment.Start"
+                           AdornmentIcon="@Icons.Material.Filled.Search"
+                           OnKeyUp="OnFilterKeyUpAsync"
+                           Immediate="true"
+                           Class="toolbar-search"
+                           Style="min-width: 220px; max-width: 320px;" />
+
+            <div class="filter-chip">
+                <SoftLookupSelect TItem="BranchLookupDto" TValue="Guid?"
+                                  Items="_branches"
+                                  ToValue="@(b => (Guid?)b.Id)"
+                                  ToLabel="@(b => b.Name)"
+                                  Value="_fromFilter"
+                                  ValueChanged="OnFromChangedAsync"
+                                  Label="@OpsL["FromBranch"]"
+                                  Margin="Margin.Dense"
+                                  Clearable="true"
+                                  Dense="true" />
+            </div>
+
+            <div class="filter-chip">
+                <SoftLookupSelect TItem="BranchLookupDto" TValue="Guid?"
+                                  Items="_branches"
+                                  ToValue="@(b => (Guid?)b.Id)"
+                                  ToLabel="@(b => b.Name)"
+                                  Value="_toFilter"
+                                  ValueChanged="OnToChangedAsync"
+                                  Label="@OpsL["ToBranch"]"
+                                  Margin="Margin.Dense"
+                                  Clearable="true"
+                                  Dense="true" />
+            </div>
+
+            <div class="filter-chip">
+                <SoftLookupSelect TItem="StatusOption" TValue="string"
+                                  Items="_statusOptions"
+                                  ToValue="@(o => o.Value)"
+                                  ToLabel="@(o => o.Label)"
+                                  Value="_statusFilter"
+                                  ValueChanged="OnStatusChangedAsync"
+                                  Label="@OpsL["AllStatuses"]"
+                                  Margin="Margin.Dense"
+                                  Clearable="true"
+                                  Dense="true" />
+            </div>
+
+            <div class="toolbar-right">
+                <SoftButton Variant="Variant.Text" Color="Color.Primary"
+                            OnClick="ReloadAsync" StartIcon="@Icons.Material.Filled.Refresh">
+                    @L["Refresh"]
+                </SoftButton>
+            </div>
+        </div>
+
+        <SoftDataGrid T="StockTransferDto"
+                      @ref="_grid"
+                      ServerData="LoadServerData"
+                      Dense="true"
+                      Hover="true"
+                      Bordered="false"
+                      Loading="_loading"
+                      SortMode="SortMode.Single"
+                      RowClick="OnRowClick">
+            <Columns>
+                <PropertyColumn T="StockTransferDto" TProperty="string" Property="x => x.Reference" Title="@OpsL["TransferRef"]" Sortable="false" />
+                <PropertyColumn T="StockTransferDto" TProperty="string" Property="x => x.FromBranchName" Title="@OpsL["FromBranch"]" />
+                <PropertyColumn T="StockTransferDto" TProperty="string" Property="x => x.ToBranchName" Title="@OpsL["ToBranch"]" />
+                <TemplateColumn T="StockTransferDto" Title="@OpsL["RequestedDate"]" SortBy="x => x.RequestedDate">
+                    <CellTemplate>
+                        <SoftText Typo="Typo.body2">@context.Item.RequestedDate.ToString("MMM d, yyyy")</SoftText>
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn T="StockTransferDto" Title="@OpsL["Items"]" Sortable="false">
+                    <CellTemplate>
+                        <SoftChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default">
+                            @context.Item.ItemCount
+                        </SoftChip>
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn T="StockTransferDto" Title="@OpsL["Status"]" SortBy="x => x.Status">
+                    <CellTemplate>
+                        <div class="@($"sts-status sts-status-{context.Item.Status.ToLower()}")">
+                            <MudIcon Icon="@StatusIcon(context.Item.Status)" Size="Size.Small" />
+                            <span>@OpsL[$"Status:{context.Item.Status}"]</span>
+                        </div>
+                    </CellTemplate>
+                </TemplateColumn>
+                <PropertyColumn T="StockTransferDto" TProperty="string" Property="x => x.RequestedByUserName!" Title="@OpsL["RequestedBy"]" Sortable="false" />
+                <TemplateColumn T="StockTransferDto" Title="" Sortable="false">
+                    <CellTemplate>
+                        <span class="row-actions">
+                            <SoftIconButton Icon="@Icons.Material.Filled.OpenInNew"
+                                            Color="Color.Primary"
+                                            Size="Size.Small"
+                                            OnClick="@(() => OpenDetail(context.Item.Id))" />
+                        </span>
+                    </CellTemplate>
+                </TemplateColumn>
+            </Columns>
+            <NoRecordsContent>
+                <SoftStack AlignItems="AlignItems.Center" Spacing="2" Class="pa-6">
+                    <SoftIcon Icon="@Icons.Material.Outlined.Inbox" Style="font-size: 56px; opacity: 0.4;" />
+                    <SoftText Typo="Typo.body1" Color="Color.Default">@OpsL["NoTransfers"]</SoftText>
+                </SoftStack>
+            </NoRecordsContent>
+            <PagerContent>
+                <MudDataGridPager T="StockTransferDto" />
+            </PagerContent>
+        </SoftDataGrid>
+    </SoftCardContent>
+</SoftCard>
+
+@if (_createVisible)
+{
+    <div class="glass-modal-backdrop" @onclick="CloseCreate">
+        <div class="glass-modal-container glass-modal-container--md" @onclick:stopPropagation="true">
+            <SoftCard Elevation="24" Class="glass-modal">
+                <SoftCardHeader Class="pa-4">
+                    <CardHeaderContent>
+                        <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <SoftIcon Icon="@Icons.Material.Filled.AddCircle" Color="Color.Primary" Size="Size.Medium" />
+                            <SoftText Typo="Typo.h6">@OpsL["NewTransfer"]</SoftText>
+                        </SoftStack>
+                    </CardHeaderContent>
+                    <CardHeaderActions>
+                        <SoftIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="CloseCreate" />
+                    </CardHeaderActions>
+                </SoftCardHeader>
+                <SoftDivider />
+                <SoftCardContent Class="pa-4">
+                    <SoftStack Spacing="3">
+                        <SoftAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+                            Step 1 of 2 — choose the branches. You'll add products in the next step.
+                        </SoftAlert>
+                        <SoftLookupSelect TItem="BranchLookupDto" TValue="Guid?"
+                                          Items="_branches"
+                                          ToValue="@(b => (Guid?)b.Id)"
+                                          ToLabel="@(b => b.Name)"
+                                          Value="_newFromId"
+                                          ValueChanged="@(v => _newFromId = v)"
+                                          Label="@OpsL["FromBranch"]"
+                                          Required="true" />
+                        <SoftLookupSelect TItem="BranchLookupDto" TValue="Guid?"
+                                          Items="_branches"
+                                          ToValue="@(b => (Guid?)b.Id)"
+                                          ToLabel="@(b => b.Name)"
+                                          Value="_newToId"
+                                          ValueChanged="@(v => _newToId = v)"
+                                          Label="@OpsL["ToBranch"]"
+                                          Required="true" />
+                        @if (_newFromId.HasValue && _newToId.HasValue && _newFromId == _newToId)
+                        {
+                            <SoftAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true">
+                                @OpsL["SameBranchWarning"]
+                            </SoftAlert>
+                        }
+                        <MudDatePicker Label="@OpsL["RequestedDate"]" Variant="Variant.Outlined"
+                                       @bind-Date="_newRequestedDate" />
+                        <SoftTextField T="string"
+                                       Label="@OpsL["Notes"]"
+                                       @bind-Value="_newNotes"
+                                       Variant="Variant.Outlined"
+                                       Lines="2"
+                                       MaxLength="512" />
+                    </SoftStack>
+                </SoftCardContent>
+                <SoftDivider />
+                <div class="pa-3 d-flex justify-end" style="gap: 8px;">
+                    <SoftButton Variant="Variant.Text" OnClick="CloseCreate">@L["Cancel"]</SoftButton>
+                    <SoftButton Variant="Variant.Filled" Color="Color.Primary"
+                                EndIcon="@Icons.Material.Filled.ArrowForward"
+                                OnClick="ConfirmCreateAsync"
+                                Disabled="_saving">
+                        @OpsL["SaveAndAddItems"]
+                    </SoftButton>
+                </div>
+            </SoftCard>
+        </div>
+    </div>
+}
+
+@if (_detailId.HasValue)
+{
+    <StockTransferDetailModal TransferId="_detailId.Value"
+                              OnClose="CloseDetailAsync"
+                              Changed="OnDetailChangedAsync"
+                              @key="_detailId" />
+}
+
+<style>
+    .sts-status {
+        display: inline-flex; align-items: center; gap: 6px;
+        padding: 3px 10px; border-radius: 999px;
+        font-size: 0.78rem; font-weight: 600;
+        border: 1px solid transparent;
+    }
+    .sts-status-draft     { background: rgba(255,255,255, 0.10); border-color: rgba(255,255,255, 0.20); color: var(--glass-text-secondary); }
+    .sts-status-pending   { background: rgba(251,191, 36, 0.20); border-color: rgba(251,191, 36, 0.40); color: #fde68a; }
+    .sts-status-approved  { background: rgba( 59,130,246, 0.20); border-color: rgba( 59,130,246, 0.40); color: #93c5fd; }
+    .sts-status-intransit { background: rgba( 20,184,166, 0.20); border-color: rgba( 20,184,166, 0.40); color: #5eead4; }
+    .sts-status-completed { background: rgba( 34,197, 94, 0.20); border-color: rgba( 34,197, 94, 0.40); color: #86efac; }
+    .sts-status-cancelled { background: rgba(239, 68, 68, 0.20); border-color: rgba(239, 68, 68, 0.40); color: #fca5a5; }
+</style>
+
+@code {
+    private SoftDataGrid<StockTransferDto> _grid = null!;
+    private bool _loading;
+    private bool _saving;
+    private bool _canCreate;
+
+    private string? _filter;
+    private string? _statusFilter;
+    private Guid? _fromFilter;
+    private Guid? _toFilter;
+
+    private List<BranchLookupDto> _branches = new();
+    private List<StatusOption> _statusOptions = new();
+
+    private Guid? _detailId;
+
+    private bool _createVisible;
+    private Guid? _newFromId;
+    private Guid? _newToId;
+    private DateTime? _newRequestedDate = DateTime.Today;
+    private string? _newNotes;
+
+    public record StatusOption(string Value, string Label);
+
+    protected override async Task OnInitializedAsync()
+    {
+        _canCreate = await AuthorizationService.IsGrantedAsync(OperationsPermissions.Transfers.Create);
+
+        _statusOptions = StockTransferStatuses.All
+            .Select(s => new StatusOption(s, OpsL[$"Status:{s}"]))
+            .ToList();
+
+        try
+        {
+            _branches = await BranchAppService.GetLookupAsync();
+        }
+        catch (Exception ex)
+        {
+            await HandleErrorAsync(ex);
+        }
+    }
+
+    private async Task<GridData<StockTransferDto>> LoadServerData(GridState<StockTransferDto> state, CancellationToken cancellationToken)
+    {
+        _loading = true;
+        try
+        {
+            string? sorting = null;
+            var sort = state.SortDefinitions.FirstOrDefault();
+            if (sort != null)
+            {
+                sorting = $"{sort.SortBy} {(sort.Descending ? "desc" : "asc")}";
+            }
+
+            var result = await StockTransferAppService.GetListAsync(new GetStockTransfersInput
+            {
+                Filter = _filter,
+                Status = _statusFilter,
+                FromBranchId = _fromFilter,
+                ToBranchId = _toFilter,
+                SkipCount = state.Page * state.PageSize,
+                MaxResultCount = state.PageSize,
+                Sorting = sorting
+            });
+
+            return new GridData<StockTransferDto>
+            {
+                Items = result.Items,
+                TotalItems = (int)result.TotalCount
+            };
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task OnFilterKeyUpAsync(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await ReloadAsync();
+    }
+
+    private async Task OnStatusChangedAsync(string? v) { _statusFilter = v; await ReloadAsync(); }
+    private async Task OnFromChangedAsync(Guid? v) { _fromFilter = v; await ReloadAsync(); }
+    private async Task OnToChangedAsync(Guid? v) { _toFilter = v; await ReloadAsync(); }
+
+    private async Task ReloadAsync()
+    {
+        if (_grid != null) await _grid.ReloadServerData();
+    }
+
+    private void OnRowClick(DataGridRowClickEventArgs<StockTransferDto> args) => OpenDetail(args.Item.Id);
+
+    private void OpenDetail(Guid id) => _detailId = id;
+
+    private async Task CloseDetailAsync()
+    {
+        _detailId = null;
+        await Task.CompletedTask;
+    }
+
+    private async Task OnDetailChangedAsync() => await ReloadAsync();
+
+    private void OpenCreateDialog()
+    {
+        _newFromId = null;
+        _newToId = null;
+        _newRequestedDate = DateTime.Today;
+        _newNotes = null;
+        _createVisible = true;
+    }
+
+    private void CloseCreate() => _createVisible = false;
+
+    private async Task ConfirmCreateAsync()
+    {
+        if (!_newFromId.HasValue)
+        {
+            Snackbar.Add(L["ThisFieldIsRequired", OpsL["FromBranch"]], Severity.Warning);
+            return;
+        }
+        if (!_newToId.HasValue)
+        {
+            Snackbar.Add(L["ThisFieldIsRequired", OpsL["ToBranch"]], Severity.Warning);
+            return;
+        }
+        if (_newFromId == _newToId)
+        {
+            Snackbar.Add(OpsL["SameBranchWarning"], Severity.Warning);
+            return;
+        }
+        if (!_newRequestedDate.HasValue)
+        {
+            Snackbar.Add(L["ThisFieldIsRequired", OpsL["RequestedDate"]], Severity.Warning);
+            return;
+        }
+
+        _saving = true;
+        try
+        {
+            var created = await StockTransferAppService.CreateAsync(new CreateStockTransferDto
+            {
+                FromBranchId = _newFromId.Value,
+                ToBranchId = _newToId.Value,
+                RequestedDate = _newRequestedDate.Value,
+                Notes = _newNotes
+            });
+            Snackbar.Add($"Transfer {created.Reference} created — add items below to continue.", Severity.Success);
+            _createVisible = false;
+            _detailId = created.Id;
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            await HandleErrorAsync(ex);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private static string StatusIcon(string status) => status switch
+    {
+        StockTransferStatuses.Draft => Icons.Material.Filled.EditNote,
+        StockTransferStatuses.Pending => Icons.Material.Filled.Send,
+        StockTransferStatuses.Approved => Icons.Material.Filled.CheckCircle,
+        StockTransferStatuses.InTransit => Icons.Material.Filled.LocalShipping,
+        StockTransferStatuses.Completed => Icons.Material.Filled.TaskAlt,
+        StockTransferStatuses.Cancelled => Icons.Material.Filled.Cancel,
+        _ => Icons.Material.Filled.HelpOutline
+    };
+}

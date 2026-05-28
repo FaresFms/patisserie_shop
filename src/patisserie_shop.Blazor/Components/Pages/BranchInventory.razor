@@ -85,9 +85,9 @@
                       Highlight="_stats.OutOfStockCount > 0" />
         </div>
 
-        <SoftCard Elevation="2" Class="pa-2">
+        <SoftCard Elevation="2" Class="pa-2 page-flat">
             <SoftCardContent>
-                <SoftStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Class="mb-4 flex-wrap">
+                <div class="toolbar">
                     <SoftTextField T="string"
                                    Placeholder="@InvL["Filter"]"
                                    @bind-Value="_filter"
@@ -97,6 +97,7 @@
                                    AdornmentIcon="@Icons.Material.Filled.Search"
                                    OnKeyUp="OnFilterKeyUpAsync"
                                    Immediate="true"
+                                   Class="toolbar-search"
                                    Style="min-width: 240px; max-width: 320px;" />
 
                     <SoftCheckBox T="bool" @bind-Value="_onlyLowStock"
@@ -112,11 +113,13 @@
                                   Color="Color.Default"
                                   CheckedChanged="@(async () => await ReloadAsync())" />
 
-                    <SoftButton Variant="Variant.Outlined" Color="Color.Primary"
-                                OnClick="ReloadAsync" StartIcon="@Icons.Material.Filled.Refresh">
-                        @L["Refresh"]
-                    </SoftButton>
-                </SoftStack>
+                    <div class="toolbar-right">
+                        <SoftButton Variant="Variant.Text" Color="Color.Primary"
+                                    OnClick="ReloadAsync" StartIcon="@Icons.Material.Filled.Refresh">
+                            @L["Refresh"]
+                        </SoftButton>
+                    </div>
+                </div>
 
                 <SoftDataGrid T="BranchInventoryDto"
                               @ref="_grid"
@@ -228,9 +231,7 @@
                                           Label="@InvL["NewQuantity"]"
                                           @bind-Value="_adjustNewQty"
                                           Variant="Variant.Outlined"
-                                          Min="0"
-                                          Adornment="Adornment.Start"
-                                          AdornmentIcon="@Icons.Material.Filled.Numbers" />
+                                          Min="0" />
 
                         @{
                             var delta = _adjustNewQty - _adjustTarget.QuantityOnHand;
@@ -250,8 +251,7 @@
                                           ToLabel="@(o => o.Label)"
                                           Value="_adjustMovementType"
                                           ValueChanged="@(v => _adjustMovementType = v ?? StockMovementTypes.ManualAdjustment)"
-                                          Label="@InvL["MovementType"]"
-                                          AdornmentIcon="@Icons.Material.Filled.Sync" />
+                                          Label="@InvL["MovementType"]" />
 
                         <SoftTextField T="string"
                                        Label="@InvL["Notes"]"
@@ -303,8 +303,7 @@
                                           Value="_initProductId"
                                           ValueChanged="@(v => _initProductId = v)"
                                           Label="@InvL["Product"]"
-                                          Required="true"
-                                          AdornmentIcon="@Icons.Material.Filled.LocalDining" />
+                                          Required="true" />
                         <SoftStack Row="true" Spacing="2">
                             <SoftNumericField T="int" Label="@InvL["InitialQuantity"]"
                                               @bind-Value="_initQty"

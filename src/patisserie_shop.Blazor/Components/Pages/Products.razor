@@ -26,15 +26,13 @@
     PageLayout.Title = InvL["Products"];
 }
 
-<SoftCard Elevation="2" Class="pa-2">
-    <SoftCardHeader>
-        <CardHeaderContent>
-            <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                <SoftIcon Icon="@Icons.Material.Filled.Inventory2" Color="Color.Primary" Size="Size.Large" />
-                <SoftText Typo="Typo.h5">@InvL["Products"]</SoftText>
-            </SoftStack>
-        </CardHeaderContent>
-        <CardHeaderActions>
+<SoftCard Elevation="2" Class="pa-2 page-flat">
+    <div class="page-head">
+        <div>
+            <h1 class="page-title">@InvL["Products"]</h1>
+            <div class="page-sub">Catalogue, pricing and stock.</div>
+        </div>
+        <div class="page-head-actions">
             <SoftButton Variant="Variant.Filled"
                         Color="Color.Primary"
                         StartIcon="@Icons.Material.Filled.Add"
@@ -42,10 +40,10 @@
                         Disabled="!_canManage">
                 @InvL["NewProduct"]
             </SoftButton>
-        </CardHeaderActions>
-    </SoftCardHeader>
+        </div>
+    </div>
     <SoftCardContent>
-        <SoftStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Class="mb-4 flex-wrap">
+        <div class="toolbar">
             <SoftTextField T="string"
                            Placeholder="@InvL["Filter"]"
                            @bind-Value="_filter"
@@ -55,9 +53,10 @@
                            AdornmentIcon="@Icons.Material.Filled.Search"
                            OnKeyUp="OnFilterKeyUpAsync"
                            Immediate="true"
+                           Class="toolbar-search"
                            Style="min-width: 240px; max-width: 320px;" />
 
-            <div style="min-width: 220px;">
+            <div class="filter-chip">
                 <SoftLookupSelect TItem="CategoryDto" TValue="Guid?"
                                   Items="_categories"
                                   ToValue="@(c => (Guid?)c.Id)"
@@ -67,11 +66,10 @@
                                   Label="@InvL["AllCategories"]"
                                   Margin="Margin.Dense"
                                   Clearable="true"
-                                  Dense="true"
-                                  AdornmentIcon="@Icons.Material.Filled.Category" />
+                                  Dense="true" />
             </div>
 
-            <div style="min-width: 220px;">
+            <div class="filter-chip">
                 <SoftLookupSelect TItem="SupplierDto" TValue="Guid?"
                                   Items="_suppliers"
                                   ToValue="@(s => (Guid?)s.Id)"
@@ -81,14 +79,15 @@
                                   Label="@InvL["AllSuppliers"]"
                                   Margin="Margin.Dense"
                                   Clearable="true"
-                                  Dense="true"
-                                  AdornmentIcon="@Icons.Material.Filled.LocalShipping" />
+                                  Dense="true" />
             </div>
 
-            <SoftButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="ReloadAsync" StartIcon="@Icons.Material.Filled.Refresh">
-                @L["Refresh"]
-            </SoftButton>
-        </SoftStack>
+            <div class="toolbar-right">
+                <SoftButton Variant="Variant.Text" Color="Color.Primary" OnClick="ReloadAsync" StartIcon="@Icons.Material.Filled.Refresh">
+                    @L["Refresh"]
+                </SoftButton>
+            </div>
+        </div>
 
         <SoftDataGrid T="ProductDto"
                       @ref="_grid"
@@ -127,18 +126,20 @@
                 </TemplateColumn>
                 <TemplateColumn T="ProductDto" Title="@InvL["Actions"]" Sortable="false">
                     <CellTemplate>
-                        <SoftStack Row="true" Spacing="1">
-                            <SoftIconButton Icon="@Icons.Material.Filled.Edit"
-                                            Color="Color.Primary"
-                                            Size="Size.Small"
-                                            OnClick="() => OpenEditDialog(context.Item)"
-                                            Disabled="!_canManage" />
-                            <SoftIconButton Icon="@Icons.Material.Filled.Delete"
-                                            Color="Color.Error"
-                                            Size="Size.Small"
-                                            OnClick="() => DeleteAsync(context.Item)"
-                                            Disabled="!_canManage" />
-                        </SoftStack>
+                        <span class="row-actions">
+                            <SoftStack Row="true" Spacing="1">
+                                <SoftIconButton Icon="@Icons.Material.Filled.Edit"
+                                                Color="Color.Primary"
+                                                Size="Size.Small"
+                                                OnClick="() => OpenEditDialog(context.Item)"
+                                                Disabled="!_canManage" />
+                                <SoftIconButton Icon="@Icons.Material.Filled.Delete"
+                                                Color="Color.Error"
+                                                Size="Size.Small"
+                                                OnClick="() => DeleteAsync(context.Item)"
+                                                Disabled="!_canManage" />
+                            </SoftStack>
+                        </span>
                     </CellTemplate>
                 </TemplateColumn>
             </Columns>
@@ -165,9 +166,12 @@
                         </SoftStack>
                     </CardHeaderContent>
                     <CardHeaderActions>
-                        <SoftIconButton Icon="@Icons.Material.Filled.Close"
-                                        Size="Size.Small"
-                                        OnClick="CloseDialog" />
+                        <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <MudSwitch T="bool" @bind-Value="_editIsActive" Color="Color.Primary" Label="@InvL["IsActive"]" />
+                            <SoftIconButton Icon="@Icons.Material.Filled.Close"
+                                            Size="Size.Small"
+                                            OnClick="CloseDialog" />
+                        </SoftStack>
                     </CardHeaderActions>
                 </SoftCardHeader>
                 <SoftDivider />
@@ -184,18 +188,14 @@
                                                    Variant="Variant.Outlined"
                                                    MaxLength="128"
                                                    Required="true"
-                                                   Immediate="true"
-                                                   Adornment="Adornment.Start"
-                                                   AdornmentIcon="@Icons.Material.Filled.LocalDining" />
+                                                   Immediate="true" />
                                     <SoftTextField T="string"
                                                    Label="@InvL["SKU"]"
                                                    @bind-Value="_editSku"
                                                    Variant="Variant.Outlined"
                                                    MaxLength="64"
                                                    Required="true"
-                                                   Immediate="true"
-                                                   Adornment="Adornment.Start"
-                                                   AdornmentIcon="@Icons.Material.Filled.QrCode" />
+                                                   Immediate="true" />
                                 </SoftStack>
                                 <SoftStack Row="true" Spacing="2">
                                     <SoftLookupSelect TItem="CategoryDto" TValue="Guid?"
@@ -206,8 +206,7 @@
                                                       ValueChanged="@(v => _editCategoryId = v)"
                                                       Label="@InvL["Category"]"
                                                       Placeholder="@InvL["SelectCategory"]"
-                                                      Required="true"
-                                                      AdornmentIcon="@Icons.Material.Filled.Category" />
+                                                      Required="true" />
                                     <SoftLookupSelect TItem="SupplierDto" TValue="Guid?"
                                                       Items="_suppliers"
                                                       ToValue="@(s => (Guid?)s.Id)"
@@ -216,8 +215,7 @@
                                                       ValueChanged="@(v => _editSupplierId = v)"
                                                       Label="@InvL["DefaultSupplier"]"
                                                       Placeholder="@InvL["SelectSupplier"]"
-                                                      Clearable="true"
-                                                      AdornmentIcon="@Icons.Material.Filled.LocalShipping" />
+                                                      Clearable="true" />
                                 </SoftStack>
                                 <SoftTextField T="string"
                                                Label="@InvL["Description"]"
@@ -237,30 +235,33 @@
                                                @bind-Value="_editUnit"
                                                Variant="Variant.Outlined"
                                                MaxLength="32"
-                                               Required="true"
-                                               Adornment="Adornment.Start"
-                                               AdornmentIcon="@Icons.Material.Filled.Straighten" />
+                                               Required="true" />
                                 <SoftNumericField T="decimal"
                                                   Label="@InvL["CostPrice"]"
                                                   @bind-Value="_editCostPrice"
                                                   Variant="Variant.Outlined"
                                                   Min="0"
+                                                  HideSpinButtons="true"
                                                   Adornment="Adornment.Start"
-                                                  AdornmentIcon="@Icons.Material.Filled.AttachMoney" />
+                                                  AdornmentText="$" />
                                 <SoftNumericField T="decimal"
                                                   Label="@InvL["SalePrice"]"
                                                   @bind-Value="_editSalePrice"
                                                   Variant="Variant.Outlined"
                                                   Min="0"
+                                                  HideSpinButtons="true"
                                                   Adornment="Adornment.Start"
-                                                  AdornmentIcon="@Icons.Material.Filled.Sell" />
-                                <SoftTextField T="string"
-                                               Label="@InvL["Currency"]"
-                                               @bind-Value="_editCurrency"
-                                               Variant="Variant.Outlined"
-                                               MaxLength="3"
-                                               Required="true"
-                                               Style="max-width: 110px;" />
+                                                  AdornmentText="$" />
+                                <SoftSelect T="string"
+                                            Label="@InvL["Currency"]"
+                                            @bind-Value="_editCurrency"
+                                            Variant="Variant.Outlined"
+                                            Required="true"
+                                            Style="max-width: 160px;">
+                                    <MudSelectItem T="string" Value="@("USD")">USD — $</MudSelectItem>
+                                    <MudSelectItem T="string" Value="@("EUR")">EUR — €</MudSelectItem>
+                                    <MudSelectItem T="string" Value="@("GBP")">GBP — £</MudSelectItem>
+                                </SoftSelect>
                             </SoftStack>
                         </div>
 
@@ -273,17 +274,13 @@
                                                   @bind-Value="_editReorderLevel"
                                                   Variant="Variant.Outlined"
                                                   Min="0"
-                                                  Adornment="Adornment.Start"
-                                                  AdornmentIcon="@Icons.Material.Filled.Warning"
+                                                  HideSpinButtons="true"
                                                   Style="max-width: 200px;" />
                                 <SoftTextField T="string"
                                                Label="@InvL["ImageUrl"]"
                                                @bind-Value="_editImageUrl"
                                                Variant="Variant.Outlined"
-                                               MaxLength="512"
-                                               Adornment="Adornment.Start"
-                                               AdornmentIcon="@Icons.Material.Filled.Image" />
-                                <SoftCheckBox T="bool" @bind-Value="_editIsActive" Label="@InvL["IsActive"]" Color="Color.Primary" />
+                                               MaxLength="512" />
                             </SoftStack>
                         </div>
                     </SoftStack>

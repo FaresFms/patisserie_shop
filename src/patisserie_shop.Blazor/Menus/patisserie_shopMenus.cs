@@ -17,4 +17,8 @@ public class patisserie_shopMenus
     public const string Operations = Prefix + ".Operations";
     public const string PurchaseOrders = Operations + ".PurchaseOrders";
     public const string Sales = Operations + ".Sales";
+    public const string StockTransfers = Operations + ".StockTransfers";
+
+    public const string Intelligence = Prefix + ".Intelligence";
+    public const string InventoryRules = Intelligence + ".InventoryRules";
 }

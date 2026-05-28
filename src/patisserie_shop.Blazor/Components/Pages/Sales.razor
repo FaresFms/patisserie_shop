@@ -25,25 +25,23 @@
     PageLayout.Title = OpsL["Sales"];
 }
 
-<SoftCard Elevation="2" Class="pa-2">
-    <SoftCardHeader>
-        <CardHeaderContent>
-            <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                <SoftIcon Icon="@Icons.Material.Filled.PointOfSale" Color="Color.Primary" Size="Size.Large" />
-                <SoftText Typo="Typo.h5">@OpsL["Sales"]</SoftText>
-            </SoftStack>
-        </CardHeaderContent>
-        <CardHeaderActions>
+<SoftCard Elevation="2" Class="pa-2 page-flat">
+    <div class="page-head">
+        <div>
+            <h1 class="page-title">@OpsL["Sales"]</h1>
+            <div class="page-sub">Recorded sales transactions.</div>
+        </div>
+        <div class="page-head-actions">
             <SoftButton Variant="Variant.Filled" Color="Color.Primary"
                         StartIcon="@Icons.Material.Filled.Add"
                         OnClick="OpenCreate"
                         Disabled="!_canManage">
                 @OpsL["NewSale"]
             </SoftButton>
-        </CardHeaderActions>
-    </SoftCardHeader>
+        </div>
+    </div>
     <SoftCardContent>
-        <SoftStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Class="mb-4 flex-wrap">
+        <div class="toolbar">
             <SoftTextField T="string"
                            Placeholder="@OpsL["InvoiceNumber"]"
                            @bind-Value="_filter"
@@ -53,9 +51,10 @@
                            AdornmentIcon="@Icons.Material.Filled.Search"
                            OnKeyUp="OnFilterKeyUpAsync"
                            Immediate="true"
+                           Class="toolbar-search"
                            Style="min-width: 220px; max-width: 320px;" />
 
-            <div style="min-width: 200px;">
+            <div class="filter-chip">
                 <SoftLookupSelect TItem="BranchLookupDto" TValue="Guid?"
                                   Items="_accessibleBranches"
                                   ToValue="@(b => (Guid?)b.Id)"
@@ -65,8 +64,7 @@
                                   Label="@OpsL["Branch"]"
                                   Margin="Margin.Dense"
                                   Clearable="true"
-                                  Dense="true"
-                                  AdornmentIcon="@Icons.Material.Filled.Store" />
+                                  Dense="true" />
             </div>
 
             <MudDatePicker Label="@OpsL["FromDate"]" @bind-Date="_fromDate" @bind-Date:after="ReloadAsync"
@@ -74,11 +72,13 @@
             <MudDatePicker Label="@OpsL["ToDate"]" @bind-Date="_toDate" @bind-Date:after="ReloadAsync"
                            Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true" />
 
-            <SoftButton Variant="Variant.Outlined" Color="Color.Primary"
-                        OnClick="ReloadAsync" StartIcon="@Icons.Material.Filled.Refresh">
-                @L["Refresh"]
-            </SoftButton>
-        </SoftStack>
+            <div class="toolbar-right">
+                <SoftButton Variant="Variant.Text" Color="Color.Primary"
+                            OnClick="ReloadAsync" StartIcon="@Icons.Material.Filled.Refresh">
+                    @L["Refresh"]
+                </SoftButton>
+            </div>
+        </div>
 
         <SoftDataGrid T="SaleDto"
                       @ref="_grid"
@@ -116,19 +116,21 @@
                 <PropertyColumn T="SaleDto" TProperty="string" Property="x => x.CreatorUserName!" Title="@OpsL["RecordedBy"]" Sortable="false" />
                 <TemplateColumn T="SaleDto" Title="" Sortable="false">
                     <CellTemplate>
-                        <SoftStack Row="true" Spacing="1">
-                            <SoftIconButton Icon="@Icons.Material.Filled.OpenInNew"
-                                            Color="Color.Primary"
-                                            Size="Size.Small"
-                                            OnClick="@(() => OpenDetail(context.Item.Id))" />
-                            @if (_canDelete)
-                            {
-                                <SoftIconButton Icon="@Icons.Material.Filled.Delete"
-                                                Color="Color.Error"
+                        <span class="row-actions">
+                            <SoftStack Row="true" Spacing="1">
+                                <SoftIconButton Icon="@Icons.Material.Filled.OpenInNew"
+                                                Color="Color.Primary"
                                                 Size="Size.Small"
-                                                OnClick="@(() => RequestDelete(context.Item))" />
-                            }
-                        </SoftStack>
+                                                OnClick="@(() => OpenDetail(context.Item.Id))" />
+                                @if (_canDelete)
+                                {
+                                    <SoftIconButton Icon="@Icons.Material.Filled.Delete"
+                                                    Color="Color.Error"
+                                                    Size="Size.Small"
+                                                    OnClick="@(() => RequestDelete(context.Item))" />
+                                }
+                            </SoftStack>
+                        </span>
                     </CellTemplate>
                 </TemplateColumn>
             </Columns>

@@ -107,9 +107,6 @@
         <SoftDrawerHeader Class="pa-3">
             <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
                 <SoftIcon Icon ="@Icons.Material.Filled.Apps" Color="MudBlazor.Color.Primary" />
-                <SoftText Typo="Typo.subtitle1" Color="MudBlazor.Color.Primary" Style="font-weight:600">
-                    @L["Nav:Navigation"]
-                </SoftText>
             </SoftStack>
         </SoftDrawerHeader>
 
@@ -203,6 +200,13 @@
                 }
                 StateHasChanged();
             }
+
+            var saved = await JS.InvokeAsync<string>("localStorage.getItem", "warm-theme");
+            if (saved == "dark" && !_isDarkMode)
+            {
+                _isDarkMode = true;
+                StateHasChanged();
+            }
         }
     }
     private void SanitizeMenuUrls(List<ApplicationMenuItem> items)
@@ -237,6 +241,7 @@
     private async Task ToggleDarkMode()
     {
         _isDarkMode = !_isDarkMode;
+        await JS.InvokeVoidAsync("applyDataTheme", _isDarkMode);
         await JS.InvokeVoidAsync("localStorage.setItem", "ewallet-darkMode", _isDarkMode.ToString().ToLower());
         await JS.InvokeVoidAsync("eval",
             _isDarkMode
@@ -257,6 +262,14 @@
         if (!string.IsNullOrWhiteSpace(icon))
         {
             var i = icon.ToLowerInvariant();
+            // Specific mappings for menu items that previously fell through to the bullet/dot fallback
+            if (i.Contains("boxes")) return Icons.Material.Filled.Inventory2;          // Inventory group
+            if (i.Contains("chart-pie")) return Icons.Material.Filled.SpaceDashboard;  // Dashboard
+            if (i.Contains("tags") || i.Contains("tag")) return Icons.Material.Filled.Category; // Categories
+            if (i.Contains("cookie")) return Icons.Material.Filled.Inventory2;         // Products
+            if (i.Contains("warehouse")) return Icons.Material.Filled.Warehouse;       // Branch inventory
+            if (i.Contains("cash-register")) return Icons.Material.Filled.PointOfSale; // Sales
+            if (i.Contains("file-invoice")) return Icons.Material.Filled.ReceiptLong;  // Purchase orders
             if (i.Contains("home")) return Icons.Material.Filled.Home;
             if (i.Contains("users")) return Icons.Material.Filled.People;
             if (i.Contains("user-tie")) return Icons.Material.Filled.ManageAccounts;

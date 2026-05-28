@@ -1,20 +1,21 @@
 using System;
+using Volo.Abp;
 using Volo.Abp.Domain.Entities.Auditing;
 
 namespace Inventory.Entities;
 
 public class AppBranch : FullAuditedAggregateRoot<Guid>
 {
-    public string Name { get; set; } = null!;
-    public string? Address { get; set; }
-    public string? Phone { get; set; }
-    public string? Email { get; set; }
-    public Guid? ManagerUserId { get; set; }
-    public bool IsActive { get; set; } = true;
+    public string Name { get; internal set; } = null!;
+    public string? Address { get; private set; }
+    public string? Phone { get; private set; }
+    public string? Email { get; private set; }
+    public Guid? ManagerUserId { get; private set; }
+    public bool IsActive { get; private set; } = true;
 
     protected AppBranch() { }
 
-    public AppBranch(
+    internal AppBranch(
         Guid id,
         string name,
         string? address = null,
@@ -24,11 +25,30 @@ public class AppBranch : FullAuditedAggregateRoot<Guid>
         bool isActive = true)
         : base(id)
     {
-        Name = name;
+        SetName(name);
         Address = address;
         Phone = phone;
         Email = email;
         ManagerUserId = managerUserId;
         IsActive = isActive;
+    }
+
+    public void UpdateInfo(
+        string? address,
+        string? phone,
+        string? email,
+        Guid? managerUserId,
+        bool isActive)
+    {
+        Address = address;
+        Phone = phone;
+        Email = email;
+        ManagerUserId = managerUserId;
+        IsActive = isActive;
+    }
+
+    internal void SetName(string name)
+    {
+        Name = Check.NotNullOrWhiteSpace(name, nameof(name)).Trim();
     }
 }

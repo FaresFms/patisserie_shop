@@ -1,20 +1,21 @@
 using System;
+using Volo.Abp;
 using Volo.Abp.Domain.Entities.Auditing;
 
 namespace Inventory.Entities;
 
 public class AppSupplier : FullAuditedAggregateRoot<Guid>
 {
-    public string Name { get; set; } = null!;
-    public string? ContactPerson { get; set; }
-    public string? Phone { get; set; }
-    public string? Email { get; set; }
-    public string? Address { get; set; }
-    public bool IsActive { get; set; } = true;
+    public string Name { get; internal set; } = null!;
+    public string? ContactPerson { get; private set; }
+    public string? Phone { get; private set; }
+    public string? Email { get; private set; }
+    public string? Address { get; private set; }
+    public bool IsActive { get; private set; } = true;
 
     protected AppSupplier() { }
 
-    public AppSupplier(
+    internal AppSupplier(
         Guid id,
         string name,
         string? contactPerson = null,
@@ -24,11 +25,30 @@ public class AppSupplier : FullAuditedAggregateRoot<Guid>
         bool isActive = true)
         : base(id)
     {
-        Name = name;
+        SetName(name);
         ContactPerson = contactPerson;
         Phone = phone;
         Email = email;
         Address = address;
         IsActive = isActive;
+    }
+
+    public void UpdateInfo(
+        string? contactPerson,
+        string? phone,
+        string? email,
+        string? address,
+        bool isActive)
+    {
+        ContactPerson = contactPerson;
+        Phone = phone;
+        Email = email;
+        Address = address;
+        IsActive = isActive;
+    }
+
+    internal void SetName(string name)
+    {
+        Name = Check.NotNullOrWhiteSpace(name, nameof(name)).Trim();
     }
 }

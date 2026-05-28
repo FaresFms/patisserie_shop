@@ -235,8 +235,7 @@
                                           Value="_newItemProductId"
                                           ValueChanged="OnAddItemProductChanged"
                                           Label="@OpsL["Product"]"
-                                          Required="true"
-                                          AdornmentIcon="@Icons.Material.Filled.LocalDining" />
+                                          Required="true" />
                         <SoftStack Row="true" Spacing="2">
                             <SoftNumericField T="int" Label="@OpsL["OrderedQuantity"]"
                                               @bind-Value="_newItemQty"
@@ -245,7 +244,7 @@
                                               @bind-Value="_newItemPrice"
                                               Variant="Variant.Outlined" Min="0"
                                               Adornment="Adornment.Start"
-                                              AdornmentIcon="@Icons.Material.Filled.AttachMoney" />
+                                              AdornmentText="$" />
                         </SoftStack>
                         @{
                             var preview = _newItemQty * _newItemPrice;

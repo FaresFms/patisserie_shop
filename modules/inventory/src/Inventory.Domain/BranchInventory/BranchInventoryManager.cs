@@ -107,6 +107,19 @@ public class BranchInventoryManager : DomainService
         return movement;
     }
 
+    public static void EnsureConcurrencyStamp(AppBranchInventory inventory, string? expectedStamp)
+    {
+        Check.NotNull(inventory, nameof(inventory));
+        if (string.IsNullOrEmpty(expectedStamp))
+        {
+            return;
+        }
+        if (!string.Equals(inventory.ConcurrencyStamp, expectedStamp, StringComparison.Ordinal))
+        {
+            throw new BusinessException(InventoryErrorCodes.BranchInventoryConcurrency);
+        }
+    }
+
     public void UpdateLimits(AppBranchInventory inventory, int minimumStock, int? maximumStock)
     {
         Check.NotNull(inventory, nameof(inventory));

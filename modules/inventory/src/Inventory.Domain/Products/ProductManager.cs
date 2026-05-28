@@ -10,10 +10,17 @@ namespace Inventory.Products;
 public class ProductManager : DomainService
 {
     private readonly IRepository<AppProduct, Guid> _productRepository;
+    private readonly IRepository<AppCategory, Guid> _categoryRepository;
+    private readonly IRepository<AppSupplier, Guid> _supplierRepository;
 
-    public ProductManager(IRepository<AppProduct, Guid> productRepository)
+    public ProductManager(
+        IRepository<AppProduct, Guid> productRepository,
+        IRepository<AppCategory, Guid> categoryRepository,
+        IRepository<AppSupplier, Guid> supplierRepository)
     {
         _productRepository = productRepository;
+        _categoryRepository = categoryRepository;
+        _supplierRepository = supplierRepository;
     }
 
     public async Task<AppProduct> CreateAsync(
@@ -30,6 +37,8 @@ public class ProductManager : DomainService
         string? imageUrl = null,
         bool isActive = true)
     {
+        await EnsureCategoryExistsAsync(categoryId);
+        await EnsureSupplierExistsAsync(defaultSupplierId);
         await EnsureSkuIsUniqueAsync(sku);
 
         return new AppProduct(
@@ -46,6 +55,23 @@ public class ProductManager : DomainService
             reorderLevel,
             imageUrl,
             isActive);
+    }
+
+    public async Task EnsureReferencesAsync(Guid categoryId, Guid? defaultSupplierId)
+    {
+        await EnsureCategoryExistsAsync(categoryId);
+        await EnsureSupplierExistsAsync(defaultSupplierId);
+    }
+
+    private Task EnsureCategoryExistsAsync(Guid categoryId)
+        => _categoryRepository.GetAsync(categoryId);
+
+    private async Task EnsureSupplierExistsAsync(Guid? supplierId)
+    {
+        if (supplierId.HasValue)
+        {
+            await _supplierRepository.GetAsync(supplierId.Value);
+        }
     }
 
     public async Task ChangeSkuAsync(AppProduct product, string newSku)

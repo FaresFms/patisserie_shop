@@ -1,610 +1,953 @@
 /* =========================================================================
-   Liquid-glass design system (CSS-only adaptation)
+   Warm theme — drop-in replacement for glass-theme.css
    -------------------------------------------------------------------------
-   Class names are preserved (.glass, .glass-card, .glass-modal,
-   .glass-modal-backdrop, .glass-btn, .glass-input, .glass-chip-*,
-   plus all the auto-themed MudBlazor selectors and the legacy
-   .soft-modal-* aliases) so no SoftComponent or page needs editing.
+   Aesthetic: cream + terracotta, low saturation, calm, editorial.
+   Targets: MudBlazor + ABP application layout (body.abp-application-layout).
 
-   What changed vs. plain glassmorphism (from liquid-glass SKILL.md):
-   - Stronger top-edge specular rim (bright top, subtle bottom) on every
-     glass surface — this is the single biggest "liquid" tell.
-   - Diagonal gloss gradient layered over the tint so the surface reads
-     as a curved, lit pane instead of a flat sheet.
-   - backdrop-filter now adds brightness(1.05) saturate(1.3) so colours
-     bleeding through are vivid, not washed-out.
-   - Tint opacity bumped to 0.18 (cards/modals) per Apple's recipe.
-   - Larger radii (pillowy 24–32px) to match iOS/macOS 26 forms.
-
-   What was deliberately NOT added (CSS-only constraint):
-   - The SVG <filter id="liquid-glass"> + url(#liquid-glass) refraction
-     warp. That requires a hidden <svg> in App.razor. Adding it later
-     is a 5-line change and would slot in via the backdrop-filter
-     declarations below without renaming anything.
+   CSS-ONLY SWAP — no HTML, Razor, or component changes required.
+   - Fonts are pulled in via @import below (no <link> tag needed).
+   - Default theme is light. Dark mode is opt-in via
+     <html data-theme="dark"> — but adding it is optional; if you don't,
+     the app renders in light mode and nothing breaks.
+   - All legacy class names (.glass, .glass-card, .glass-modal,
+     .soft-modal-*, etc.) are preserved and re-styled in the warm
+     palette so no component markup needs to change.
    ========================================================================= */
 
-/* =========================================================================
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,500;8..60,600&display=swap');
+
+
+/* ========================================================================
    1. Tokens
-   ========================================================================= */
-:root {
-    /* Background layers — bumped opacities so the tint reads as glass, not film */
-    --glass-bg:          rgba(255, 255, 255, 0.12);
-    --glass-bg-hover:    rgba(255, 255, 255, 0.18);
-    --glass-bg-strong:   rgba(255, 255, 255, 0.22);
-    --glass-bg-card:     rgba(255, 255, 255, 0.16);
-    --glass-bg-modal:    rgba(255, 255, 255, 0.18);
-
-    /* Diagonal gloss overlay applied on every glass surface */
-    --glass-gloss: linear-gradient(135deg,
-        rgba(255, 255, 255, 0.22) 0%,
-        rgba(255, 255, 255, 0.06) 40%,
-        rgba(255, 255, 255, 0.02) 100%);
-
-    /* Backdrop filter recipes — blur + brightness + saturate (Apple recipe) */
-    --glass-filter:        blur(14px) brightness(1.05) saturate(1.30);
-    --glass-filter-strong: blur(22px) brightness(1.08) saturate(1.40);
-    --glass-filter-modal:  blur(28px) brightness(1.10) saturate(1.45);
+   ======================================================================== */
+:root, [data-theme="light"] {
+    /* Surfaces */
+    --bg:        #faf9f5;       /* warm cream */
+    --bg-2:      #f5f2ea;
+    --surface:   #ffffff;
+    --surface-2: #f5f2ea;
+    --hover:     #efe9da;
+    --selected:  #ebe3d1;
 
     /* Borders */
-    --glass-border:        1px solid rgba(255, 255, 255, 0.28);
-    --glass-border-strong: 1px solid rgba(255, 255, 255, 0.40);
-
-    /* Specular rim — bright top edge, subtle bottom edge */
-    --glass-rim:
-        inset 0  1px 0 rgba(255, 255, 255, 0.70),
-        inset 0 -1px 0 rgba(255, 255, 255, 0.12),
-        inset 1px 0 0 rgba(255, 255, 255, 0.18),
-        inset -1px 0 0 rgba(255, 255, 255, 0.08);
-
-    --glass-rim-modal:
-        inset 0  1px 0 rgba(255, 255, 255, 0.85),
-        inset 0 -1px 0 rgba(255, 255, 255, 0.18),
-        inset 1px 0 0 rgba(255, 255, 255, 0.25),
-        inset -1px 0 0 rgba(255, 255, 255, 0.12);
-
-    /* Outer shadows — softer, larger, more diffused */
-    --glass-shadow:        0 8px 32px rgba(0, 0, 0, 0.28), 0 2px 6px rgba(0, 0, 0, 0.18);
-    --glass-shadow-hover:  0 14px 44px rgba(0, 0, 0, 0.38), 0 4px 10px rgba(0, 0, 0, 0.22);
-    --glass-shadow-modal:  0 24px 64px rgba(0, 0, 0, 0.50), 0 8px 20px rgba(0, 0, 0, 0.30);
-
-    /* Radii — pillowy, iOS-26-ish */
-    --glass-radius:    20px;
-    --glass-radius-sm: 12px;
-    --glass-radius-lg: 28px;
+    --bd-1: rgba(60, 50, 35, 0.07);
+    --bd-2: rgba(60, 50, 35, 0.12);
+    --bd-3: rgba(60, 50, 35, 0.22);
 
     /* Text */
-    --glass-text-primary:   rgba(255, 255, 255, 0.96);
-    --glass-text-secondary: rgba(255, 255, 255, 0.70);
-    --glass-text-muted:     rgba(255, 255, 255, 0.45);
+    --fg-1: #2c2520;            /* warm near-black */
+    --fg-2: #5c5347;
+    --fg-3: #8a7e6e;
+    --fg-4: #b5a896;
 
-    /* Accents */
-    --glass-accent:        rgba(139, 92, 246, 0.85);
-    --glass-accent-hover:  rgba(139, 92, 246, 1.00);
-    --glass-success:       rgba( 34,197, 94, 0.85);
-    --glass-warning:       rgba(251,191, 36, 0.85);
-    --glass-error:         rgba(239, 68, 68, 0.85);
-    --glass-info:          rgba( 59,130,246, 0.85);
+    /* Scrim & shadows */
+    --scrim: rgba(44, 37, 32, 0.35);
+    --shadow-sm: 0 1px 2px rgba(60, 40, 20, 0.05);
+    --shadow-md: 0 4px 12px rgba(60, 40, 20, 0.08);
+    --shadow-modal: 0 20px 50px rgba(60, 40, 20, 0.14),
+                    0 4px 12px rgba(60, 40, 20, 0.06);
 
-    /* App background gradient */
-    --glass-app-bg: linear-gradient(135deg, #0f0c29 0%, #221f47 50%, #24243e 100%);
+    /* Accent — desaturated terracotta */
+    --accent:        #c8633f;
+    --accent-hover:  #b55530;
+    --accent-soft:   rgba(200, 99, 63, 0.10);
+    --accent-line:   rgba(200, 99, 63, 0.30);
+    --accent-fg:     #ffffff;
+
+    /* Semantic — all muted */
+    --success:    #6b8e4e;       /* muted sage */
+    --warn:       #c89c4f;       /* muted amber */
+    --danger:     #b3543a;
+    --green-text: #5a7a3f;
+    --amber-text: #946b18;
+
+    /* Type */
+    --font-sans:  'Inter', -apple-system, system-ui, sans-serif;
+    --font-serif: 'Source Serif 4', Georgia, serif;
+    --font-mono:  'JetBrains Mono', ui-monospace, monospace;
+
+    /* Radii */
+    --r-sm: 6px;
+    --r-md: 8px;
+    --r-lg: 12px;
 }
 
-/* =========================================================================
-   2. App background — auto-applied
-   ========================================================================= */
-html,
-body,
-body.abp-application-layout,
-#app {
+[data-theme="dark"] {
+    --bg:        #1c1814;
+    --bg-2:      #221d18;
+    --surface:   #2a241d;
+    --surface-2: #322b23;
+    --hover:     #3a322a;
+    --selected:  #4a3f33;
+
+    --bd-1: rgba(255, 245, 220, 0.06);
+    --bd-2: rgba(255, 245, 220, 0.12);
+    --bd-3: rgba(255, 245, 220, 0.22);
+
+    --fg-1: #f5ede0;
+    --fg-2: #c5b8a3;
+    --fg-3: #94876f;
+    --fg-4: #6b6151;
+
+    --scrim: rgba(0, 0, 0, 0.55);
+    --shadow-modal: 0 30px 80px rgba(0,0,0,0.55), 0 8px 24px rgba(0,0,0,0.3);
+
+    --accent:        #d97757;
+    --accent-hover:  #e58a6c;
+    --accent-soft:   rgba(217, 119, 87, 0.16);
+    --accent-line:   rgba(217, 119, 87, 0.40);
+    --accent-fg:     #1c1814;
+
+    --success:    #88a86b;
+    --warn:       #d9b56c;
+    --danger:     #d97757;
+    --green-text: #a8c282;
+    --amber-text: #e5ba6b;
+}
+
+/* ========================================================================
+   2. App background — NO gradient, NO blobs, NO blur
+   ======================================================================== */
+html, body, body.abp-application-layout, #app {
     min-height: 100vh;
-    background: var(--glass-app-bg);
-    background-attachment: fixed;
-    color: var(--glass-text-primary);
+    background: var(--bg) !important;
+    color: var(--fg-1);
+    font-family: var(--font-sans);
+    transition: background .2s ease, color .2s ease;
+}
+body::before { content: none !important; }   /* kill the radial blobs */
+
+::selection { background: var(--accent-soft); }
+
+/* ========================================================================
+   3. MudBlazor overrides
+   ======================================================================== */
+
+/* --- App bar ----------------------------------------------------------- */
+body.abp-application-layout .mud-appbar {
+    background: var(--bg) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    border-bottom: 1px solid var(--bd-1);
+    box-shadow: none;
+    color: var(--fg-1);
 }
 
-/* Soft decorative blobs — give the blur something to refract */
-body::before {
-    content: '';
-    position: fixed;
-    inset: 0;
-    pointer-events: none;
-    z-index: 0;
-    background:
-        radial-gradient(circle at 15% 20%, rgba(139, 92, 246, 0.28), transparent 45%),
-        radial-gradient(circle at 85% 80%, rgba( 59,130,246, 0.22), transparent 50%),
-        radial-gradient(circle at 60% 10%, rgba(236, 72,153, 0.14), transparent 55%);
+/* --- Drawer / sidebar -------------------------------------------------- */
+body.abp-application-layout .mud-drawer {
+    background: var(--bg) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    border-right: 1px solid var(--bd-1);
+    box-shadow: none;
+    color: var(--fg-1);
 }
-
-/* =========================================================================
-   3. Utility classes — single-element liquid-glass surfaces
-   -------------------------------------------------------------------------
-   Each surface gets:
-     - tint background + diagonal gloss overlay (Layer 1+2 from SKILL.md)
-     - backdrop-filter blur + brightness + saturate (Layer 0)
-     - inset specular rim (Layer 2 equivalent)
-   ========================================================================= */
-.glass {
-    position: relative;
-    background:
-        var(--glass-gloss),
-        var(--glass-bg);
-    backdrop-filter: var(--glass-filter);
-    -webkit-backdrop-filter: var(--glass-filter);
-    border: var(--glass-border);
-    border-radius: var(--glass-radius);
-    box-shadow: var(--glass-shadow), var(--glass-rim);
-    color: var(--glass-text-primary);
+body.abp-application-layout .mud-nav-link {
+    color: var(--fg-2);
+    border-radius: var(--r-sm);
+    margin: 2px 8px;
+    padding: 6px 10px;
+    font-weight: 400;
+    transition: background .12s, color .12s;
 }
-
-.glass-card {
-    position: relative;
-    background:
-        var(--glass-gloss),
-        var(--glass-bg-card);
-    backdrop-filter: var(--glass-filter);
-    -webkit-backdrop-filter: var(--glass-filter);
-    border: var(--glass-border);
-    border-radius: var(--glass-radius);
-    box-shadow: var(--glass-shadow), var(--glass-rim);
-    color: var(--glass-text-primary);
-    transition: box-shadow 0.25s ease, background 0.25s ease, transform 0.25s ease;
+body.abp-application-layout .mud-nav-link:hover {
+    background: var(--hover);
+    color: var(--fg-1);
 }
-.glass-card:hover {
-    background:
-        var(--glass-gloss),
-        var(--glass-bg-hover);
-    box-shadow: var(--glass-shadow-hover), var(--glass-rim);
-}
-
-.glass-modal {
-    position: relative;
-    background:
-        var(--glass-gloss),
-        var(--glass-bg-modal);
-    backdrop-filter: var(--glass-filter-modal);
-    -webkit-backdrop-filter: var(--glass-filter-modal);
-    border: var(--glass-border-strong);
-    border-radius: var(--glass-radius-lg);
-    box-shadow: var(--glass-shadow-modal), var(--glass-rim-modal);
-    overflow: hidden;
-    color: var(--glass-text-primary);
-}
-
-.glass-modal-backdrop {
-    position: fixed;
-    inset: 0;
-    background: rgba(10, 8, 30, 0.55);
-    backdrop-filter: blur(3px);
-    -webkit-backdrop-filter: blur(3px);
-    z-index: 1400;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 16px;
-    animation: glass-fade-in 0.18s ease-out;
-}
-
-.glass-modal-container {
-    width: 100%;
-    max-width: 560px;
-    animation: glass-scale-in 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-.glass-modal-container--sm { max-width: 420px; }
-.glass-modal-container--md { max-width: 640px; }
-.glass-modal-container--lg { max-width: 880px; }
-
-.glass-modal-body {
-    max-height: 70vh;
-    overflow-y: auto;
-}
-
-.glass-btn {
-    position: relative;
-    background:
-        var(--glass-gloss),
-        var(--glass-bg-strong);
-    backdrop-filter: var(--glass-filter);
-    -webkit-backdrop-filter: var(--glass-filter);
-    border: var(--glass-border);
-    border-radius: var(--glass-radius-sm);
-    color: var(--glass-text-primary);
-    box-shadow: var(--glass-rim);
-    transition: all 0.2s ease;
-}
-.glass-btn:hover {
-    background:
-        var(--glass-gloss),
-        var(--glass-bg-hover);
-    box-shadow: var(--glass-shadow-hover), var(--glass-rim);
-    transform: translateY(-1px);
-}
-
-.glass-input {
-    background:
-        var(--glass-gloss),
-        var(--glass-bg);
-    backdrop-filter: var(--glass-filter);
-    -webkit-backdrop-filter: var(--glass-filter);
-    border: var(--glass-border);
-    border-radius: var(--glass-radius-sm);
-    color: var(--glass-text-primary);
-    box-shadow: var(--glass-rim);
-}
-.glass-input:focus {
-    border: var(--glass-border-strong);
-    background:
-        var(--glass-gloss),
-        var(--glass-bg-hover);
-    outline: none;
-}
-
-.glass-chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    backdrop-filter: var(--glass-filter);
-    -webkit-backdrop-filter: var(--glass-filter);
-    border-radius: 999px;
-    padding: 2px 12px;
-    font-size: 12px;
-    font-weight: 600;
-    line-height: 1.5;
-    border: 1px solid transparent;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
-}
-.glass-chip-success { background: rgba( 34,197, 94, 0.22); border-color: rgba( 34,197, 94, 0.45); color: #86efac; }
-.glass-chip-warning { background: rgba(251,191, 36, 0.22); border-color: rgba(251,191, 36, 0.45); color: #fde68a; }
-.glass-chip-error   { background: rgba(239, 68, 68, 0.22); border-color: rgba(239, 68, 68, 0.45); color: #fca5a5; }
-.glass-chip-info    { background: rgba( 59,130,246, 0.22); border-color: rgba( 59,130,246, 0.45); color: #93c5fd; }
-.glass-chip-neutral { background: rgba(255,255,255, 0.12); border-color: rgba(255,255,255, 0.24); color: var(--glass-text-secondary); }
-
-.glass-divider {
-    border: none;
-    border-top: 1px solid rgba(255, 255, 255, 0.14);
-    margin: 8px 0;
-}
-
-.glass-section-title {
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--glass-text-secondary);
-    margin-bottom: 12px;
-}
-
-.glass-label {
-    font-size: 11px;
-    color: var(--glass-text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-}
-.glass-value {
-    font-size: 14px;
-    color: var(--glass-text-primary);
+body.abp-application-layout .mud-nav-link.active,
+body.abp-application-layout .mud-nav-link.mud-nav-link-active {
+    background: var(--selected) !important;
+    color: var(--fg-1) !important;
     font-weight: 500;
+    box-shadow: none;
+}
+body.abp-application-layout .mud-nav-link.active .mud-icon-root,
+body.abp-application-layout .mud-nav-link.mud-nav-link-active .mud-icon-root {
+    color: var(--accent);
 }
 
-@keyframes glass-fade-in {
-    from { opacity: 0; }
-    to   { opacity: 1; }
-}
-@keyframes glass-scale-in {
-    from { opacity: 0; transform: scale(0.92) translateY(10px); }
-    to   { opacity: 1; transform: scale(1)    translateY(0);    }
-}
-
-/* =========================================================================
-   4. Auto-theming of MudBlazor renders
-   -------------------------------------------------------------------------
-   Same selectors as before — values upgraded to liquid-glass.
-   ========================================================================= */
-
-/* --- Cards ----------------------------------------------------------- */
-body.abp-application-layout .mud-card {
-    position: relative;
-    background:
-        var(--glass-gloss),
-        var(--glass-bg-card) !important;
-    backdrop-filter: var(--glass-filter);
-    -webkit-backdrop-filter: var(--glass-filter);
-    border: var(--glass-border);
-    border-radius: var(--glass-radius);
-    box-shadow: var(--glass-shadow), var(--glass-rim);
-    color: var(--glass-text-primary);
-    transition: box-shadow 0.25s ease, background 0.25s ease;
+/* --- Cards & papers ---------------------------------------------------- */
+body.abp-application-layout .mud-card,
+body.abp-application-layout .mud-paper {
+    background: var(--surface) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    border: 1px solid var(--bd-1);
+    border-radius: var(--r-lg);
+    box-shadow: var(--shadow-sm);
+    color: var(--fg-1);
+    transition: box-shadow .15s, border-color .15s;
 }
 body.abp-application-layout .mud-card:hover {
-    box-shadow: var(--glass-shadow-hover), var(--glass-rim);
+    box-shadow: var(--shadow-md);
 }
 body.abp-application-layout .mud-card-header,
 body.abp-application-layout .mud-card-content,
 body.abp-application-layout .mud-card-actions {
     background: transparent;
-    color: var(--glass-text-primary);
+    color: var(--fg-1);
 }
 
-/* --- Data grid ------------------------------------------------------- */
+/* --- Data grid / table ------------------------------------------------- */
 body.abp-application-layout .mud-data-grid,
-body.abp-application-layout .mud-table-container {
+body.abp-application-layout .mud-table-container,
+body.abp-application-layout .mud-table {
     background: transparent !important;
-    color: var(--glass-text-primary);
+    color: var(--fg-1);
 }
+body.abp-application-layout .mud-table-head .mud-table-cell,
 body.abp-application-layout .mud-data-grid .mud-table-head .mud-table-cell {
-    background:
-        var(--glass-gloss),
-        var(--glass-bg-strong);
-    backdrop-filter: var(--glass-filter);
-    -webkit-backdrop-filter: var(--glass-filter);
-    color: var(--glass-text-primary);
+    background: var(--bg) !important;
+    backdrop-filter: none !important;
+    color: var(--fg-3);
+    font-size: 11px;
     font-weight: 600;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.22);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.30);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    border-bottom: 1px solid var(--bd-2);
+    box-shadow: none;
 }
-body.abp-application-layout .mud-data-grid .mud-table-row {
-    transition: background 0.15s ease;
+body.abp-application-layout .mud-table-row {
+    transition: background .1s;
 }
-body.abp-application-layout .mud-data-grid .mud-table-row:hover {
-    background: var(--glass-bg-hover) !important;
+body.abp-application-layout .mud-table-row:hover {
+    background: var(--hover) !important;
 }
-body.abp-application-layout .mud-data-grid .mud-table-cell {
-    border-bottom: 1px solid rgba(255, 255, 255, 0.07);
-    color: var(--glass-text-primary);
+body.abp-application-layout .mud-table-cell {
+    border-bottom: 1px solid var(--bd-1);
+    color: var(--fg-1);
+    padding: 12px 14px;
 }
 body.abp-application-layout .mud-table-pager,
 body.abp-application-layout .mud-table-pager-actions,
 body.abp-application-layout .mud-data-grid-footer {
     background: transparent;
-    color: var(--glass-text-secondary);
+    color: var(--fg-3);
+    border-top: 1px solid var(--bd-1);
 }
 
-/* --- Buttons --------------------------------------------------------- */
+/* --- Buttons ----------------------------------------------------------- */
+body.abp-application-layout .mud-button-root {
+    text-transform: none;
+    font-weight: 500;
+    border-radius: var(--r-sm);
+    transition: background .12s, border-color .12s;
+}
 body.abp-application-layout .mud-button-outlined,
 body.abp-application-layout .mud-button-text {
-    background:
-        var(--glass-gloss),
-        var(--glass-bg);
-    backdrop-filter: var(--glass-filter);
-    -webkit-backdrop-filter: var(--glass-filter);
-    border: var(--glass-border);
-    border-radius: var(--glass-radius-sm);
-    color: var(--glass-text-primary);
-    box-shadow: var(--glass-rim);
-    transition: all 0.2s ease;
+    background: var(--surface);
+    backdrop-filter: none !important;
+    border: 1px solid var(--bd-2);
+    color: var(--fg-1);
+    box-shadow: none;
 }
 body.abp-application-layout .mud-button-outlined:hover,
 body.abp-application-layout .mud-button-text:hover {
-    background:
-        var(--glass-gloss),
-        var(--glass-bg-hover);
-    box-shadow: var(--glass-shadow-hover), var(--glass-rim);
-    transform: translateY(-1px);
+    background: var(--hover);
+    border-color: var(--bd-3);
+    transform: none;
+    box-shadow: none;
 }
-body.abp-application-layout .mud-button-filled {
-    border: var(--glass-border);
-    backdrop-filter: var(--glass-filter);
-    -webkit-backdrop-filter: var(--glass-filter);
-    border-radius: var(--glass-radius-sm);
-    box-shadow: var(--glass-shadow), var(--glass-rim);
-    transition: all 0.2s ease;
-}
-body.abp-application-layout .mud-button-filled:hover {
-    box-shadow: var(--glass-shadow-hover), var(--glass-rim);
-    transform: translateY(-1px);
-}
-
-/* --- Chips ----------------------------------------------------------- */
-body.abp-application-layout .mud-chip {
-    backdrop-filter: var(--glass-filter);
-    -webkit-backdrop-filter: var(--glass-filter);
-    border-radius: 999px;
+/* Primary (filled) — terracotta */
+body.abp-application-layout .mud-button-filled.mud-button-filled-primary,
+body.abp-application-layout .mud-button-filled-primary {
+    background: var(--accent) !important;
+    color: var(--accent-fg) !important;
     border: 1px solid transparent;
-    font-weight: 600;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
+    box-shadow: var(--shadow-sm), inset 0 1px 0 rgba(255,255,255,0.18);
 }
-body.abp-application-layout .mud-chip.mud-chip-color-success,
+body.abp-application-layout .mud-button-filled.mud-button-filled-primary:hover {
+    background: var(--accent-hover) !important;
+    box-shadow: var(--shadow-md), inset 0 1px 0 rgba(255,255,255,0.18);
+}
+
+/* --- Chips ------------------------------------------------------------- */
+body.abp-application-layout .mud-chip {
+    backdrop-filter: none !important;
+    border-radius: 999px;
+    border: 1px solid var(--bd-2);
+    font-weight: 500;
+    box-shadow: none;
+    background: var(--surface);
+    color: var(--fg-2);
+}
 body.abp-application-layout .mud-chip-filled.mud-chip-color-success {
-    background: rgba( 34,197, 94, 0.22) !important;
-    border-color: rgba( 34,197, 94, 0.45);
-    color: #86efac !important;
+    background: rgba(107, 142, 78, 0.12) !important;
+    border-color: rgba(107, 142, 78, 0.30);
+    color: var(--green-text) !important;
 }
-body.abp-application-layout .mud-chip.mud-chip-color-warning,
 body.abp-application-layout .mud-chip-filled.mud-chip-color-warning {
-    background: rgba(251,191, 36, 0.22) !important;
-    border-color: rgba(251,191, 36, 0.45);
-    color: #fde68a !important;
+    background: rgba(200, 156, 79, 0.15) !important;
+    border-color: rgba(200, 156, 79, 0.35);
+    color: var(--amber-text) !important;
 }
-body.abp-application-layout .mud-chip.mud-chip-color-error,
 body.abp-application-layout .mud-chip-filled.mud-chip-color-error {
-    background: rgba(239, 68, 68, 0.22) !important;
-    border-color: rgba(239, 68, 68, 0.45);
-    color: #fca5a5 !important;
-}
-body.abp-application-layout .mud-chip.mud-chip-color-info,
-body.abp-application-layout .mud-chip-filled.mud-chip-color-info {
-    background: rgba( 59,130,246, 0.22) !important;
-    border-color: rgba( 59,130,246, 0.45);
-    color: #93c5fd !important;
-}
-body.abp-application-layout .mud-chip.mud-chip-color-default,
-body.abp-application-layout .mud-chip-outlined.mud-chip-color-default {
-    background: rgba(255,255,255, 0.12) !important;
-    border-color: rgba(255,255,255, 0.24);
-    color: var(--glass-text-secondary) !important;
+    background: rgba(179, 84, 58, 0.12) !important;
+    border-color: rgba(179, 84, 58, 0.30);
+    color: var(--danger) !important;
 }
 
-/* --- Inputs (outlined text + numeric fields) ------------------------- */
-
-/* Kill the white rectangle — target every layer MudBlazor renders */
+/* --- Inputs ------------------------------------------------------------ */
 body.abp-application-layout .mud-input-control,
 body.abp-application-layout .mud-input-root,
 body.abp-application-layout .mud-input,
-body.abp-application-layout .mud-input-outlined,
 body.abp-application-layout .mud-input-outlined .mud-input-slot,
-body.abp-application-layout .mud-input-outlined .mud-input,
-body.abp-application-layout .mud-input-outlined .mud-input-root,
-body.abp-application-layout .mud-input-adorned-start,
-body.abp-application-layout .mud-input-adorned-end,
 body.abp-application-layout .mud-input-outlined input,
 body.abp-application-layout .mud-input-outlined textarea,
 body.abp-application-layout .mud-input-outlined select {
-    background: transparent !important;
-    background-color: transparent !important;
+    background: var(--surface) !important;
+    backdrop-filter: none !important;
     box-shadow: none !important;
+    color: var(--fg-1) !important;
 }
-
-/* Simple translucent tint — no backdrop-filter on inputs (it caused
-   a flicker on every caret blink). The page-level glass background
-   still shows through the low-opacity fill. */
-
-body.abp-application-layout .mud-input-outlined.mud-focused .mud-input-slot {
-    background: rgba(255, 255, 255, 0.10) !important;
-}
-
-/* Border styling */
 body.abp-application-layout .mud-input-outlined .mud-input-outlined-border {
-    border-color: rgba(255, 255, 255, 0.30);
-    border-radius: var(--glass-radius-sm);
-    transition: border-color 0.2s ease;
-}
-body.abp-application-layout .mud-input-outlined:hover .mud-input-outlined-border {
-    border-color: rgba(255, 255, 255, 0.48);
-}
-body.abp-application-layout .mud-input-outlined.mud-focused .mud-input-outlined-border {
-    border-color: rgba(255, 255, 255, 0.70);
+    border-color: var(--bd-2);
+    border-radius: var(--r-sm);
     border-width: 1px;
 }
-
-/* Native input text colour */
-body.abp-application-layout .mud-input-outlined input,
-body.abp-application-layout .mud-input-outlined textarea {
-    color: var(--glass-text-primary) !important;
-    caret-color: rgba(255, 255, 255, 0.85);
+body.abp-application-layout .mud-input-outlined:hover .mud-input-outlined-border {
+    border-color: var(--bd-3);
+}
+body.abp-application-layout .mud-input-outlined.mud-focused .mud-input-outlined-border {
+    border-color: var(--accent) !important;
+    border-width: 1px;
+    box-shadow: 0 0 0 3px var(--accent-soft);
 }
 body.abp-application-layout .mud-input-outlined input::placeholder,
 body.abp-application-layout .mud-input-outlined textarea::placeholder {
-    color: var(--glass-text-secondary);
+    color: var(--fg-3);
 }
-
 body.abp-application-layout .mud-input-label,
 body.abp-application-layout .mud-input-helper-text,
 body.abp-application-layout .mud-input-adornment {
-    color: var(--glass-text-secondary);
+    color: var(--fg-2);
+}
+body.abp-application-layout .mud-input-label.mud-shrink,
+body.abp-application-layout .mud-input-outlined.mud-focused .mud-input-label {
+    color: var(--fg-2) !important;
+}
+body.abp-application-layout .mud-input-outlined.mud-input-error .mud-input-label {
+    color: var(--danger) !important;
 }
 
-/* Label stays white in all states (focused, filled, shrunk) — only error turns red */
-body.abp-application-layout .mud-input-label,
-body.abp-application-layout .mud-input-label.mud-input-label-animated,
-body.abp-application-layout .mud-input-label.mud-input-label-inputcontrol,
-body.abp-application-layout .mud-input-outlined .mud-input-label,
-body.abp-application-layout .mud-input-outlined.mud-focused .mud-input-label,
-body.abp-application-layout .mud-input-outlined .mud-input-label.mud-shrink,
-body.abp-application-layout .mud-input-control .mud-input-label.mud-primary-text,
-body.abp-application-layout .mud-input-control .mud-input-label.mud-secondary-text {
-    color: var(--glass-text-primary) !important;
+/* --- Dialog ------------------------------------------------------------ */
+body.abp-application-layout .mud-overlay-dialog .mud-overlay-scrim {
+    background-color: var(--scrim) !important;
+    backdrop-filter: blur(2px) !important;
+    -webkit-backdrop-filter: blur(2px) !important;
 }
-body.abp-application-layout .mud-input-outlined.mud-input-error .mud-input-label,
-body.abp-application-layout .mud-input-label.mud-error-text,
-body.abp-application-layout .mud-input-label.mud-input-error {
-    color: var(--mud-palette-error, #ff6b6b) !important;
-}
-
-/* --- Divider --------------------------------------------------------- */
-body.abp-application-layout .mud-divider {
-    border-color: rgba(255, 255, 255, 0.14);
-}
-
-/* --- AppBar / Drawer / Layout chrome --------------------------------- */
-body.abp-application-layout .mud-appbar {
-    background:
-        var(--glass-gloss),
-        var(--glass-bg-strong) !important;
-    backdrop-filter: var(--glass-filter-strong);
-    -webkit-backdrop-filter: var(--glass-filter-strong);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.14);
-    box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.10);
-    color: var(--glass-text-primary);
-}
-body.abp-application-layout .mud-drawer {
-    background:
-        var(--glass-gloss),
-        var(--glass-bg-card) !important;
-    backdrop-filter: var(--glass-filter-strong);
-    -webkit-backdrop-filter: var(--glass-filter-strong);
-    border-right: 1px solid rgba(255, 255, 255, 0.12);
-    box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.08);
-    color: var(--glass-text-primary);
-}
-body.abp-application-layout .mud-nav-link {
-    color: var(--glass-text-secondary);
-    border-radius: var(--glass-radius-sm);
-    margin: 2px 6px;
-    transition: background 0.15s ease, color 0.15s ease;
-}
-body.abp-application-layout .mud-nav-link:hover {
-    background: var(--glass-bg-hover);
-    color: var(--glass-text-primary);
-}
-body.abp-application-layout .mud-nav-link.active {
-    background:
-        var(--glass-gloss),
-        var(--glass-bg-strong);
-    color: var(--glass-text-primary);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.30);
-}
-
-/* --- Alerts ---------------------------------------------------------- */
-body.abp-application-layout .mud-alert {
-    backdrop-filter: var(--glass-filter);
-    -webkit-backdrop-filter: var(--glass-filter);
-    border-radius: var(--glass-radius-sm);
-    border: var(--glass-border);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25);
-}
-
-/* --- Text typography readability over glass -------------------------- */
-body.abp-application-layout .mud-typography {
-    color: inherit;
-}
-
-/* =========================================================================
-   5. Backward-compatible aliases for legacy .soft-modal-* class names
-   ========================================================================= */
-.soft-modal-backdrop {
-    position: fixed;
-    inset: 0;
-    background: rgba(82, 90, 247, 0.678);
-    backdrop-filter: blur(3px);
-    -webkit-backdrop-filter: blur(3px);
-    z-index: 1400;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 16px;
-    animation: glass-fade-in 0.18s ease-out;
-}
-.soft-modal-container {
-    width: 100%;
-    max-width: 560px;
-    animation: glass-scale-in 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-.soft-modal-container--sm { max-width: 420px; }
-.soft-modal-container--md { max-width: 640px; }
-.soft-modal-container--lg { max-width: 880px; }
-.soft-modal-card {
-    position: relative;
-    background:
-        var(--glass-gloss),
-        var(--glass-bg-modal);
-    backdrop-filter: var(--glass-filter-modal);
-    -webkit-backdrop-filter: var(--glass-filter-modal);
-    border: var(--glass-border-strong);
-    border-radius: var(--glass-radius-lg);
-    box-shadow: var(--glass-shadow-modal), var(--glass-rim-modal);
+body.abp-application-layout .mud-dialog {
+    background: var(--bg-2) !important;
+    backdrop-filter: none !important;
+    border: 1px solid var(--bd-1);
+    border-radius: 14px;
+    box-shadow: var(--shadow-modal);
+    color: var(--fg-1);
     overflow: hidden;
-    color: var(--glass-text-primary);
 }
-.soft-modal-body {
+body.abp-application-layout .mud-dialog-title {
+    font-family: var(--font-serif);
+    font-size: 20px;
+    font-weight: 500;
+    letter-spacing: -0.015em;
+    color: var(--fg-1);
+    padding: 22px 24px 12px;
+    border-bottom: 1px solid var(--bd-1);
+}
+body.abp-application-layout .mud-dialog-content {
+    background: var(--surface);
+    padding: 18px 24px;
+    color: var(--fg-1);
+}
+body.abp-application-layout .mud-dialog-actions {
+    padding: 14px 24px;
+    background: var(--bg-2);
+    border-top: 1px solid var(--bd-1);
+}
+
+/* --- Divider ----------------------------------------------------------- */
+body.abp-application-layout .mud-divider {
+    border-color: var(--bd-1);
+}
+
+/* --- Alerts ------------------------------------------------------------ */
+body.abp-application-layout .mud-alert {
+    backdrop-filter: none !important;
+    border-radius: var(--r-md);
+    border: 1px solid var(--bd-2);
+    background: var(--surface);
+    color: var(--fg-1);
+    box-shadow: none;
+}
+
+/* --- Typography -------------------------------------------------------- */
+body.abp-application-layout .mud-typography { color: inherit; }
+body.abp-application-layout .mud-typography-h1,
+body.abp-application-layout .mud-typography-h2,
+body.abp-application-layout .mud-typography-h3,
+body.abp-application-layout .mud-typography-h4,
+body.abp-application-layout .mud-typography-h5,
+body.abp-application-layout .mud-typography-h6 {
+    font-family: var(--font-serif);
+    font-weight: 500;
+    letter-spacing: -0.015em;
+    color: var(--fg-1);
+}
+
+/* ========================================================================
+   4. Backward-compat — legacy .soft-modal-* / .glass-* aliases
+   Keep working but rendered in the warm style so existing pages don't break.
+   ======================================================================== */
+.soft-modal-backdrop,
+.glass-modal-backdrop {
+    position: fixed; inset: 0;
+    background: var(--scrim);
+    z-index: 1400;
+    display: flex; align-items: center; justify-content: center;
+    padding: 16px;
+    animation: warm-fade .15s ease;
+}
+.soft-modal-container,
+.glass-modal-container { width: 100%; max-width: 560px; }
+.soft-modal-container--sm, .glass-modal-container--sm { max-width: 420px; }
+.soft-modal-container--md, .glass-modal-container--md { max-width: 640px; }
+.soft-modal-container--lg, .glass-modal-container--lg { max-width: 880px; }
+
+.soft-modal-card,
+body.abp-application-layout .soft-modal-card,
+.glass-modal,
+body.abp-application-layout .glass-modal {
+    background: var(--bg-2) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    border: 1px solid var(--bd-1) !important;
+    border-radius: 14px;
+    box-shadow: var(--shadow-modal) !important;
+    color: var(--fg-1);
+    overflow: hidden;
+}
+.soft-modal-card::after { content: none !important; }   /* kill the sheen sweep */
+
+.soft-modal-body,
+.glass-modal-body {
     max-height: 70vh;
     overflow-y: auto;
+    background: var(--surface);
+}
+
+.glass, .glass-card, .glass-btn, .glass-input {
+    background: var(--surface) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    border: 1px solid var(--bd-2);
+    border-radius: var(--r-sm);
+    color: var(--fg-1);
+    box-shadow: none;
+}
+.glass-section-title {
+    font-size: 11px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--fg-2);
+    margin-bottom: 12px;
+}
+.glass-chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    border-radius: 999px;
+    padding: 2px 10px;
+    font-size: 12px; font-weight: 500;
+    border: 1px solid var(--bd-2);
+    background: var(--surface);
+    box-shadow: none;
+    backdrop-filter: none !important;
+}
+.glass-chip-success { background: rgba(107,142,78,0.12); border-color: rgba(107,142,78,0.30); color: var(--green-text); }
+.glass-chip-warning { background: rgba(200,156,79,0.15); border-color: rgba(200,156,79,0.35); color: var(--amber-text); }
+.glass-chip-error   { background: rgba(179, 84,58,0.12); border-color: rgba(179, 84,58,0.30); color: var(--danger); }
+.glass-chip-info    { background: var(--hover);          border-color: var(--bd-2);          color: var(--fg-2); }
+.glass-chip-neutral { background: var(--surface);        border-color: var(--bd-2);          color: var(--fg-2); }
+
+@keyframes warm-fade { from { opacity: 0; } to { opacity: 1; } }
+
+/* ========================================================================
+   5. Validation-error dialog (preserve existing class)
+   ======================================================================== */
+.validation-error-dialog.mud-dialog,
+.validation-error-dialog .mud-dialog {
+    background: var(--bg-2);
+    border: 1px solid var(--bd-2);
+    border-radius: 14px;
+    box-shadow: var(--shadow-modal);
+    color: var(--fg-1);
+    backdrop-filter: none;
+}
+.validation-error-list { list-style: disc; padding-left: 1.25rem; margin: 0; }
+.validation-error-list > li { padding: 0.25rem 0; line-height: 1.4; }
+.validation-error-list strong { color: var(--fg-1); }
+
+/* ========================================================================
+   6. Patch — narrow icon recoloring + MudSwitch + select fixes
+   (Revised: previous version over-recolored .mud-primary-text — fixed.)
+   ======================================================================== */
+
+/* Only recolor ICON elements that carry primary/info color — NOT all
+   primary-text elements (that includes form labels, headings, etc). */
+body.abp-application-layout .mud-icon-root.mud-icon-color-primary,
+body.abp-application-layout .mud-icon-root.mud-icon-color-info,
+body.abp-application-layout .mud-svg-icon.mud-icon-color-primary,
+body.abp-application-layout .mud-svg-icon.mud-icon-color-info {
+    color: var(--accent) !important;
+    fill: var(--accent) !important;
+}
+
+/* Primary-colored buttons that aren't filled (text/outlined) keep the
+   accent color on label and border */
+body.abp-application-layout .mud-button-text-primary,
+body.abp-application-layout .mud-button-outlined-primary {
+    color: var(--accent) !important;
+}
+body.abp-application-layout .mud-button-outlined-primary {
+    border-color: var(--accent-line) !important;
+}
+
+/* MudSwitch — recolor primary track + thumb to terracotta */
+body.abp-application-layout .mud-switch .mud-switch-track {
+    background-color: var(--bd-3) !important;
+    opacity: 1;
+}
+body.abp-application-layout .mud-switch.mud-checked .mud-switch-track,
+body.abp-application-layout .mud-switch-primary.mud-checked .mud-switch-track {
+    background-color: var(--accent) !important;
+    opacity: 1;
+}
+body.abp-application-layout .mud-switch .mud-switch-thumb {
+    background-color: var(--surface) !important;
+    color: var(--accent) !important;
+}
+body.abp-application-layout .mud-switch .mud-button-root.mud-icon-button-color-primary {
+    color: var(--accent) !important;
+}
+
+/* MudCheckBox / MudRadio primary color too */
+body.abp-application-layout .mud-checkbox .mud-icon-button-color-primary,
+body.abp-application-layout .mud-radio .mud-icon-button-color-primary {
+    color: var(--accent) !important;
+}
+
+/* Info alerts — calm warm tint instead of blue */
+body.abp-application-layout .mud-alert-filled-info,
+body.abp-application-layout .mud-alert-outlined-info {
+    background: var(--accent-soft) !important;
+    border-color: var(--accent-line) !important;
+    color: var(--fg-1) !important;
+}
+body.abp-application-layout .mud-alert-filled-info .mud-alert-icon,
+body.abp-application-layout .mud-alert-outlined-info .mud-alert-icon {
+    color: var(--accent) !important;
+}
+
+/* MudSelect / MudAutocomplete — render like text inputs */
+body.abp-application-layout .mud-select .mud-input-slot,
+body.abp-application-layout .mud-autocomplete .mud-input-slot {
+    background: var(--surface) !important;
+    min-height: 36px;
+}
+body.abp-application-layout .mud-select .mud-select-input,
+body.abp-application-layout .mud-autocomplete input {
+    color: var(--fg-1) !important;
+}
+
+/* Dark-mode tokens triggered explicitly by <html data-theme="dark">.
+   (The previous body.mud-theme-dark hook didn't work — MudBlazor 6+
+   doesn't auto-add that class. Section C below wires the toggle.) */
+html[data-theme="dark"] body.abp-application-layout,
+html[data-theme="dark"] body {
+    --bg:        #1c1814;
+    --bg-2:      #221d18;
+    --surface:   #2a241d;
+    --surface-2: #322b23;
+    --hover:     #3a322a;
+    --selected:  #4a3f33;
+
+    --bd-1: rgba(255, 245, 220, 0.06);
+    --bd-2: rgba(255, 245, 220, 0.12);
+    --bd-3: rgba(255, 245, 220, 0.22);
+
+    --fg-1: #f5ede0;
+    --fg-2: #c5b8a3;
+    --fg-3: #94876f;
+    --fg-4: #6b6151;
+
+    --scrim: rgba(0, 0, 0, 0.55);
+    --shadow-modal: 0 30px 80px rgba(0,0,0,0.55), 0 8px 24px rgba(0,0,0,0.3);
+
+    --accent:        #d97757;
+    --accent-hover:  #e58a6c;
+    --accent-soft:   rgba(217, 119, 87, 0.16);
+    --accent-line:   rgba(217, 119, 87, 0.40);
+    --accent-fg:     #1c1814;
+
+    --success:    #88a86b;
+    --warn:       #d9b56c;
+    --danger:     #d97757;
+    --green-text: #a8c282;
+    --amber-text: #e5ba6b;
+}
+
+/* In dark mode, force the existing soft-modal / dialog backgrounds dark */
+html[data-theme="dark"] .soft-modal-card,
+html[data-theme="dark"] body.abp-application-layout .soft-modal-card,
+html[data-theme="dark"] body.abp-application-layout .mud-dialog,
+html[data-theme="dark"] .glass-modal,
+html[data-theme="dark"] body.abp-application-layout .glass-modal {
+    background: var(--bg-2) !important;
+    border-color: var(--bd-1) !important;
+    color: var(--fg-1);
+}
+html[data-theme="dark"] body.abp-application-layout .mud-dialog-content,
+html[data-theme="dark"] .soft-modal-body,
+html[data-theme="dark"] .glass-modal-body {
+    background: var(--surface);
+}
+
+/* ========================================================================
+   7. Clean data-list page pattern
+   Marker class: .page-flat on the page's outer SoftCard / MudCard.
+   ======================================================================== */
+
+/* Outer card on data-list pages — make it disappear visually */
+body.abp-application-layout .page-flat,
+body.abp-application-layout .page-flat.mud-card,
+body.abp-application-layout .page-flat .mud-card-content {
+    background: transparent !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+}
+
+/* Page head */
+.page-flat .page-head {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    padding: 28px 32px 12px;
+    gap: 24px;
+}
+.page-flat .page-head .page-title {
+    font-family: var(--font-serif);
+    font-size: 28px;
+    font-weight: 500;
+    letter-spacing: -0.015em;
+    color: var(--fg-1);
+    margin: 0;
+}
+.page-flat .page-head .page-sub {
+    color: var(--fg-3);
+    font-size: 13.5px;
+    margin-top: 4px;
+}
+.page-flat .page-head-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* Stats row */
+.page-flat .stats {
+    display: flex;
+    gap: 40px;
+    padding: 4px 32px 12px;
+}
+.page-flat .stats .stat-label {
+    display: block;
+    font-size: 11.5px;
+    color: var(--fg-3);
+    font-weight: 500;
+    margin-bottom: 3px;
+}
+.page-flat .stats .stat-value {
+    font-family: var(--font-serif);
+    font-size: 20px;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.02em;
+    color: var(--fg-1);
+}
+
+/* Toolbar */
+.page-flat .toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0 32px;
+    padding: 10px 0;
+    border-top: 1px solid var(--bd-1);
+    border-bottom: 1px solid var(--bd-1);
+}
+.page-flat .toolbar-right {
+    margin-left: auto;
+    display: flex;
+    gap: 6px;
+}
+
+/* Compact filter chip — wraps an existing MudSelect/SoftLookupSelect */
+.page-flat .filter-chip,
+.page-flat .filter-chip.mud-input-control,
+.page-flat .filter-chip .mud-input-outlined-border {
+    border: 0 !important;
+}
+.page-flat .filter-chip .mud-input-slot,
+.page-flat .filter-chip .mud-select .mud-input-slot {
+    height: 30px !important;
+    min-height: 30px !important;
+    padding: 0 12px !important;
+    background: transparent !important;
+    border: 1px dashed var(--bd-2) !important;
+    border-radius: 999px !important;
+    font-size: 12.5px !important;
+    transition: background .12s, border-color .12s;
+}
+.page-flat .filter-chip .mud-input-slot:hover,
+.page-flat .filter-chip .mud-select .mud-input-slot:hover {
+    background: var(--hover) !important;
+    border-color: var(--bd-3) !important;
+}
+.page-flat .filter-chip .mud-input-label {
+    display: none !important;        /* kill floating label inside chip */
+}
+.page-flat .filter-chip .mud-input-adornment {
+    color: var(--fg-3) !important;
+}
+
+/* Search wrapper */
+.page-flat .toolbar-search .mud-input-slot {
+    height: 32px !important;
+    min-height: 32px !important;
+    padding: 0 10px !important;
+    background: transparent !important;
+    border: 1px solid transparent !important;
+    border-radius: var(--r-sm) !important;
+}
+.page-flat .toolbar-search .mud-input-slot:hover {
+    background: var(--hover) !important;
+}
+.page-flat .toolbar-search.mud-focused .mud-input-slot,
+.page-flat .toolbar-search .mud-input-slot:focus-within {
+    background: var(--surface) !important;
+    border-color: var(--accent-line) !important;
+    box-shadow: 0 0 0 3px var(--accent-soft) !important;
+}
+.page-flat .toolbar-search .mud-input-label {
+    display: none !important;
+}
+
+/* Flat table — no card wrap, hairline rows */
+.page-flat .mud-table,
+.page-flat .mud-data-grid,
+.page-flat .mud-table-container {
+    background: transparent !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    margin: 0 32px;
+    width: calc(100% - 64px) !important;
+}
+.page-flat .mud-table-head .mud-table-cell {
+    background: transparent !important;
+    border-bottom: 1px solid var(--bd-2) !important;
+    font-size: 11px !important;
+    font-weight: 600 !important;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--fg-3) !important;
+    padding: 12px 14px !important;
+}
+.page-flat .mud-table-body .mud-table-row {
+    background: transparent !important;
+}
+.page-flat .mud-table-body .mud-table-row:hover {
+    background: var(--hover) !important;
+}
+.page-flat .mud-table-body .mud-table-cell {
+    border-bottom: 1px solid var(--bd-1) !important;
+    padding: 12px 14px !important;
+    background: transparent !important;
+}
+.page-flat .mud-table-body .mud-table-row:last-child .mud-table-cell {
+    border-bottom: 0 !important;
+}
+
+/* Row action icons — neutral, visible on hover only */
+.page-flat .mud-table-body .row-actions {
+    opacity: 0;
+    transition: opacity .12s;
+}
+.page-flat .mud-table-body .mud-table-row:hover .row-actions {
+    opacity: 1;
+}
+.page-flat .mud-table-body .mud-icon-button {
+    color: var(--fg-3) !important;
+}
+.page-flat .mud-table-body .mud-icon-button:hover {
+    color: var(--fg-1) !important;
+    background: var(--bd-1) !important;
+}
+.page-flat .mud-table-body .mud-icon-button.mud-error-text:hover {
+    color: var(--danger) !important;
+}
+
+/* Pager — flat */
+.page-flat .mud-table-pager,
+.page-flat .mud-table-pager-actions,
+.page-flat .mud-data-grid-footer {
+    background: transparent !important;
+    border-top: 1px solid var(--bd-1) !important;
+    margin: 0 32px;
+    padding: 12px 0 18px !important;
+    color: var(--fg-3) !important;
+}
+
+/* Active/status chips — make smaller, dot+label feel */
+.page-flat .mud-chip {
+    height: 22px;
+    font-size: 11.5px;
+    padding: 0 9px;
+}
+
+/* ========================================================================
+   8. Nav-icon warm glow (sidebar) — requested to match mock-up
+   ======================================================================== */
+body.abp-application-layout .mud-nav-link .mud-icon-root,
+body.abp-application-layout .mud-nav-link .mud-nav-link-icon {
+    color: var(--accent) !important;
+    filter: drop-shadow(0 0 5px var(--accent-soft));
+    transition: filter .12s, color .12s;
+}
+body.abp-application-layout .mud-nav-link:hover .mud-icon-root,
+body.abp-application-layout .mud-nav-link:hover .mud-nav-link-icon {
+    filter: drop-shadow(0 0 7px var(--accent-line));
+}
+body.abp-application-layout .mud-nav-link.active .mud-icon-root,
+body.abp-application-layout .mud-nav-link.mud-nav-link-active .mud-icon-root,
+body.abp-application-layout .mud-nav-link.active .mud-nav-link-icon,
+body.abp-application-layout .mud-nav-link.mud-nav-link-active .mud-nav-link-icon {
+    color: var(--accent) !important;
+    filter: drop-shadow(0 0 8px var(--accent-line));
+}
+
+/* ========================================================================
+   8. Patch — filter chip labels, blue color leaks, focus ring
+   ======================================================================== */
+
+/* --- Filter chip: show the label, kill the surrounding background ----- */
+
+/* Override Section 7's hide-the-label rule */
+.page-flat .filter-chip .mud-input-label {
+    display: block !important;
+    position: static !important;
+    transform: none !important;
+    font-size: 10.5px !important;
+    font-weight: 600 !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.06em !important;
+    color: var(--fg-3) !important;
+    margin-bottom: 4px !important;
+    padding: 0 !important;
+}
+
+/* Make the entire control wrapper transparent — no color bleed outside
+   the dashed pill */
+.page-flat .filter-chip,
+.page-flat .filter-chip .mud-input-control,
+.page-flat .filter-chip .mud-input-root,
+.page-flat .filter-chip .mud-input {
+    background: transparent !important;
+    box-shadow: none !important;
+}
+
+/* Kill the inner MudBlazor outlined-border so only our pill border shows */
+.page-flat .filter-chip .mud-input-outlined-border {
+    border: 0 !important;
+}
+
+/* Pill itself */
+.page-flat .filter-chip .mud-input-slot {
+    height: 32px !important;
+    min-height: 32px !important;
+    padding: 0 14px !important;
+    background: transparent !important;
+    border: 1px dashed var(--bd-2) !important;
+    border-radius: 999px !important;
+    font-size: 12.5px !important;
+}
+.page-flat .filter-chip .mud-input-slot:hover {
+    background: var(--hover) !important;
+    border-color: var(--bd-3) !important;
+}
+.page-flat .filter-chip.mud-focused .mud-input-slot,
+.page-flat .filter-chip .mud-input-slot:focus-within {
+    border-style: solid !important;
+    border-color: var(--accent-line) !important;
+    box-shadow: 0 0 0 3px var(--accent-soft) !important;
+}
+
+/* Kill any adornment icons inside filter chips — they don't fit the pill */
+.page-flat .filter-chip .mud-input-adornment {
+    display: none !important;
+}
+
+/* --- Recolor Color="Primary" TEXT to terracotta — but skip input labels.
+   The previous patch only covered icons; that left things like
+   <SoftText Color="Color.Primary">Sale info</SoftText> rendering blue. */
+body.abp-application-layout .mud-primary-text:not(.mud-input-label),
+body.abp-application-layout .mud-typography.mud-primary-text:not(.mud-input-label) {
+    color: var(--accent) !important;
+}
+
+/* --- Dialog header icons: force terracotta regardless of color prop ---- */
+body.abp-application-layout .mud-dialog-title .mud-icon-root,
+body.abp-application-layout .mud-dialog-title .mud-svg-icon,
+body.abp-application-layout .soft-modal-card .mud-dialog-title .mud-icon-root,
+body.abp-application-layout .soft-modal-card .mud-icon-root.mud-icon-size-medium:first-of-type,
+body.abp-application-layout .glass-modal .mud-icon-root.mud-icon-size-medium:first-of-type {
+    color: var(--accent) !important;
+    fill: var(--accent) !important;
+}
+
+/* If a dialog title uses a literal <span class="..."> for the icon
+   (FontAwesome / icon font), force terracotta on the first-child of the
+   modal title block */
+body.abp-application-layout .soft-modal-card .modal-title > :first-child,
+body.abp-application-layout .glass-modal .modal-title > :first-child,
+body.abp-application-layout .mud-dialog-title > :first-child:where(i, span, svg) {
+    color: var(--accent) !important;
+    fill: var(--accent) !important;
+}
+
+/* --- Focused-input ring: force terracotta, override Mud's primary ----- */
+body.abp-application-layout .mud-input-outlined.mud-focused .mud-input-outlined-border,
+body.abp-application-layout .mud-input-outlined:focus-within .mud-input-outlined-border {
+    border-color: var(--accent) !important;
+    border-width: 1px !important;
+}
+body.abp-application-layout .mud-input-control.mud-focused,
+body.abp-application-layout .mud-input-outlined.mud-focused,
+body.abp-application-layout .mud-input-outlined:focus-within {
+    box-shadow: 0 0 0 3px var(--accent-soft) !important;
+    border-radius: var(--r-sm);
+}
+
+/* Caret in focused inputs */
+body.abp-application-layout .mud-input input:focus,
+body.abp-application-layout .mud-input textarea:focus {
+    caret-color: var(--accent);
+}
+
+/* --- A safety net for any other Mud "primary" surface still leaking blue */
+body.abp-application-layout .mud-button-filled-primary {
+    background: var(--accent) !important;
+    color: var(--accent-fg) !important;
+}
+body.abp-application-layout .mud-progress-circular.mud-primary-text circle,
+body.abp-application-layout .mud-progress-linear-bar.mud-primary-text {
+    color: var(--accent) !important;
+    background: var(--accent) !important;
 }

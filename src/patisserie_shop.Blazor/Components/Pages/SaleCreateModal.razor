@@ -47,8 +47,7 @@
                                                   ValueChanged="OnBranchChangedAsync"
                                                   Label="@OpsL["Branch"]"
                                                   Required="true"
-                                                  Disabled="@(AccessibleBranches.Count == 1)"
-                                                  AdornmentIcon="@Icons.Material.Filled.Store" />
+                                                  Disabled="@(AccessibleBranches.Count == 1)" />
                                 <MudDatePicker Label="@OpsL["SaleDate"]" Variant="Variant.Outlined"
                                                @bind-Date="_saleDate" />
                             </SoftStack>
@@ -58,9 +57,7 @@
                                                @bind-Value="_invoiceNumber"
                                                HelperText="@OpsL["InvoiceNumberAutoHint"]"
                                                Variant="Variant.Outlined"
-                                               MaxLength="64"
-                                               Adornment="Adornment.Start"
-                                               AdornmentIcon="@Icons.Material.Filled.Receipt" />
+                                               MaxLength="64" />
                                 <SoftTextField T="string" Label="@OpsL["Currency"]"
                                                @bind-Value="_currency"
                                                Variant="Variant.Outlined"

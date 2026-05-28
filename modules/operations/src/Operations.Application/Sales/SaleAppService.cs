@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Linq.Dynamic.Core;
 using System.Threading.Tasks;
 using Inventory;
 using Inventory.BranchInventory;
@@ -11,7 +10,6 @@ using Operations.Entities;
 using Operations.Permissions;
 using Volo.Abp;
 using Volo.Abp.Application.Dtos;
-using Volo.Abp.Domain.Entities;
 using Volo.Abp.Domain.Repositories;
 using Volo.Abp.Identity;
 
@@ -20,19 +18,19 @@ namespace Operations.Sales;
 [Authorize(OperationsPermissions.Sales.Default)]
 public class SaleAppService : OperationsAppService, ISaleAppService
 {
-    private readonly IRepository<AppSale, Guid> _saleRepository;
+    private readonly ISaleRepository _saleRepository;
     private readonly IRepository<AppBranch, Guid> _branchRepository;
     private readonly IRepository<AppProduct, Guid> _productRepository;
-    private readonly IRepository<AppBranchInventory, Guid> _branchInventoryRepository;
+    private readonly IBranchInventoryRepository _branchInventoryRepository;
     private readonly SaleManager _manager;
     private readonly BranchInventoryManager _inventoryManager;
     private readonly IRepository<IdentityUser, Guid> _userRepository;
 
     public SaleAppService(
-        IRepository<AppSale, Guid> saleRepository,
+        ISaleRepository saleRepository,
         IRepository<AppBranch, Guid> branchRepository,
         IRepository<AppProduct, Guid> productRepository,
-        IRepository<AppBranchInventory, Guid> branchInventoryRepository,
+        IBranchInventoryRepository branchInventoryRepository,
         SaleManager manager,
         BranchInventoryManager inventoryManager,
         IRepository<IdentityUser, Guid> userRepository)
@@ -50,64 +48,53 @@ public class SaleAppService : OperationsAppService, ISaleAppService
 
     public async Task<SaleDto> GetAsync(Guid id)
     {
-        var sale = await LoadWithItemsAsync(id);
+        var sale = await _saleRepository.GetWithItemsAsync(id);
         await EnsureBranchAccessAsync(sale.BranchId);
         return await ProjectAsync(sale);
     }
 
     public async Task<PagedResultDto<SaleDto>> GetListAsync(GetSalesInput input)
     {
-        var saleQ = await _saleRepository.GetQueryableAsync();
-
-        // Scope by accessible branches if user is not ManageAll
-        var hasManageAll = await AuthorizationService.IsGrantedAsync(OperationsPermissions.Sales.ManageAll);
-        if (!hasManageAll)
+        // Scope to accessible branches unless the user may manage all of them.
+        IReadOnlyCollection<Guid>? branchScope = null;
+        if (!await AuthorizationService.IsGrantedAsync(OperationsPermissions.Sales.ManageAll))
         {
-            var accessibleIds = await GetAccessibleBranchIdsAsync();
-            var set = accessibleIds.ToHashSet();
-            saleQ = saleQ.Where(s => set.Contains(s.BranchId));
+            branchScope = await GetAccessibleBranchIdsAsync();
         }
 
-        if (input.BranchId.HasValue) saleQ = saleQ.Where(s => s.BranchId == input.BranchId.Value);
-        if (input.FromDate.HasValue) { var f = input.FromDate.Value; saleQ = saleQ.Where(s => s.SaleDate >= f); }
-        if (input.ToDate.HasValue)   { var t = input.ToDate.Value;   saleQ = saleQ.Where(s => s.SaleDate <= t); }
-        if (!string.IsNullOrWhiteSpace(input.Filter))
+        var totalCount = await _saleRepository.CountFilteredAsync(
+            branchScope, input.BranchId, input.FromDate, input.ToDate, input.Filter);
+
+        var rows = await _saleRepository.GetFilteredListAsync(
+            branchScope, input.BranchId, input.FromDate, input.ToDate, input.Filter,
+            input.Sorting ?? string.Empty, input.SkipCount, input.MaxResultCount);
+
+        // Resolve denormalised display names (branch + creator live in other contexts).
+        var branchIds = rows.Select(r => r.Sale.BranchId).Distinct().ToList();
+        var creatorIds = new HashSet<Guid>();
+        foreach (var r in rows)
         {
-            var f = input.Filter.Trim().ToLower();
-            saleQ = saleQ.Where(s => s.InvoiceNumber.ToLower().Contains(f));
+            if (r.Sale.CreatorId is { } creatorId) creatorIds.Add(creatorId);
         }
 
-        var totalCount = await AsyncExecuter.CountAsync(saleQ);
+        var branchNames = await GetBranchNamesAsync(branchIds);
+        var creatorNames = await GetUserNamesAsync(creatorIds.ToList());
 
-        var sorting = string.IsNullOrWhiteSpace(input.Sorting)
-            ? $"{nameof(AppSale.SaleDate)} desc"
-            : input.Sorting!;
-        var sales = await AsyncExecuter.ToListAsync(saleQ.OrderBy(sorting).Skip(input.SkipCount).Take(input.MaxResultCount));
-
-        var branchIds  = sales.Select(s => s.BranchId).Distinct().ToList();
-        var creatorIds = sales.Where(s => s.CreatorId.HasValue).Select(s => s.CreatorId!.Value).Distinct().ToList();
-        var branchNames  = await GetBranchNamesAsync(branchIds);
-        var creatorNames = await GetUserNamesAsync(creatorIds);
-
-        // Item counts in one round-trip
-        var saleIds = sales.Select(s => s.Id).ToList();
-        var itemCounts = await GetItemCountsAsync(saleIds);
-
-        var items = sales.Select(s => new SaleDto
+        var items = rows.ConvertAll(r => new SaleDto
         {
-            Id = s.Id,
-            InvoiceNumber = s.InvoiceNumber,
-            BranchId = s.BranchId,
-            BranchName = branchNames.GetValueOrDefault(s.BranchId, "-"),
-            SaleDate = s.SaleDate,
-            TotalAmount = s.TotalAmount,
-            Currency = s.Currency,
-            Notes = s.Notes,
-            CreationTime = s.CreationTime,
-            CreatorId = s.CreatorId,
-            CreatorUserName = s.CreatorId.HasValue && creatorNames.TryGetValue(s.CreatorId.Value, out var n) ? n : null,
-            ItemCount = itemCounts.GetValueOrDefault(s.Id, 0)
-        }).ToList();
+            Id = r.Sale.Id,
+            InvoiceNumber = r.Sale.InvoiceNumber,
+            BranchId = r.Sale.BranchId,
+            BranchName = branchNames.GetValueOrDefault(r.Sale.BranchId, "-"),
+            SaleDate = r.Sale.SaleDate,
+            TotalAmount = r.Sale.TotalAmount,
+            Currency = r.Sale.Currency,
+            Notes = r.Sale.Notes,
+            CreationTime = r.Sale.CreationTime,
+            CreatorId = r.Sale.CreatorId,
+            CreatorUserName = r.Sale.CreatorId.HasValue && creatorNames.TryGetValue(r.Sale.CreatorId.Value, out var n) ? n : null,
+            ItemCount = r.ItemCount
+        });
 
         return new PagedResultDto<SaleDto>(totalCount, items);
     }
@@ -116,36 +103,18 @@ public class SaleAppService : OperationsAppService, ISaleAppService
     {
         await EnsureBranchAccessAsync(branchId);
 
-        var invQ = await _branchInventoryRepository.GetQueryableAsync();
-        var inventories = await AsyncExecuter.ToListAsync(
-            invQ.Where(x => x.BranchId == branchId && x.QuantityOnHand > 0));
+        var rows = await _branchInventoryRepository.GetAvailableProductsAsync(branchId);
 
-        if (inventories.Count == 0) return new List<SaleProductLookupDto>();
-
-        var productIds = inventories.Select(i => i.ProductId).ToList();
-        var prodQ = await _productRepository.GetQueryableAsync();
-        var products = await AsyncExecuter.ToListAsync(
-            prodQ.Where(p => productIds.Contains(p.Id) && p.IsActive));
-
-        var productMap = products.ToDictionary(p => p.Id);
-        return inventories
-            .Where(i => productMap.ContainsKey(i.ProductId))
-            .Select(i =>
-            {
-                var p = productMap[i.ProductId];
-                return new SaleProductLookupDto
-                {
-                    ProductId = p.Id,
-                    Name = p.Name,
-                    SKU = p.SKU,
-                    Unit = p.Unit,
-                    SalePrice = p.SalePrice,
-                    Currency = p.Currency,
-                    QuantityOnHand = i.QuantityOnHand
-                };
-            })
-            .OrderBy(x => x.Name)
-            .ToList();
+        return rows.ConvertAll(r => new SaleProductLookupDto
+        {
+            ProductId = r.Product.Id,
+            Name = r.Product.Name,
+            SKU = r.Product.SKU,
+            Unit = r.Product.Unit,
+            SalePrice = r.Product.SalePrice,
+            Currency = r.Product.Currency,
+            QuantityOnHand = r.Inventory.QuantityOnHand
+        });
     }
 
     public async Task<List<Guid>> GetAccessibleBranchIdsAsync()
@@ -153,12 +122,12 @@ public class SaleAppService : OperationsAppService, ISaleAppService
         if (await AuthorizationService.IsGrantedAsync(OperationsPermissions.Sales.ManageAll))
         {
             var all = await _branchRepository.GetListAsync(b => b.IsActive);
-            return all.Select(b => b.Id).ToList();
+            return all.ConvertAll(b => b.Id);
         }
         var userId = CurrentUser.Id;
         if (userId == null) return new List<Guid>();
         var mine = await _branchRepository.GetListAsync(b => b.IsActive && b.ManagerUserId == userId);
-        return mine.Select(b => b.Id).ToList();
+        return mine.ConvertAll(b => b.Id);
     }
 
     // ─── Atomic create ───
@@ -191,9 +160,8 @@ public class SaleAppService : OperationsAppService, ISaleAppService
 
         // 3) Fetch current stock for every item's product at this branch.
         var productIds = sale.Items.Select(i => i.ProductId).Distinct().ToList();
-        var invQ = await _branchInventoryRepository.GetQueryableAsync();
-        var inventories = await AsyncExecuter.ToListAsync(
-            invQ.Where(x => x.BranchId == sale.BranchId && productIds.Contains(x.ProductId)));
+        var inventories = await _branchInventoryRepository.GetListAsync(
+            x => x.BranchId == sale.BranchId && productIds.Contains(x.ProductId));
         var invByProduct = inventories.ToDictionary(x => x.ProductId);
         var stockSnapshot = invByProduct.ToDictionary(kv => kv.Key, kv => kv.Value.QuantityOnHand);
 
@@ -231,14 +199,6 @@ public class SaleAppService : OperationsAppService, ISaleAppService
 
     // ─── Helpers ───
 
-    private async Task<AppSale> LoadWithItemsAsync(Guid id)
-    {
-        var query = await _saleRepository.WithDetailsAsync(s => s.Items);
-        var sale = await AsyncExecuter.FirstOrDefaultAsync(query.Where(s => s.Id == id));
-        if (sale == null) throw new EntityNotFoundException(typeof(AppSale), id);
-        return sale;
-    }
-
     private async Task EnsureBranchAccessAsync(Guid branchId)
     {
         if (await AuthorizationService.IsGrantedAsync(OperationsPermissions.Sales.ManageAll)) return;
@@ -263,8 +223,7 @@ public class SaleAppService : OperationsAppService, ISaleAppService
         }
 
         var productIds = sale.Items.Select(i => i.ProductId).Distinct().ToList();
-        var prodQ = await _productRepository.GetQueryableAsync();
-        var products = await AsyncExecuter.ToListAsync(prodQ.Where(p => productIds.Contains(p.Id)));
+        var products = await _productRepository.GetListAsync(p => productIds.Contains(p.Id));
         var productMap = products.ToDictionary(p => p.Id);
 
         return new SaleDto
@@ -300,25 +259,14 @@ public class SaleAppService : OperationsAppService, ISaleAppService
     private async Task<Dictionary<Guid, string>> GetBranchNamesAsync(List<Guid> ids)
     {
         if (ids.Count == 0) return new Dictionary<Guid, string>();
-        var q = await _branchRepository.GetQueryableAsync();
-        var rows = await AsyncExecuter.ToListAsync(q.Where(x => ids.Contains(x.Id)).Select(x => new { x.Id, x.Name }));
-        return rows.ToDictionary(r => r.Id, r => r.Name);
+        var branches = await _branchRepository.GetListAsync(b => ids.Contains(b.Id));
+        return branches.ToDictionary(b => b.Id, b => b.Name);
     }
 
     private async Task<Dictionary<Guid, string>> GetUserNamesAsync(List<Guid> ids)
     {
         if (ids.Count == 0) return new Dictionary<Guid, string>();
-        var q = await _userRepository.GetQueryableAsync();
-        var rows = await AsyncExecuter.ToListAsync(q.Where(u => ids.Contains(u.Id)).Select(u => new { u.Id, u.UserName }));
-        return rows.ToDictionary(r => r.Id, r => r.UserName);
-    }
-
-    private async Task<Dictionary<Guid, int>> GetItemCountsAsync(List<Guid> saleIds)
-    {
-        if (saleIds.Count == 0) return new Dictionary<Guid, int>();
-        var q = await _saleRepository.WithDetailsAsync(s => s.Items);
-        var rows = await AsyncExecuter.ToListAsync(
-            q.Where(s => saleIds.Contains(s.Id)).Select(s => new { s.Id, Count = s.Items.Count }));
-        return rows.ToDictionary(r => r.Id, r => r.Count);
+        var users = await _userRepository.GetListAsync(u => ids.Contains(u.Id));
+        return users.ToDictionary(u => u.Id, u => u.UserName);
     }
 }

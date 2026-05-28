@@ -4,6 +4,9 @@
     "AppName": "patisserie_shop",
     "Menu:Home": "Home",
     "LongWelcomeMessage": "Welcome to the application. This is a startup project based on the ABP framework. For more information visit",
-    "Welcome": "Welcome"
+    "Welcome": "Welcome",
+    "ValidationErrorsTitle": "Please fix the following",
+    "ValidationErrorsIntro": "Some fields are not valid. Review the items below and try again.",
+    "OK": "OK"
   }
 }
