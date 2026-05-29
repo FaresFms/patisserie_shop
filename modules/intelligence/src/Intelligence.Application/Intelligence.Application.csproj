@@ -11,9 +11,11 @@
   <ItemGroup>
     <PackageReference Include="Volo.Abp.Mapperly" Version="10.1.1" />
     <PackageReference Include="Volo.Abp.Ddd.Application" Version="10.1.1" />
+    <PackageReference Include="Volo.Abp.BackgroundWorkers" Version="10.1.1" />
     <ProjectReference Include="..\Intelligence.Application.Contracts\Intelligence.Application.Contracts.csproj" />
     <ProjectReference Include="..\Intelligence.Domain\Intelligence.Domain.csproj" />
     <ProjectReference Include="..\..\..\inventory\src\Inventory.Application.Contracts\Inventory.Application.Contracts.csproj" />
+    <ProjectReference Include="..\..\..\inventory\src\Inventory.Domain\Inventory.Domain.csproj" />
   </ItemGroup>
 
 </Project>

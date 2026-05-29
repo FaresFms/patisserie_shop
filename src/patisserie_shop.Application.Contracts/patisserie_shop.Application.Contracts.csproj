@@ -7,6 +7,7 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\patisserie_shop.Domain.Shared\patisserie_shop.Domain.Shared.csproj" />
+    <ProjectReference Include="../../modules/inventory/src/Inventory.Application.Contracts/Inventory.Application.Contracts.csproj" />
     <ProjectReference Include="../../modules/intelligence/src/Intelligence.Application.Contracts/Intelligence.Application.Contracts.csproj" />
     <ProjectReference Include="../../modules/operations/src/Operations.Application.Contracts/Operations.Application.Contracts.csproj" />
   </ItemGroup>

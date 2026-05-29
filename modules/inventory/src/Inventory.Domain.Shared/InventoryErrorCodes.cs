@@ -13,4 +13,5 @@ public static class InventoryErrorCodes
     public const string NegativeStock = "Inventory:BranchInventory:NegativeStock";
     public const string BranchAccessDenied = "Inventory:BranchInventory:BranchAccessDenied";
     public const string InvalidStockLimits = "Inventory:BranchInventory:InvalidStockLimits";
+    public const string StockMovementNotFound = "Inventory:StockMovements:NotFound";
 }

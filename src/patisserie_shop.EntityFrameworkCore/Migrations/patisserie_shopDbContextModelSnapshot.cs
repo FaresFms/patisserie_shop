@@ -36,6 +36,9 @@ namespace patisserie_shop.Migrations
                     b.Property<Guid?>("AcknowledgedByUserId")
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("BranchId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("ConcurrencyStamp")
                         .IsConcurrencyToken()
                         .IsRequired()
@@ -50,6 +53,9 @@ namespace patisserie_shop.Migrations
                     b.Property<Guid?>("CreatorId")
                         .HasColumnType("uuid")
                         .HasColumnName("CreatorId");
+
+                    b.Property<int?>("DaysWithoutSale")
+                        .HasColumnType("integer");
 
                     b.Property<string>("DecisionType")
                         .IsRequired()
@@ -72,6 +78,9 @@ namespace patisserie_shop.Migrations
                     b.Property<Guid>("RuleId")
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("SourceBranchId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
@@ -79,11 +88,20 @@ namespace patisserie_shop.Migrations
                         .HasColumnType("character varying(32)")
                         .HasDefaultValue("Pending");
 
+                    b.Property<int?>("StockAtEvaluation")
+                        .HasColumnType("integer");
+
                     b.Property<string>("SuggestedAction")
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)");
 
+                    b.Property<Guid?>("TargetBranchId")
+                        .HasColumnType("uuid");
+
                     b.HasKey("Id");
+
+                    b.HasIndex("BranchId")
+                        .HasDatabaseName("IX_DecisionLogs_Branch");
 
                     b.HasIndex("DecisionType")
                         .HasDatabaseName("IX_DecisionLogs_Type");
@@ -544,6 +562,18 @@ namespace patisserie_shop.Migrations
                     b.Property<Guid>("ProductId")
                         .HasColumnType("uuid");
 
+                    b.Property<int>("Quantity")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("QuantityAfter")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("QuantityBefore")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("ReferenceId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("ReferenceType")
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");
@@ -728,8 +758,12 @@ namespace patisserie_shop.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("OrderDate");
+
                     b.HasIndex("PONumber")
                         .IsUnique();
+
+                    b.HasIndex("Status");
 
                     b.ToTable("OperationsPurchaseOrders", (string)null);
                 });
@@ -840,8 +874,12 @@ namespace patisserie_shop.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("BranchId");
+
                     b.HasIndex("InvoiceNumber")
                         .IsUnique();
+
+                    b.HasIndex("SaleDate");
 
                     b.ToTable("OperationsSales", (string)null);
                 });

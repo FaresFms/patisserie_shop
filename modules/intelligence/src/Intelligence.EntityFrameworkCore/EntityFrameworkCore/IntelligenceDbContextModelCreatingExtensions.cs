@@ -31,10 +31,21 @@ public static class IntelligenceDbContextModelCreatingExtensions
             b.Property(x => x.Reasoning).IsRequired().HasMaxLength(1024);
             b.Property(x => x.SuggestedAction).HasMaxLength(256);
             b.Property(x => x.Status).IsRequired().HasMaxLength(32).HasDefaultValue("Pending");
+
+            // Nullable get-only auto-properties are silently skipped by EF's convention,
+            // so map them explicitly. Without this, queries that reference BranchId etc.
+            // fail with "translation of member ... failed; commonly occurs when unmapped".
+            b.Property(x => x.BranchId);
+            b.Property(x => x.SourceBranchId);
+            b.Property(x => x.TargetBranchId);
+            b.Property(x => x.StockAtEvaluation);
+            b.Property(x => x.DaysWithoutSale);
+
             b.HasIndex(x => x.Status).HasDatabaseName("IX_DecisionLogs_Status");
             b.HasIndex(x => x.DecisionType).HasDatabaseName("IX_DecisionLogs_Type");
             b.HasIndex(x => x.ProductId).HasDatabaseName("IX_DecisionLogs_Product");
             b.HasIndex(x => x.RuleId).HasDatabaseName("IX_DecisionLogs_Rule");
+            b.HasIndex(x => x.BranchId).HasDatabaseName("IX_DecisionLogs_Branch");
         });
     }
 }

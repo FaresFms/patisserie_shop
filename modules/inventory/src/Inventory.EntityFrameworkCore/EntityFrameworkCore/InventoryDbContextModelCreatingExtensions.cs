@@ -70,6 +70,13 @@ public static class InventoryDbContextModelCreatingExtensions
             b.Property(x => x.MovementType).IsRequired().HasMaxLength(32);
             b.Property(x => x.ReferenceType).HasMaxLength(32);
             b.Property(x => x.Notes).HasMaxLength(512);
+            // Getter-only properties are not auto-discovered by EF Core convention;
+            // UsePropertyAccessMode(Field) tells EF Core to read/write via the
+            // compiler-generated backing field (<PropertyName>k__BackingField).
+            b.Property(x => x.Quantity).UsePropertyAccessMode(PropertyAccessMode.Field);
+            b.Property(x => x.QuantityBefore).UsePropertyAccessMode(PropertyAccessMode.Field);
+            b.Property(x => x.QuantityAfter).UsePropertyAccessMode(PropertyAccessMode.Field);
+            b.Property(x => x.ReferenceId).UsePropertyAccessMode(PropertyAccessMode.Field);
             b.HasIndex(x => x.BranchId).HasDatabaseName("IX_StockMovements_Branch");
             b.HasIndex(x => x.ProductId).HasDatabaseName("IX_StockMovements_Product");
             b.HasIndex(x => x.CreationTime).HasDatabaseName("IX_StockMovements_Date");

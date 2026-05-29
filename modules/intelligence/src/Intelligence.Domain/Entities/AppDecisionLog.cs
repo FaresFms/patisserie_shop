@@ -1,5 +1,7 @@
 using System;
+using Intelligence.Decisions;
 using Intelligence.Events;
+using Volo.Abp;
 using Volo.Abp.Domain.Entities.Auditing;
 
 namespace Intelligence.Entities;
@@ -17,7 +19,7 @@ public class AppDecisionLog : CreationAuditedAggregateRoot<Guid>
     public int? StockAtEvaluation { get; }
     public int? DaysWithoutSale { get; }
 
-    public string Status { get; private set; } = "Pending";
+    public string Status { get; private set; } = DecisionLogStatuses.Pending;
     public DateTime? AcknowledgedAt { get; private set; }
     public Guid? AcknowledgedByUserId { get; private set; }
 
@@ -47,7 +49,7 @@ public class AppDecisionLog : CreationAuditedAggregateRoot<Guid>
         DaysWithoutSale = daysWithoutSale;
         SourceBranchId = sourceBranchId;
         TargetBranchId = targetBranchId;
-        Status = "Pending";
+        Status = DecisionLogStatuses.Pending;
 
         AddDistributedEvent(new DecisionMadeEto
         {
@@ -58,9 +60,28 @@ public class AppDecisionLog : CreationAuditedAggregateRoot<Guid>
         });
     }
 
-    public void Acknowledge(Guid userId)
+    public void Acknowledge(Guid userId) => TransitionTo(DecisionLogStatuses.Acknowledged, userId);
+
+    public void Dismiss(Guid userId) => TransitionTo(DecisionLogStatuses.Dismissed, userId);
+
+    public void MarkExecuted(Guid userId) => TransitionTo(DecisionLogStatuses.Executed, userId);
+
+    /// <summary>
+    /// Single point of mutation for the workflow status. A decision log is born
+    /// Pending and may only move once — to Acknowledged, Dismissed, or Executed.
+    /// Any attempt to transition a non-Pending log throws so historical entries
+    /// stay immutable.
+    /// </summary>
+    private void TransitionTo(string newStatus, Guid userId)
     {
-        Status = "Acknowledged";
+        if (Status != DecisionLogStatuses.Pending)
+        {
+            throw new BusinessException(IntelligenceErrorCodes.DecisionLogNotPending)
+                .WithData("CurrentStatus", Status)
+                .WithData("AttemptedStatus", newStatus);
+        }
+
+        Status = newStatus;
         AcknowledgedAt = DateTime.UtcNow;
         AcknowledgedByUserId = userId;
     }

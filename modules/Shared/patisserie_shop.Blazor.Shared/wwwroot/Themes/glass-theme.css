@@ -951,3 +951,15 @@ body.abp-application-layout .mud-progress-linear-bar.mud-primary-text {
     color: var(--accent) !important;
     background: var(--accent) !important;
 }
+
+
+/* =========================================================
+   Permission / role checklist (Users & Roles management modals)
+   ========================================================= */
+.perm-toolbar { padding: 2px 0; }
+.perm-group { padding: 8px 0; border-bottom: 1px solid var(--bd-1); }
+.perm-group:last-child { border-bottom: 0; }
+.perm-group-head { font-weight: 600; }
+.perm-group-body { display: flex; flex-direction: column; gap: 2px; margin-top: 4px; }
+.perm-item { line-height: 1.4; }
+.perm-item .mud-checkbox { margin: 0; }

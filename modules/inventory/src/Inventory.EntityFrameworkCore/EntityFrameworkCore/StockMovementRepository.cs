@@ -73,13 +73,80 @@ public class StockMovementRepository
         StockMovementListFilter filter,
         CancellationToken cancellationToken = default)
     {
-        var query = await BuildFilteredQueryAsync(filter);
+        var dbContext = await GetDbContextAsync();
+        var movements = ApplyScalarFilters(dbContext.Set<AppStockMovement>().AsQueryable(), filter);
 
-        var grouped = query
-            .GroupBy(x => x.Movement.MovementType)
+        if (!string.IsNullOrWhiteSpace(filter.Filter))
+        {
+            var f = filter.Filter.Trim().ToLower();
+            var matchingIds =
+                from m in movements
+                join p in dbContext.Set<AppProduct>() on m.ProductId equals p.Id
+                where p.Name.ToLower().Contains(f) || p.SKU.ToLower().Contains(f) ||
+                      (m.Notes != null && m.Notes.ToLower().Contains(f))
+                select m.Id;
+            movements = movements.Where(m => matchingIds.Contains(m.Id));
+        }
+
+        var grouped = movements
+            .GroupBy(m => m.MovementType)
             .Select(g => new StockMovementTypeCount { MovementType = g.Key, Count = g.Count() });
 
         return await grouped.ToListAsync(GetCancellationToken(cancellationToken));
+    }
+
+    public async Task<StockMovementWithContext?> GetWithContextAsync(
+        Guid id,
+        CancellationToken cancellationToken = default)
+    {
+        var dbContext = await GetDbContextAsync();
+
+        var result = await (
+            from m in dbContext.Set<AppStockMovement>()
+            join b in dbContext.Set<AppBranch>() on m.BranchId equals b.Id
+            join p in dbContext.Set<AppProduct>() on m.ProductId equals p.Id
+            where m.Id == id
+            select new StockMovementWithContext { Movement = m, Branch = b, Product = p }
+        ).FirstOrDefaultAsync(GetCancellationToken(cancellationToken));
+
+        return result;
+    }
+
+    private static IQueryable<AppStockMovement> ApplyScalarFilters(
+        IQueryable<AppStockMovement> movements,
+        StockMovementListFilter filter)
+    {
+        if (filter.BranchIdScope != null)
+        {
+            var scope = filter.BranchIdScope;
+            movements = movements.Where(m => scope.Contains(m.BranchId));
+        }
+        if (filter.BranchId.HasValue)
+        {
+            var branchId = filter.BranchId.Value;
+            movements = movements.Where(m => m.BranchId == branchId);
+        }
+        if (filter.ProductId.HasValue)
+        {
+            var productId = filter.ProductId.Value;
+            movements = movements.Where(m => m.ProductId == productId);
+        }
+        if (!string.IsNullOrWhiteSpace(filter.MovementType) && StockMovementTypes.IsValid(filter.MovementType))
+        {
+            var type = filter.MovementType;
+            movements = movements.Where(m => m.MovementType == type);
+        }
+        if (filter.FromDate.HasValue)
+        {
+            var from = filter.FromDate.Value;
+            movements = movements.Where(m => m.CreationTime >= from);
+        }
+        if (filter.ToDate.HasValue)
+        {
+            var to = filter.ToDate.Value;
+            movements = movements.Where(m => m.CreationTime <= to);
+        }
+        return movements;
     }
 
     private async Task<IQueryable<StockMovementWithContext>> BuildFilteredQueryAsync(StockMovementListFilter filter)

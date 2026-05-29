@@ -57,6 +57,56 @@
 
     "Intelligence:Rules:InvalidRuleType": "Invalid rule type.",
     "Intelligence:Rules:ThresholdValueRequired": "A stock quantity threshold is required for this rule type.",
-    "Intelligence:Rules:ThresholdDaysRequired": "A days-without-sale value is required for Dead Stock rules."
+    "Intelligence:Rules:ThresholdDaysRequired": "A days-without-sale value is required for Dead Stock rules.",
+    "Intelligence:DecisionLogs:NotPending": "This decision has already been resolved and cannot be changed.",
+
+    "Permission:DecisionLogs": "Decision Log",
+    "Permission:DecisionLogs.Acknowledge": "Acknowledge, dismiss, or mark decisions executed",
+
+    "Menu:DecisionLog": "Decision Log",
+    "DecisionLog": "Decision Log",
+    "DecisionLogSubtitle": "Every recommendation the engine has made, and why.",
+
+    "DecisionLog:Filter": "Search reasoning or suggested action",
+    "DecisionLog:AllTypes": "All Types",
+    "DecisionLog:AllStatuses": "All Statuses",
+    "DecisionLog:AllBranches": "All Branches",
+    "DecisionLog:AllProducts": "All Products",
+    "DecisionLog:FromDate": "From",
+    "DecisionLog:ToDate": "To",
+
+    "DecisionLog:Summary:TotalPending": "Total Pending",
+    "DecisionLog:Summary:LowStockPending": "Low Stock Alerts",
+    "DecisionLog:Summary:ExcessStockPending": "Excess Stock Alerts",
+    "DecisionLog:Summary:ResolvedToday": "Resolved Today",
+
+    "DecisionLog:Empty": "No decisions match the current filters.",
+    "DecisionLog:Reasoning": "Reasoning",
+    "DecisionLog:StockAtEvaluation": "Stock at evaluation",
+    "DecisionLog:DaysWithoutSale": "Days without sale",
+    "DecisionLog:Rule": "Rule",
+    "DecisionLog:AcknowledgedBy": "Acknowledged by {0} at {1}",
+    "DecisionLog:NoRule": "(rule deleted)",
+
+    "DecisionLog:Action:Acknowledge": "Acknowledge",
+    "DecisionLog:Action:Dismiss": "Dismiss",
+    "DecisionLog:Action:Executed": "Executed",
+
+    "DecisionType:LowStockAlert": "Low Stock Alert",
+    "DecisionType:ExcessStockAlert": "Excess Stock Alert",
+    "DecisionType:DeadStockFlag": "Dead Stock",
+    "DecisionType:TransferSuggestion": "Transfer Suggestion",
+    "DecisionType:ReorderSuggestion": "Reorder Suggestion",
+
+    "DecisionStatus:Pending": "Pending",
+    "DecisionStatus:Acknowledged": "Acknowledged",
+    "DecisionStatus:Dismissed": "Dismissed",
+    "DecisionStatus:Executed": "Executed",
+
+    "TimeAgo:JustNow": "just now",
+    "TimeAgo:MinAgo": "{0} min ago",
+    "TimeAgo:HrAgo": "{0} hr ago",
+    "TimeAgo:DayAgo": "{0} d ago",
+    "TimeAgo:Yesterday": "yesterday"
   }
 }

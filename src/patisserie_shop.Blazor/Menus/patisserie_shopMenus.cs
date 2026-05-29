@@ -21,4 +21,5 @@ public class patisserie_shopMenus
 
     public const string Intelligence = Prefix + ".Intelligence";
     public const string InventoryRules = Intelligence + ".InventoryRules";
+    public const string DecisionLog = Intelligence + ".DecisionLog";
 }

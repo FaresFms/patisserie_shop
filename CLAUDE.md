@@ -477,71 +477,178 @@ SoftCheckBox, SoftRadioGroup
 SoftProgressLinear, SoftProgressCircular
 SoftSkeleton
 ```
-always use those component and if you want to use mud blazor component and you did not find it make a soft component for it 
-### Glass Theme
 
-The app uses a frosted glass visual design. Every card, modal, and panel must use the glass CSS variables defined in `glass-theme.css`:
+Always use these. If a needed MudBlazor component isn't wrapped, create a new Soft component for it (don't reach for the raw Mud one inline).
 
+**Class-passthrough gotcha:** Most Soft components inherit their MudBlazor counterpart directly — `SoftCard : MudCard`, `SoftTextField : MudTextField<T>`, `SoftDataGrid : MudDataGrid<T>`, `SoftNumericField : MudNumericField<T>`, `SoftSelect : MudSelect<T>` — so `Class="..."` passes through to the underlying element. The exception is **`SoftLookupSelect`**: it's a composite component with a fixed parameter set and **no `Class` parameter**. When you need to attach a CSS class to it (e.g. `filter-chip` for the toolbar pattern below), wrap it in `<div class="...">` instead — the page-flat CSS uses descendant selectors so the styling still lands.
 
-### Page Structure
+### Theme (warm cream + terracotta)
 
-Every page follows this pattern:
+The active theme lives in `modules/Shared/patisserie_shop.Blazor.Shared/wwwroot/Themes/glass-theme.css`. The filename is preserved from the original liquid-glass design; the content is now the warm palette. Use these CSS custom properties instead of hex literals or `--glass-*` variables (which no longer exist):
+
+```
+Surfaces:  --bg, --bg-2, --surface, --surface-2, --hover, --selected
+Borders:   --bd-1 (hairline), --bd-2 (light), --bd-3 (medium)
+Text:      --fg-1 (primary), --fg-2 (secondary), --fg-3 (muted), --fg-4 (faint)
+Accent:    --accent (terracotta), --accent-hover, --accent-soft, --accent-line, --accent-fg
+Status:    --success, --warn, --danger, --green-text, --amber-text
+Shadows:   --shadow-sm, --shadow-md, --shadow-modal
+Radii:     --r-sm, --r-md, --r-lg
+Fonts:     --font-sans (Inter), --font-serif (Source Serif 4), --font-mono (JetBrains Mono)
+```
+
+Dark mode is opt-in via `<html data-theme="dark">`. The `wwwroot/js/theme-bridge.js` helper writes and restores this attribute when the top-bar moon icon toggles — the warm dark tokens flip via the `html[data-theme="dark"]` selector inside the same CSS file, with no Razor change required. The toggle handler in `MainLayout.razor` calls `applyDataTheme(_isDarkMode)` after flipping the bool.
+
+### Data-list page pattern (`page-flat`)
+
+Every data-list page (Products, Categories, Suppliers, Branches, Branch Inventory, Stock Movements, Purchase Orders, Sales, Stock Transfers, Inventory Rules, Decision Log) follows the **page-flat** pattern: no outer card chrome, hairline-separated rows, dashed-pill filter chips, hover-revealed row actions.
 
 ```razor
 @page "/module/feature"
 @attribute [Authorize(ModulePermissions.Feature.Default)]
 @inherits patisserie_shopComponentBase
 
-<SoftCard>
-    <SoftCardHeader>
-        <!-- Title + action buttons -->
-    </SoftCardHeader>
+<SoftCard Elevation="2" Class="pa-2 page-flat">
+    <div class="page-head">
+        <div>
+            <h1 class="page-title">@L["Feature"]</h1>
+            <div class="page-sub">Short descriptive subtitle.</div>
+        </div>
+        <div class="page-head-actions">
+            <SoftButton Variant="Variant.Filled" Color="Color.Primary"
+                        StartIcon="@Icons.Material.Filled.Add" OnClick="OpenCreateDialog">
+                @L["NewFeature"]
+            </SoftButton>
+        </div>
+    </div>
+
     <SoftCardContent>
-        <!-- Filter bar -->
-        <!-- SoftDataGrid with ServerData -->
+        <div class="toolbar">
+            <SoftTextField @bind-Value="_filter" Placeholder="@L["Filter"]"
+                           Variant="Variant.Outlined" Margin="Margin.Dense"
+                           Adornment="Adornment.Start"
+                           AdornmentIcon="@Icons.Material.Filled.Search"
+                           Class="toolbar-search" />
+
+            <div class="filter-chip">
+                <SoftLookupSelect ... />   @* class lives on the wrapper, not the component *@
+            </div>
+
+            <div class="toolbar-right">
+                <SoftButton Variant="Variant.Text" Color="Color.Primary"
+                            StartIcon="@Icons.Material.Filled.Refresh" OnClick="ReloadAsync">
+                    @L["Refresh"]
+                </SoftButton>
+            </div>
+        </div>
+
+        <SoftDataGrid ...>
+            <Columns>
+                ...
+                <TemplateColumn Title="@L["Actions"]" Sortable="false">
+                    <CellTemplate>
+                        <span class="row-actions">
+                            <SoftIconButton Icon="@Icons.Material.Filled.Edit" ... />
+                            <SoftIconButton Icon="@Icons.Material.Filled.Delete"
+                                            Color="Color.Error" ... />
+                        </span>
+                    </CellTemplate>
+                </TemplateColumn>
+            </Columns>
+        </SoftDataGrid>
     </SoftCardContent>
 </SoftCard>
-
-<!-- Create/Edit modal -->
-<!-- Delete confirmation modal -->
 ```
 
-### Modal Pattern
+Marker classes (defined in Sections 7–8 of `glass-theme.css`):
 
-Two styles used in this project:
+| Class | Where it goes | Effect |
+|---|---|---|
+| `.page-flat` | outer `SoftCard` | makes the card transparent, zero padding/border/shadow |
+| `.page-head` / `.page-title` / `.page-sub` / `.page-head-actions` | top banner | serif `<h1>` title, muted subtitle, right-aligned action buttons |
+| `.toolbar`, `.toolbar-right` | filter row | flex layout with hairline top/bottom borders |
+| `.toolbar-search` | search `SoftTextField` | borderless inline input, focused-ring on accent |
+| `.filter-chip` | wrapper `<div>` around a `SoftLookupSelect` / `MudSelect` | renders as a small dashed pill with an 11px uppercase label; hides any `AdornmentIcon` |
+| `.row-actions` | `<span>` wrapping table-row icon buttons | `opacity: 0` by default, `1` on row hover |
+| `.stats`, `.stat-label`, `.stat-value` | optional summary row under the head | flat tabular-num numbers for dashboards (e.g. Decision Log) |
 
-**Simple modal** (Categories, Suppliers, Products) — inline form for CRUD:
+**Adornments inside dialogs:** prefer `AdornmentText="$"` over decorative `AdornmentIcon` on currency / numeric fields. Reserve `AdornmentIcon` for genuinely functional icons (search magnifier, calendar picker). Decorative leading icons on text fields, selects, and lookups have been swept out of every dialog.
+
+### Modal pattern (custom inline modals)
+
+Modals in this project are **not** `MudDialog` / `DialogService.Show<>()`. They're hand-rolled overlay markup using the `glass-modal-*` class system (the class names predate the warm theme; the CSS aliases them to the new tokens). Render them conditionally in the same `.razor` file as the page:
+
 ```razor
-<div class="soft-modal-backdrop">
-    <div class="soft-modal-container soft-modal-container--lg">
-        <SoftCard Elevation="24" Class="soft-modal-card">
-            <!-- header, form, footer -->
-        </SoftCard>
+@if (_dialogVisible)
+{
+    <div class="glass-modal-backdrop" @onclick="CloseDialog">
+        <div class="glass-modal-container glass-modal-container--lg" @onclick:stopPropagation="true">
+            <SoftCard Elevation="24" Class="glass-modal">
+                <SoftCardHeader Class="pa-4">
+                    <CardHeaderContent>
+                        <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <SoftIcon Icon="@Icons.Material.Filled.AddCircle"
+                                      Color="Color.Primary" Size="Size.Medium" />
+                            <SoftText Typo="Typo.h6">@L["NewItem"]</SoftText>
+                        </SoftStack>
+                    </CardHeaderContent>
+                    <CardHeaderActions>
+                        <SoftIconButton Icon="@Icons.Material.Filled.Close"
+                                        Size="Size.Small" OnClick="CloseDialog" />
+                    </CardHeaderActions>
+                </SoftCardHeader>
+                <SoftDivider />
+                <SoftCardContent Class="pa-4 glass-modal-body">
+                    @* form body *@
+                </SoftCardContent>
+                <SoftDivider />
+                <div class="pa-3 d-flex justify-end" style="gap: 8px;">
+                    <SoftButton Variant="Variant.Text" OnClick="CloseDialog">@L["Cancel"]</SoftButton>
+                    <SoftButton Variant="Variant.Filled" Color="Color.Primary"
+                                StartIcon="@Icons.Material.Filled.Save" OnClick="SaveAsync">
+                        @L["Save"]
+                    </SoftButton>
+                </div>
+            </SoftCard>
+        </div>
     </div>
-</div>
+}
 ```
 
-**Detail modal** (Purchase Orders, Sales) — read-only detail view + actions:
-- Opened by clicking a row in the grid
-- Shows full entity details with items table
-- Status-aware action footer
-- Sub-modals for adding items / receiving items
+Container sizes: `glass-modal-container--sm` (420 px), default (560 px), `--md` (640 px), `--lg` (880 px).
 
-### Status Chips
+Two functional variants of this skeleton are in use:
 
-Consistent color coding across the app:
+- **Form modal** (Categories, Suppliers, Products, Branches, New Purchase Order, New Sale, New Stock Transfer, New Rule, Adjust Stock, Initialize Product) — inline create/edit form with Save / Cancel footer.
+- **Detail modal** (`PurchaseOrderDetailModal.razor`, `SaleDetailModal.razor`, `StockTransferDetailModal.razor`) — separate `.razor` component opened by row click; shows full entity detail + items table + status-aware action footer; may host its own sub-modals (e.g. add item, receive items).
+
+The dialog header icon is always a `SoftIcon` with `Color="Color.Primary"`; the warm theme CSS recolors it to terracotta automatically. Don't hardcode `Color.Info` / hex colors / inline styles on dialog title icons — the override won't reach them.
+
+### Status chips
+
+Used in tables, detail modals, and decision-log cards:
+
 - **Green filled** — Confirmed, Received, Active, Acknowledged
-- **Blue filled** — Approved, In Transit
-- **Orange filled** — Pending, Partial, Draft (with activity)
-- **Grey outlined** — Draft (inactive)
-- **Red outlined** — Cancelled, Dismissed
+- **Blue filled** — Approved, In Transit, Executed
+- **Orange filled** — Pending, Partial
+- **Grey outlined** — Draft (inactive), Dismissed
+- **Red outlined / red filled** — Cancelled, Out of stock, Dead-stock alert
 
-### Menu Registration
+On the Decision Log dashboard the chip variant doubles as a state-loudness signal: **Pending** chips are filled (loud); **Acknowledged / Dismissed / Executed** chips are outlined (quieter), and the card's left-border color carries the decision-type accent (amber for LowStock, blue for ExcessStock, red for DeadStock, teal for Transfer).
 
-All pages registered in `patisserie_shopMenuContributor.cs` under module groups:
-- Inventory: Categories, Suppliers, Products, Branches, Branch Inventory, Stock Movements
-- Operations: Purchase Orders, Sales, Stock Transfers
-- Intelligence: Inventory Rules, Decision Log
+### Sidebar nav glow
+
+Nav-link icons in the sidebar drawer render with a soft terracotta drop-shadow so the active page glows. The effect is purely CSS (Section 8 of the theme file) — every `<MudNavLink>` inside the drawer gets the treatment automatically; no Razor change needed.
+
+### Menu registration
+
+All routed pages are registered in `src/patisserie_shop.Blazor/Menus/patisserie_shopMenuContributor.cs` under the three module groups:
+
+- **Inventory** — Dashboard, Categories, Suppliers, Products, Branches, Branch Inventory, Stock Movements
+- **Operations** — Purchase Orders, Sales, Stock Transfers
+- **Intelligence** — Inventory Rules, Decision Log
+
+Each menu item is gated with `.RequirePermissions(...)` against the appropriate `*Permissions.*.Default` constant, so BranchManagers (who lack `Intelligence.Rules.Default`) don't see the Inventory Rules entry at all. Menu IDs and routes live in `Menus/patisserie_shopMenus.cs`.
 
 ---
 

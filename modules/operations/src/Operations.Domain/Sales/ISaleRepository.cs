@@ -37,4 +37,26 @@ public interface ISaleRepository : IRepository<AppSale, Guid>
         int skipCount,
         int maxResultCount,
         CancellationToken cancellationToken = default);
+
+    /// <summary>Sum + count grouped by sale date (UTC date component) in the supplied window.</summary>
+    Task<List<DailySaleAggregate>> GetDailySalesAsync(
+        DateTime fromUtcInclusive,
+        DateTime toUtcExclusive,
+        IReadOnlyCollection<Guid>? branchIdScope,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Top selling products in the window by quantity sold, with revenue.</summary>
+    Task<List<ProductSalesAggregate>> GetTopProductsAsync(
+        DateTime fromUtcInclusive,
+        DateTime toUtcExclusive,
+        IReadOnlyCollection<Guid>? branchIdScope,
+        int take,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Sum + count grouped by branch in the supplied window.</summary>
+    Task<List<BranchSalesAggregate>> GetSalesByBranchAsync(
+        DateTime fromUtcInclusive,
+        DateTime toUtcExclusive,
+        IReadOnlyCollection<Guid>? branchIdScope,
+        CancellationToken cancellationToken = default);
 }

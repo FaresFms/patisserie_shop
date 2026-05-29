@@ -7,6 +7,8 @@
     "Welcome": "Welcome",
     "ValidationErrorsTitle": "Please fix the following",
     "ValidationErrorsIntro": "Some fields are not valid. Review the items below and try again.",
-    "OK": "OK"
+    "OK": "OK",
+    "Close": "Close",
+    "Details": "Details"
   }
 }

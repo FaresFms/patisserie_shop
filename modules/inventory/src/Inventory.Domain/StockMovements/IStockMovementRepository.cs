@@ -52,4 +52,8 @@ public interface IStockMovementRepository : IRepository<AppStockMovement, Guid>
     Task<List<StockMovementTypeCount>> GetCountsByTypeAsync(
         StockMovementListFilter filter,
         CancellationToken cancellationToken = default);
+
+    Task<StockMovementWithContext?> GetWithContextAsync(
+        Guid id,
+        CancellationToken cancellationToken = default);
 }

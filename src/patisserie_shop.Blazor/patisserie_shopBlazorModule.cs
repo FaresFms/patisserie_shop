@@ -294,6 +294,13 @@ public class patisserie_shopBlazorModule : AbpModule
         Configure<AbpRouterOptions>(options =>
         {
             options.AppAssembly = typeof(patisserie_shopBlazorModule).Assembly;
+
+            // Override ABP's built-in Identity management pages (/identity/users, /identity/roles)
+            // with our own warm-themed pages. Dropping the Identity.Blazor assembly from the router
+            // frees those routes so the app-assembly pages claim them without route ambiguity.
+            // The Administration → Identity menu items keep working since the routes are unchanged.
+            options.AdditionalAssemblies.RemoveAll(
+                a => a == typeof(Volo.Abp.Identity.Blazor.AbpIdentityBlazorModule).Assembly);
         });
     }
 

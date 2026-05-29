@@ -39,25 +39,19 @@
                         <SoftDivider Class="mb-3" />
                         <SoftStack Spacing="3">
                             <SoftStack Row="true" Spacing="2">
-                                <SoftLookupSelect TItem="BranchLookupDto" TValue="Guid?"
-                                                  Items="AccessibleBranches"
-                                                  ToValue="@(b => (Guid?)b.Id)"
-                                                  ToLabel="@(b => b.Name)"
-                                                  Value="_branchId"
-                                                  ValueChanged="OnBranchChangedAsync"
-                                                  Label="@OpsL["Branch"]"
-                                                  Required="true"
-                                                  Disabled="@(AccessibleBranches.Count == 1)" />
+                                @if (AccessibleBranches.Count > 1)
+                                {
+                                    <SoftLookupSelect TItem="BranchLookupDto" TValue="Guid?"
+                                                      Items="AccessibleBranches"
+                                                      ToValue="@(b => (Guid?)b.Id)"
+                                                      ToLabel="@(b => b.Name)"
+                                                      Value="_branchId"
+                                                      ValueChanged="OnBranchChangedAsync"
+                                                      Label="@OpsL["Branch"]"
+                                                      Required="true" />
+                                }
                                 <MudDatePicker Label="@OpsL["SaleDate"]" Variant="Variant.Outlined"
                                                @bind-Date="_saleDate" />
-                            </SoftStack>
-                            <SoftStack Row="true" Spacing="2">
-                                <SoftTextField T="string"
-                                               Label="@OpsL["InvoiceNumber"]"
-                                               @bind-Value="_invoiceNumber"
-                                               HelperText="@OpsL["InvoiceNumberAutoHint"]"
-                                               Variant="Variant.Outlined"
-                                               MaxLength="64" />
                                 <SoftTextField T="string" Label="@OpsL["Currency"]"
                                                @bind-Value="_currency"
                                                Variant="Variant.Outlined"
@@ -205,7 +199,6 @@
     [Parameter] public EventCallback<SaleDto> Saved { get; set; }
 
     private Guid? _branchId;
-    private string? _invoiceNumber;
     private DateTime? _saleDate = DateTime.Today;
     private string _currency = "USD";
     private string? _notes;
@@ -231,14 +224,15 @@
         && _rows.Count > 0
         && _rows.All(r => r.ProductId != Guid.Empty && r.Quantity > 0 && r.Quantity <= r.AvailableStock);
 
-    protected override Task OnInitializedAsync()
+    protected override async Task OnInitializedAsync()
     {
-        // Branch manager with a single branch — preselect & lock it.
+        // Single accessible branch (branch manager) — preselect it. Awaited so the
+        // available-products load completes before first render, otherwise the
+        // "Add row" button stays disabled until an unrelated re-render fires.
         if (AccessibleBranches.Count == 1)
         {
-            _ = OnBranchChangedAsync(AccessibleBranches[0].Id);
+            await OnBranchChangedAsync(AccessibleBranches[0].Id);
         }
-        return Task.CompletedTask;
     }
 
     private async Task OnBranchChangedAsync(Guid? id)
@@ -298,7 +292,7 @@
             var created = await SaleAppService.CreateAsync(new CreateSaleDto
             {
                 BranchId = _branchId!.Value,
-                InvoiceNumber = string.IsNullOrWhiteSpace(_invoiceNumber) ? null : _invoiceNumber.Trim(),
+                InvoiceNumber = null, // auto-generated as INV-YYYY-NNNN by SaleManager
                 SaleDate = _saleDate!.Value,
                 Currency = (_currency ?? "USD").ToUpper(),
                 Notes = _notes,

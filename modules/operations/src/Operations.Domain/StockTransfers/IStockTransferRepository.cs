@@ -34,4 +34,14 @@ public interface IStockTransferRepository : IRepository<AppStockTransfer, Guid>
         int skipCount,
         int maxResultCount,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Active incoming transfers for the given destination branch — i.e. status is
+    /// Pending, Approved or InTransit. Ordered by most-recent first. Used by the
+    /// BranchManager dashboard.
+    /// </summary>
+    Task<List<StockTransferListRow>> GetActiveIncomingAsync(
+        Guid toBranchId,
+        int take,
+        CancellationToken cancellationToken = default);
 }

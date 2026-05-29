@@ -1,8 +1,12 @@
-﻿using Inventory;
+using System.Threading.Tasks;
+using Intelligence.Decisions;
+using Inventory;
 using Microsoft.Extensions.DependencyInjection;
+using Volo.Abp;
+using Volo.Abp.Application;
+using Volo.Abp.BackgroundWorkers;
 using Volo.Abp.Mapperly;
 using Volo.Abp.Modularity;
-using Volo.Abp.Application;
 
 namespace Intelligence;
 
@@ -11,12 +15,19 @@ namespace Intelligence;
     typeof(IntelligenceApplicationContractsModule),
     typeof(InventoryApplicationContractsModule),
     typeof(AbpDddApplicationModule),
-    typeof(AbpMapperlyModule)
+    typeof(AbpMapperlyModule),
+    typeof(AbpBackgroundWorkersModule)
     )]
 public class IntelligenceApplicationModule : AbpModule
 {
     public override void ConfigureServices(ServiceConfigurationContext context)
     {
         context.Services.AddMapperlyObjectMapper<IntelligenceApplicationModule>();
+        context.Services.AddTransient<DeadStockScannerWorker>();
+    }
+
+    public override async Task OnApplicationInitializationAsync(ApplicationInitializationContext context)
+    {
+        await context.AddBackgroundWorkerAsync<DeadStockScannerWorker>();
     }
 }

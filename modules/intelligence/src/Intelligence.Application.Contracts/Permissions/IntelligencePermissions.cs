@@ -12,6 +12,12 @@ public class IntelligencePermissions
         public const string Manage = Default + ".Manage";
     }
 
+    public static class DecisionLogs
+    {
+        public const string Default = GroupName + ".DecisionLogs";
+        public const string Acknowledge = Default + ".Acknowledge";
+    }
+
     public static string[] GetAll()
     {
         return ReflectionHelper.GetPublicConstantsRecursively(typeof(IntelligencePermissions));

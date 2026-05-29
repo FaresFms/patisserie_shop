@@ -1,0 +1,131 @@
+@page
+@model patisserie_shop.Blazor.Pages.Account.ManageModel
+@{
+    Layout = "_AccountLayout";
+}
+
+<div class="acct-wrap">
+    <h1 class="acct-page-title">My account</h1>
+    <div class="acct-page-sub">Update your profile details and change your password.</div>
+
+    @if (!ViewData.ModelState.IsValid)
+    {
+        <div class="acct-alert acct-alert--error" role="alert">
+            <span class="material-icons-outlined">error_outline</span>
+            <div asp-validation-summary="All"></div>
+        </div>
+    }
+
+    <!-- ===== Profile ===== -->
+    <div class="acct-card">
+        <div class="acct-card-head">
+            <span class="material-icons-outlined">person_outline</span>
+            <span class="acct-card-title">Profile</span>
+        </div>
+        <p class="acct-card-sub">Your personal information and contact details.</p>
+
+        @if (Model.StatusSection == "profile" && !string.IsNullOrEmpty(Model.StatusMessage))
+        {
+            <div class="acct-alert acct-alert--success" role="status">
+                <span class="material-icons-outlined">check_circle_outline</span>
+                <span>@Model.StatusMessage</span>
+            </div>
+        }
+
+        <form method="post" asp-page-handler="Profile">
+            <input asp-for="ProfileInfo.ConcurrencyStamp" type="hidden" />
+
+            <div class="acct-grid">
+                <div class="login-field">
+                    <label class="login-label" asp-for="ProfileInfo.UserName">Username</label>
+                    <input asp-for="ProfileInfo.UserName" type="text" autocomplete="username" />
+                    <span class="acct-validation" asp-validation-for="ProfileInfo.UserName"></span>
+                </div>
+
+                <div class="login-field">
+                    <label class="login-label" asp-for="ProfileInfo.Email">Email</label>
+                    <input asp-for="ProfileInfo.Email" type="email" autocomplete="email" />
+                    <span class="acct-validation" asp-validation-for="ProfileInfo.Email"></span>
+                </div>
+
+                <div class="login-field">
+                    <label class="login-label" asp-for="ProfileInfo.Name">Name</label>
+                    <input asp-for="ProfileInfo.Name" type="text" autocomplete="given-name" />
+                    <span class="acct-validation" asp-validation-for="ProfileInfo.Name"></span>
+                </div>
+
+                <div class="login-field">
+                    <label class="login-label" asp-for="ProfileInfo.Surname">Surname</label>
+                    <input asp-for="ProfileInfo.Surname" type="text" autocomplete="family-name" />
+                    <span class="acct-validation" asp-validation-for="ProfileInfo.Surname"></span>
+                </div>
+
+                <div class="login-field acct-field-full">
+                    <label class="login-label" asp-for="ProfileInfo.PhoneNumber">Phone number</label>
+                    <input asp-for="ProfileInfo.PhoneNumber" type="tel" autocomplete="tel" />
+                    <span class="acct-validation" asp-validation-for="ProfileInfo.PhoneNumber"></span>
+                </div>
+            </div>
+
+            <div class="acct-actions">
+                <button type="submit" class="login-submit" style="width: auto; padding: 0 22px;">
+                    <span class="material-icons-outlined">save</span>
+                    Save profile
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- ===== Password ===== -->
+    <div class="acct-card">
+        <div class="acct-card-head">
+            <span class="material-icons-outlined">lock_outline</span>
+            <span class="acct-card-title">Password</span>
+        </div>
+        <p class="acct-card-sub">
+            @(Model.HasPassword
+                ? "Enter your current password and choose a new one."
+                : "Set a password for your account.")
+        </p>
+
+        @if (Model.StatusSection == "password" && !string.IsNullOrEmpty(Model.StatusMessage))
+        {
+            <div class="acct-alert acct-alert--success" role="status">
+                <span class="material-icons-outlined">check_circle_outline</span>
+                <span>@Model.StatusMessage</span>
+            </div>
+        }
+
+        <form method="post" asp-page-handler="Password">
+            <div class="acct-grid">
+                @if (Model.HasPassword)
+                {
+                    <div class="login-field acct-field-full">
+                        <label class="login-label" asp-for="PasswordInfo.CurrentPassword">Current password</label>
+                        <input asp-for="PasswordInfo.CurrentPassword" type="password" autocomplete="current-password" />
+                        <span class="acct-validation" asp-validation-for="PasswordInfo.CurrentPassword"></span>
+                    </div>
+                }
+
+                <div class="login-field">
+                    <label class="login-label" asp-for="PasswordInfo.NewPassword">New password</label>
+                    <input asp-for="PasswordInfo.NewPassword" type="password" autocomplete="new-password" />
+                    <span class="acct-validation" asp-validation-for="PasswordInfo.NewPassword"></span>
+                </div>
+
+                <div class="login-field">
+                    <label class="login-label" asp-for="PasswordInfo.NewPasswordConfirm">Confirm new password</label>
+                    <input asp-for="PasswordInfo.NewPasswordConfirm" type="password" autocomplete="new-password" />
+                    <span class="acct-validation" asp-validation-for="PasswordInfo.NewPasswordConfirm"></span>
+                </div>
+            </div>
+
+            <div class="acct-actions">
+                <button type="submit" class="login-submit" style="width: auto; padding: 0 22px;">
+                    <span class="material-icons-outlined">key</span>
+                    @(Model.HasPassword ? "Change password" : "Set password")
+                </button>
+            </div>
+        </form>
+    </div>
+</div>

@@ -70,6 +70,28 @@ public class StockTransferRepository
         return await rows.ToListAsync(GetCancellationToken(cancellationToken));
     }
 
+    public async Task<List<StockTransferListRow>> GetActiveIncomingAsync(
+        Guid toBranchId,
+        int take,
+        CancellationToken cancellationToken = default)
+    {
+        var query = await GetQueryableAsync();
+        var active = new[]
+        {
+            StockTransferStatuses.Pending,
+            StockTransferStatuses.Approved,
+            StockTransferStatuses.InTransit
+        };
+
+        var rows = query
+            .Where(t => t.ToBranchId == toBranchId && active.Contains(t.Status))
+            .OrderByDescending(t => t.RequestedDate)
+            .Take(take)
+            .Select(t => new StockTransferListRow { Transfer = t, ItemCount = t.Items.Count });
+
+        return await rows.ToListAsync(GetCancellationToken(cancellationToken));
+    }
+
     private async Task<IQueryable<AppStockTransfer>> BuildFilteredQueryAsync(
         string? status,
         Guid? fromBranchId,

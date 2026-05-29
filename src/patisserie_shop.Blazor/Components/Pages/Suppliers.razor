@@ -29,13 +29,15 @@
             <div class="page-sub">Vendors and their contact details.</div>
         </div>
         <div class="page-head-actions">
-            <SoftButton Variant="Variant.Filled"
-                        Color="Color.Primary"
-                        StartIcon="@Icons.Material.Filled.Add"
-                        OnClick="OpenCreateDialog"
-                        Disabled="!_canManage">
-                @InvL["NewSupplier"]
-            </SoftButton>
+            @if (_canManage)
+            {
+                <SoftButton Variant="Variant.Filled"
+                            Color="Color.Primary"
+                            StartIcon="@Icons.Material.Filled.Add"
+                            OnClick="OpenCreateDialog">
+                    @InvL["NewSupplier"]
+                </SoftButton>
+            }
         </div>
     </div>
     <SoftCardContent>
@@ -88,18 +90,19 @@
                 <TemplateColumn T="SupplierDto" Title="@InvL["Actions"]" Sortable="false">
                     <CellTemplate>
                         <span class="row-actions">
-                            <SoftStack Row="true" Spacing="1">
-                                <SoftIconButton Icon="@Icons.Material.Filled.Edit"
-                                                Color="Color.Primary"
-                                                Size="Size.Small"
-                                                OnClick="() => OpenEditDialog(context.Item)"
-                                                Disabled="!_canManage" />
-                                <SoftIconButton Icon="@Icons.Material.Filled.Delete"
-                                                Color="Color.Error"
-                                                Size="Size.Small"
-                                                OnClick="() => DeleteAsync(context.Item)"
-                                                Disabled="!_canManage" />
-                            </SoftStack>
+                            @if (_canManage)
+                            {
+                                <SoftStack Row="true" Spacing="1">
+                                    <SoftIconButton Icon="@Icons.Material.Filled.Edit"
+                                                    Color="Color.Primary"
+                                                    Size="Size.Small"
+                                                    OnClick="() => OpenEditDialog(context.Item)" />
+                                    <SoftIconButton Icon="@Icons.Material.Filled.Delete"
+                                                    Color="Color.Error"
+                                                    Size="Size.Small"
+                                                    OnClick="() => DeleteAsync(context.Item)" />
+                                </SoftStack>
+                            }
                         </span>
                     </CellTemplate>
                 </TemplateColumn>

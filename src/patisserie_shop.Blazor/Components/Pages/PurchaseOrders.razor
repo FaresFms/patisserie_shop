@@ -35,13 +35,15 @@
             <div class="page-sub">Incoming stock orders from suppliers.</div>
         </div>
         <div class="page-head-actions">
-            <SoftButton Variant="Variant.Filled"
-                        Color="Color.Primary"
-                        StartIcon="@Icons.Material.Filled.Add"
-                        OnClick="OpenCreateDialog"
-                        Disabled="!_canCreate">
-                @OpsL["NewPurchaseOrder"]
-            </SoftButton>
+            @if (_canCreate)
+            {
+                <SoftButton Variant="Variant.Filled"
+                            Color="Color.Primary"
+                            StartIcon="@Icons.Material.Filled.Add"
+                            OnClick="OpenCreateDialog">
+                    @OpsL["NewPurchaseOrder"]
+                </SoftButton>
+            }
         </div>
     </div>
     <SoftCardContent>

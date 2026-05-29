@@ -195,6 +195,16 @@
                             }
                         </CellTemplate>
                     </TemplateColumn>
+                    <TemplateColumn T="StockMovementDto" Title="@L["Actions"]" Sortable="false">
+                        <CellTemplate>
+                            <span class="row-actions">
+                                <SoftIconButton Icon="@Icons.Material.Outlined.Info"
+                                               Size="Size.Small"
+                                               Title="@L["Details"]"
+                                               OnClick="@(() => OpenDetailAsync(context.Item))" />
+                            </span>
+                        </CellTemplate>
+                    </TemplateColumn>
                 </Columns>
                 <NoRecordsContent>
                     <SoftStack AlignItems="AlignItems.Center" Spacing="2" Class="pa-6">
@@ -210,6 +220,119 @@
     </SoftCard>
 </SoftStack>
 
+@if (_detailVisible && _detailRow != null)
+{
+    <div class="glass-modal-backdrop" @onclick="CloseDetail">
+        <div class="glass-modal-container glass-modal-container--md" @onclick:stopPropagation="true">
+            <SoftCard Elevation="24" Class="glass-modal">
+                <SoftCardHeader Class="pa-4">
+                    <CardHeaderContent>
+                        <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <SoftIcon Icon="@MovementIcon(_detailRow.MovementType)" Color="Color.Primary" Size="Size.Medium" />
+                            <SoftText Typo="Typo.h6">@MovementLabel(_detailRow.MovementType)</SoftText>
+                        </SoftStack>
+                    </CardHeaderContent>
+                    <CardHeaderActions>
+                        <SoftIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="CloseDetail" />
+                    </CardHeaderActions>
+                </SoftCardHeader>
+                <SoftDivider />
+                <SoftCardContent Class="pa-4 glass-modal-body">
+                    <SoftGrid Spacing="3">
+                        <SoftGridItem xs="12" sm="6">
+                            <SoftStack Spacing="1">
+                                <SoftText Typo="Typo.caption" Color="Color.Default">@InvL["DateTime"]</SoftText>
+                                <SoftText Typo="Typo.body1" Style="font-weight:500;">@_detailRow.CreationTime.ToString("MMM d, yyyy — HH:mm:ss")</SoftText>
+                            </SoftStack>
+                        </SoftGridItem>
+                        <SoftGridItem xs="12" sm="6">
+                            <SoftStack Spacing="1">
+                                <SoftText Typo="Typo.caption" Color="Color.Default">@InvL["MovementType"]</SoftText>
+                                <div class="@($"sm-type-chip sm-type-{_detailRow.MovementType.ToLower()}")">
+                                    <MudIcon Icon="@MovementIcon(_detailRow.MovementType)" Size="Size.Small" />
+                                    <span>@MovementLabel(_detailRow.MovementType)</span>
+                                </div>
+                            </SoftStack>
+                        </SoftGridItem>
+                        <SoftGridItem xs="12" sm="6">
+                            <SoftStack Spacing="1">
+                                <SoftText Typo="Typo.caption" Color="Color.Default">@InvL["Branch"]</SoftText>
+                                <SoftText Typo="Typo.body1" Style="font-weight:500;">@_detailRow.BranchName</SoftText>
+                            </SoftStack>
+                        </SoftGridItem>
+                        <SoftGridItem xs="12" sm="6">
+                            <SoftStack Spacing="1">
+                                <SoftText Typo="Typo.caption" Color="Color.Default">@InvL["Product"]</SoftText>
+                                <SoftText Typo="Typo.body1" Style="font-weight:500;">@_detailRow.ProductName</SoftText>
+                                <SoftText Typo="Typo.caption" Color="Color.Default">@_detailRow.ProductSKU</SoftText>
+                            </SoftStack>
+                        </SoftGridItem>
+                        <SoftGridItem xs="12">
+                            <SoftDivider />
+                        </SoftGridItem>
+                        <SoftGridItem xs="12" sm="4">
+                            <SoftStack Spacing="1" AlignItems="AlignItems.Center">
+                                <SoftText Typo="Typo.caption" Color="Color.Default">@InvL["Before"]</SoftText>
+                                <SoftText Typo="Typo.h5" Style="font-weight:700;">@_detailRow.QuantityBefore</SoftText>
+                                <SoftText Typo="Typo.caption" Color="Color.Default">@_detailRow.ProductUnit</SoftText>
+                            </SoftStack>
+                        </SoftGridItem>
+                        <SoftGridItem xs="12" sm="4">
+                            <SoftStack Spacing="1" AlignItems="AlignItems.Center">
+                                <SoftText Typo="Typo.caption" Color="Color.Default">@InvL["Delta"]</SoftText>
+                                @{
+                                    var q = _detailRow.Quantity;
+                                    var chipColor = q > 0 ? Color.Success : (q < 0 ? Color.Error : Color.Default);
+                                    var sign = q > 0 ? "+" : "";
+                                }
+                                <SoftChip T="string" Color="@chipColor" Variant="Variant.Filled">
+                                    @sign@q @_detailRow.ProductUnit
+                                </SoftChip>
+                            </SoftStack>
+                        </SoftGridItem>
+                        <SoftGridItem xs="12" sm="4">
+                            <SoftStack Spacing="1" AlignItems="AlignItems.Center">
+                                <SoftText Typo="Typo.caption" Color="Color.Default">@InvL["After"]</SoftText>
+                                <SoftText Typo="Typo.h5" Style="font-weight:700;">@_detailRow.QuantityAfter</SoftText>
+                                <SoftText Typo="Typo.caption" Color="Color.Default">@_detailRow.ProductUnit</SoftText>
+                            </SoftStack>
+                        </SoftGridItem>
+                        @if (!string.IsNullOrWhiteSpace(_detailRow.Notes) || _detailRow.ReferenceId.HasValue)
+                        {
+                            <SoftGridItem xs="12">
+                                <SoftDivider />
+                            </SoftGridItem>
+                        }
+                        @if (_detailRow.ReferenceId.HasValue)
+                        {
+                            <SoftGridItem xs="12" sm="6">
+                                <SoftStack Spacing="1">
+                                    <SoftText Typo="Typo.caption" Color="Color.Default">@InvL["Reference"]</SoftText>
+                                    <SoftText Typo="Typo.body2">@FriendlyReferenceType(_detailRow.ReferenceType)</SoftText>
+                                </SoftStack>
+                            </SoftGridItem>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(_detailRow.Notes))
+                        {
+                            var notesSm = _detailRow.ReferenceId.HasValue ? 6 : 12;
+                            <SoftGridItem xs="12" sm="@notesSm">
+                                <SoftStack Spacing="1">
+                                    <SoftText Typo="Typo.caption" Color="Color.Default">@InvL["Notes"]</SoftText>
+                                    <SoftText Typo="Typo.body2">@_detailRow.Notes</SoftText>
+                                </SoftStack>
+                            </SoftGridItem>
+                        }
+                    </SoftGrid>
+                </SoftCardContent>
+                <SoftDivider />
+                <div class="pa-3 d-flex justify-end">
+                    <SoftButton Variant="Variant.Text" OnClick="CloseDetail">@L["Close"]</SoftButton>
+                </div>
+            </SoftCard>
+        </div>
+    </div>
+}
+
 <style>
     .sm-type-strip {
         display: grid;
@@ -222,12 +345,10 @@
         align-items: center;
         gap: 10px;
         padding: 10px 12px;
-        border-radius: var(--glass-radius-sm);
-        border: var(--glass-border);
-        background: var(--glass-bg);
-        backdrop-filter: var(--glass-blur);
-        -webkit-backdrop-filter: var(--glass-blur);
-        color: var(--glass-text-primary);
+        border-radius: var(--r-sm);
+        border: 1px solid var(--bd-2);
+        background: var(--surface);
+        color: var(--fg-1);
     }
     .sm-type-stat .sm-stat-icon {
         display: flex;
@@ -261,7 +382,7 @@
     .sm-type-sale             { background: rgba( 59,130,246, 0.20); border: 1px solid rgba( 59,130,246, 0.40); color: #93c5fd; }
     .sm-type-transferin       { background: rgba( 20,184,166, 0.20); border: 1px solid rgba( 20,184,166, 0.40); color: #5eead4; }
     .sm-type-transferout      { background: rgba(251,191, 36, 0.20); border: 1px solid rgba(251,191, 36, 0.40); color: #fde68a; }
-    .sm-type-manualadjustment { background: rgba(255,255,255, 0.10); border: 1px solid rgba(255,255,255, 0.20); color: var(--glass-text-secondary); }
+    .sm-type-manualadjustment { background: rgba(255,255,255, 0.10); border: 1px solid rgba(255,255,255, 0.20); color: var(--fg-2); }
 </style>
 
 @code {
@@ -400,6 +521,42 @@
                 break;
         }
     }
+
+    private bool _detailVisible;
+    private StockMovementDto? _detailRow;
+    private bool _detailLoading;
+
+    private async Task OpenDetailAsync(StockMovementDto row)
+    {
+        _detailLoading = true;
+        try
+        {
+            _detailRow = await MovementAppService.GetAsync(row.Id);
+            _detailVisible = true;
+        }
+        catch (Exception ex)
+        {
+            await HandleErrorAsync(ex);
+        }
+        finally
+        {
+            _detailLoading = false;
+        }
+    }
+
+    private void CloseDetail()
+    {
+        _detailVisible = false;
+        _detailRow = null;
+    }
+
+    private static string FriendlyReferenceType(string? referenceType) => referenceType switch
+    {
+        "AppPurchaseOrder" => "Purchase Order",
+        "AppSale" => "Sale",
+        "AppStockTransfer" => "Stock Transfer",
+        _ => referenceType ?? "—"
+    };
 
     private Variant GetRangeVariant(string range) => _activeRange == range ? Variant.Filled : Variant.Outlined;
 

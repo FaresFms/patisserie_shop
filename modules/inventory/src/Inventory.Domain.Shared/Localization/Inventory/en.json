@@ -128,6 +128,7 @@
     "Range:30Days": "Last 30 days",
     "Range:All": "All time",
     "NoMovements": "No movements match these filters",
+    "Reference": "Source reference",
     "Inventory:Products:DuplicateSku": "A product with SKU '{SKU}' already exists. SKUs must be unique."
   }
 }

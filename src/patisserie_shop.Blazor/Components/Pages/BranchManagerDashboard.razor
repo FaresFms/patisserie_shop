@@ -1,0 +1,995 @@
+@using System.Threading.Tasks
+@using Microsoft.AspNetCore.Components.Authorization
+@using patisserie_shop.Dashboard
+@using Intelligence.Decisions
+@using Color = MudBlazor.Color
+@using Variant = MudBlazor.Variant
+@using Size = MudBlazor.Size
+@inherits patisserie_shopComponentBase
+@inject IBranchManagerDashboardAppService BranchDashboardService
+@inject IDecisionLogAppService DecisionLogAppService
+@inject NavigationManager Nav
+@inject AuthenticationStateProvider AuthState
+@inject ISnackbar Snackbar
+
+<SoftCard Elevation="2" Class="pa-2 page-flat bm-dash">
+    <div class="page-head">
+        <div>
+            <h1 class="page-title">@_greeting@(_userName is null ? "" : $", {_userName}") 👋</h1>
+            <div class="page-sub">
+                @if (_data?.HasBranchAssigned == true)
+                {
+                    <span>Branch: <strong>@_data.BranchName</strong></span>
+                    @if (_data.HasMultipleBranches)
+                    {
+                        <span class="bm-multi-badge">You manage multiple branches — showing primary</span>
+                    }
+                    @if (_lastRefresh.HasValue)
+                    {
+                        <span> · Last updated @TimeAgo(_lastRefresh.Value)</span>
+                    }
+                }
+                else if (_data != null)
+                {
+                    <span>No branch assigned</span>
+                }
+                else
+                {
+                    <span>Loading…</span>
+                }
+            </div>
+        </div>
+        <div class="page-head-actions">
+            <SoftButton Variant="Variant.Text" Color="Color.Primary"
+                        StartIcon="@Icons.Material.Filled.Refresh"
+                        OnClick="LoadAsync" Disabled="_loading">
+                @(_loading ? "Refreshing…" : "Refresh")
+            </SoftButton>
+        </div>
+    </div>
+
+    <SoftCardContent>
+        @if (_error != null)
+        {
+            <SoftAlert Severity="Severity.Error" Variant="Variant.Filled" Class="ma-4">
+                <strong>Failed to load dashboard:</strong> @_error
+            </SoftAlert>
+        }
+        else if (_data == null)
+        {
+            <div class="bm-skeleton-row">
+                @for (var i = 0; i < 4; i++)
+                {
+                    <SoftSkeleton SkeletonType="SkeletonType.Rectangle" Height="120px" Width="100%" />
+                }
+            </div>
+            <div class="bm-skeleton-row" style="margin-top:20px;">
+                <SoftSkeleton SkeletonType="SkeletonType.Rectangle" Height="360px" Width="100%" />
+                <SoftSkeleton SkeletonType="SkeletonType.Rectangle" Height="360px" Width="100%" />
+            </div>
+        }
+        else if (!_data.HasBranchAssigned)
+        {
+            <div class="bm-noassign">
+                <SoftIcon Icon="@Icons.Material.Outlined.Storefront" />
+                <div class="bm-noassign-title">No branch assigned to your account</div>
+                <div class="bm-noassign-sub">Contact your administrator to be assigned as a branch manager.</div>
+            </div>
+        }
+        else
+        {
+            @* ───────── ROW 1 — KPI Cards (4) ───────── *@
+            <div class="bm-kpi-grid">
+                <div class="bm-kpi-card @(_data.LowStockCount > 0 ? "bm-kpi-warn" : "")">
+                    <div class="bm-kpi-icon @(_data.LowStockCount > 0 ? "bm-kpi-icon--warn" : "bm-kpi-icon--neutral")">
+                        <SoftIcon Icon="@Icons.Material.Filled.Inventory2" />
+                    </div>
+                    <div class="bm-kpi-body">
+                        <div class="bm-kpi-value">@_data.TotalProducts</div>
+                        <div class="bm-kpi-label">My Stock</div>
+                        <div class="bm-kpi-sub">
+                            <span class="bm-pill bm-pill-low">@_data.LowStockCount low</span>
+                            <span class="bm-pill bm-pill-ok">@_data.HealthyCount healthy</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bm-kpi-card bm-clickable @(_data.PendingDecisionsCount > 0 ? "bm-kpi-warn" : "")"
+                     @onclick="OnPendingAlertsClick">
+                    <div class="bm-kpi-icon bm-kpi-icon--warn">
+                        @if (_data.PendingDecisionsCount > 0)
+                        {
+                            <span class="bm-pulse-dot"></span>
+                        }
+                        <SoftIcon Icon="@Icons.Material.Filled.WarningAmber" />
+                    </div>
+                    <div class="bm-kpi-body">
+                        <div class="bm-kpi-value">@_data.PendingDecisionsCount</div>
+                        <div class="bm-kpi-label">Pending Alerts</div>
+                        <div class="bm-kpi-sub">
+                            @(_data.PendingDecisionsCount == 0 ? "all clear" : "need your attention")
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bm-kpi-card">
+                    <div class="bm-kpi-icon bm-kpi-icon--accent">
+                        @if (TodayDelta > 0)
+                        {
+                            <SoftIcon Icon="@Icons.Material.Filled.TrendingUp" />
+                        }
+                        else if (TodayDelta < 0)
+                        {
+                            <SoftIcon Icon="@Icons.Material.Filled.TrendingDown" />
+                        }
+                        else
+                        {
+                            <SoftIcon Icon="@Icons.Material.Filled.TrendingFlat" />
+                        }
+                    </div>
+                    <div class="bm-kpi-body">
+                        <div class="bm-kpi-value">@FormatMoney(_data.TodaySalesTotal)</div>
+                        <div class="bm-kpi-label">Today's Sales</div>
+                        <div class="bm-kpi-sub">
+                            @_data.TodaySalesCount sale@(_data.TodaySalesCount == 1 ? "" : "s")
+                            @if (_data.YesterdaySalesTotal > 0)
+                            {
+                                <span> · </span>
+                                <span class="@(TodayDelta >= 0 ? "bm-delta-up" : "bm-delta-down")">
+                                    @(TodayDelta >= 0 ? "+" : "")@TodayDelta.ToString("0")% vs yesterday
+                                </span>
+                            }
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bm-kpi-card bm-clickable" @onclick='() => Nav.NavigateTo("/operations/stock-transfers")'>
+                    <div class="bm-kpi-icon bm-kpi-icon--info">
+                        <SoftIcon Icon="@Icons.Material.Filled.LocalShipping" />
+                    </div>
+                    <div class="bm-kpi-body">
+                        <div class="bm-kpi-value">@_data.IncomingTransfersCount</div>
+                        <div class="bm-kpi-label">Incoming Transfers</div>
+                        <div class="bm-kpi-sub">pending delivery</div>
+                    </div>
+                </div>
+            </div>
+
+            @* ───────── ROW 2 — Stock Health | Alerts ───────── *@
+            <div class="bm-row-2">
+                <div class="bm-col-left">
+                    <section class="bm-section">
+                        <header class="bm-section-head">
+                            <div>
+                                <h2 class="bm-section-title">My Stock Health</h2>
+                                <div class="bm-section-sub">Sorted by urgency — low &amp; dead stock first</div>
+                            </div>
+                            <a class="bm-section-link" href="@($"/inventory/branch-inventory?branchId={_data.BranchId}")">View all →</a>
+                        </header>
+
+                        @if (_data.StockItems.Count == 0)
+                        {
+                            <div class="bm-empty">
+                                <SoftIcon Icon="@Icons.Material.Outlined.Inbox" />
+                                <span>No products in your branch yet.</span>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="bm-stock-list">
+                                @foreach (var s in _data.StockItems)
+                                {
+                                    var statusKey = s.StockStatus.ToLowerInvariant();
+                                    var refQty = s.MaximumStock ?? Math.Max(s.MinimumStock * 3, 10);
+                                    if (refQty <= 0) refQty = 1;
+                                    var pct = Math.Min(100.0, (double)s.QuantityOnHand / refQty * 100.0);
+                                    if (pct < 0) pct = 0;
+
+                                    <div class="bm-stock-row bm-stock-@statusKey">
+                                        <div class="bm-stock-icon">
+                                            @if (s.StockStatus == "Dead")
+                                            {
+                                                <SoftIcon Icon="@Icons.Material.Outlined.SentimentVeryDissatisfied" />
+                                            }
+                                            else if (s.StockStatus == "Low")
+                                            {
+                                                <SoftIcon Icon="@Icons.Material.Outlined.WarningAmber" />
+                                            }
+                                            else if (s.StockStatus == "Excess")
+                                            {
+                                                <SoftIcon Icon="@Icons.Material.Outlined.TrendingUp" />
+                                            }
+                                            else
+                                            {
+                                                <SoftIcon Icon="@Icons.Material.Outlined.CheckCircle" />
+                                            }
+                                        </div>
+                                        <div class="bm-stock-info">
+                                            <div class="bm-stock-name">
+                                                <span>@s.ProductName</span>
+                                                <span class="bm-stock-sku">@s.SKU</span>
+                                            </div>
+                                            <div class="bm-stock-bar-wrap">
+                                                <div class="bm-stock-bar">
+                                                    <div class="bm-stock-bar-fill bm-stock-bar-@statusKey"
+                                                         style="width: @(pct.ToString("0.##"))%"></div>
+                                                </div>
+                                                <div class="bm-stock-qty">
+                                                    <strong>@s.QuantityOnHand</strong> @s.Unit
+                                                    <span class="bm-stock-min">/ min @s.MinimumStock</span>
+                                                </div>
+                                            </div>
+                                            <div class="bm-stock-meta">
+                                                @if (s.LastSoldDate.HasValue)
+                                                {
+                                                    <span>Last sold @s.LastSoldDate.Value.ToString("MMM d")</span>
+                                                }
+                                                else
+                                                {
+                                                    <span>Never sold</span>
+                                                }
+                                                @if (s.StockStatus == "Dead" && s.DaysSinceLastSale.HasValue)
+                                                {
+                                                    <span class="bm-dead-days">@s.DaysSinceLastSale days idle</span>
+                                                }
+                                            </div>
+                                        </div>
+                                        <div class="bm-stock-action">
+                                            @if (s.StockStatus == "Low")
+                                            {
+                                                <SoftButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary"
+                                                            StartIcon="@Icons.Material.Filled.AddShoppingCart"
+                                                            OnClick='() => Nav.NavigateTo("/operations/purchase-orders")'>
+                                                    Reorder?
+                                                </SoftButton>
+                                            }
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </section>
+
+                    <section class="bm-section">
+                        <header class="bm-section-head">
+                            <div>
+                                <h2 class="bm-section-title">My Sales — Last 7 Days</h2>
+                                <div class="bm-section-sub">@FormatMoney(_data.WeekSalesTotal) total this week</div>
+                            </div>
+                        </header>
+
+                        @{
+                            var maxVal = _data.SalesLast7Days.Max(s => s.TotalAmount);
+                            if (maxVal <= 0) maxVal = 1;
+                        }
+                        <div class="bm-chart">
+                            @foreach (var d in _data.SalesLast7Days)
+                            {
+                                var h = (double)(d.TotalAmount / maxVal) * 100.0;
+                                if (h > 0 && h < 3) h = 3;
+                                var tooltip = $"{d.Date:ddd, MMM d}: {FormatMoney(d.TotalAmount)} · {d.SaleCount} sales";
+                                <div class="bm-bar-col" title="@tooltip">
+                                    <div class="bm-bar-val">@(d.TotalAmount > 0 ? FormatCompact(d.TotalAmount) : "")</div>
+                                    <div class="bm-bar-wrap">
+                                        <div class="bm-bar @(IsToday(d.Date) ? "bm-bar--today" : "")"
+                                             style="height: @(h.ToString("0.##"))%"></div>
+                                    </div>
+                                    <div class="bm-bar-label">@d.Date.ToString("ddd")</div>
+                                </div>
+                            }
+                        </div>
+                    </section>
+
+                    <section class="bm-section">
+                        <header class="bm-section-head">
+                            <div>
+                                <h2 class="bm-section-title">My Recent Sales</h2>
+                                <div class="bm-section-sub">Last @_data.RecentSales.Count invoice@(_data.RecentSales.Count == 1 ? "" : "s")</div>
+                            </div>
+                            <a class="bm-section-link" href="/operations/sales">View all →</a>
+                        </header>
+
+                        @if (_data.RecentSales.Count == 0)
+                        {
+                            <div class="bm-empty">
+                                <SoftIcon Icon="@Icons.Material.Outlined.PointOfSale" />
+                                <span>No sales yet today.</span>
+                            </div>
+                        }
+                        else
+                        {
+                            <table class="bm-table">
+                                <thead>
+                                    <tr>
+                                        <th>Invoice</th>
+                                        <th>Date</th>
+                                        <th class="t-right">Items</th>
+                                        <th class="t-right">Amount</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var s in _data.RecentSales)
+                                    {
+                                        <tr>
+                                            <td class="bm-mono">@s.InvoiceNumber</td>
+                                            <td>@s.SaleDate.ToLocalTime().ToString("MMM d, HH:mm")</td>
+                                            <td class="t-right bm-mono">@s.ItemCount</td>
+                                            <td class="t-right bm-mono">@FormatMoney(s.TotalAmount)</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        }
+                    </section>
+                </div>
+
+                <div class="bm-col-right">
+                    <section class="bm-section">
+                        <header class="bm-section-head">
+                            <div>
+                                <h2 class="bm-section-title">My Alerts</h2>
+                                <div class="bm-section-sub">Pending decisions for your branch</div>
+                            </div>
+                            <a class="bm-section-link" href="/intelligence/decision-log">View all →</a>
+                        </header>
+
+                        @if (_data.PendingDecisions.Count == 0)
+                        {
+                            <div class="bm-empty bm-empty--success">
+                                <SoftIcon Icon="@Icons.Material.Filled.CheckCircle" />
+                                <span>All clear — no alerts for your branch.</span>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="bm-decisions">
+                                @foreach (var d in _data.PendingDecisions)
+                                {
+                                    var typeClass = d.DecisionType.ToLowerInvariant();
+                                    var dismissed = _fadingIds.Contains(d.Id);
+                                    <div class="bm-decision-card bm-dec-@typeClass @(dismissed ? "bm-dec--fading" : "")">
+                                        <div class="bm-dec-head">
+                                            <SoftChip T="string" Size="Size.Small" Variant="Variant.Filled"
+                                                      Color="@DecisionTypeColor(d.DecisionType)">
+                                                @FormatDecisionType(d.DecisionType)
+                                            </SoftChip>
+                                            <span class="bm-dec-time">@TimeAgo(d.CreationTime)</span>
+                                        </div>
+                                        <div class="bm-dec-reason">@Truncate(d.Reasoning, 160)</div>
+                                        @if (!string.IsNullOrWhiteSpace(d.ProductName))
+                                        {
+                                            <div class="bm-dec-meta">
+                                                <span class="bm-dec-pill">
+                                                    <SoftIcon Icon="@Icons.Material.Outlined.Inventory2" />@d.ProductName
+                                                </span>
+                                            </div>
+                                        }
+                                        <div class="bm-dec-actions">
+                                            <SoftButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Success"
+                                                        StartIcon="@Icons.Material.Filled.Check"
+                                                        OnClick="@(() => AcknowledgeAsync(d.Id))"
+                                                        Disabled="@(_busyId == d.Id)">
+                                                Acknowledge
+                                            </SoftButton>
+                                            <SoftButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default"
+                                                        StartIcon="@Icons.Material.Filled.Close"
+                                                        OnClick="@(() => DismissAsync(d.Id))"
+                                                        Disabled="@(_busyId == d.Id)">
+                                                Dismiss
+                                            </SoftButton>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </section>
+
+                    <section class="bm-section">
+                        <header class="bm-section-head">
+                            <div>
+                                <h2 class="bm-section-title">Incoming Transfers</h2>
+                                <div class="bm-section-sub">Headed to your branch</div>
+                            </div>
+                        </header>
+
+                        @if (_data.IncomingTransfers.Count == 0)
+                        {
+                            <div class="bm-empty">
+                                <SoftIcon Icon="@Icons.Material.Outlined.LocalShipping" />
+                                <span>No incoming transfers.</span>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="bm-transfers">
+                                @foreach (var t in _data.IncomingTransfers)
+                                {
+                                    <div class="bm-transfer bm-transfer-@(t.Status.ToLowerInvariant())"
+                                         @onclick='() => Nav.NavigateTo("/operations/stock-transfers")'>
+                                        <div class="bm-transfer-icon">
+                                            @if (t.Status == "InTransit")
+                                            {
+                                                <SoftIcon Icon="@Icons.Material.Filled.LocalShipping" />
+                                            }
+                                            else if (t.Status == "Approved")
+                                            {
+                                                <SoftIcon Icon="@Icons.Material.Outlined.Verified" />
+                                            }
+                                            else
+                                            {
+                                                <SoftIcon Icon="@Icons.Material.Outlined.Schedule" />
+                                            }
+                                        </div>
+                                        <div class="bm-transfer-body">
+                                            <div class="bm-transfer-line">
+                                                <span>From <strong>@t.FromBranchName</strong></span>
+                                                <SoftChip T="string" Size="Size.Small"
+                                                          Color="@TransferStatusColor(t.Status)"
+                                                          Variant="@(t.Status == "InTransit" ? Variant.Filled : Variant.Outlined)">
+                                                    @FormatTransferStatus(t.Status)
+                                                </SoftChip>
+                                            </div>
+                                            <div class="bm-transfer-sub">
+                                                <span>@t.ItemCount item@(t.ItemCount == 1 ? "" : "s")</span>
+                                                <span class="bm-transfer-date">requested @t.RequestedDate.ToLocalTime().ToString("MMM d")</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </section>
+                </div>
+            </div>
+        }
+    </SoftCardContent>
+</SoftCard>
+
+<style>
+    .bm-dash { animation: bm-fade .25s ease-out; }
+    @@keyframes bm-fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+    .bm-multi-badge {
+        display: inline-block;
+        margin-left: 10px;
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: .04em;
+        background: var(--accent-soft);
+        color: var(--accent);
+        padding: 1px 8px;
+        border-radius: 999px;
+    }
+
+    .bm-skeleton-row {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 14px;
+        padding: 12px 32px 0;
+    }
+
+    .bm-noassign {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 10px;
+        padding: 60px 24px;
+        color: var(--fg-3);
+        text-align: center;
+    }
+    .bm-noassign .mud-icon-root { font-size: 48px; color: var(--fg-4); }
+    .bm-noassign-title {
+        font-family: var(--font-serif);
+        font-size: 20px;
+        font-weight: 600;
+        color: var(--fg-1);
+    }
+    .bm-noassign-sub { font-size: 14px; max-width: 380px; }
+
+    /* ── KPIs ── */
+    .bm-kpi-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 14px;
+        padding: 4px 32px 8px;
+    }
+    .bm-kpi-card {
+        display: flex;
+        align-items: flex-start;
+        gap: 14px;
+        padding: 16px 18px;
+        background: var(--surface);
+        border: 1px solid var(--bd-1);
+        border-radius: var(--r-md);
+        box-shadow: var(--shadow-sm);
+        transition: transform .15s, box-shadow .15s, border-color .15s;
+        position: relative;
+    }
+    .bm-kpi-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
+    .bm-clickable { cursor: pointer; }
+    .bm-kpi-warn { border-color: var(--accent-line); }
+
+    .bm-kpi-icon {
+        width: 42px; height: 42px;
+        flex-shrink: 0;
+        border-radius: var(--r-sm);
+        display: flex; align-items: center; justify-content: center;
+        position: relative;
+    }
+    .bm-kpi-icon .mud-icon-root { font-size: 22px; }
+    .bm-kpi-icon--neutral { background: var(--hover); color: var(--fg-2); }
+    .bm-kpi-icon--warn    { background: rgba(200, 156, 79, .12); color: #c89c4f; }
+    .bm-kpi-icon--accent  { background: var(--accent-soft); color: var(--accent); }
+    .bm-kpi-icon--info    { background: rgba(74, 125, 168, .12); color: #4a7da8; }
+
+    .bm-pulse-dot {
+        position: absolute;
+        top: 4px; right: 4px;
+        width: 8px; height: 8px;
+        border-radius: 50%;
+        background: #c89c4f;
+        box-shadow: 0 0 0 0 rgba(200, 156, 79, 0.6);
+        animation: bm-pulse 1.6s infinite;
+    }
+    @@keyframes bm-pulse {
+        0%   { box-shadow: 0 0 0 0 rgba(200, 156, 79, .6); }
+        70%  { box-shadow: 0 0 0 8px rgba(200, 156, 79, 0); }
+        100% { box-shadow: 0 0 0 0 rgba(200, 156, 79, 0); }
+    }
+
+    .bm-kpi-body { flex: 1; min-width: 0; }
+    .bm-kpi-value {
+        font-family: var(--font-serif);
+        font-size: 28px;
+        font-weight: 600;
+        color: var(--fg-1);
+        line-height: 1;
+        font-variant-numeric: tabular-nums;
+    }
+    .bm-kpi-label {
+        font-size: 11.5px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--fg-3);
+        margin-top: 6px;
+    }
+    .bm-kpi-sub { font-size: 12.5px; color: var(--fg-2); margin-top: 4px; display: flex; gap: 6px; flex-wrap: wrap; }
+    .bm-delta-up   { color: #6b8e4e; font-weight: 600; }
+    .bm-delta-down { color: #b3543a; font-weight: 600; }
+
+    .bm-pill {
+        font-size: 11px;
+        font-weight: 600;
+        padding: 1px 8px;
+        border-radius: 999px;
+        text-transform: lowercase;
+    }
+    .bm-pill-low { background: rgba(179, 84, 58, .12); color: #b3543a; }
+    .bm-pill-ok  { background: rgba(107, 142, 78, .12); color: #6b8e4e; }
+
+    /* ── Row 2 ── */
+    .bm-row-2 {
+        display: grid;
+        grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+        gap: 18px;
+        padding: 14px 32px 0;
+    }
+    @@media (max-width: 1100px) { .bm-row-2 { grid-template-columns: 1fr; } }
+    .bm-col-left, .bm-col-right { display: flex; flex-direction: column; gap: 18px; }
+
+    .bm-section {
+        background: var(--surface);
+        border: 1px solid var(--bd-1);
+        border-radius: var(--r-md);
+        box-shadow: var(--shadow-sm);
+        padding: 16px 18px;
+    }
+    .bm-section-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 10px;
+        margin-bottom: 14px;
+    }
+    .bm-section-title {
+        font-family: var(--font-serif);
+        font-size: 18px;
+        font-weight: 600;
+        color: var(--fg-1);
+        margin: 0;
+    }
+    .bm-section-sub { font-size: 12.5px; color: var(--fg-3); margin-top: 2px; }
+    .bm-section-link {
+        font-size: 12.5px;
+        color: var(--accent);
+        text-decoration: none;
+        white-space: nowrap;
+    }
+    .bm-section-link:hover { text-decoration: underline; }
+
+    /* ── Stock list (centerpiece) ── */
+    .bm-stock-list { display: flex; flex-direction: column; gap: 8px; }
+    .bm-stock-row {
+        display: grid;
+        grid-template-columns: auto 1fr auto;
+        gap: 12px;
+        align-items: center;
+        padding: 10px 12px;
+        background: var(--bg-2);
+        border: 1px solid var(--bd-1);
+        border-left: 3px solid var(--bd-2);
+        border-radius: var(--r-sm);
+        transition: box-shadow .12s, border-color .12s;
+    }
+    .bm-stock-row:hover { box-shadow: var(--shadow-sm); }
+    .bm-stock-low     { border-left-color: #b3543a; }
+    .bm-stock-dead    { border-left-color: #b3543a; }
+    .bm-stock-excess  { border-left-color: #4a7da8; }
+    .bm-stock-healthy { border-left-color: #6b8e4e; }
+
+    .bm-stock-icon .mud-icon-root { font-size: 22px; }
+    .bm-stock-low .bm-stock-icon .mud-icon-root     { color: #c89c4f; }
+    .bm-stock-dead .bm-stock-icon .mud-icon-root    { color: #b3543a; }
+    .bm-stock-excess .bm-stock-icon .mud-icon-root  { color: #4a7da8; }
+    .bm-stock-healthy .bm-stock-icon .mud-icon-root { color: #6b8e4e; }
+
+    .bm-stock-info { min-width: 0; }
+    .bm-stock-name {
+        display: flex; align-items: baseline; gap: 8px;
+        font-family: var(--font-serif);
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--fg-1);
+    }
+    .bm-stock-sku {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        color: var(--fg-3);
+        font-weight: 400;
+    }
+    .bm-stock-bar-wrap {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-top: 4px;
+    }
+    .bm-stock-bar {
+        flex: 1;
+        height: 6px;
+        background: var(--hover);
+        border-radius: 3px;
+        overflow: hidden;
+    }
+    .bm-stock-bar-fill { height: 100%; transition: width .25s ease-out; }
+    .bm-stock-bar-low     { background: #b3543a; }
+    .bm-stock-bar-dead    { background: #b3543a; }
+    .bm-stock-bar-excess  { background: #4a7da8; }
+    .bm-stock-bar-healthy { background: #6b8e4e; }
+    .bm-stock-qty {
+        font-size: 12.5px;
+        color: var(--fg-1);
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+    }
+    .bm-stock-qty strong { font-weight: 600; }
+    .bm-stock-min { color: var(--fg-3); margin-left: 4px; }
+    .bm-stock-meta {
+        font-size: 11.5px;
+        color: var(--fg-3);
+        margin-top: 4px;
+        display: flex;
+        gap: 10px;
+    }
+    .bm-dead-days { color: #b3543a; font-weight: 600; }
+    .bm-stock-action { display: flex; align-items: center; }
+
+    /* ── Chart (same as admin) ── */
+    .bm-chart {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        gap: 8px;
+        align-items: end;
+        height: 180px;
+    }
+    .bm-bar-col { display: flex; flex-direction: column; align-items: center; gap: 4px; height: 100%; }
+    .bm-bar-val { font-size: 10.5px; color: var(--fg-3); font-variant-numeric: tabular-nums; min-height: 14px; }
+    .bm-bar-wrap { flex: 1; width: 100%; display: flex; align-items: flex-end; justify-content: center; }
+    .bm-bar {
+        width: 80%;
+        max-width: 44px;
+        min-height: 2px;
+        background: linear-gradient(180deg, var(--accent) 0%, var(--accent-hover, var(--accent)) 100%);
+        border-radius: 4px 4px 0 0;
+        transition: opacity .15s;
+    }
+    .bm-bar:hover { opacity: .85; }
+    .bm-bar--today { background: linear-gradient(180deg, #c89c4f 0%, #b88a3e 100%); }
+    .bm-bar-label { font-size: 11px; color: var(--fg-3); text-transform: uppercase; letter-spacing: .04em; }
+
+    /* ── Sales table ── */
+    .bm-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13.5px;
+    }
+    .bm-table th {
+        text-align: left;
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: .06em;
+        color: var(--fg-3);
+        padding: 8px 10px;
+        border-bottom: 1px solid var(--bd-1);
+    }
+    .bm-table td {
+        padding: 10px;
+        border-bottom: 1px solid var(--bd-1);
+        color: var(--fg-1);
+    }
+    .bm-table tr:last-child td { border-bottom: none; }
+    .bm-mono { font-family: var(--font-mono); font-size: 12.5px; }
+    .t-right { text-align: right; }
+
+    /* ── Decisions ── */
+    .bm-decisions { display: flex; flex-direction: column; gap: 10px; }
+    .bm-decision-card {
+        padding: 10px 12px;
+        background: var(--bg-2);
+        border: 1px solid var(--bd-1);
+        border-left: 3px solid var(--accent);
+        border-radius: var(--r-sm);
+        transition: opacity .35s ease-out, transform .35s ease-out, max-height .35s ease-out;
+        max-height: 320px;
+        overflow: hidden;
+    }
+    .bm-dec-lowstockalert    { border-left-color: #c89c4f; }
+    .bm-dec-excessstockalert { border-left-color: #4a7da8; }
+    .bm-dec-deadstockflag    { border-left-color: #b3543a; }
+    .bm-dec-transfersuggestion { border-left-color: #4a8e8e; }
+    .bm-dec--fading {
+        opacity: 0;
+        transform: translateX(8px);
+        max-height: 0;
+        padding-top: 0;
+        padding-bottom: 0;
+        margin: 0;
+        border-width: 0;
+    }
+    .bm-dec-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+    .bm-dec-time { font-size: 11.5px; color: var(--fg-3); }
+    .bm-dec-reason {
+        font-family: var(--font-serif);
+        font-size: 13.5px;
+        color: var(--fg-1);
+        line-height: 1.4;
+        margin-bottom: 6px;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+    }
+    .bm-dec-meta { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+    .bm-dec-pill {
+        display: inline-flex; align-items: center; gap: 4px;
+        font-size: 11.5px; color: var(--fg-2);
+        background: var(--hover); padding: 2px 8px;
+        border-radius: 999px;
+    }
+    .bm-dec-pill .mud-icon-root { font-size: 12px; }
+    .bm-dec-actions { display: flex; gap: 6px; }
+
+    /* ── Transfers ── */
+    .bm-transfers { display: flex; flex-direction: column; gap: 8px; }
+    .bm-transfer {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 10px;
+        align-items: center;
+        padding: 10px 12px;
+        background: var(--bg-2);
+        border: 1px solid var(--bd-1);
+        border-left: 3px solid var(--bd-2);
+        border-radius: var(--r-sm);
+        cursor: pointer;
+        transition: box-shadow .12s, border-color .12s;
+    }
+    .bm-transfer:hover { box-shadow: var(--shadow-sm); border-color: var(--accent-line); }
+    .bm-transfer-intransit { border-left-color: #4a7da8; background: rgba(74, 125, 168, .05); }
+    .bm-transfer-approved  { border-left-color: #6b8e4e; }
+    .bm-transfer-pending   { border-left-color: #c89c4f; }
+    .bm-transfer-icon .mud-icon-root { font-size: 22px; color: var(--fg-3); }
+    .bm-transfer-intransit .bm-transfer-icon .mud-icon-root { color: #4a7da8; }
+    .bm-transfer-line {
+        display: flex; align-items: center; justify-content: space-between;
+        gap: 8px;
+        font-size: 13.5px;
+        color: var(--fg-1);
+    }
+    .bm-transfer-sub {
+        font-size: 11.5px;
+        color: var(--fg-3);
+        margin-top: 2px;
+        display: flex;
+        gap: 10px;
+    }
+    .bm-transfer-date { margin-left: auto; }
+
+    /* ── Empty ── */
+    .bm-empty {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 18px 12px;
+        color: var(--fg-3);
+        font-size: 13px;
+        justify-content: center;
+    }
+    .bm-empty .mud-icon-root { font-size: 22px; }
+    .bm-empty--success { color: #6b8e4e; }
+    .bm-empty--success .mud-icon-root { color: #6b8e4e; }
+</style>
+
+@code {
+    private BranchDashboardDto? _data;
+    private bool _loading;
+    private DateTime? _lastRefresh;
+    private string _greeting = "Welcome";
+    private string? _userName;
+    private string? _error;
+    private Guid? _busyId;
+    private readonly HashSet<Guid> _fadingIds = new();
+
+    private double TodayDelta
+    {
+        get
+        {
+            if (_data == null) return 0;
+            if (_data.YesterdaySalesTotal <= 0) return _data.TodaySalesTotal > 0 ? 100 : 0;
+            return (double)((_data.TodaySalesTotal - _data.YesterdaySalesTotal) / _data.YesterdaySalesTotal) * 100.0;
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        _greeting = ComputeGreeting(DateTime.Now);
+        var state = await AuthState.GetAuthenticationStateAsync();
+        _userName = state.User.Identity?.Name;
+
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error = null;
+        try
+        {
+            _data = await BranchDashboardService.GetBranchDashboardAsync();
+            _lastRefresh = DateTime.UtcNow;
+            _fadingIds.Clear();
+        }
+        catch (Exception ex)
+        {
+            _error = $"{ex.GetType().Name}: {ex.Message}";
+            Console.Error.WriteLine($"[BranchManagerDashboard] {ex}");
+            await HandleErrorAsync(ex);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void OnPendingAlertsClick()
+    {
+        if (_data?.HasBranchAssigned == true)
+        {
+            Nav.NavigateTo($"/intelligence/decision-log?branchId={_data.BranchId}");
+        }
+        else
+        {
+            Nav.NavigateTo("/intelligence/decision-log");
+        }
+    }
+
+    private Task AcknowledgeAsync(Guid id) => RunActionAsync(id, DecisionLogAppService.AcknowledgeAsync);
+    private Task DismissAsync(Guid id) => RunActionAsync(id, DecisionLogAppService.DismissAsync);
+
+    private async Task RunActionAsync(Guid id, Func<Guid, Task<DecisionLogDto>> action)
+    {
+        _busyId = id;
+        try
+        {
+            await action(id);
+            _fadingIds.Add(id);
+            Snackbar.Add(L["SuccessfullySaved"], Severity.Success);
+            StateHasChanged();
+
+            // After the fade transition completes, drop the item and refresh counters.
+            await Task.Delay(380);
+            if (_data != null)
+            {
+                _data.PendingDecisions = _data.PendingDecisions.Where(d => d.Id != id).ToList();
+                _data.PendingDecisionsCount = Math.Max(0, _data.PendingDecisionsCount - 1);
+            }
+        }
+        catch (Exception ex)
+        {
+            await HandleErrorAsync(ex);
+        }
+        finally
+        {
+            _busyId = null;
+        }
+    }
+
+    private static string ComputeGreeting(DateTime now)
+    {
+        var h = now.Hour;
+        if (h < 12) return "Good morning";
+        if (h < 18) return "Good afternoon";
+        return "Good evening";
+    }
+
+    private static string FormatMoney(decimal v) => v.ToString("C0", System.Globalization.CultureInfo.GetCultureInfo("en-US"));
+
+    private static string FormatCompact(decimal v)
+    {
+        if (v >= 1_000_000) return $"${v / 1_000_000m:0.#}M";
+        if (v >= 1_000) return $"${v / 1_000m:0.#}k";
+        return $"${v:0}";
+    }
+
+    private static bool IsToday(DateTime d) => d.Date == DateTime.UtcNow.Date;
+
+    private static string Truncate(string s, int max)
+        => string.IsNullOrEmpty(s) || s.Length <= max ? s : s[..max].TrimEnd() + "…";
+
+    private static Color DecisionTypeColor(string type) => type switch
+    {
+        DecisionTypes.LowStockAlert => Color.Warning,
+        DecisionTypes.ExcessStockAlert => Color.Info,
+        DecisionTypes.DeadStockFlag => Color.Error,
+        DecisionTypes.TransferSuggestion => Color.Tertiary,
+        DecisionTypes.ReorderSuggestion => Color.Primary,
+        _ => Color.Default
+    };
+
+    private static string FormatDecisionType(string type) => type switch
+    {
+        DecisionTypes.LowStockAlert => "Low Stock",
+        DecisionTypes.ExcessStockAlert => "Excess Stock",
+        DecisionTypes.DeadStockFlag => "Dead Stock",
+        DecisionTypes.TransferSuggestion => "Transfer",
+        DecisionTypes.ReorderSuggestion => "Reorder",
+        _ => type
+    };
+
+    private static Color TransferStatusColor(string status) => status switch
+    {
+        "InTransit" => Color.Info,
+        "Approved" => Color.Success,
+        "Pending" => Color.Warning,
+        _ => Color.Default
+    };
+
+    private static string FormatTransferStatus(string status) => status switch
+    {
+        "InTransit" => "In Transit",
+        _ => status
+    };
+
+    private static string TimeAgo(DateTime utc)
+    {
+        var diff = DateTime.UtcNow - utc;
+        if (diff.TotalSeconds < 60) return "just now";
+        if (diff.TotalMinutes < 60) return $"{(int)diff.TotalMinutes}m ago";
+        if (diff.TotalHours < 24) return $"{(int)diff.TotalHours}h ago";
+        if (diff.TotalDays < 2) return "yesterday";
+        return $"{(int)diff.TotalDays}d ago";
+    }
+}

@@ -140,6 +140,12 @@ public class patisserie_shopMenuContributor : IMenuContributor
             "/intelligence/inventory-rules",
             icon: "fas fa-gavel"
         ).RequirePermissions(IntelligencePermissions.Rules.Default));
+        intelligenceMenu.AddItem(new ApplicationMenuItem(
+            patisserie_shopMenus.DecisionLog,
+            intelL["Menu:DecisionLog"],
+            "/intelligence/decision-log",
+            icon: "fas fa-clipboard-check"
+        ).RequirePermissions(IntelligencePermissions.DecisionLogs.Default));
         context.Menu.AddItem(intelligenceMenu);
 
         //Administration

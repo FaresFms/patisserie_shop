@@ -1,0 +1,730 @@
+@page "/intelligence/decision-log"
+@attribute [Authorize(IntelligencePermissions.DecisionLogs.Default)]
+@using System.Threading.Tasks
+@using Microsoft.AspNetCore.Authorization
+@using Volo.Abp.Application.Dtos
+@using Volo.Abp.AspNetCore.Components.Web.Theming.Layout
+@using Volo.Abp.Identity
+@using Intelligence.Decisions
+@using Intelligence.Permissions
+@using Intelligence.Localization
+@using Inventory.Branches
+@using Inventory.Products
+@using Color = MudBlazor.Color
+@using Variant = MudBlazor.Variant
+@using Size = MudBlazor.Size
+@using Margin = MudBlazor.Margin
+@inherits patisserie_shopComponentBase
+@inject IDecisionLogAppService DecisionLogAppService
+@inject IBranchAppService BranchAppService
+@inject IProductAppService ProductAppService
+@inject IIdentityUserAppService IdentityUserAppService
+@inject PageLayout PageLayout
+@inject ISnackbar Snackbar
+@inject IStringLocalizer<IntelligenceResource> IntL
+
+@{
+    PageLayout.Title = IntL["DecisionLog"];
+}
+
+<SoftCard Elevation="2" Class="pa-2 page-flat">
+    <div class="page-head">
+        <div>
+            <h1 class="page-title">@IntL["DecisionLog"]</h1>
+            <div class="page-sub">@IntL["DecisionLogSubtitle"]</div>
+        </div>
+        <div class="page-head-actions">
+            <SoftButton Variant="Variant.Text" Color="Color.Primary"
+                        StartIcon="@Icons.Material.Filled.Refresh"
+                        OnClick="RefreshAllAsync">
+                @L["Refresh"]
+            </SoftButton>
+        </div>
+    </div>
+
+    <SoftCardContent>
+        <div class="dl-summary">
+            <div class="dl-summary-card dl-summary-pending">
+                <SoftIcon Icon="@Icons.Material.Filled.WarningAmber" />
+                <div class="dl-summary-text">
+                    <div class="dl-summary-label">@IntL["DecisionLog:Summary:TotalPending"]</div>
+                    <div class="dl-summary-value">@_summary.TotalPending</div>
+                </div>
+            </div>
+            <div class="dl-summary-card dl-summary-low">
+                <SoftIcon Icon="@Icons.Material.Filled.TrendingDown" />
+                <div class="dl-summary-text">
+                    <div class="dl-summary-label">@IntL["DecisionLog:Summary:LowStockPending"]</div>
+                    <div class="dl-summary-value">@_summary.LowStockPending</div>
+                </div>
+            </div>
+            <div class="dl-summary-card dl-summary-excess">
+                <SoftIcon Icon="@Icons.Material.Filled.TrendingUp" />
+                <div class="dl-summary-text">
+                    <div class="dl-summary-label">@IntL["DecisionLog:Summary:ExcessStockPending"]</div>
+                    <div class="dl-summary-value">@_summary.ExcessStockPending</div>
+                </div>
+            </div>
+            <div class="dl-summary-card dl-summary-resolved">
+                <SoftIcon Icon="@Icons.Material.Filled.TaskAlt" />
+                <div class="dl-summary-text">
+                    <div class="dl-summary-label">@IntL["DecisionLog:Summary:ResolvedToday"]</div>
+                    <div class="dl-summary-value">@_summary.ResolvedToday</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="toolbar">
+            <SoftTextField T="string"
+                           Placeholder="@IntL["DecisionLog:Filter"]"
+                           @bind-Value="_filter"
+                           Variant="Variant.Outlined"
+                           Margin="Margin.Dense"
+                           Adornment="Adornment.Start"
+                           AdornmentIcon="@Icons.Material.Filled.Search"
+                           OnKeyUp="OnFilterKeyUpAsync"
+                           Immediate="true"
+                           Class="toolbar-search"
+                           Style="min-width: 220px; max-width: 320px;" />
+
+            <div class="filter-chip">
+                <SoftLookupSelect TItem="LabeledOption" TValue="string"
+                                  Items="_typeOptions"
+                                  ToValue="@(o => o.Value)"
+                                  ToLabel="@(o => o.Label)"
+                                  Value="_typeFilter"
+                                  ValueChanged="OnTypeChangedAsync"
+                                  Label="@IntL["DecisionLog:AllTypes"]"
+                                  Margin="Margin.Dense"
+                                  Clearable="true"
+                                  Dense="true" />
+            </div>
+
+            <div class="filter-chip">
+                <SoftLookupSelect TItem="LabeledOption" TValue="string"
+                                  Items="_statusOptions"
+                                  ToValue="@(o => o.Value)"
+                                  ToLabel="@(o => o.Label)"
+                                  Value="_statusFilter"
+                                  ValueChanged="OnStatusChangedAsync"
+                                  Label="@IntL["DecisionLog:AllStatuses"]"
+                                  Margin="Margin.Dense"
+                                  Clearable="true"
+                                  Dense="true" />
+            </div>
+
+            <div class="filter-chip">
+                <SoftLookupSelect TItem="BranchLookupDto" TValue="Guid?"
+                                  Items="_branches"
+                                  ToValue="@(b => (Guid?)b.Id)"
+                                  ToLabel="@(b => b.Name)"
+                                  Value="_branchFilter"
+                                  ValueChanged="OnBranchChangedAsync"
+                                  Label="@IntL["DecisionLog:AllBranches"]"
+                                  Margin="Margin.Dense"
+                                  Clearable="true"
+                                  Dense="true" />
+            </div>
+
+            <div class="filter-chip">
+                <SoftLookupSelect TItem="ProductLookupDto" TValue="Guid?"
+                                  Items="_products"
+                                  ToValue="@(p => (Guid?)p.Id)"
+                                  ToLabel="@(p => $"{p.SKU} — {p.Name}")"
+                                  Value="_productFilter"
+                                  ValueChanged="OnProductChangedAsync"
+                                  Label="@IntL["DecisionLog:AllProducts"]"
+                                  Margin="Margin.Dense"
+                                  Clearable="true"
+                                  Dense="true" />
+            </div>
+
+            <MudDatePicker Label="@IntL["DecisionLog:FromDate"]" Variant="Variant.Outlined"
+                           Margin="Margin.Dense" Clearable="true"
+                           Date="_fromDate" DateChanged="@(d => OnFromDateChangedAsync(d))"
+                           Class="dl-date-picker" />
+            <MudDatePicker Label="@IntL["DecisionLog:ToDate"]" Variant="Variant.Outlined"
+                           Margin="Margin.Dense" Clearable="true"
+                           Date="_toDate" DateChanged="@(d => OnToDateChangedAsync(d))"
+                           Class="dl-date-picker" />
+        </div>
+
+        <div class="dl-list">
+            @if (_loading && _items.Count == 0)
+            {
+                <SoftStack AlignItems="AlignItems.Center" Spacing="2" Class="pa-6">
+                    <SoftProgressCircular Indeterminate="true" Color="Color.Primary" />
+                </SoftStack>
+            }
+            else if (_items.Count == 0)
+            {
+                <SoftStack AlignItems="AlignItems.Center" Spacing="2" Class="pa-6">
+                    <SoftIcon Icon="@Icons.Material.Outlined.Inbox" Style="font-size: 56px; opacity: 0.4;" />
+                    <SoftText Typo="Typo.body1" Color="Color.Default">@IntL["DecisionLog:Empty"]</SoftText>
+                </SoftStack>
+            }
+            else
+            {
+                @foreach (var item in _items)
+                {
+                    var typeKey = item.DecisionType.ToLowerInvariant();
+                    <div class="@($"dl-card dl-type-{typeKey} dl-status-{item.Status.ToLowerInvariant()}")">
+                        <div class="dl-card-left">
+                            <MudIcon Icon="@TypeIcon(item.DecisionType)" Size="Size.Medium" Class="dl-type-icon" />
+                            <SoftChip T="string" Size="Size.Small" Variant="Variant.Filled"
+                                      Color="@TypeChipColor(item.DecisionType)"
+                                      Class="dl-type-chip">
+                                @IntL[$"DecisionType:{item.DecisionType}"]
+                            </SoftChip>
+                        </div>
+
+                        <div class="dl-card-center">
+                            <div class="dl-reasoning">@item.Reasoning</div>
+                            <div class="dl-meta">
+                                @if (!string.IsNullOrWhiteSpace(item.ProductName))
+                                {
+                                    <span class="dl-meta-pill">
+                                        <MudIcon Icon="@Icons.Material.Outlined.Inventory2" Size="Size.Small" />
+                                        @item.ProductName
+                                    </span>
+                                }
+                                @if (!string.IsNullOrWhiteSpace(item.BranchName))
+                                {
+                                    <span class="dl-meta-pill">
+                                        <MudIcon Icon="@Icons.Material.Outlined.Storefront" Size="Size.Small" />
+                                        @item.BranchName
+                                    </span>
+                                }
+                                <span class="dl-meta-pill">
+                                    <MudIcon Icon="@Icons.Material.Outlined.Gavel" Size="Size.Small" />
+                                    @(string.IsNullOrWhiteSpace(item.RuleName) ? IntL["DecisionLog:NoRule"].Value : item.RuleName)
+                                </span>
+                            </div>
+
+                            @if (!string.IsNullOrWhiteSpace(item.SuggestedAction))
+                            {
+                                <div class="dl-suggested">
+                                    <MudIcon Icon="@Icons.Material.Outlined.Lightbulb" Size="Size.Small" />
+                                    <span>@item.SuggestedAction</span>
+                                </div>
+                            }
+
+                            @if (item.StockAtEvaluation.HasValue || item.DaysWithoutSale.HasValue)
+                            {
+                                <div class="dl-snapshot">
+                                    @if (item.StockAtEvaluation.HasValue)
+                                    {
+                                        <span>@IntL["DecisionLog:StockAtEvaluation"]: <strong>@item.StockAtEvaluation</strong></span>
+                                    }
+                                    @if (item.DaysWithoutSale.HasValue)
+                                    {
+                                        <span>@IntL["DecisionLog:DaysWithoutSale"]: <strong>@item.DaysWithoutSale</strong></span>
+                                    }
+                                </div>
+                            }
+                        </div>
+
+                        <div class="dl-card-right">
+                            <SoftChip T="string" Size="Size.Small"
+                                      Color="@StatusChipColor(item.Status)"
+                                      Variant="@(item.Status == "Pending" ? Variant.Filled : Variant.Outlined)">
+                                @IntL[$"DecisionStatus:{item.Status}"]
+                            </SoftChip>
+                            <div class="dl-time">@TimeAgo(item.CreationTime)</div>
+                            @if (item.Status != "Pending" && item.AcknowledgedAt.HasValue)
+                            {
+                                <div class="dl-ack">
+                                    @string.Format(
+                                        IntL["DecisionLog:AcknowledgedBy"],
+                                        ResolveUserName(item.AcknowledgedByUserId),
+                                        item.AcknowledgedAt.Value.ToLocalTime().ToString("MMM d, HH:mm"))
+                                </div>
+                            }
+                            @if (_canAcknowledge && item.Status == "Pending")
+                            {
+                                <div class="dl-actions">
+                                    <SoftButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Success"
+                                                StartIcon="@Icons.Material.Filled.Check"
+                                                OnClick="@(() => AcknowledgeAsync(item))"
+                                                Disabled="_busyId == item.Id">
+                                        @IntL["DecisionLog:Action:Acknowledge"]
+                                    </SoftButton>
+                                    <SoftButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default"
+                                                StartIcon="@Icons.Material.Filled.Close"
+                                                OnClick="@(() => DismissAsync(item))"
+                                                Disabled="_busyId == item.Id">
+                                        @IntL["DecisionLog:Action:Dismiss"]
+                                    </SoftButton>
+                                    <SoftButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Info"
+                                                StartIcon="@Icons.Material.Filled.PlayArrow"
+                                                OnClick="@(() => ExecuteAsync(item))"
+                                                Disabled="_busyId == item.Id">
+                                        @IntL["DecisionLog:Action:Executed"]
+                                    </SoftButton>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                }
+
+                <div class="dl-pager">
+                    <span class="dl-pager-text">
+                        @($"{_skipCount + 1}–{Math.Min(_skipCount + _items.Count, _totalCount)} of {_totalCount}")
+                    </span>
+                    <SoftIconButton Icon="@Icons.Material.Filled.ChevronLeft" Size="Size.Small"
+                                    Disabled="@(_skipCount <= 0 || _loading)"
+                                    OnClick="PrevPageAsync" />
+                    <SoftIconButton Icon="@Icons.Material.Filled.ChevronRight" Size="Size.Small"
+                                    Disabled="@(_skipCount + _pageSize >= _totalCount || _loading)"
+                                    OnClick="NextPageAsync" />
+                </div>
+            }
+        </div>
+    </SoftCardContent>
+</SoftCard>
+
+<style>
+    .dl-summary {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 12px;
+        margin: 0 32px 16px;
+    }
+    .dl-summary-card {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding: 14px 18px;
+        background: var(--surface);
+        border: 1px solid var(--bd-1);
+        border-radius: var(--r-md);
+        box-shadow: var(--shadow-sm);
+    }
+    .dl-summary-card .mud-icon-root {
+        font-size: 28px;
+    }
+    .dl-summary-label {
+        font-size: 11.5px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--fg-3);
+        margin-bottom: 2px;
+    }
+    .dl-summary-value {
+        font-family: var(--font-serif);
+        font-size: 24px;
+        font-weight: 600;
+        color: var(--fg-1);
+        font-variant-numeric: tabular-nums;
+    }
+    .dl-summary-pending .mud-icon-root  { color: #c89c4f; }
+    .dl-summary-low .mud-icon-root      { color: #c89c4f; }
+    .dl-summary-excess .mud-icon-root   { color: #4a7da8; }
+    .dl-summary-resolved .mud-icon-root { color: #6b8e4e; }
+
+    .dl-date-picker { max-width: 160px; }
+
+    .dl-list {
+        padding: 4px 32px 18px;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+    }
+    .dl-card {
+        display: grid;
+        grid-template-columns: 160px 1fr 220px;
+        gap: 18px;
+        padding: 16px 18px;
+        background: var(--surface);
+        border: 1px solid var(--bd-1);
+        border-left: 3px solid var(--bd-2);
+        border-radius: var(--r-md);
+        box-shadow: var(--shadow-sm);
+        transition: box-shadow .15s, border-color .15s;
+    }
+    .dl-card:hover { box-shadow: var(--shadow-md); }
+    .dl-card.dl-status-pending {
+        background: var(--bg-2);
+        border-left-color: var(--accent);
+    }
+    .dl-card.dl-type-lowstockalert    { border-left-color: #c89c4f; }
+    .dl-card.dl-type-excessstockalert { border-left-color: #4a7da8; }
+    .dl-card.dl-type-deadstockflag    { border-left-color: #b3543a; }
+    .dl-card.dl-type-transfersuggestion { border-left-color: #4a8e8e; }
+    .dl-card.dl-status-acknowledged,
+    .dl-card.dl-status-dismissed,
+    .dl-card.dl-status-executed {
+        opacity: 0.82;
+    }
+
+    .dl-card-left {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+    }
+    .dl-type-icon {
+        font-size: 28px;
+    }
+    .dl-type-lowstockalert    .dl-type-icon { color: #c89c4f; }
+    .dl-type-excessstockalert .dl-type-icon { color: #4a7da8; }
+    .dl-type-deadstockflag    .dl-type-icon { color: #b3543a; }
+    .dl-type-transfersuggestion .dl-type-icon { color: #4a8e8e; }
+
+    .dl-card-center { min-width: 0; }
+    .dl-reasoning {
+        font-family: var(--font-serif);
+        font-size: 16px;
+        font-weight: 500;
+        color: var(--fg-1);
+        line-height: 1.4;
+        margin-bottom: 8px;
+    }
+    .dl-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-bottom: 6px;
+    }
+    .dl-meta-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 12px;
+        color: var(--fg-2);
+        background: var(--hover);
+        padding: 2px 8px;
+        border-radius: 999px;
+    }
+    .dl-meta-pill .mud-icon-root { font-size: 14px; }
+    .dl-suggested {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        margin-top: 6px;
+        padding: 4px 10px;
+        background: var(--accent-soft);
+        border: 1px solid var(--accent-line);
+        border-radius: var(--r-sm);
+        font-size: 13px;
+        color: var(--fg-1);
+    }
+    .dl-suggested .mud-icon-root { color: var(--accent); font-size: 16px; }
+    .dl-snapshot {
+        display: flex;
+        gap: 16px;
+        margin-top: 6px;
+        font-size: 12px;
+        color: var(--fg-3);
+    }
+
+    .dl-card-right {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 6px;
+    }
+    .dl-time { font-size: 12px; color: var(--fg-3); }
+    .dl-ack  { font-size: 11px; color: var(--fg-3); text-align: right; max-width: 200px; }
+    .dl-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+        justify-content: flex-end;
+        margin-top: 4px;
+    }
+
+    .dl-pager {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 8px;
+        padding: 10px 0 6px;
+        border-top: 1px solid var(--bd-1);
+        margin-top: 8px;
+        color: var(--fg-3);
+    }
+    .dl-pager-text { font-size: 12px; margin-right: 8px; }
+
+    @@media (max-width: 900px) {
+        .dl-card { grid-template-columns: 1fr; }
+        .dl-card-left, .dl-card-right { flex-direction: row; align-items: center; }
+    }
+</style>
+
+@code {
+    private DecisionLogSummaryDto _summary = new();
+    private List<DecisionLogDto> _items = new();
+    private bool _loading;
+    private bool _canAcknowledge;
+    private Guid? _busyId;
+
+    private string? _filter;
+    private string? _typeFilter;
+    private string? _statusFilter;
+    private Guid? _branchFilter;
+    private Guid? _productFilter;
+    private DateTime? _fromDate;
+    private DateTime? _toDate;
+
+    private const int _pageSize = 10;
+    private int _skipCount;
+    private int _totalCount;
+
+    private List<BranchLookupDto> _branches = new();
+    private List<ProductLookupDto> _products = new();
+    private List<LabeledOption> _typeOptions = new();
+    private List<LabeledOption> _statusOptions = new();
+
+    // Cache for AcknowledgedByUserId → UserName
+    private readonly Dictionary<Guid, string> _userNames = new();
+
+    public record LabeledOption(string Value, string Label);
+
+    protected override async Task OnInitializedAsync()
+    {
+        _canAcknowledge = await AuthorizationService.IsGrantedAsync(IntelligencePermissions.DecisionLogs.Acknowledge);
+
+        _typeOptions = new List<LabeledOption>
+        {
+            new(DecisionTypes.LowStockAlert,     IntL["DecisionType:LowStockAlert"]),
+            new(DecisionTypes.ExcessStockAlert,  IntL["DecisionType:ExcessStockAlert"]),
+            new(DecisionTypes.DeadStockFlag,     IntL["DecisionType:DeadStockFlag"]),
+            new(DecisionTypes.TransferSuggestion, IntL["DecisionType:TransferSuggestion"]),
+            new(DecisionTypes.ReorderSuggestion,  IntL["DecisionType:ReorderSuggestion"])
+        };
+
+        _statusOptions = new List<LabeledOption>
+        {
+            new(DecisionLogStatuses.Pending,      IntL["DecisionStatus:Pending"]),
+            new(DecisionLogStatuses.Acknowledged, IntL["DecisionStatus:Acknowledged"]),
+            new(DecisionLogStatuses.Dismissed,    IntL["DecisionStatus:Dismissed"]),
+            new(DecisionLogStatuses.Executed,     IntL["DecisionStatus:Executed"])
+        };
+
+        try
+        {
+            _branches = await BranchAppService.GetLookupAsync();
+            _products = await ProductAppService.GetLookupAsync();
+        }
+        catch (Exception ex)
+        {
+            await HandleErrorAsync(ex);
+        }
+
+        await RefreshAllAsync();
+    }
+
+    private async Task RefreshAllAsync()
+    {
+        await LoadSummaryAsync();
+        await LoadListAsync();
+    }
+
+    private async Task LoadSummaryAsync()
+    {
+        try
+        {
+            _summary = await DecisionLogAppService.GetSummaryAsync();
+        }
+        catch (Exception ex)
+        {
+            await HandleErrorAsync(ex);
+        }
+    }
+
+    private async Task LoadListAsync()
+    {
+        _loading = true;
+        try
+        {
+            var result = await DecisionLogAppService.GetListAsync(new GetDecisionLogsInput
+            {
+                Filter = _filter,
+                DecisionType = _typeFilter,
+                Status = _statusFilter,
+                BranchId = _branchFilter,
+                ProductId = _productFilter,
+                FromDate = _fromDate,
+                ToDate = _toDate,
+                SkipCount = _skipCount,
+                MaxResultCount = _pageSize,
+                Sorting = "CreationTime desc"
+            });
+
+            _items = result.Items.ToList();
+            _totalCount = (int)result.TotalCount;
+
+            await ResolveUserNamesAsync(_items);
+        }
+        catch (Exception ex)
+        {
+            await HandleErrorAsync(ex);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task ResolveUserNamesAsync(IEnumerable<DecisionLogDto> items)
+    {
+        foreach (var id in items
+                     .Where(i => i.AcknowledgedByUserId.HasValue)
+                     .Select(i => i.AcknowledgedByUserId!.Value)
+                     .Distinct())
+        {
+            if (_userNames.ContainsKey(id)) continue;
+            try
+            {
+                var user = await IdentityUserAppService.GetAsync(id);
+                _userNames[id] = string.IsNullOrWhiteSpace(user.UserName) ? user.Name ?? "—" : user.UserName;
+            }
+            catch
+            {
+                _userNames[id] = "—";
+            }
+        }
+    }
+
+    private string ResolveUserName(Guid? userId)
+        => userId.HasValue && _userNames.TryGetValue(userId.Value, out var name) ? name : "—";
+
+    private async Task OnFilterKeyUpAsync(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            _skipCount = 0;
+            await RefreshAllAsync();
+        }
+    }
+
+    private async Task OnTypeChangedAsync(string? v)
+    {
+        _typeFilter = v;
+        _skipCount = 0;
+        await RefreshAllAsync();
+    }
+
+    private async Task OnStatusChangedAsync(string? v)
+    {
+        _statusFilter = v;
+        _skipCount = 0;
+        await RefreshAllAsync();
+    }
+
+    private async Task OnBranchChangedAsync(Guid? v)
+    {
+        _branchFilter = v;
+        _skipCount = 0;
+        await RefreshAllAsync();
+    }
+
+    private async Task OnProductChangedAsync(Guid? v)
+    {
+        _productFilter = v;
+        _skipCount = 0;
+        await RefreshAllAsync();
+    }
+
+    private async Task OnFromDateChangedAsync(DateTime? d)
+    {
+        _fromDate = d;
+        _skipCount = 0;
+        await RefreshAllAsync();
+    }
+
+    private async Task OnToDateChangedAsync(DateTime? d)
+    {
+        _toDate = d;
+        _skipCount = 0;
+        await RefreshAllAsync();
+    }
+
+    private async Task PrevPageAsync()
+    {
+        if (_skipCount <= 0) return;
+        _skipCount = Math.Max(0, _skipCount - _pageSize);
+        await LoadListAsync();
+    }
+
+    private async Task NextPageAsync()
+    {
+        if (_skipCount + _pageSize >= _totalCount) return;
+        _skipCount += _pageSize;
+        await LoadListAsync();
+    }
+
+    private async Task AcknowledgeAsync(DecisionLogDto item)
+        => await RunActionAsync(item, async id => await DecisionLogAppService.AcknowledgeAsync(id));
+
+    private async Task DismissAsync(DecisionLogDto item)
+        => await RunActionAsync(item, async id => await DecisionLogAppService.DismissAsync(id));
+
+    private async Task ExecuteAsync(DecisionLogDto item)
+        => await RunActionAsync(item, async id => await DecisionLogAppService.ExecuteAsync(id));
+
+    private async Task RunActionAsync(DecisionLogDto item, Func<Guid, Task<DecisionLogDto>> action)
+    {
+        _busyId = item.Id;
+        try
+        {
+            var updated = await action(item.Id);
+            await ResolveUserNamesAsync(new[] { updated });
+
+            var index = _items.FindIndex(x => x.Id == item.Id);
+            if (index >= 0) _items[index] = updated;
+
+            await LoadSummaryAsync();
+            Snackbar.Add(L["SuccessfullySaved"], Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            await HandleErrorAsync(ex);
+        }
+        finally
+        {
+            _busyId = null;
+        }
+    }
+
+    private static string TypeIcon(string decisionType) => decisionType switch
+    {
+        DecisionTypes.LowStockAlert => Icons.Material.Filled.WarningAmber,
+        DecisionTypes.ExcessStockAlert => Icons.Material.Filled.TrendingUp,
+        DecisionTypes.DeadStockFlag => Icons.Material.Filled.Archive,
+        DecisionTypes.TransferSuggestion => Icons.Material.Filled.SwapHoriz,
+        DecisionTypes.ReorderSuggestion => Icons.Material.Filled.AddShoppingCart,
+        _ => Icons.Material.Filled.Info
+    };
+
+    private static Color TypeChipColor(string decisionType) => decisionType switch
+    {
+        DecisionTypes.LowStockAlert => Color.Warning,
+        DecisionTypes.ExcessStockAlert => Color.Info,
+        DecisionTypes.DeadStockFlag => Color.Error,
+        DecisionTypes.TransferSuggestion => Color.Tertiary,
+        DecisionTypes.ReorderSuggestion => Color.Primary,
+        _ => Color.Default
+    };
+
+    private static Color StatusChipColor(string status) => status switch
+    {
+        DecisionLogStatuses.Pending => Color.Warning,
+        DecisionLogStatuses.Acknowledged => Color.Success,
+        DecisionLogStatuses.Dismissed => Color.Default,
+        DecisionLogStatuses.Executed => Color.Info,
+        _ => Color.Default
+    };
+
+    private string TimeAgo(DateTime utc)
+    {
+        var diff = DateTime.UtcNow - utc;
+        if (diff.TotalSeconds < 60) return IntL["TimeAgo:JustNow"];
+        if (diff.TotalMinutes < 60) return string.Format(IntL["TimeAgo:MinAgo"], (int)diff.TotalMinutes);
+        if (diff.TotalHours < 24)   return string.Format(IntL["TimeAgo:HrAgo"],  (int)diff.TotalHours);
+        if (diff.TotalDays < 2)     return IntL["TimeAgo:Yesterday"];
+        return string.Format(IntL["TimeAgo:DayAgo"], (int)diff.TotalDays);
+    }
+}

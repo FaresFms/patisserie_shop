@@ -116,4 +116,89 @@ public class SaleRepository
         => string.IsNullOrWhiteSpace(sorting)
             ? $"{nameof(AppSale.SaleDate)} desc"
             : sorting.Trim();
+
+    public async Task<List<DailySaleAggregate>> GetDailySalesAsync(
+        DateTime fromUtcInclusive,
+        DateTime toUtcExclusive,
+        IReadOnlyCollection<Guid>? branchIdScope,
+        CancellationToken cancellationToken = default)
+    {
+        var query = await GetQueryableAsync();
+        query = query.Where(s => s.SaleDate >= fromUtcInclusive && s.SaleDate < toUtcExclusive);
+        if (branchIdScope != null)
+        {
+            query = query.Where(s => branchIdScope.Contains(s.BranchId));
+        }
+
+        var grouped = query
+            .GroupBy(s => s.SaleDate.Date)
+            .Select(g => new DailySaleAggregate
+            {
+                Date = g.Key,
+                TotalAmount = g.Sum(s => s.TotalAmount),
+                SaleCount = g.Count()
+            });
+
+        return await grouped.ToListAsync(GetCancellationToken(cancellationToken));
+    }
+
+    public async Task<List<ProductSalesAggregate>> GetTopProductsAsync(
+        DateTime fromUtcInclusive,
+        DateTime toUtcExclusive,
+        IReadOnlyCollection<Guid>? branchIdScope,
+        int take,
+        CancellationToken cancellationToken = default)
+    {
+        var dbContext = await GetDbContextAsync();
+
+        var sales = dbContext.Set<AppSale>()
+            .Where(s => s.SaleDate >= fromUtcInclusive && s.SaleDate < toUtcExclusive);
+
+        if (branchIdScope != null)
+        {
+            sales = sales.Where(s => branchIdScope.Contains(s.BranchId));
+        }
+
+        var lines = from s in sales
+                    from i in s.Items
+                    select new { i.ProductId, i.Quantity, i.Subtotal };
+
+        var grouped = lines
+            .GroupBy(x => x.ProductId)
+            .Select(g => new ProductSalesAggregate
+            {
+                ProductId = g.Key,
+                TotalQuantitySold = g.Sum(x => x.Quantity),
+                TotalRevenue = g.Sum(x => x.Subtotal)
+            })
+            .OrderByDescending(p => p.TotalQuantitySold)
+            .Take(take);
+
+        return await grouped.ToListAsync(GetCancellationToken(cancellationToken));
+    }
+
+    public async Task<List<BranchSalesAggregate>> GetSalesByBranchAsync(
+        DateTime fromUtcInclusive,
+        DateTime toUtcExclusive,
+        IReadOnlyCollection<Guid>? branchIdScope,
+        CancellationToken cancellationToken = default)
+    {
+        var query = await GetQueryableAsync();
+        query = query.Where(s => s.SaleDate >= fromUtcInclusive && s.SaleDate < toUtcExclusive);
+        if (branchIdScope != null)
+        {
+            query = query.Where(s => branchIdScope.Contains(s.BranchId));
+        }
+
+        var grouped = query
+            .GroupBy(s => s.BranchId)
+            .Select(g => new BranchSalesAggregate
+            {
+                BranchId = g.Key,
+                TotalAmount = g.Sum(s => s.TotalAmount),
+                SaleCount = g.Count()
+            });
+
+        return await grouped.ToListAsync(GetCancellationToken(cancellationToken));
+    }
 }

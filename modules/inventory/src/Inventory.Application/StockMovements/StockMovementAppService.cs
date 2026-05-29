@@ -6,6 +6,7 @@ using Inventory.BranchInventory;
 using Inventory.Entities;
 using Inventory.Permissions;
 using Microsoft.AspNetCore.Authorization;
+using Volo.Abp;
 using Volo.Abp.Application.Dtos;
 
 namespace Inventory.StockMovements;
@@ -73,6 +74,14 @@ public class StockMovementAppService : InventoryAppService, IStockMovementAppSer
             Filter = input.Filter,
             BranchIdScope = scope
         };
+    }
+
+    public async Task<StockMovementDto> GetAsync(Guid id)
+    {
+        var row = await _movementRepository.GetWithContextAsync(id);
+        if (row == null)
+            throw new BusinessException(InventoryErrorCodes.StockMovementNotFound).WithData("Id", id);
+        return MapRow(row);
     }
 
     private StockMovementDto MapRow(StockMovementWithContext row)
