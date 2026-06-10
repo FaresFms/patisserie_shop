@@ -93,6 +93,22 @@ public class IntelligenceDataSeedContributor : IDataSeedContributor, ITransientD
             suggestedAction: "URGENT: Stock critically low — reorder immediately",
             priority: 10,
             isActive: true
+        ), autoSave: false);
+
+        // Rule 5 — global TransferSuggestion at 10 units, Priority 5.
+        // Any branch below 10 units of a product is a candidate to receive
+        // a transfer from a branch that has clear excess.
+        await _rulesRepository.InsertAsync(new AppInventoryRule(
+            id: _guidGenerator.Create(),
+            ruleName: "Global Transfer Suggestion",
+            ruleType: InventoryRuleTypes.TransferSuggestion,
+            productId: null,
+            branchId: null,
+            thresholdValue: 10,
+            thresholdDays: null,
+            suggestedAction: "Transfer stock from overstocked branch",
+            priority: 5,
+            isActive: true
         ), autoSave: true);
     }
 }

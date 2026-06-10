@@ -21,6 +21,12 @@ public class DecisionLogDto : EntityDto<Guid>
     public DateTime? AcknowledgedAt { get; set; }
     public Guid? AcknowledgedByUserId { get; set; }
 
+    /// <summary>Corrective document kind created on execution (see DecisionActionTypes).</summary>
+    public string? ExecutedActionType { get; set; }
+
+    /// <summary>Id of the corrective document created on execution.</summary>
+    public Guid? ExecutedActionId { get; set; }
+
     public DateTime CreationTime { get; set; }
 
     /// <summary>Resolved by the app service from the originating AppInventoryRule.</summary>

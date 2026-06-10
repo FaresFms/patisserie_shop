@@ -9,6 +9,12 @@
     "ValidationErrorsIntro": "Some fields are not valid. Review the items below and try again.",
     "OK": "OK",
     "Close": "Close",
-    "Details": "Details"
+    "Details": "Details",
+    "Notifications": "Notifications",
+    "Notifications:Pending": "pending",
+    "Notifications:Empty": "No pending decisions",
+    "Notifications:ViewAll": "View all decisions",
+    "Notifications:JustNow": "now",
+    "Notifications:NewDecisionToast": "New decision: {0} — {1}"
   }
 }

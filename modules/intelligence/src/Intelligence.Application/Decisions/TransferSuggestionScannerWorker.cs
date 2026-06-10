@@ -9,24 +9,24 @@ using Volo.Abp.Uow;
 namespace Intelligence.Decisions;
 
 /// <summary>
-/// Periodic worker that drives <see cref="DeadStockScannerService"/>. The scanning logic
-/// lives in the service (testable, mirrors how StockChangedEventHandler delegates to
-/// DecisionMakerService); the worker only owns the schedule and the unit-of-work boundary.
+/// Periodic worker that drives <see cref="TransferSuggestionScannerService"/>. As with the
+/// DeadStock worker, the scan logic lives in the service; the worker owns only the schedule
+/// and the unit-of-work boundary.
 ///
-/// Interval comes from configuration: "BackgroundJobs:DeadStockScanIntervalMinutes".
+/// Interval comes from configuration: "BackgroundJobs:TransferSuggestionScanIntervalMinutes".
 /// Development/demo uses 5; production should use 1440 (24 hours).
 /// </summary>
-public class DeadStockScannerWorker : AsyncPeriodicBackgroundWorkerBase
+public class TransferSuggestionScannerWorker : AsyncPeriodicBackgroundWorkerBase
 {
     private const int DefaultIntervalMinutes = 1440; // 24 hours (production default)
 
-    public DeadStockScannerWorker(
+    public TransferSuggestionScannerWorker(
         AbpAsyncTimer timer,
         IServiceScopeFactory serviceScopeFactory,
         IConfiguration configuration)
         : base(timer, serviceScopeFactory)
     {
-        var minutes = configuration.GetValue<int?>("BackgroundJobs:DeadStockScanIntervalMinutes")
+        var minutes = configuration.GetValue<int?>("BackgroundJobs:TransferSuggestionScanIntervalMinutes")
                       ?? DefaultIntervalMinutes;
         if (minutes <= 0)
         {
@@ -40,7 +40,7 @@ public class DeadStockScannerWorker : AsyncPeriodicBackgroundWorkerBase
     {
         var sp = workerContext.ServiceProvider;
         var uowManager = sp.GetRequiredService<IUnitOfWorkManager>();
-        var scanner = sp.GetRequiredService<DeadStockScannerService>();
+        var scanner = sp.GetRequiredService<TransferSuggestionScannerService>();
 
         using var uow = uowManager.Begin(requiresNew: true);
         await scanner.ScanAsync();

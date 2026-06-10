@@ -59,6 +59,10 @@
     "Intelligence:Rules:ThresholdValueRequired": "A stock quantity threshold is required for this rule type.",
     "Intelligence:Rules:ThresholdDaysRequired": "A days-without-sale value is required for Dead Stock rules.",
     "Intelligence:DecisionLogs:NotPending": "This decision has already been resolved and cannot be changed.",
+    "Intelligence:DecisionLogs:InvalidActionType": "Unknown decision action type.",
+    "Intelligence:DecisionLogs:BranchRequired": "This decision has no branch, so a purchase order cannot be created automatically.",
+    "Intelligence:DecisionLogs:TransferBranchesRequired": "This decision is missing its source or target branch, so a stock transfer cannot be created automatically.",
+    "Intelligence:DecisionLogs:NoDefaultSupplier": "The product has no default supplier, so a purchase order cannot be created automatically. Set a default supplier on the product first.",
 
     "Permission:DecisionLogs": "Decision Log",
     "Permission:DecisionLogs.Acknowledge": "Acknowledge, dismiss, or mark decisions executed",
@@ -91,6 +95,11 @@
     "DecisionLog:Action:Acknowledge": "Acknowledge",
     "DecisionLog:Action:Dismiss": "Dismiss",
     "DecisionLog:Action:Executed": "Executed",
+
+    "DecisionLog:DraftPOCreated": "Draft purchase order {0} created",
+    "DecisionLog:DraftTransferCreated": "Draft stock transfer {0} created",
+    "DecisionLog:ViewPurchaseOrder": "View PO",
+    "DecisionLog:ViewStockTransfer": "View Transfer",
 
     "DecisionType:LowStockAlert": "Low Stock Alert",
     "DecisionType:ExcessStockAlert": "Excess Stock Alert",

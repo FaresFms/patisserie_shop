@@ -45,6 +45,13 @@
             </SoftButton>
         </SoftTooltip>
 
+        @* ── Decision notification bell (host-app component, resolved at runtime
+             because this shared layout cannot reference the Blazor host project) ── *@
+        @if (CurrentUser.IsAuthenticated && _notificationBellType is not null)
+        {
+            <DynamicComponent Type="_notificationBellType" />
+        }
+
         @* ── Dark / Light mode toggle ── *@
         <SoftTooltip Text="@(_isDarkMode ? L["Nav:SwitchToLight"] : L["Nav:SwitchToDark"])" Placement="MudBlazor.Placement.Bottom">
             <SoftIconButton Icon="@(_isDarkMode ? Icons.Material.Filled.LightMode : Icons.Material.Filled.DarkMode)"
@@ -170,6 +177,12 @@
 </SoftLayout>
 
 @code {
+    // Resolved by name so the shared theme project stays free of a reference
+    // to the host application. Null (and silently skipped) if the host app
+    // does not provide the component.
+    private static readonly Type? _notificationBellType =
+        Type.GetType("patisserie_shop.Blazor.Components.Layout.NotificationBell, patisserie_shop.Blazor");
+
     private MudMenu _userMenu = default!;
     private MudBlazor.MudTheme _theme = MyTheme.Create();
     private bool _drawerOpen = true;

@@ -7,6 +7,8 @@ namespace Intelligence.Decisions;
 
 public interface IDecisionLogAppService : IApplicationService
 {
+    Task<DecisionLogDto> GetAsync(Guid id);
+
     Task<PagedResultDto<DecisionLogDto>> GetListAsync(GetDecisionLogsInput input);
 
     Task<DecisionLogSummaryDto> GetSummaryAsync();
@@ -15,5 +17,5 @@ public interface IDecisionLogAppService : IApplicationService
 
     Task<DecisionLogDto> DismissAsync(Guid id);
 
-    Task<DecisionLogDto> ExecuteAsync(Guid id);
+    Task<DecisionLogDto> ExecuteAsync(Guid id, ExecuteDecisionLogInput? input = null);
 }

@@ -3,6 +3,7 @@
 @using System.Threading
 @using System.Threading.Tasks
 @using Microsoft.AspNetCore.Authorization
+@using Microsoft.JSInterop
 @using Volo.Abp.Application.Dtos
 @using Volo.Abp.AspNetCore.Components.Web.Theming.Layout
 @using Inventory
@@ -11,6 +12,8 @@
 @using Inventory.Products
 @using Inventory.Permissions
 @using Inventory.Localization
+@using Intelligence.Decisions
+@using Intelligence.Permissions
 @using Color = MudBlazor.Color
 @using Variant = MudBlazor.Variant
 @using Size = MudBlazor.Size
@@ -19,6 +22,9 @@
 @inject IBranchInventoryAppService InventoryAppService
 @inject IBranchAppService BranchAppService
 @inject IProductAppService ProductAppService
+@inject IDecisionLogAppService DecisionLogAppService
+@inject NavigationManager Nav
+@inject IJSRuntime JS
 @inject PageLayout PageLayout
 @inject ISnackbar Snackbar
 @inject IStringLocalizer<InventoryResource> InvL
@@ -29,37 +35,59 @@
 
 <SoftStack Spacing="3">
 
-    <SoftCard Elevation="2" Class="pa-2">
-        <SoftCardContent>
-            <SoftStack Row="true" Spacing="3" AlignItems="AlignItems.Center" Class="flex-wrap">
-                <SoftIcon Icon="@Icons.Material.Filled.Warehouse" Color="Color.Primary" Size="Size.Large" />
-                <div style="min-width: 280px; flex: 1;">
+    @* ── 1. Compact header (unchanged) ─────────────────────────────────── *@
+    <div class="bi-head">
+        <div class="bi-head-left">
+            <SoftIcon Icon="@Icons.Material.Filled.Place" Color="Color.Primary" Size="Size.Small" />
+            @if (_accessibleBranches.Count > 1)
+            {
+                <div class="bi-branch-select">
                     <SoftLookupSelect TItem="BranchLookupDto" TValue="Guid?"
                                       Items="_accessibleBranches"
                                       ToValue="@(b => (Guid?)b.Id)"
                                       ToLabel="@(b => b.Name)"
                                       Value="_branchId"
                                       ValueChanged="OnBranchChangedAsync"
-                                      Label="@InvL["Branch"]"
-                                      Placeholder="@InvL["SelectBranchPrompt"]"
-                                      AdornmentIcon="@Icons.Material.Filled.Store" />
+                                      Dense="true"
+                                      Margin="Margin.Dense" />
                 </div>
-                @if (_branchId.HasValue && _canInitialize)
-                {
-                    <SoftButton Variant="Variant.Filled"
-                                Color="Color.Primary"
-                                StartIcon="@Icons.Material.Filled.AddBox"
-                                OnClick="OpenInitializeDialog">
-                        @InvL["InitializeProduct"]
-                    </SoftButton>
-                }
-            </SoftStack>
-        </SoftCardContent>
-    </SoftCard>
+            }
+            else
+            {
+                <span class="bi-branch-name">@_currentBranchName</span>
+            }
+        </div>
+
+        @if (_branchId.HasValue)
+        {
+            <div class="bi-stats-strip">
+                <span><strong>@_stats.TotalItems</strong> @InvL["Stats:Total:Short"]</span>
+                <span class="bi-dot">·</span>
+                <span class="bi-strip-ok"><strong>@_stats.HealthyStockCount</strong> @InvL["Stats:Healthy"]</span>
+                <span class="bi-dot">·</span>
+                <span class="@(_stats.LowStockCount > 0 ? "bi-strip-warn" : "")"><strong>@_stats.LowStockCount</strong> @InvL["Stats:LowStock"]</span>
+                <span class="bi-dot">·</span>
+                <span class="@(_stats.OutOfStockCount > 0 ? "bi-strip-danger" : "")"><strong>@_stats.OutOfStockCount</strong> @InvL["Stats:OutOfStock"]</span>
+            </div>
+        }
+
+        <div class="bi-head-actions">
+            @if (_branchId.HasValue && _canInitialize)
+            {
+                <SoftButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small"
+                            StartIcon="@Icons.Material.Filled.AddBox"
+                            OnClick="OpenInitializeDialog">
+                    @InvL["InitializeProduct"]
+                </SoftButton>
+            }
+            <SoftIconButton Icon="@Icons.Material.Filled.Refresh" Size="Size.Small"
+                            Color="Color.Default" OnClick="ReloadAsync" />
+        </div>
+    </div>
 
     @if (!_branchId.HasValue)
     {
-        <SoftCard Elevation="0" Class="pa-6 d-flex align-items-center justify-content-center" Style="border: 2px dashed var(--mud-palette-lines-default); background: transparent;">
+        <SoftCard Elevation="0" Class="pa-6 d-flex align-items-center justify-content-center" Style="border: 2px dashed var(--bd-2); background: transparent;">
             <SoftStack AlignItems="AlignItems.Center" Spacing="2">
                 <SoftIcon Icon="@Icons.Material.Outlined.Warehouse" Color="Color.Default" Style="font-size: 64px; opacity: 0.5;" />
                 <SoftText Typo="Typo.h6" Color="Color.Default">@InvL["SelectBranchPrompt"]</SoftText>
@@ -72,127 +100,197 @@
     }
     else
     {
-        <div class="bi-stats-grid">
-            <StatCard Icon="@Icons.Material.Filled.Inventory" Label="@InvL["Stats:Total"]"
-                      Value="@_stats.TotalItems.ToString()" AccentColor="primary" />
-            <StatCard Icon="@Icons.Material.Filled.CheckCircle" Label="@InvL["Stats:Healthy"]"
-                      Value="@_stats.HealthyStockCount.ToString()" AccentColor="success" />
-            <StatCard Icon="@Icons.Material.Filled.WarningAmber" Label="@InvL["Stats:LowStock"]"
-                      Value="@_stats.LowStockCount.ToString()" AccentColor="warning"
-                      Highlight="_stats.LowStockCount > 0" />
-            <StatCard Icon="@Icons.Material.Filled.Cancel" Label="@InvL["Stats:OutOfStock"]"
-                      Value="@_stats.OutOfStockCount.ToString()" AccentColor="error"
-                      Highlight="_stats.OutOfStockCount > 0" />
-        </div>
+        @* ── 2. Pending-decisions banner (replaces the card grid) ───────── *@
+        @if (_pendingDecisionCount > 0)
+        {
+            <div class="bi-decisions-banner">
+                <MudIcon Icon="@Icons.Material.Filled.NotificationsActive" Size="Size.Small" Class="bi-banner-icon" />
+                <span class="bi-banner-text">
+                    <strong>@_pendingDecisionCount</strong> @InvL["DecisionsNeedAttention"]
+                </span>
+                <SoftButton Variant="Variant.Text" Color="Color.Primary" Size="Size.Small"
+                            EndIcon="@Icons.Material.Filled.ArrowForward"
+                            OnClick="GoToDecisionLog">
+                    @InvL["Review"]
+                </SoftButton>
+            </div>
+        }
 
-        <SoftCard Elevation="2" Class="pa-2 page-flat">
-            <SoftCardContent>
-                <div class="toolbar">
-                    <SoftTextField T="string"
-                                   Placeholder="@InvL["Filter"]"
-                                   @bind-Value="_filter"
-                                   Variant="Variant.Outlined"
-                                   Margin="Margin.Dense"
-                                   Adornment="Adornment.Start"
-                                   AdornmentIcon="@Icons.Material.Filled.Search"
-                                   OnKeyUp="OnFilterKeyUpAsync"
-                                   Immediate="true"
-                                   Class="toolbar-search"
-                                   Style="min-width: 240px; max-width: 320px;" />
-
-                    <SoftCheckBox T="bool" @bind-Value="_onlyLowStock"
-                                  Label="@InvL["OnlyLowStock"]"
-                                  Color="Color.Warning"
-                                  CheckedChanged="@(async () => await ReloadAsync())" />
-                    <SoftCheckBox T="bool" @bind-Value="_onlyOutOfStock"
-                                  Label="@InvL["OnlyOutOfStock"]"
-                                  Color="Color.Error"
-                                  CheckedChanged="@(async () => await ReloadAsync())" />
-                    <SoftCheckBox T="bool" @bind-Value="_includeInactive"
-                                  Label="@InvL["IncludeInactiveProducts"]"
-                                  Color="Color.Default"
-                                  CheckedChanged="@(async () => await ReloadAsync())" />
-
-                    <div class="toolbar-right">
-                        <SoftButton Variant="Variant.Text" Color="Color.Primary"
-                                    OnClick="ReloadAsync" StartIcon="@Icons.Material.Filled.Refresh">
-                            @L["Refresh"]
-                        </SoftButton>
-                    </div>
+        @* ── 3. All Products (table / card toggle) ──────────────────────── *@
+        <section class="bi-section">
+            <div class="bi-section-head bi-section-head--spread">
+                <h2 class="bi-section-title">@InvL["AllProducts"] (@_stats.TotalItems)</h2>
+                <div class="bi-view-toggle">
+                    <SoftTooltip Text="@InvL["TableView"]">
+                        <SoftIconButton Icon="@Icons.Material.Filled.ViewList"
+                                        Size="Size.Small"
+                                        Color="@(_viewMode == ViewTable ? Color.Primary : Color.Default)"
+                                        Class="@(_viewMode == ViewTable ? "bi-view-active" : "")"
+                                        OnClick="@(() => SetViewAsync(ViewTable))" />
+                    </SoftTooltip>
+                    <SoftTooltip Text="@InvL["CardView"]">
+                        <SoftIconButton Icon="@Icons.Material.Filled.GridView"
+                                        Size="Size.Small"
+                                        Color="@(_viewMode == ViewCard ? Color.Primary : Color.Default)"
+                                        Class="@(_viewMode == ViewCard ? "bi-view-active" : "")"
+                                        OnClick="@(() => SetViewAsync(ViewCard))" />
+                    </SoftTooltip>
                 </div>
+            </div>
 
-                <SoftDataGrid T="BranchInventoryDto"
-                              @ref="_grid"
-                              ServerData="LoadServerData"
-                              Dense="true"
-                              Hover="true"
-                              Bordered="false"
-                              Loading="_loading"
-                              SortMode="SortMode.Single"
-                              RowClassFunc="@RowClassFunc">
-                    <Columns>
-                        <PropertyColumn T="BranchInventoryDto" TProperty="string" Property="x => x.ProductSKU" Title="@InvL["SKU"]" />
-                        <PropertyColumn T="BranchInventoryDto" TProperty="string" Property="x => x.ProductName" Title="@InvL["Product"]" />
-                        <TemplateColumn T="BranchInventoryDto" Title="@InvL["QuantityOnHand"]" SortBy="x => x.QuantityOnHand">
-                            <CellTemplate>
-                                <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                                    <SoftText Typo="Typo.body1" Style="font-weight:600;">@context.Item.QuantityOnHand</SoftText>
-                                    <SoftText Typo="Typo.caption" Color="Color.Default">@context.Item.ProductUnit</SoftText>
-                                    @if (context.Item.IsOutOfStock)
-                                    {
-                                        <SoftChip T="string" Color="Color.Error" Size="Size.Small" Variant="Variant.Filled">@InvL["OutOfStock"]</SoftChip>
-                                    }
-                                    else if (context.Item.IsLowStock)
-                                    {
-                                        <SoftChip T="string" Color="Color.Warning" Size="Size.Small" Variant="Variant.Filled">@InvL["LowStock"]</SoftChip>
-                                    }
-                                </SoftStack>
-                            </CellTemplate>
-                        </TemplateColumn>
-                        <PropertyColumn T="BranchInventoryDto" TProperty="int" Property="x => x.MinimumStock" Title="@InvL["MinimumStock"]" />
-                        <TemplateColumn T="BranchInventoryDto" Title="@InvL["MaximumStock"]" SortBy="x => x.MaximumStock ?? 0">
-                            <CellTemplate>
-                                <SoftText>@(context.Item.MaximumStock?.ToString() ?? "-")</SoftText>
-                            </CellTemplate>
-                        </TemplateColumn>
-                        <TemplateColumn T="BranchInventoryDto" Title="@InvL["LastRestocked"]" SortBy="x => x.LastRestockedDate ?? DateTime.MinValue">
-                            <CellTemplate>
-                                <SoftText Typo="Typo.body2">@(context.Item.LastRestockedDate?.ToString("g") ?? "-")</SoftText>
-                            </CellTemplate>
-                        </TemplateColumn>
-                        <TemplateColumn T="BranchInventoryDto" Title="@InvL["LastSold"]" SortBy="x => x.LastSoldDate ?? DateTime.MinValue">
-                            <CellTemplate>
-                                <SoftText Typo="Typo.body2">@(context.Item.LastSoldDate?.ToString("g") ?? "-")</SoftText>
-                            </CellTemplate>
-                        </TemplateColumn>
-                        <TemplateColumn T="BranchInventoryDto" Title="@InvL["Actions"]" Sortable="false">
-                            <CellTemplate>
-                                <SoftStack Row="true" Spacing="1">
-                                    <SoftButton Size="Size.Small"
-                                                Color="Color.Primary"
-                                                Variant="Variant.Filled"
-                                                StartIcon="@Icons.Material.Filled.SwapVert"
-                                                OnClick="() => OpenAdjustDialog(context.Item)"
-                                                Disabled="!_canAdjust">
-                                        @InvL["AdjustStock"]
-                                    </SoftButton>
-                                    @if (_canSetLimits)
-                                    {
-                                        <SoftIconButton Icon="@Icons.Material.Filled.Tune"
-                                                        Color="Color.Default"
-                                                        Size="Size.Small"
-                                                        OnClick="() => OpenLimitsDialog(context.Item)" />
-                                    }
-                                </SoftStack>
-                            </CellTemplate>
-                        </TemplateColumn>
-                    </Columns>
-                    <PagerContent>
-                        <MudDataGridPager T="BranchInventoryDto" />
-                    </PagerContent>
-                </SoftDataGrid>
-            </SoftCardContent>
-        </SoftCard>
+            <SoftCard Elevation="2" Class="pa-2 page-flat">
+                <SoftCardContent>
+                    <div class="toolbar">
+                        <SoftTextField T="string"
+                                       Placeholder="@InvL["Filter"]"
+                                       @bind-Value="_filter"
+                                       Variant="Variant.Outlined"
+                                       Margin="Margin.Dense"
+                                       Adornment="Adornment.Start"
+                                       AdornmentIcon="@Icons.Material.Filled.Search"
+                                       OnKeyUp="OnFilterKeyUpAsync"
+                                       Immediate="true"
+                                       Class="toolbar-search"
+                                       Style="min-width: 240px; max-width: 320px;" />
+
+                        <SoftCheckBox T="bool" @bind-Value="_includeInactive"
+                                      Label="@InvL["IncludeInactiveProducts"]"
+                                      Color="Color.Default"
+                                      CheckedChanged="@(async () => await ReloadCurrentViewAsync())" />
+
+                        @if (_viewMode == ViewTable)
+                        {
+                            <div class="toolbar-right">
+                                <SoftButton Variant="Variant.Text" Color="Color.Default"
+                                            StartIcon="@(_showLimits ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Tune)"
+                                            OnClick="@(() => _showLimits = !_showLimits)">
+                                    @(_showLimits ? InvL["HideLimits"] : InvL["ShowLimits"])
+                                </SoftButton>
+                            </div>
+                        }
+                    </div>
+
+                    @if (_viewMode == ViewTable)
+                    {
+                        <SoftDataGrid T="BranchInventoryDto"
+                                      @ref="_grid"
+                                      ServerData="LoadServerData"
+                                      Dense="true"
+                                      Hover="true"
+                                      Bordered="false"
+                                      Loading="_loading"
+                                      SortMode="SortMode.Single"
+                                      RowClassFunc="@RowClassFunc">
+                            <Columns>
+                                <PropertyColumn T="BranchInventoryDto" TProperty="string" Property="x => x.ProductSKU" Title="@InvL["SKU"]" />
+                                <PropertyColumn T="BranchInventoryDto" TProperty="string" Property="x => x.ProductName" Title="@InvL["Product"]" />
+                                <TemplateColumn T="BranchInventoryDto" Title="@InvL["QuantityOnHand"]" SortBy="x => x.QuantityOnHand">
+                                    <CellTemplate>
+                                        <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                            <SoftText Typo="Typo.body1" Style="font-weight:600;">@context.Item.QuantityOnHand</SoftText>
+                                            <SoftText Typo="Typo.caption" Color="Color.Default">@context.Item.ProductUnit</SoftText>
+                                            @if (context.Item.IsOutOfStock)
+                                            {
+                                                <SoftChip T="string" Color="Color.Error" Size="Size.Small" Variant="Variant.Filled">@InvL["OutOfStock"]</SoftChip>
+                                            }
+                                            else if (context.Item.IsLowStock)
+                                            {
+                                                <SoftChip T="string" Color="Color.Warning" Size="Size.Small" Variant="Variant.Filled">@InvL["LowStock"]</SoftChip>
+                                            }
+                                        </SoftStack>
+                                    </CellTemplate>
+                                </TemplateColumn>
+                                @if (_showLimits)
+                                {
+                                    <PropertyColumn T="BranchInventoryDto" TProperty="int" Property="x => x.MinimumStock" Title="@InvL["MinimumStock"]" />
+                                    <TemplateColumn T="BranchInventoryDto" Title="@InvL["MaximumStock"]" SortBy="x => x.MaximumStock ?? 0">
+                                        <CellTemplate>
+                                            <SoftText>@(context.Item.MaximumStock?.ToString() ?? "-")</SoftText>
+                                        </CellTemplate>
+                                    </TemplateColumn>
+                                }
+                                <TemplateColumn T="BranchInventoryDto" Title="@InvL["LastRestocked"]" SortBy="x => x.LastRestockedDate ?? DateTime.MinValue">
+                                    <CellTemplate>
+                                        <SoftText Typo="Typo.body2">@(context.Item.LastRestockedDate?.ToString("g") ?? "-")</SoftText>
+                                    </CellTemplate>
+                                </TemplateColumn>
+                                <TemplateColumn T="BranchInventoryDto" Title="@InvL["Actions"]" Sortable="false">
+                                    <CellTemplate>
+                                        <span class="row-actions">@RowActions(context.Item)</span>
+                                    </CellTemplate>
+                                </TemplateColumn>
+                            </Columns>
+                            <PagerContent>
+                                <MudDataGridPager T="BranchInventoryDto" />
+                            </PagerContent>
+                        </SoftDataGrid>
+                    }
+                    else
+                    {
+                        @* ── Card view ─────────────────────────────────── *@
+                        @if (_loading && _cardItems.Count == 0)
+                        {
+                            <SoftStack AlignItems="AlignItems.Center" Class="pa-6">
+                                <SoftProgressCircular Indeterminate="true" Color="Color.Primary" />
+                            </SoftStack>
+                        }
+                        else if (_cardItems.Count == 0)
+                        {
+                            <SoftStack AlignItems="AlignItems.Center" Spacing="2" Class="pa-6">
+                                <SoftIcon Icon="@Icons.Material.Outlined.Inventory2" Style="font-size: 52px; opacity: 0.4;" />
+                                <SoftText Typo="Typo.body1" Color="Color.Default">@InvL["NoMovements"]</SoftText>
+                            </SoftStack>
+                        }
+                        else
+                        {
+                            <div class="bi-prod-grid">
+                                @foreach (var item in _cardItems)
+                                {
+                                    var barClass = CardBarClass(item);
+                                    <div class="bi-prod-card @(item.ProductIsActive ? "" : "bi-prod-inactive")">
+                                        <div class="bi-prod-top">
+                                            <span class="bi-prod-sku">@item.ProductSKU</span>
+                                            <span class="bi-prod-unit">@item.ProductUnit</span>
+                                        </div>
+                                        <div class="bi-prod-name" title="@item.ProductName">@item.ProductName</div>
+
+                                        <SoftDivider Class="bi-prod-div" />
+
+                                        <div class="bi-prod-onhand-label">@InvL["QuantityOnHand"]</div>
+                                        <div class="bi-bar-wrap">
+                                            <div class="bi-bar">
+                                                <div class="bi-bar-fill @barClass" style="width:@(CardBarPercent(item))%"></div>
+                                            </div>
+                                            <div class="bi-prod-onhand-val">@item.QuantityOnHand</div>
+                                        </div>
+
+                                        <div class="bi-prod-limits">
+                                            @InvL["MinimumStock"] @item.MinimumStock
+                                            <span class="bi-dot">·</span>
+                                            @InvL["MaximumStock"] @(item.MaximumStock?.ToString() ?? "—")
+                                        </div>
+                                        <div class="bi-prod-restock">
+                                            @InvL["LastRestocked"]: @(item.LastRestockedDate?.ToLocalTime().ToString("MMM d") ?? "—")
+                                        </div>
+
+                                        <SoftDivider Class="bi-prod-div" />
+
+                                        <div class="bi-prod-actions">@RowActions(item)</div>
+                                    </div>
+                                }
+                            </div>
+
+                            @if (_cardTotal > _cardItems.Count)
+                            {
+                                <div class="bi-prod-more">
+                                    @string.Format(InvL["ShowingOfTotal"], _cardItems.Count, _cardTotal)
+                                </div>
+                            }
+                        }
+                    }
+                </SoftCardContent>
+            </SoftCard>
+        </section>
     }
 </SoftStack>
 
@@ -378,95 +476,252 @@
 }
 
 <style>
-    .bi-stats-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-        gap: 12px;
+    /* ── 1. Compact header (≤60px) ───────────────────────────────────── */
+    .bi-head {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        min-height: 44px;
+        max-height: 60px;
+        padding: 6px 4px;
+    }
+    .bi-head-left {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        min-width: 0;
+    }
+    .bi-branch-name {
+        font-family: var(--font-serif);
+        font-size: 1.05rem;
+        font-weight: 600;
+        color: var(--fg-1);
+        white-space: nowrap;
+    }
+    .bi-branch-select { min-width: 220px; }
+    .bi-stats-strip {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-left: auto;
+        font-size: 0.82rem;
+        color: var(--fg-3);
+        white-space: nowrap;
+        font-variant-numeric: tabular-nums;
+    }
+    .bi-stats-strip strong { color: var(--fg-1); font-weight: 600; }
+    .bi-dot { opacity: 0.4; }
+    .bi-strip-ok strong     { color: var(--green-text, var(--success)); }
+    .bi-strip-warn          { color: var(--amber-text, var(--warn)); }
+    .bi-strip-warn strong   { color: var(--amber-text, var(--warn)); }
+    .bi-strip-danger        { color: var(--danger); }
+    .bi-strip-danger strong { color: var(--danger); }
+    .bi-head-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
     }
 
-    .bi-stat-card {
-        position: relative;
+    /* ── 2. Pending-decisions banner ─────────────────────────────────── */
+    .bi-decisions-banner {
         display: flex;
         align-items: center;
         gap: 12px;
-        padding: 16px 18px;
-        border-radius: var(--glass-radius);
-        background: var(--glass-bg-card);
-        backdrop-filter: var(--glass-blur);
-        -webkit-backdrop-filter: var(--glass-blur);
-        border: var(--glass-border);
-        box-shadow: var(--glass-shadow);
-        color: var(--glass-text-primary);
-        transition: transform 0.15s ease, box-shadow 0.15s ease;
-        overflow: hidden;
+        max-height: 48px;
+        padding: 8px 14px;
+        background: var(--surface);
+        border: 1px solid var(--bd-1);
+        border-left: 3px solid var(--warn);
+        border-radius: var(--r-md);
     }
-    .bi-stat-card::before {
-        content: '';
-        position: absolute;
-        left: 0; top: 0; bottom: 0;
-        width: 4px;
+    .bi-banner-icon { color: var(--amber-text, var(--warn)); }
+    .bi-banner-text {
+        font-size: 0.9rem;
+        color: var(--fg-2);
     }
-    .bi-stat-card.accent-primary::before { background: var(--mud-palette-primary); }
-    .bi-stat-card.accent-success::before { background: var(--mud-palette-success); }
-    .bi-stat-card.accent-warning::before { background: var(--mud-palette-warning); }
-    .bi-stat-card.accent-error::before   { background: var(--mud-palette-error); }
+    .bi-banner-text strong {
+        color: var(--fg-1);
+        font-variant-numeric: tabular-nums;
+    }
+    .bi-decisions-banner .mud-button-root { margin-left: auto; }
 
-    .bi-stat-card.highlight {
-        box-shadow: 0 2px 12px rgba(0,0,0,0.08);
-        transform: translateY(-1px);
-    }
-    .bi-stat-card .bi-stat-icon {
+    /* ── Sections ────────────────────────────────────────────────────── */
+    .bi-section { display: flex; flex-direction: column; gap: 12px; }
+    .bi-section-head {
         display: flex;
         align-items: center;
-        justify-content: center;
-        width: 44px;
-        height: 44px;
-        border-radius: 10px;
+        gap: 8px;
     }
-    .bi-stat-card.accent-primary .bi-stat-icon { background: rgba(var(--mud-palette-primary-rgb), 0.12); color: var(--mud-palette-primary); }
-    .bi-stat-card.accent-success .bi-stat-icon { background: rgba(var(--mud-palette-success-rgb), 0.12); color: var(--mud-palette-success); }
-    .bi-stat-card.accent-warning .bi-stat-icon { background: rgba(var(--mud-palette-warning-rgb), 0.15); color: var(--mud-palette-warning); }
-    .bi-stat-card.accent-error   .bi-stat-icon { background: rgba(var(--mud-palette-error-rgb), 0.15); color: var(--mud-palette-error); }
+    .bi-section-head--spread { justify-content: space-between; }
+    .bi-section-title {
+        font-family: var(--font-serif);
+        font-size: 1.15rem;
+        font-weight: 600;
+        color: var(--fg-1);
+        margin: 0;
+    }
+    .bi-view-toggle {
+        display: flex;
+        align-items: center;
+        gap: 2px;
+        padding: 2px;
+        background: var(--bg-2);
+        border: 1px solid var(--bd-1);
+        border-radius: var(--r-sm);
+    }
+    .bi-view-toggle .bi-view-active {
+        background: var(--accent-soft);
+    }
 
-    .bi-stat-value { font-size: 1.7rem; font-weight: 700; line-height: 1.1; }
-    .bi-stat-label { font-size: 0.78rem; opacity: 0.75; text-transform: uppercase; letter-spacing: 0.04em; }
-
+    /* ── 3a. Table row tints ─────────────────────────────────────────── */
     .bi-current-qty {
-        background: var(--glass-bg-strong);
-        backdrop-filter: var(--glass-blur);
-        -webkit-backdrop-filter: var(--glass-blur);
-        border: var(--glass-border);
-        border-radius: var(--glass-radius-sm);
+        background: var(--bg-2);
+        border: 1px solid var(--bd-1);
+        border-radius: var(--r-sm);
         padding: 12px 16px;
         text-align: center;
-        color: var(--glass-text-primary);
+        color: var(--fg-1);
     }
 
-    ::deep tr.row-low-stock { background: rgba(255, 167, 38, 0.10); }
-    ::deep tr.row-low-stock:hover { background: rgba(255, 167, 38, 0.18) !important; }
-    ::deep tr.row-out-of-stock { background: rgba(244, 67, 54, 0.12); }
-    ::deep tr.row-out-of-stock:hover { background: rgba(244, 67, 54, 0.20) !important; }
+    ::deep tr.row-low-stock { background: rgba(200, 156, 79, 0.10); }
+    ::deep tr.row-low-stock:hover { background: rgba(200, 156, 79, 0.18) !important; }
+    ::deep tr.row-out-of-stock { background: rgba(179, 84, 58, 0.12); }
+    ::deep tr.row-out-of-stock:hover { background: rgba(179, 84, 58, 0.20) !important; }
     ::deep tr.row-inactive { opacity: 0.55; }
+
+    /* ── 3b. Card view ───────────────────────────────────────────────── */
+    .bi-prod-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 14px;
+        padding-top: 4px;
+    }
+    .bi-prod-card {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        padding: 14px 16px;
+        background: var(--surface);
+        border: 1px solid var(--bd-1);
+        border-radius: var(--r-md);
+        transition: box-shadow .15s;
+    }
+    .bi-prod-card:hover { box-shadow: var(--shadow-sm); }
+    .bi-prod-inactive { opacity: 0.55; }
+    .bi-prod-top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+    }
+    .bi-prod-sku {
+        font-family: var(--font-mono);
+        font-size: 0.78rem;
+        color: var(--fg-3);
+    }
+    .bi-prod-unit {
+        font-size: 0.68rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+        color: var(--fg-2);
+        background: var(--hover);
+        padding: 2px 8px;
+        border-radius: 999px;
+    }
+    .bi-prod-name {
+        font-weight: 600;
+        font-size: 0.95rem;
+        color: var(--fg-1);
+        line-height: 1.3;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        min-height: 2.5em;
+    }
+    .bi-prod-div { margin: 4px 0; }
+    .bi-prod-onhand-label {
+        font-size: 0.72rem;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--fg-3);
+    }
+    .bi-prod-onhand-val {
+        font-size: 0.95rem;
+        font-weight: 700;
+        color: var(--fg-1);
+        font-variant-numeric: tabular-nums;
+        min-width: 2.5em;
+        text-align: right;
+    }
+    .bi-prod-limits {
+        font-size: 0.8rem;
+        color: var(--fg-2);
+        font-variant-numeric: tabular-nums;
+    }
+    .bi-prod-restock { font-size: 0.78rem; color: var(--fg-3); }
+    .bi-prod-actions { display: flex; justify-content: flex-end; }
+    .bi-prod-more {
+        text-align: center;
+        font-size: 0.8rem;
+        color: var(--fg-3);
+        padding: 12px 0 4px;
+    }
+
+    /* shared stock bar */
+    .bi-bar-wrap { display: flex; align-items: center; gap: 8px; }
+    .bi-bar {
+        flex: 1;
+        height: 8px;
+        border-radius: 999px;
+        background: var(--hover);
+        overflow: hidden;
+    }
+    .bi-bar-fill { height: 100%; border-radius: 999px; transition: width .25s; }
+    .bi-bar-critical { background: var(--danger); }
+    .bi-bar-warning  { background: var(--warn); }
+    .bi-bar-ok       { background: var(--success); }
+
+    @@media (max-width: 1100px) {
+        .bi-prod-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+    @@media (max-width: 720px) {
+        .bi-head { flex-wrap: wrap; max-height: none; }
+        .bi-stats-strip { margin-left: 0; flex-wrap: wrap; }
+        .bi-prod-grid { grid-template-columns: 1fr; }
+    }
 </style>
 
 @code {
+    private const string ViewTable = "table";
+    private const string ViewCard = "card";
+    private const string ViewStorageKey = "bi-viewmode";
+    private const int CardFetchLimit = 200;
+
     private SoftDataGrid<BranchInventoryDto> _grid = null!;
     private bool _loading;
     private bool _saving;
 
     private List<BranchLookupDto> _accessibleBranches = new();
     private Guid? _branchId;
+    private string _currentBranchName = string.Empty;
 
     private string? _filter;
-    private bool _onlyLowStock;
-    private bool _onlyOutOfStock;
     private bool _includeInactive;
+    private bool _showLimits;
+
+    private string _viewMode = ViewTable;
+    private List<BranchInventoryDto> _cardItems = new();
+    private int _cardTotal;
 
     private BranchInventoryStatsDto _stats = new();
+    private int _pendingDecisionCount;
 
     private bool _canAdjust;
     private bool _canInitialize;
     private bool _canSetLimits;
+    private bool _canViewDecisions;
 
     private bool _adjustVisible;
     private BranchInventoryDto? _adjustTarget;
@@ -490,11 +745,42 @@
 
     public record MovementOption(string Value, string Label);
 
+    /// <summary>Kebab action menu, shared by the table rows and the product cards.</summary>
+    private RenderFragment<BranchInventoryDto> RowActions => item =>
+        @<SoftMenu Icon="@Icons.Material.Filled.MoreVert"
+                   Size="Size.Small"
+                   Dense="true"
+                   AnchorOrigin="Origin.BottomRight"
+                   TransformOrigin="Origin.TopRight">
+            @if (_canAdjust)
+            {
+                <SoftMenuItem Icon="@Icons.Material.Filled.SwapVert" OnClick="() => OpenAdjustDialog(item)">
+                    @InvL["AdjustStock"]
+                </SoftMenuItem>
+            }
+            @if (_canSetLimits)
+            {
+                <SoftMenuItem Icon="@Icons.Material.Filled.Tune" OnClick="() => OpenLimitsDialog(item)">
+                    @InvL["EditLimits"]
+                </SoftMenuItem>
+            }
+            <SoftMenuItem Icon="@Icons.Material.Filled.History" OnClick="GoToMovements">
+                @InvL["ViewMovementHistory"]
+            </SoftMenuItem>
+            <SoftMenuItem Icon="@Icons.Material.Filled.SwapHoriz" OnClick="GoToTransfers">
+                @InvL["RequestTransfer"]
+            </SoftMenuItem>
+            <SoftMenuItem Icon="@Icons.Material.Filled.Inventory2" OnClick="GoToProducts">
+                @InvL["ViewProductDetails"]
+            </SoftMenuItem>
+        </SoftMenu>;
+
     protected override async Task OnInitializedAsync()
     {
         _canAdjust = await AuthorizationService.IsGrantedAsync(InventoryPermissions.BranchInventory.Adjust);
         _canInitialize = await AuthorizationService.IsGrantedAsync(InventoryPermissions.BranchInventory.Initialize);
         _canSetLimits = await AuthorizationService.IsGrantedAsync(InventoryPermissions.BranchInventory.SetLimits);
+        _canViewDecisions = await AuthorizationService.IsGrantedAsync(IntelligencePermissions.DecisionLogs.Default);
 
         _movementOptions = new List<MovementOption>
         {
@@ -512,6 +798,12 @@
             {
                 var all = await BranchAppService.GetLookupAsync();
                 _accessibleBranches = all.Where(b => ids.Contains(b.Id)).ToList();
+
+                // Branch managers normally have exactly one branch — auto-select it.
+                if (_accessibleBranches.Count > 0)
+                {
+                    await SelectBranchAsync(_accessibleBranches[0].Id);
+                }
             }
         }
         catch (Exception ex)
@@ -520,17 +812,45 @@
         }
     }
 
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        try
+        {
+            var saved = await JS.InvokeAsync<string?>("localStorage.getItem", ViewStorageKey);
+            if (saved == ViewCard && _viewMode != ViewCard)
+            {
+                _viewMode = ViewCard;
+                if (_branchId.HasValue) await LoadCardItemsAsync();
+                StateHasChanged();
+            }
+        }
+        catch
+        {
+            // localStorage unavailable (e.g. prerender) — keep the default table view.
+        }
+    }
+
     private async Task OnBranchChangedAsync(Guid? branchId)
     {
-        _branchId = branchId;
-        _filter = null;
-        _onlyLowStock = false;
-        _onlyOutOfStock = false;
         if (branchId.HasValue)
         {
-            await RefreshStatsAsync();
-            await ReloadAsync();
+            await SelectBranchAsync(branchId.Value);
         }
+        else
+        {
+            _branchId = null;
+        }
+    }
+
+    private async Task SelectBranchAsync(Guid branchId)
+    {
+        _branchId = branchId;
+        _currentBranchName = _accessibleBranches.FirstOrDefault(b => b.Id == branchId)?.Name ?? string.Empty;
+        _filter = null;
+        await RefreshStatsAsync();
+        await LoadPendingDecisionCountAsync();
+        await ReloadCurrentViewAsync();
     }
 
     private async Task RefreshStatsAsync()
@@ -539,6 +859,32 @@
         try
         {
             _stats = await InventoryAppService.GetStatsAsync(_branchId.Value);
+        }
+        catch (Exception ex)
+        {
+            await HandleErrorAsync(ex);
+        }
+    }
+
+    /// <summary>
+    /// Counts pending decision logs for this branch (only when the user may read them).
+    /// Drives the banner. Acknowledged / Dismissed / Executed logs are excluded by the
+    /// Status == Pending filter, so the count drops once a decision is resolved.
+    /// </summary>
+    private async Task LoadPendingDecisionCountAsync()
+    {
+        _pendingDecisionCount = 0;
+        if (!_branchId.HasValue || !_canViewDecisions) return;
+        try
+        {
+            var res = await DecisionLogAppService.GetListAsync(new GetDecisionLogsInput
+            {
+                BranchId = _branchId.Value,
+                Status = DecisionLogStatuses.Pending,
+                SkipCount = 0,
+                MaxResultCount = 1
+            });
+            _pendingDecisionCount = (int)res.TotalCount;
         }
         catch (Exception ex)
         {
@@ -567,8 +913,6 @@
             {
                 BranchId = _branchId.Value,
                 Filter = _filter,
-                OnlyLowStock = _onlyLowStock ? true : (bool?)null,
-                OnlyOutOfStock = _onlyOutOfStock ? true : (bool?)null,
                 IncludeInactiveProducts = _includeInactive ? true : (bool?)null,
                 SkipCount = state.Page * state.PageSize,
                 MaxResultCount = state.PageSize,
@@ -587,6 +931,34 @@
         }
     }
 
+    private async Task LoadCardItemsAsync()
+    {
+        if (!_branchId.HasValue) return;
+        _loading = true;
+        try
+        {
+            var result = await InventoryAppService.GetListAsync(new GetBranchInventoryInput
+            {
+                BranchId = _branchId.Value,
+                Filter = _filter,
+                IncludeInactiveProducts = _includeInactive ? true : (bool?)null,
+                SkipCount = 0,
+                MaxResultCount = CardFetchLimit,
+                Sorting = "ProductName asc"
+            });
+            _cardItems = result.Items.ToList();
+            _cardTotal = (int)result.TotalCount;
+        }
+        catch (Exception ex)
+        {
+            await HandleErrorAsync(ex);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
     private string RowClassFunc(BranchInventoryDto row, int index)
     {
         if (!row.ProductIsActive) return "row-inactive";
@@ -595,15 +967,59 @@
         return string.Empty;
     }
 
-    private async Task OnFilterKeyUpAsync(KeyboardEventArgs e)
+    private static int CardBarPercent(BranchInventoryDto r)
     {
-        if (e.Key == "Enter") await ReloadAsync();
+        var denom = r.MaximumStock.HasValue && r.MaximumStock.Value > 0
+            ? r.MaximumStock.Value
+            : Math.Max(1, r.MinimumStock * 3);
+        var pct = (int)Math.Round((double)r.QuantityOnHand / denom * 100);
+        return Math.Clamp(pct, 0, 100);
     }
 
+    private static string CardBarClass(BranchInventoryDto r)
+    {
+        if (r.QuantityOnHand < r.MinimumStock) return "bi-bar-critical";
+        if (r.QuantityOnHand < r.MinimumStock * 1.5) return "bi-bar-warning";
+        return "bi-bar-ok";
+    }
+
+    private async Task OnFilterKeyUpAsync(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await ReloadCurrentViewAsync();
+    }
+
+    private async Task SetViewAsync(string mode)
+    {
+        if (_viewMode == mode) return;
+        _viewMode = mode;
+        try { await JS.InvokeVoidAsync("localStorage.setItem", ViewStorageKey, mode); } catch { }
+        await ReloadCurrentViewAsync();
+    }
+
+    private async Task GoToDecisionLog() => Nav.NavigateTo("/intelligence/decision-log");
+    private void GoToTransfers() => Nav.NavigateTo("/operations/stock-transfers");
+    private void GoToMovements() => Nav.NavigateTo("/inventory/stock-movements");
+    private void GoToProducts() => Nav.NavigateTo("/inventory/products");
+
+    /// <summary>Full refresh: stats, banner, and the active view.</summary>
     private async Task ReloadAsync()
     {
-        if (_grid != null) await _grid.ReloadServerData();
         await RefreshStatsAsync();
+        await LoadPendingDecisionCountAsync();
+        await ReloadCurrentViewAsync();
+    }
+
+    /// <summary>Reload whichever view is active (table grid or card list).</summary>
+    private async Task ReloadCurrentViewAsync()
+    {
+        if (_viewMode == ViewCard)
+        {
+            await LoadCardItemsAsync();
+        }
+        else if (_grid != null)
+        {
+            await _grid.ReloadServerData();
+        }
     }
 
     private void OpenAdjustDialog(BranchInventoryDto row)

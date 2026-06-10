@@ -30,7 +30,17 @@ public static class IntelligenceDbContextModelCreatingExtensions
             b.Property(x => x.DecisionType).IsRequired().HasMaxLength(32);
             b.Property(x => x.Reasoning).IsRequired().HasMaxLength(1024);
             b.Property(x => x.SuggestedAction).HasMaxLength(256);
-            b.Property(x => x.Status).IsRequired().HasMaxLength(32).HasDefaultValue("Pending");
+            // NOTE: do NOT use HasDefaultValue("Pending") here. A store default marks the
+            // property ValueGeneratedOnAdd, and ABP's disconnected UpdateAsync path then
+            // omits it from the UPDATE SET clause — so Acknowledge/Dismiss/Execute would
+            // silently fail to persist Status (the row stays "Pending"). The entity already
+            // initialises Status to Pending in code, so a DB default is unnecessary.
+            b.Property(x => x.Status).IsRequired().HasMaxLength(32);
+
+            // Link to the corrective document created on execution (nullable —
+            // only set during the single Pending→Executed transition).
+            b.Property(x => x.ExecutedActionType).HasMaxLength(32);
+            b.Property(x => x.ExecutedActionId);
 
             // Nullable get-only auto-properties are silently skipped by EF's convention,
             // so map them explicitly. Without this, queries that reference BranchId etc.

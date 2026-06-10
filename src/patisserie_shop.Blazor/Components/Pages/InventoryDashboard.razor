@@ -8,6 +8,7 @@
 @using Inventory.Permissions
 @using Inventory.Localization
 @using Volo.Abp.AspNetCore.Components.Web.Theming.Layout
+@using ApexCharts
 @using Color = MudBlazor.Color
 @using Size = MudBlazor.Size
 @inherits patisserie_shopComponentBase
@@ -167,14 +168,27 @@
                         <span class="health-pct">@(total > 0 ? $"{(double)_data.OutOfStockCount / total * 100:F1}" : "0")%</span>
                     </div>
 
-                    @* Visual ring *@
-                    <div class="health-ring-wrap">
-                        <div class="health-ring" style="@BuildRingStyle()">
-                            <div class="health-ring-inner">
-                                <div class="health-ring-pct">@(total > 0 ? $"{(double)_data.HealthyStockCount / total * 100:F0}" : "0")%</div>
-                                <div class="health-ring-text">healthy</div>
+                    @* Visual donut (ApexCharts) *@
+                    <div class="health-donut-wrap">
+                        @if (total > 0)
+                        {
+                            <ApexChart TItem="HealthSlice" @key="_data" Options="_healthChartOptions" Height="230">
+                                <ApexPointSeries TItem="HealthSlice"
+                                                 Items="_healthSlices"
+                                                 Name="Items"
+                                                 SeriesType="SeriesType.Donut"
+                                                 XValue="@(s => s.Label)"
+                                                 YValue="@(s => s.Count)" />
+                            </ApexChart>
+                            <div class="health-donut-center">
+                                <div class="health-donut-pct">@($"{(double)_data.HealthyStockCount / total * 100:F0}")%</div>
+                                <div class="health-donut-text">healthy</div>
                             </div>
-                        </div>
+                        }
+                        else
+                        {
+                            <div class="health-donut-empty">No inventory items yet</div>
+                        }
                     </div>
                 </div>
             </SoftCard>
@@ -578,32 +592,31 @@
     .health-bar { margin-bottom: 2px; }
     .health-pct { font-size: .75rem; color: var(--mud-palette-text-secondary); display: block; text-align: right; }
 
-    .health-ring-wrap {
-        display: flex;
-        justify-content: center;
-        margin-top: 20px;
+    .health-donut-wrap {
+        position: relative;
+        margin-top: 16px;
+        min-height: 230px;
     }
-    .health-ring {
-        width: 120px; height: 120px;
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-    }
-    .health-ring-inner {
-        width: 82px; height: 82px;
-        border-radius: 50%;
-        background: rgba(20, 18, 50, 0.85);
-        backdrop-filter: blur(8px);
-        -webkit-backdrop-filter: blur(8px);
+    .health-donut-wrap .apexcharts-svg { background: transparent !important; }
+    .health-donut-center {
+        position: absolute;
+        inset: 0;
         display: flex;
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        color: #fff;
+        pointer-events: none;
     }
-    .health-ring-pct { font-size: 1.3rem; font-weight: 700; line-height: 1; }
-    .health-ring-text { font-size: .65rem; opacity: .55; text-transform: uppercase; letter-spacing: .06em; }
+    .health-donut-pct { font-size: 1.4rem; font-weight: 700; line-height: 1; color: var(--fg-1); }
+    .health-donut-text { font-size: .65rem; color: var(--fg-3); text-transform: uppercase; letter-spacing: .06em; margin-top: 3px; }
+    .health-donut-empty {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 230px;
+        color: var(--fg-3);
+        font-size: .85rem;
+    }
 
     /* ─── Movement Summary Panel ────────────────────────── */
     .movement-total { text-align: center; padding-top: 4px; }
@@ -800,6 +813,37 @@
     private InventoryDashboardDto? _data;
     private bool _loading;
     private DateTime? _lastRefreshed;
+    private List<HealthSlice> _healthSlices = new();
+
+    private sealed class HealthSlice
+    {
+        public string Label { get; set; } = string.Empty;
+        public int Count { get; set; }
+    }
+
+    // Warm-theme chart styling — hex values mirror glass-theme.css tokens:
+    // --success #6b8e4e, --warn #c89c4f, --danger #b3543a, --fg-3 #8a7e6e.
+    private readonly ApexChartOptions<HealthSlice> _healthChartOptions = new()
+    {
+        Chart = new ApexCharts.Chart
+        {
+            Toolbar = new ApexCharts.Toolbar { Show = false },
+            Background = "transparent",
+            FontFamily = "Inter, sans-serif",
+            ForeColor = "#8a7e6e"
+        },
+        Colors = new List<string> { "#6b8e4e", "#c89c4f", "#b3543a" },
+        DataLabels = new ApexCharts.DataLabels { Enabled = false },
+        Legend = new ApexCharts.Legend { Show = false },
+        Stroke = new ApexCharts.Stroke { Show = false },
+        PlotOptions = new ApexCharts.PlotOptions
+        {
+            Pie = new ApexCharts.PlotOptionsPie
+            {
+                Donut = new ApexCharts.PlotOptionsDonut { Size = "74%" }
+            }
+        }
+    };
 
     protected override async Task OnInitializedAsync()
     {
@@ -812,6 +856,12 @@
         try
         {
             _data = await DashboardAppService.GetAsync();
+            _healthSlices = new List<HealthSlice>
+            {
+                new() { Label = "Healthy", Count = _data.HealthyStockCount },
+                new() { Label = "Low Stock", Count = _data.LowStockCount },
+                new() { Label = "Out of Stock", Count = _data.OutOfStockCount }
+            };
             _lastRefreshed = DateTime.Now;
         }
         catch (Exception ex)
@@ -832,21 +882,6 @@
         >= 70 => Color.Warning,
         _     => Color.Error
     };
-
-    private string BuildRingStyle()
-    {
-        if (_data == null) return "";
-        var total = _data.TotalInventoryItems;
-        if (total == 0) return "background: conic-gradient(#4caf50 0%, #e0e0e0 0%);";
-
-        double healthy = (double)_data.HealthyStockCount / total * 100;
-        double low = (double)_data.LowStockCount / total * 100;
-
-        return $"background: conic-gradient(" +
-               $"#4caf50 0% {healthy:F1}%, " +
-               $"#ff9800 {healthy:F1}% {healthy + low:F1}%, " +
-               $"#f44336 {healthy + low:F1}% 100%);";
-    }
 
     private static string FormatMovementType(string type) => type switch
     {

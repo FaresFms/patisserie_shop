@@ -43,6 +43,22 @@ public class DecisionLogAppService : IntelligenceAppService, IDecisionLogAppServ
         _authorizationService = authorizationService;
     }
 
+    public async Task<DecisionLogDto> GetAsync(Guid id)
+    {
+        var log = await _decisionLogRepository.GetAsync(id);
+
+        var scope = await GetBranchScopeAsync();
+        if (scope != null && log.BranchId.HasValue && !scope.Contains(log.BranchId.Value))
+        {
+            throw new AbpAuthorizationException("You do not have access to this decision log's branch.");
+        }
+
+        var joined = await _decisionLogRepository.GetByIdWithRuleNameAsync(id);
+        var dto = BuildDto(joined ?? new DecisionLogWithRuleName { DecisionLog = log, RuleName = null });
+        await ResolveLookupNamesAsync(new[] { dto });
+        return dto;
+    }
+
     public async Task<PagedResultDto<DecisionLogDto>> GetListAsync(GetDecisionLogsInput input)
     {
         var scope = await GetBranchScopeAsync();
@@ -85,8 +101,8 @@ public class DecisionLogAppService : IntelligenceAppService, IDecisionLogAppServ
         => MutateAsync(id, (log, userId) => log.Dismiss(userId));
 
     [Authorize(IntelligencePermissions.DecisionLogs.Acknowledge)]
-    public Task<DecisionLogDto> ExecuteAsync(Guid id)
-        => MutateAsync(id, (log, userId) => log.MarkExecuted(userId));
+    public Task<DecisionLogDto> ExecuteAsync(Guid id, ExecuteDecisionLogInput? input = null)
+        => MutateAsync(id, (log, userId) => log.MarkExecuted(userId, input?.ActionType, input?.ActionId));
 
     private async Task<DecisionLogDto> MutateAsync(Guid id, Action<AppDecisionLog, Guid> transition)
     {

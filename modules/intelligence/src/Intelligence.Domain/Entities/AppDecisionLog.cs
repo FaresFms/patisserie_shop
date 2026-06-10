@@ -23,6 +23,16 @@ public class AppDecisionLog : CreationAuditedAggregateRoot<Guid>
     public DateTime? AcknowledgedAt { get; private set; }
     public Guid? AcknowledgedByUserId { get; private set; }
 
+    /// <summary>
+    /// Kind of corrective document created when this decision was executed
+    /// (see <see cref="DecisionActionTypes"/>). Set exclusively during the single
+    /// allowed Pending→Executed transition; null when execution created nothing.
+    /// </summary>
+    public string? ExecutedActionType { get; private set; }
+
+    /// <summary>Id of the document referenced by <see cref="ExecutedActionType"/>.</summary>
+    public Guid? ExecutedActionId { get; private set; }
+
     protected AppDecisionLog() { }
 
     public AppDecisionLog(
@@ -64,7 +74,18 @@ public class AppDecisionLog : CreationAuditedAggregateRoot<Guid>
 
     public void Dismiss(Guid userId) => TransitionTo(DecisionLogStatuses.Dismissed, userId);
 
-    public void MarkExecuted(Guid userId) => TransitionTo(DecisionLogStatuses.Executed, userId);
+    public void MarkExecuted(Guid userId, string? actionType = null, Guid? actionId = null)
+    {
+        if (actionType != null && !DecisionActionTypes.IsValid(actionType))
+        {
+            throw new BusinessException(IntelligenceErrorCodes.InvalidDecisionActionType)
+                .WithData("ActionType", actionType);
+        }
+
+        ExecutedActionType = actionType;
+        ExecutedActionId = actionId;
+        TransitionTo(DecisionLogStatuses.Executed, userId);
+    }
 
     /// <summary>
     /// Single point of mutation for the workflow status. A decision log is born

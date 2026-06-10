@@ -2,6 +2,7 @@
 @using Microsoft.AspNetCore.Components.Authorization
 @using patisserie_shop.Dashboard
 @using Intelligence.Decisions
+@using ApexCharts
 @using Color = MudBlazor.Color
 @using Variant = MudBlazor.Variant
 @using Size = MudBlazor.Size
@@ -258,25 +259,15 @@
                             </div>
                         </header>
 
-                        @{
-                            var maxVal = _data.SalesLast7Days.Max(s => s.TotalAmount);
-                            if (maxVal <= 0) maxVal = 1;
-                        }
                         <div class="bm-chart">
-                            @foreach (var d in _data.SalesLast7Days)
-                            {
-                                var h = (double)(d.TotalAmount / maxVal) * 100.0;
-                                if (h > 0 && h < 3) h = 3;
-                                var tooltip = $"{d.Date:ddd, MMM d}: {FormatMoney(d.TotalAmount)} · {d.SaleCount} sales";
-                                <div class="bm-bar-col" title="@tooltip">
-                                    <div class="bm-bar-val">@(d.TotalAmount > 0 ? FormatCompact(d.TotalAmount) : "")</div>
-                                    <div class="bm-bar-wrap">
-                                        <div class="bm-bar @(IsToday(d.Date) ? "bm-bar--today" : "")"
-                                             style="height: @(h.ToString("0.##"))%"></div>
-                                    </div>
-                                    <div class="bm-bar-label">@d.Date.ToString("ddd")</div>
-                                </div>
-                            }
+                            <ApexChart TItem="DailySalesDto" @key="_data" Options="_salesChartOptions" Height="220">
+                                <ApexPointSeries TItem="DailySalesDto"
+                                                 Items="_data.SalesLast7Days"
+                                                 Name="Sales"
+                                                 SeriesType="SeriesType.Area"
+                                                 XValue='@(d => d.Date.ToString("ddd"))'
+                                                 YValue="@(d => d.TotalAmount)" />
+                            </ApexChart>
                         </div>
                     </section>
 
@@ -685,28 +676,9 @@
     .bm-dead-days { color: #b3543a; font-weight: 600; }
     .bm-stock-action { display: flex; align-items: center; }
 
-    /* ── Chart (same as admin) ── */
-    .bm-chart {
-        display: grid;
-        grid-template-columns: repeat(7, 1fr);
-        gap: 8px;
-        align-items: end;
-        height: 180px;
-    }
-    .bm-bar-col { display: flex; flex-direction: column; align-items: center; gap: 4px; height: 100%; }
-    .bm-bar-val { font-size: 10.5px; color: var(--fg-3); font-variant-numeric: tabular-nums; min-height: 14px; }
-    .bm-bar-wrap { flex: 1; width: 100%; display: flex; align-items: flex-end; justify-content: center; }
-    .bm-bar {
-        width: 80%;
-        max-width: 44px;
-        min-height: 2px;
-        background: linear-gradient(180deg, var(--accent) 0%, var(--accent-hover, var(--accent)) 100%);
-        border-radius: 4px 4px 0 0;
-        transition: opacity .15s;
-    }
-    .bm-bar:hover { opacity: .85; }
-    .bm-bar--today { background: linear-gradient(180deg, #c89c4f 0%, #b88a3e 100%); }
-    .bm-bar-label { font-size: 11px; color: var(--fg-3); text-transform: uppercase; letter-spacing: .04em; }
+    /* ── Chart (ApexCharts, same style as admin) ── */
+    .bm-chart { min-height: 220px; }
+    .bm-chart .apexcharts-svg { background: transparent !important; }
 
     /* ── Sales table ── */
     .bm-table {
@@ -843,6 +815,53 @@
     private Guid? _busyId;
     private readonly HashSet<Guid> _fadingIds = new();
 
+    // Warm-theme chart styling — hex values mirror glass-theme.css tokens
+    // (--accent #c8633f terracotta, --fg-3 #8a7e6e mid-tone for both light & dark).
+    private readonly ApexChartOptions<DailySalesDto> _salesChartOptions = new()
+    {
+        Chart = new ApexCharts.Chart
+        {
+            Toolbar = new ApexCharts.Toolbar { Show = false },
+            Background = "transparent",
+            FontFamily = "Inter, sans-serif",
+            ForeColor = "#8a7e6e"
+        },
+        Colors = new List<string> { "#c8633f" },
+        Stroke = new ApexCharts.Stroke { Curve = ApexCharts.Curve.Smooth, Width = 3 },
+        DataLabels = new ApexCharts.DataLabels { Enabled = false },
+        Fill = new ApexCharts.Fill
+        {
+            Type = ApexCharts.FillType.Gradient,
+            Gradient = new ApexCharts.FillGradient
+            {
+                ShadeIntensity = 0.4,
+                OpacityFrom = 0.35,
+                OpacityTo = 0.05
+            }
+        },
+        Grid = new ApexCharts.Grid
+        {
+            BorderColor = "rgba(138, 126, 110, 0.25)",
+            StrokeDashArray = 3
+        },
+        Legend = new ApexCharts.Legend { Show = false },
+        Xaxis = new ApexCharts.XAxis
+        {
+            AxisBorder = new ApexCharts.AxisBorder { Show = false },
+            AxisTicks = new ApexCharts.AxisTicks { Show = false }
+        },
+        Yaxis = new List<ApexCharts.YAxis>
+        {
+            new ApexCharts.YAxis
+            {
+                Labels = new ApexCharts.YAxisLabels
+                {
+                    Formatter = "function (value) { return '$' + Math.round(value).toLocaleString(); }"
+                }
+            }
+        }
+    };
+
     private double TodayDelta
     {
         get
@@ -936,15 +955,6 @@
     }
 
     private static string FormatMoney(decimal v) => v.ToString("C0", System.Globalization.CultureInfo.GetCultureInfo("en-US"));
-
-    private static string FormatCompact(decimal v)
-    {
-        if (v >= 1_000_000) return $"${v / 1_000_000m:0.#}M";
-        if (v >= 1_000) return $"${v / 1_000m:0.#}k";
-        return $"${v:0}";
-    }
-
-    private static bool IsToday(DateTime d) => d.Date == DateTime.UtcNow.Date;
 
     private static string Truncate(string s, int max)
         => string.IsNullOrEmpty(s) || s.Length <= max ? s : s[..max].TrimEnd() + "…";
