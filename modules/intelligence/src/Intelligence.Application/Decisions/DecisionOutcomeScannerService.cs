@@ -37,6 +37,7 @@ public class DecisionOutcomeScannerService : ITransientDependency
     private readonly IRepository<AppInventoryRule, Guid> _ruleRepository;
     private readonly IRepository<AppProductVelocity, Guid> _velocityRepository;
     private readonly IBranchInventoryRepository _inventoryRepository;
+    private readonly IRepository<AppStockBatch, Guid> _batchRepository;
     private readonly IAsyncQueryableExecuter _asyncExecuter;
     private readonly ILogger<DecisionOutcomeScannerService> _logger;
 
@@ -45,6 +46,7 @@ public class DecisionOutcomeScannerService : ITransientDependency
         IRepository<AppInventoryRule, Guid> ruleRepository,
         IRepository<AppProductVelocity, Guid> velocityRepository,
         IBranchInventoryRepository inventoryRepository,
+        IRepository<AppStockBatch, Guid> batchRepository,
         IAsyncQueryableExecuter asyncExecuter,
         ILogger<DecisionOutcomeScannerService> logger)
     {
@@ -52,6 +54,7 @@ public class DecisionOutcomeScannerService : ITransientDependency
         _ruleRepository = ruleRepository;
         _velocityRepository = velocityRepository;
         _inventoryRepository = inventoryRepository;
+        _batchRepository = batchRepository;
         _asyncExecuter = asyncExecuter;
         _logger = logger;
     }
@@ -103,13 +106,23 @@ public class DecisionOutcomeScannerService : ITransientDependency
             velocityByKey = velocities.ToDictionary(v => (v.ProductId, v.BranchId));
         }
 
+        // Live batch expiry dates are only needed to judge ExpiryAlert decisions.
+        var batchExpiriesByKey = new Dictionary<(Guid ProductId, Guid BranchId), List<DateTime>>();
+        if (decisions.Any(d => d.DecisionType == DecisionTypes.ExpiryAlert))
+        {
+            var liveBatches = await _batchRepository.GetListAsync(b => b.QuantityRemaining > 0);
+            batchExpiriesByKey = liveBatches
+                .GroupBy(b => (b.ProductId, b.BranchId))
+                .ToDictionary(g => g.Key, g => g.Select(b => b.ExpiryDate).ToList());
+        }
+
         var resolved = 0;
         var stockedOut = 0;
         var unresolved = 0;
 
         foreach (var decision in decisions)
         {
-            var outcome = EvaluateOutcome(decision, stockByKey, ruleById, velocityByKey);
+            var outcome = EvaluateOutcome(decision, stockByKey, ruleById, velocityByKey, batchExpiriesByKey, nowUtc.Date);
 
             // Sanctioned controlled mutation of the otherwise-immutable ledger row
             // (see RecordOutcome). Persisted in one batch when the worker's unit of
@@ -137,7 +150,9 @@ public class DecisionOutcomeScannerService : ITransientDependency
         AppDecisionLog decision,
         IReadOnlyDictionary<(Guid ProductId, Guid BranchId), AppBranchInventory> stockByKey,
         IReadOnlyDictionary<Guid, AppInventoryRule> ruleById,
-        IReadOnlyDictionary<(Guid ProductId, Guid BranchId), AppProductVelocity> velocityByKey)
+        IReadOnlyDictionary<(Guid ProductId, Guid BranchId), AppProductVelocity> velocityByKey,
+        IReadOnlyDictionary<(Guid ProductId, Guid BranchId), List<DateTime>> batchExpiriesByKey,
+        DateTime todayUtc)
     {
         // TransferSuggestion is judged at the branch that needed the stock (target);
         // every other type at the branch the decision was raised for.
@@ -200,6 +215,23 @@ public class DecisionOutcomeScannerService : ITransientDependency
                 return inventory.LastSoldDate.HasValue && inventory.LastSoldDate.Value > decision.CreationTime
                     ? DecisionOutcomes.Resolved
                     : DecisionOutcomes.Unresolved;
+
+            case DecisionTypes.ExpiryAlert:
+            {
+                // Rule deleted (or threshold-less): can't recompute the expiry window → unresolved.
+                if (rule?.ThresholdDays is not int windowDays)
+                {
+                    return DecisionOutcomes.Unresolved;
+                }
+                // Resolved when nothing at risk remains: no live batch (qty > 0) that is
+                // already expired or expiring within the rule's window — i.e. the at-risk
+                // stock was sold/moved before dying. An expired batch always satisfies
+                // ExpiryDate <= windowEnd, so one comparison covers both conditions.
+                var windowEnd = todayUtc.AddDays(windowDays);
+                var stillAtRisk = batchExpiriesByKey.TryGetValue((decision.ProductId, branchId.Value), out var expiries)
+                    && expiries.Any(d => d.Date <= windowEnd);
+                return stillAtRisk ? DecisionOutcomes.Unresolved : DecisionOutcomes.Resolved;
+            }
 
             default:
                 // Unknown/future decision type: record Unresolved rather than re-scanning forever.

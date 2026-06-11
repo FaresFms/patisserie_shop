@@ -53,6 +53,17 @@ public interface ISaleRepository : IRepository<AppSale, Guid>
         int take,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Per-product quantity + revenue totals in the window, without truncation or
+    /// ordering. Backs analytics views that need the full distribution (top and
+    /// slow movers, category mix) rather than a top-N slice.
+    /// </summary>
+    Task<List<ProductSalesAggregate>> GetProductSalesTotalsAsync(
+        DateTime fromUtcInclusive,
+        DateTime toUtcExclusive,
+        IReadOnlyCollection<Guid>? branchIdScope,
+        CancellationToken cancellationToken = default);
+
     /// <summary>Sum + count grouped by branch in the supplied window.</summary>
     Task<List<BranchSalesAggregate>> GetSalesByBranchAsync(
         DateTime fromUtcInclusive,

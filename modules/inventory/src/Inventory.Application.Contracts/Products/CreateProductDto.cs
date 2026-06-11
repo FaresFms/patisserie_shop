@@ -42,4 +42,8 @@ public class CreateProductDto
     public string? ImageUrl { get; set; }
 
     public bool IsActive { get; set; } = true;
+
+    /// <summary>Null = non-perishable (no batch/expiry tracking).</summary>
+    [Range(1, 3650)]
+    public int? ShelfLifeDays { get; set; }
 }

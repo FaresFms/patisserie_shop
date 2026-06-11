@@ -18,6 +18,9 @@ public static class DecisionTypes
     /// <summary>Raised by DaysOfCover rules: stock will run out within the threshold days.</summary>
     public const string StockoutRisk = "StockoutRisk";
 
+    /// <summary>Raised by ExpiringSoon rules: a stock batch expires within the threshold days.</summary>
+    public const string ExpiryAlert = "ExpiryAlert";
+
     public static readonly string[] All =
     {
         LowStockAlert,
@@ -25,7 +28,8 @@ public static class DecisionTypes
         DeadStockFlag,
         TransferSuggestion,
         ReorderSuggestion,
-        StockoutRisk
+        StockoutRisk,
+        ExpiryAlert
     };
 
     public static bool IsValid(string? decisionType)

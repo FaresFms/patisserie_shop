@@ -3,7 +3,9 @@
     "allow": [
       "Bash(dotnet build *)",
       "Read(//tmp/**)",
-      "Bash(find \"c:\\\\\\\\Users\\\\\\\\fares\\\\\\\\OneDrive\\\\\\\\Documents\\\\\\\\Projects\\\\\\\\patisserie_shop\\\\\\\\modules\\\\\\\\inventory\\\\\\\\src\" -name \"*.cs\" -type f ! -path \"*/obj/*\" ! -name \"*AssemblyInfo*\" ! -name \"*AssemblyAttributes*\")"
+      "Bash(find \"c:\\\\\\\\Users\\\\\\\\fares\\\\\\\\OneDrive\\\\\\\\Documents\\\\\\\\Projects\\\\\\\\patisserie_shop\\\\\\\\modules\\\\\\\\inventory\\\\\\\\src\" -name \"*.cs\" -type f ! -path \"*/obj/*\" ! -name \"*AssemblyInfo*\" ! -name \"*AssemblyAttributes*\")",
+      "Bash(git -C . status --short src/patisserie_shop.EntityFrameworkCore/Migrations/)",
+      "Bash(dotnet ef *)"
     ],
     "additionalDirectories": [
       "\\tmp"

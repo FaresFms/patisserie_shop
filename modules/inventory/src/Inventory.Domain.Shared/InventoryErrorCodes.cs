@@ -15,4 +15,8 @@ public static class InventoryErrorCodes
     public const string BranchAccessDenied = "Inventory:BranchInventory:BranchAccessDenied";
     public const string InvalidStockLimits = "Inventory:BranchInventory:InvalidStockLimits";
     public const string StockMovementNotFound = "Inventory:StockMovements:NotFound";
+    public const string InvalidShelfLifeDays = "Inventory:Products:InvalidShelfLifeDays";
+    public const string InvalidBatchQuantity = "Inventory:StockBatches:InvalidQuantity";
+    public const string InvalidBatchConsumeQuantity = "Inventory:StockBatches:InvalidConsumeQuantity";
+    public const string InvalidBatchSourceType = "Inventory:StockBatches:InvalidSourceType";
 }

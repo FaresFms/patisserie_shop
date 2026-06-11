@@ -374,6 +374,7 @@
     .dl-card.dl-type-deadstockflag    { border-left-color: #b3543a; }
     .dl-card.dl-type-transfersuggestion { border-left-color: #4a8e8e; }
     .dl-card.dl-type-stockoutrisk     { border-left-color: #a4313f; } /* crimson — distinct from amber LowStock and red DeadStock */
+    .dl-card.dl-type-expiryalert      { border-left-color: #7d4a8e; } /* plum — perishables / expiry family */
     .dl-card.dl-status-acknowledged,
     .dl-card.dl-status-dismissed,
     .dl-card.dl-status-executed {
@@ -394,6 +395,7 @@
     .dl-type-deadstockflag    .dl-type-icon { color: #b3543a; }
     .dl-type-transfersuggestion .dl-type-icon { color: #4a8e8e; }
     .dl-type-stockoutrisk     .dl-type-icon { color: #a4313f; }
+    .dl-type-expiryalert      .dl-type-icon { color: #7d4a8e; }
 
     .dl-card-center { min-width: 0; }
     .dl-reasoning {
@@ -531,7 +533,8 @@
             new(DecisionTypes.DeadStockFlag,     IntL["DecisionType:DeadStockFlag"]),
             new(DecisionTypes.TransferSuggestion, IntL["DecisionType:TransferSuggestion"]),
             new(DecisionTypes.ReorderSuggestion,  IntL["DecisionType:ReorderSuggestion"]),
-            new(DecisionTypes.StockoutRisk,       IntL["DecisionType:StockoutRisk"])
+            new(DecisionTypes.StockoutRisk,       IntL["DecisionType:StockoutRisk"]),
+            new(DecisionTypes.ExpiryAlert,        IntL["DecisionType:ExpiryAlert"])
         };
 
         _statusOptions = new List<LabeledOption>
@@ -792,6 +795,7 @@
         DecisionTypes.TransferSuggestion => Icons.Material.Filled.SwapHoriz,
         DecisionTypes.ReorderSuggestion => Icons.Material.Filled.AddShoppingCart,
         DecisionTypes.StockoutRisk => Icons.Material.Filled.HourglassBottom,
+        DecisionTypes.ExpiryAlert => Icons.Material.Filled.EventBusy,
         _ => Icons.Material.Filled.Info
     };
 
@@ -803,6 +807,7 @@
         DecisionTypes.TransferSuggestion => Color.Tertiary,
         DecisionTypes.ReorderSuggestion => Color.Primary,
         DecisionTypes.StockoutRisk => Color.Secondary, // crimson family via CSS accents below
+        DecisionTypes.ExpiryAlert => Color.Secondary,  // plum family via CSS accents below
         _ => Color.Default
     };
 

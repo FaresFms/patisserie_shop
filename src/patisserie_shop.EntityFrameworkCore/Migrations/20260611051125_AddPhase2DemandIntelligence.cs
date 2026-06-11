@@ -16,7 +16,7 @@ namespace patisserie_shop.Migrations
                 table: "InventorySuppliers",
                 type: "integer",
                 nullable: false,
-                defaultValue: 0);
+                defaultValue: 3); // backfill existing suppliers with the code-side default lead time
 
             migrationBuilder.AddColumn<string>(
                 name: "ActionMode",
@@ -24,7 +24,7 @@ namespace patisserie_shop.Migrations
                 type: "character varying(32)",
                 maxLength: 32,
                 nullable: false,
-                defaultValue: "");
+                defaultValue: "SuggestOnly"); // backfill existing rules with the safe non-automated mode
 
             migrationBuilder.AddColumn<string>(
                 name: "Outcome",

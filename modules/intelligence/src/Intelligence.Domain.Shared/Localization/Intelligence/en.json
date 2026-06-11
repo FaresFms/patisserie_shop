@@ -40,6 +40,7 @@
     "RuleType:DeadStock": "Dead Stock",
     "RuleType:TransferSuggestion": "Transfer Suggestion",
     "RuleType:DaysOfCover": "Days of Cover",
+    "RuleType:ExpiringSoon": "Expiring Soon",
 
     "Status:All": "All",
     "Status:ActiveOnly": "Active Only",
@@ -53,6 +54,7 @@
     "StockQuantityThreshold": "Stock Quantity Threshold",
     "DaysOfCoverThreshold": "Days of Cover Threshold",
     "DaysWithoutSale": "Days Without Sale",
+    "ExpiryWindowDays": "Days Until Expiry",
     "DaysSuffix": "days",
 
     "ScopeSectionHint": "Leave a field empty to apply the rule globally. Product + Branch can be combined for a specific match.",
@@ -65,7 +67,7 @@
 
     "Intelligence:Rules:InvalidRuleType": "Invalid rule type.",
     "Intelligence:Rules:ThresholdValueRequired": "A stock quantity threshold is required for this rule type.",
-    "Intelligence:Rules:ThresholdDaysRequired": "A days-without-sale value is required for Dead Stock rules.",
+    "Intelligence:Rules:ThresholdDaysRequired": "A number of days is required for Dead Stock (days without sale) and Expiring Soon (days until expiry) rules.",
     "Intelligence:Rules:InvalidActionMode": "Invalid action mode.",
     "Intelligence:DecisionLogs:NotPending": "This decision has already been resolved and cannot be changed.",
     "Intelligence:DecisionLogs:InvalidActionType": "Unknown decision action type.",
@@ -128,6 +130,7 @@
     "DecisionType:TransferSuggestion": "Transfer Suggestion",
     "DecisionType:ReorderSuggestion": "Reorder Suggestion",
     "DecisionType:StockoutRisk": "Stockout Risk",
+    "DecisionType:ExpiryAlert": "Expiry Alert",
 
     "Menu:ProductVelocity": "Product Velocity",
     "ProductVelocity": "Product Velocity",

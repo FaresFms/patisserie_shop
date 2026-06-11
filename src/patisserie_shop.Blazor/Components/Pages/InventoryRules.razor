@@ -263,10 +263,10 @@
                                         }
                                     </SoftSelect>
 
-                                    @if (_editType == InventoryRuleTypes.DeadStock)
+                                    @if (InventoryRuleTypes.UsesThresholdDays(_editType))
                                     {
                                         <SoftNumericField T="int?"
-                                                          Label="@IntL["DaysWithoutSale"]"
+                                                          Label="@(_editType == InventoryRuleTypes.ExpiringSoon ? IntL["ExpiryWindowDays"] : IntL["DaysWithoutSale"])"
                                                           @bind-Value="_editThresholdDays"
                                                           Variant="Variant.Outlined"
                                                           Min="0"
@@ -549,7 +549,7 @@
     {
         _editType = value;
         // Keep only the threshold relevant to the selected type.
-        if (_editType == InventoryRuleTypes.DeadStock)
+        if (InventoryRuleTypes.UsesThresholdDays(_editType))
         {
             _editThresholdValue = null;
         }
@@ -606,7 +606,7 @@
             return;
         }
 
-        if (_editType == InventoryRuleTypes.DeadStock)
+        if (InventoryRuleTypes.UsesThresholdDays(_editType))
         {
             if (!_editThresholdDays.HasValue)
             {
@@ -752,6 +752,7 @@
         InventoryRuleTypes.DeadStock => Color.Error,
         InventoryRuleTypes.TransferSuggestion => Color.Tertiary,
         InventoryRuleTypes.DaysOfCover => Color.Secondary,
+        InventoryRuleTypes.ExpiringSoon => Color.Primary, // plum accent lives on the Decision Log cards
         _ => Color.Default
     };
 
@@ -777,7 +778,8 @@
 
     private string ThresholdText(InventoryRuleDto rule)
     {
-        if (rule.RuleType == InventoryRuleTypes.DeadStock)
+        // DeadStock (days without sale) and ExpiringSoon (days until expiry).
+        if (InventoryRuleTypes.UsesThresholdDays(rule.RuleType))
         {
             return rule.ThresholdDays.HasValue ? $"{rule.ThresholdDays} {IntL["DaysSuffix"]}" : "—";
         }

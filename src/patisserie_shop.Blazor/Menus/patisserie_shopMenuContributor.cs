@@ -98,6 +98,13 @@ public class patisserie_shopMenuContributor : IMenuContributor
             icon: "fas fa-history"
         ).RequirePermissions(InventoryPermissions.StockMovements.Default));
 
+        inventoryMenu.AddItem(new ApplicationMenuItem(
+            patisserie_shopMenus.StockBatches,
+            invL["Menu:StockBatches"],
+            "/inventory/stock-batches",
+            icon: "fas fa-hourglass-half"
+        ).RequirePermissions(InventoryPermissions.BranchInventory.Default));
+
         context.Menu.AddItem(inventoryMenu);
 
         var opsL = context.GetLocalizer<OperationsResource>();
@@ -125,6 +132,12 @@ public class patisserie_shopMenuContributor : IMenuContributor
             "/operations/stock-transfers",
             icon: "fas fa-exchange-alt"
         ).RequirePermissions(OperationsPermissions.Transfers.Default));
+        operationsMenu.AddItem(new ApplicationMenuItem(
+            patisserie_shopMenus.SalesAnalytics,
+            l["Menu:SalesAnalytics"],
+            "/operations/sales-analytics",
+            icon: "fas fa-chart-line"
+        ).RequirePermissions(OperationsPermissions.Sales.Default));
         context.Menu.AddItem(operationsMenu);
 
         var intelL = context.GetLocalizer<IntelligenceResource>();

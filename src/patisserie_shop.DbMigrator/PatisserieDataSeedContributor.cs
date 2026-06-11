@@ -2,11 +2,15 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using Intelligence.Entities;
+using Intelligence.Rules;
+using Inventory;
 using Inventory.BranchInventory;
 using Inventory.Branches;
 using Inventory.Categories;
 using Inventory.Entities;
 using Inventory.Products;
+using Inventory.StockBatches;
 using Inventory.Suppliers;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -27,12 +31,16 @@ public class PatisserieDataSeedContributor : IDataSeedContributor, ITransientDep
     private readonly ProductManager _productManager;
     private readonly BranchManager _branchManager;
     private readonly BranchInventoryManager _inventoryManager;
+    private readonly StockBatchManager _stockBatchManager;
+    private readonly InventoryRuleManager _ruleManager;
 
     private readonly IRepository<AppCategory, Guid> _categoryRepo;
     private readonly IRepository<AppSupplier, Guid> _supplierRepo;
     private readonly IRepository<AppProduct, Guid> _productRepo;
     private readonly IRepository<AppBranch, Guid> _branchRepo;
     private readonly IRepository<AppBranchInventory, Guid> _inventoryRepo;
+    private readonly IRepository<AppStockBatch, Guid> _batchRepo;
+    private readonly IRepository<AppInventoryRule, Guid> _ruleRepo;
 
     private readonly IdentityUserManager _userManager;
     private readonly IDbContextProvider<patisserie_shopDbContext> _dbContextProvider;
@@ -44,11 +52,15 @@ public class PatisserieDataSeedContributor : IDataSeedContributor, ITransientDep
         ProductManager productManager,
         BranchManager branchManager,
         BranchInventoryManager inventoryManager,
+        StockBatchManager stockBatchManager,
+        InventoryRuleManager ruleManager,
         IRepository<AppCategory, Guid> categoryRepo,
         IRepository<AppSupplier, Guid> supplierRepo,
         IRepository<AppProduct, Guid> productRepo,
         IRepository<AppBranch, Guid> branchRepo,
         IRepository<AppBranchInventory, Guid> inventoryRepo,
+        IRepository<AppStockBatch, Guid> batchRepo,
+        IRepository<AppInventoryRule, Guid> ruleRepo,
         IdentityUserManager userManager,
         IDbContextProvider<patisserie_shopDbContext> dbContextProvider,
         ILogger<PatisserieDataSeedContributor> logger)
@@ -58,15 +70,34 @@ public class PatisserieDataSeedContributor : IDataSeedContributor, ITransientDep
         _productManager = productManager;
         _branchManager = branchManager;
         _inventoryManager = inventoryManager;
+        _stockBatchManager = stockBatchManager;
+        _ruleManager = ruleManager;
         _categoryRepo = categoryRepo;
         _supplierRepo = supplierRepo;
         _productRepo = productRepo;
         _branchRepo = branchRepo;
         _inventoryRepo = inventoryRepo;
+        _batchRepo = batchRepo;
+        _ruleRepo = ruleRepo;
         _userManager = userManager;
         _dbContextProvider = dbContextProvider;
         _logger = logger;
     }
+
+    /// <summary>
+    /// Shelf life per seeded SKU (days). Viennoiseries/breads spoil in 2–3 days,
+    /// cakes/tarts in 3–5, petit fours/cookies last 7–14; the chocolate Easter egg
+    /// is shelf-stable for months. Products absent from this map are non-perishable.
+    /// </summary>
+    private static readonly Dictionary<string, int> ShelfLifeBySku = new()
+    {
+        ["VN-001"] = 2, ["VN-002"] = 2, ["VN-003"] = 3, ["VN-004"] = 3,
+        ["CT-001"] = 3, ["CT-002"] = 4, ["CT-003"] = 3, ["CT-004"] = 4, ["CT-005"] = 3,
+        ["BR-001"] = 2, ["BR-002"] = 3, ["BR-003"] = 3, ["BR-004"] = 2,
+        ["PF-001"] = 7, ["PF-002"] = 7, ["PF-003"] = 7, ["PF-004"] = 10, ["PF-005"] = 7,
+        ["CB-001"] = 14, ["CB-002"] = 10, ["CB-003"] = 14,
+        ["SS-001"] = 5, ["SS-002"] = 5, ["SS-003"] = 90,
+    };
 
     [UnitOfWork]
     public async Task SeedAsync(DataSeedContext context)
@@ -74,8 +105,11 @@ public class PatisserieDataSeedContributor : IDataSeedContributor, ITransientDep
         var categories = await SeedCategoriesAsync();
         var suppliers  = await SeedSuppliersAsync();
         var products   = await SeedProductsAsync(categories, suppliers);
+        await BackfillShelfLifeAsync(products);
         var branches   = await SeedBranchesAsync();
         await SeedInventoryAsync(products, branches);
+        await SeedStockBatchesAsync(products);
+        await SeedDemoRulesAsync();
     }
 
     // ─────────────────────────── Categories ───────────────────────────
@@ -207,13 +241,38 @@ public class PatisserieDataSeedContributor : IDataSeedContributor, ITransientDep
             var p = await _productManager.CreateAsync(
                 d.CatId, d.Name, d.Sku, d.Unit, d.SupId,
                 costPrice: d.Cost, salePrice: d.Sale,
-                currency: "USD", reorderLevel: d.Reorder);
+                currency: "USD", reorderLevel: d.Reorder,
+                shelfLifeDays: ShelfLifeBySku.TryGetValue(d.Sku, out var shelf) ? shelf : null);
             await _productRepo.InsertAsync(p, autoSave: true);
             result[d.Sku] = p;
         }
 
         _logger.LogInformation("[Seed] Seeded {Count} products.", result.Count);
         return result;
+    }
+
+    /// <summary>
+    /// Idempotent backfill: seeded products that pre-date the shelf-life column (or a
+    /// re-run after the Products table already existed) get their ShelfLifeDays set
+    /// if still null. Products the admin already marked perishable are not touched.
+    /// </summary>
+    private async Task BackfillShelfLifeAsync(Dictionary<string, AppProduct> products)
+    {
+        var updated = 0;
+        foreach (var (sku, product) in products)
+        {
+            if (product.ShelfLifeDays == null && ShelfLifeBySku.TryGetValue(sku, out var shelf))
+            {
+                product.SetShelfLifeDays(shelf);
+                await _productRepo.UpdateAsync(product, autoSave: true);
+                updated++;
+            }
+        }
+
+        if (updated > 0)
+        {
+            _logger.LogInformation("[Seed] Backfilled shelf life on {Count} products.", updated);
+        }
     }
 
     // ─────────────────────────── Branches ─────────────────────────────
@@ -449,5 +508,132 @@ public class PatisserieDataSeedContributor : IDataSeedContributor, ITransientDep
         _logger.LogInformation(
             "[Seed] Seeded {Count} inventory rows ({Branches} branches × {Products} products).",
             rows.Count, branches.Count, products.Count);
+    }
+
+    // ─────────────────────────── Stock Batches ────────────────────────
+
+    /// <summary>
+    /// Splits each perishable product's on-hand quantity into 1–3 "Seed" batches with
+    /// staggered expiries — the oldest batch expires within 1–2 days so the ExpiringSoon
+    /// rule demos instantly, the freshest gets the full shelf life. Deterministic
+    /// (fixed-seed Random, rows processed in a stable order) and idempotent (skipped
+    /// entirely once any batch exists).
+    /// </summary>
+    private async Task SeedStockBatchesAsync(Dictionary<string, AppProduct> products)
+    {
+        if (await _batchRepo.AnyAsync())
+        {
+            _logger.LogInformation("[Seed] Stock batches already exist — skipping.");
+            return;
+        }
+
+        var productById = products.Values.ToDictionary(p => p.Id);
+
+        // Stable order (branch, then SKU) so the fixed-seed Random yields the same
+        // batches on every fresh database.
+        var invRows = (await _inventoryRepo.GetListAsync())
+            .Where(r => r.QuantityOnHand > 0
+                        && productById.TryGetValue(r.ProductId, out var p)
+                        && p.ShelfLifeDays != null)
+            .OrderBy(r => r.BranchId)
+            .ThenBy(r => productById[r.ProductId].SKU)
+            .ToList();
+
+        var rng = new Random(20260611); // fixed seed — deterministic demo data
+        var today = DateTime.UtcNow.Date;
+        var created = 0;
+
+        foreach (var row in invRows)
+        {
+            var product = productById[row.ProductId];
+            var shelf = product.ShelfLifeDays!.Value;
+            var qty = row.QuantityOnHand;
+
+            // 1–3 batches depending on how much stock there is.
+            var batchCount = qty <= 5 ? 1 : qty <= 15 ? 2 : 3;
+
+            // Expiry offsets, oldest → freshest. The oldest slice expires in 1–2 days
+            // (capped by shelf life); the freshest got delivered today.
+            var offsets = batchCount switch
+            {
+                1 => new[] { shelf },
+                2 => new[] { Math.Min(1 + rng.Next(0, 2), shelf), shelf },
+                _ => new[]
+                {
+                    Math.Min(1 + rng.Next(0, 2), shelf),
+                    Math.Min(Math.Max(3, shelf / 2), shelf),
+                    shelf
+                }
+            };
+
+            // Quantity split: ~30% / ~30% / remainder (older slices smaller).
+            var quantities = batchCount switch
+            {
+                1 => new[] { qty },
+                2 => new[] { Math.Max(1, qty * 4 / 10), 0 },
+                _ => new[] { Math.Max(1, qty * 3 / 10), Math.Max(1, qty * 3 / 10), 0 }
+            };
+            quantities[^1] = qty - quantities.Take(batchCount - 1).Sum();
+
+            for (var i = 0; i < batchCount; i++)
+            {
+                await _stockBatchManager.CreateAsync(
+                    row.BranchId,
+                    row.ProductId,
+                    quantities[i],
+                    today.AddDays(offsets[i]),
+                    StockBatchSourceTypes.Seed,
+                    sourceId: null,
+                    autoSave: true);
+                created++;
+            }
+        }
+
+        _logger.LogInformation(
+            "[Seed] Seeded {Count} stock batches across {Rows} perishable inventory rows.",
+            created, invRows.Count);
+    }
+
+    // ─────────────────────────── Demo Rules ───────────────────────────
+
+    /// <summary>
+    /// Phase 2/3 demo rules, seeded per-type so they also land on databases where the
+    /// original rule bank (from IntelligenceDataSeedContributor) already exists.
+    /// </summary>
+    private async Task SeedDemoRulesAsync()
+    {
+        if (!await _ruleRepo.AnyAsync(r => r.RuleType == InventoryRuleTypes.DaysOfCover))
+        {
+            var rule = await _ruleManager.CreateAsync(
+                ruleName: "Days of Cover Risk (4 days)",
+                ruleType: InventoryRuleTypes.DaysOfCover,
+                productId: null,
+                branchId: null,
+                thresholdValue: 4,
+                thresholdDays: null,
+                suggestedAction: "Reorder before stock runs out — fewer than 4 days of demand left",
+                priority: 3,
+                isActive: true,
+                actionMode: RuleActionModes.SuggestOnly);
+            await _ruleRepo.InsertAsync(rule, autoSave: true);
+            _logger.LogInformation("[Seed] Seeded global DaysOfCover demo rule.");
+        }
+
+        if (!await _ruleRepo.AnyAsync(r => r.RuleType == InventoryRuleTypes.ExpiringSoon))
+        {
+            var rule = await _ruleManager.CreateAsync(
+                ruleName: "Expiring Soon (3 days)",
+                ruleType: InventoryRuleTypes.ExpiringSoon,
+                productId: null,
+                branchId: null,
+                thresholdValue: null,
+                thresholdDays: 3,
+                suggestedAction: "Apply a discount or transfer the stock to a faster-moving branch before it expires",
+                priority: 5,
+                isActive: true,
+                actionMode: RuleActionModes.SuggestOnly);
+            await _ruleRepo.InsertAsync(rule, autoSave: true);
+            _logger.LogInformation("[Seed] Seeded global ExpiringSoon demo rule.");
+        }
     }
 }

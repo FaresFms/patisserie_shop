@@ -17,5 +17,9 @@ public class ProductDto : EntityDto<Guid>
     public int ReorderLevel { get; set; }
     public string? ImageUrl { get; set; }
     public bool IsActive { get; set; }
+
+    /// <summary>Null = non-perishable (no batch/expiry tracking).</summary>
+    public int? ShelfLifeDays { get; set; }
+
     public DateTime CreationTime { get; set; }
 }

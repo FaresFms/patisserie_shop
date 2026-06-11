@@ -42,6 +42,10 @@ public class CreateProductDtoValidator : AbstractValidator<CreateProductDto>
 
         RuleFor(x => x.ImageUrl)
             .MaximumLength(512).WithMessage("Image URL must not exceed 512 characters.");
+
+        RuleFor(x => x.ShelfLifeDays)
+            .InclusiveBetween(1, 3650).When(x => x.ShelfLifeDays.HasValue)
+            .WithMessage("Shelf life must be between 1 and 3650 days (leave empty for non-perishable).");
     }
 }
 
@@ -84,5 +88,9 @@ public class UpdateProductDtoValidator : AbstractValidator<UpdateProductDto>
 
         RuleFor(x => x.ImageUrl)
             .MaximumLength(512).WithMessage("Image URL must not exceed 512 characters.");
+
+        RuleFor(x => x.ShelfLifeDays)
+            .InclusiveBetween(1, 3650).When(x => x.ShelfLifeDays.HasValue)
+            .WithMessage("Shelf life must be between 1 and 3650 days (leave empty for non-perishable).");
     }
 }

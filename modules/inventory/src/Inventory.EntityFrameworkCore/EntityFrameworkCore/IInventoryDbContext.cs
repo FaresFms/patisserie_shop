@@ -14,4 +14,5 @@ public interface IInventoryDbContext : IEfCoreDbContext
     DbSet<AppBranch> Branches { get; }
     DbSet<AppBranchInventory> BranchInventories { get; }
     DbSet<AppStockMovement> StockMovements { get; }
+    DbSet<AppStockBatch> StockBatches { get; }
 }

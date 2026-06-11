@@ -114,6 +114,18 @@
                         <SoftText>@FormatMoney(context.Item.SalePrice, context.Item.Currency)</SoftText>
                     </CellTemplate>
                 </TemplateColumn>
+                <TemplateColumn T="ProductDto" Title="@InvL["ShelfLife"]" SortBy="x => x.ShelfLifeDays">
+                    <CellTemplate>
+                        @if (context.Item.ShelfLifeDays.HasValue)
+                        {
+                            <SoftText Typo="Typo.body2">@($"{context.Item.ShelfLifeDays}d")</SoftText>
+                        }
+                        else
+                        {
+                            <SoftText Typo="Typo.caption" Color="Color.Default">—</SoftText>
+                        }
+                    </CellTemplate>
+                </TemplateColumn>
                 <TemplateColumn T="ProductDto" Title="@InvL["IsActive"]" Sortable="true" SortBy="x => x.IsActive">
                     <CellTemplate>
                         @if (context.Item.IsActive)
@@ -279,6 +291,16 @@
                                                   Min="0"
                                                   HideSpinButtons="true"
                                                   Style="max-width: 200px;" />
+                                <SoftNumericField T="int?"
+                                                  Label="@InvL["ShelfLifeDays"]"
+                                                  @bind-Value="_editShelfLifeDays"
+                                                  Variant="Variant.Outlined"
+                                                  Min="1"
+                                                  Max="3650"
+                                                  Clearable="true"
+                                                  HideSpinButtons="true"
+                                                  HelperText="@InvL["ShelfLifeHint"]"
+                                                  Style="max-width: 220px;" />
                                 <SoftTextField T="string"
                                                Label="@InvL["ImageUrl"]"
                                                @bind-Value="_editImageUrl"
@@ -363,6 +385,7 @@
     private int _editReorderLevel = 5;
     private string? _editImageUrl;
     private bool _editIsActive = true;
+    private int? _editShelfLifeDays;
 
     private bool _confirmVisible;
     private ProductDto? _pendingDelete;
@@ -484,6 +507,7 @@
         _editReorderLevel = 5;
         _editImageUrl = null;
         _editIsActive = true;
+        _editShelfLifeDays = null;
         _dialogVisible = true;
     }
 
@@ -502,6 +526,7 @@
         _editReorderLevel = p.ReorderLevel;
         _editImageUrl = p.ImageUrl;
         _editIsActive = p.IsActive;
+        _editShelfLifeDays = p.ShelfLifeDays;
         _dialogVisible = true;
     }
 
@@ -556,7 +581,8 @@
                     Currency = _editCurrency.ToUpper(),
                     ReorderLevel = _editReorderLevel,
                     ImageUrl = _editImageUrl,
-                    IsActive = _editIsActive
+                    IsActive = _editIsActive,
+                    ShelfLifeDays = _editShelfLifeDays
                 });
             }
             else
@@ -574,7 +600,8 @@
                     Currency = _editCurrency.ToUpper(),
                     ReorderLevel = _editReorderLevel,
                     ImageUrl = _editImageUrl,
-                    IsActive = _editIsActive
+                    IsActive = _editIsActive,
+                    ShelfLifeDays = _editShelfLifeDays
                 });
             }
             Snackbar.Add(L["SuccessfullySaved"], Severity.Success);

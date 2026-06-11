@@ -35,7 +35,8 @@ public class ProductManager : DomainService
         string currency = "USD",
         int reorderLevel = 5,
         string? imageUrl = null,
-        bool isActive = true)
+        bool isActive = true,
+        int? shelfLifeDays = null)
     {
         await EnsureCategoryExistsAsync(categoryId);
         await EnsureSupplierExistsAsync(defaultSupplierId);
@@ -54,7 +55,8 @@ public class ProductManager : DomainService
             currency,
             reorderLevel,
             imageUrl,
-            isActive);
+            isActive,
+            shelfLifeDays);
     }
 
     public async Task EnsureReferencesAsync(Guid categoryId, Guid? defaultSupplierId)

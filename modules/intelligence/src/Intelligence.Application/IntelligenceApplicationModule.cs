@@ -27,6 +27,7 @@ public class IntelligenceApplicationModule : AbpModule
         context.Services.AddTransient<TransferSuggestionScannerWorker>();
         context.Services.AddTransient<VelocityScannerWorker>();
         context.Services.AddTransient<DecisionOutcomeScannerWorker>();
+        context.Services.AddTransient<ExpiryScannerWorker>();
     }
 
     public override async Task OnApplicationInitializationAsync(ApplicationInitializationContext context)
@@ -35,5 +36,6 @@ public class IntelligenceApplicationModule : AbpModule
         await context.AddBackgroundWorkerAsync<TransferSuggestionScannerWorker>();
         await context.AddBackgroundWorkerAsync<VelocityScannerWorker>();
         await context.AddBackgroundWorkerAsync<DecisionOutcomeScannerWorker>();
+        await context.AddBackgroundWorkerAsync<ExpiryScannerWorker>();
     }
 }

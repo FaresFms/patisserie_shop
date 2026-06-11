@@ -86,5 +86,18 @@ public static class InventoryDbContextModelCreatingExtensions
             b.HasIndex(x => x.ProductId).HasDatabaseName("IX_StockMovements_Product");
             b.HasIndex(x => x.CreationTime).HasDatabaseName("IX_StockMovements_Date");
         });
+
+        builder.Entity<AppStockBatch>(b =>
+        {
+            b.ToTable(InventoryDbProperties.DbTablePrefix + "StockBatches", InventoryDbProperties.DbSchema);
+            b.ConfigureByConvention();
+            b.Property(x => x.BatchNumber).IsRequired().HasMaxLength(32);
+            b.Property(x => x.SourceType).IsRequired().HasMaxLength(32);
+            // FEFO lookups load a product's batches at one branch ordered by expiry;
+            // the scanner sweeps everything expiring before a cutoff date.
+            b.HasIndex(x => new { x.BranchId, x.ProductId, x.ExpiryDate })
+                .HasDatabaseName("IX_StockBatches_Branch_Product_Expiry");
+            b.HasIndex(x => x.ExpiryDate).HasDatabaseName("IX_StockBatches_Expiry");
+        });
     }
 }

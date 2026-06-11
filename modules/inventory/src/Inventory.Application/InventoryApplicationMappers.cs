@@ -3,6 +3,7 @@ using Inventory.Branches;
 using Inventory.Categories;
 using Inventory.Entities;
 using Inventory.Products;
+using Inventory.StockBatches;
 using Inventory.StockMovements;
 using Inventory.Suppliers;
 using Riok.Mapperly.Abstractions;
@@ -82,4 +83,20 @@ public partial class BranchToLookupMapper : MapperBase<AppBranch, BranchLookupDt
 {
     public override partial BranchLookupDto Map(AppBranch source);
     public override partial void Map(AppBranch source, BranchLookupDto destination);
+}
+
+[Mapper]
+public partial class StockBatchToDtoMapper : MapperBase<AppStockBatch, StockBatchDto>
+{
+    [MapperIgnoreTarget(nameof(StockBatchDto.ProductName))]
+    [MapperIgnoreTarget(nameof(StockBatchDto.ProductSKU))]
+    [MapperIgnoreTarget(nameof(StockBatchDto.ProductUnit))]
+    [MapperIgnoreTarget(nameof(StockBatchDto.BranchName))]
+    public override partial StockBatchDto Map(AppStockBatch source);
+
+    [MapperIgnoreTarget(nameof(StockBatchDto.ProductName))]
+    [MapperIgnoreTarget(nameof(StockBatchDto.ProductSKU))]
+    [MapperIgnoreTarget(nameof(StockBatchDto.ProductUnit))]
+    [MapperIgnoreTarget(nameof(StockBatchDto.BranchName))]
+    public override partial void Map(AppStockBatch source, StockBatchDto destination);
 }

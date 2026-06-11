@@ -21,6 +21,7 @@ public class InventoryEntityFrameworkCoreModule : AbpModule
             options.AddRepository<AppStockMovement, StockMovementRepository>();
             options.AddRepository<AppProduct, ProductRepository>();
             options.AddRepository<AppSupplier, SupplierRepository>();
+            options.AddRepository<AppStockBatch, StockBatchRepository>();
         });
     }
 }

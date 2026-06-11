@@ -19,6 +19,12 @@ public class AppProduct : FullAuditedAggregateRoot<Guid>
     public string? ImageUrl { get; private set; }
     public bool IsActive { get; private set; } = true;
 
+    /// <summary>
+    /// Days the product stays sellable after it is received. Null = non-perishable —
+    /// no stock-batch (expiry) tracking happens for this product.
+    /// </summary>
+    public int? ShelfLifeDays { get; private set; }
+
     protected AppProduct() { }
 
     internal AppProduct(
@@ -34,7 +40,8 @@ public class AppProduct : FullAuditedAggregateRoot<Guid>
         string currency = "USD",
         int reorderLevel = 5,
         string? imageUrl = null,
-        bool isActive = true)
+        bool isActive = true,
+        int? shelfLifeDays = null)
         : base(id)
     {
         CategoryId = categoryId;
@@ -50,7 +57,8 @@ public class AppProduct : FullAuditedAggregateRoot<Guid>
             currency,
             reorderLevel,
             imageUrl,
-            isActive);
+            isActive,
+            shelfLifeDays);
     }
 
     public void UpdateInfo(
@@ -64,7 +72,8 @@ public class AppProduct : FullAuditedAggregateRoot<Guid>
         string currency,
         int reorderLevel,
         string? imageUrl,
-        bool isActive)
+        bool isActive,
+        int? shelfLifeDays = null)
     {
         Check.NotNullOrWhiteSpace(name, nameof(name));
         Check.NotNullOrWhiteSpace(unit, nameof(unit));
@@ -84,5 +93,18 @@ public class AppProduct : FullAuditedAggregateRoot<Guid>
         ReorderLevel = reorderLevel;
         ImageUrl = imageUrl;
         IsActive = isActive;
+        SetShelfLifeDays(shelfLifeDays);
+    }
+
+    /// <summary>Null clears perishability (no batch tracking); when set, 1–3650 days.</summary>
+    public void SetShelfLifeDays(int? shelfLifeDays)
+    {
+        if (shelfLifeDays.HasValue && (shelfLifeDays.Value < 1 || shelfLifeDays.Value > 3650))
+        {
+            throw new BusinessException(InventoryErrorCodes.InvalidShelfLifeDays)
+                .WithData("ShelfLifeDays", shelfLifeDays.Value);
+        }
+
+        ShelfLifeDays = shelfLifeDays;
     }
 }
