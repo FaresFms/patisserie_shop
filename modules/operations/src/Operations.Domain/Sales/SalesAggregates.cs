@@ -22,3 +22,22 @@ public class BranchSalesAggregate
     public decimal TotalAmount { get; set; }
     public int SaleCount { get; set; }
 }
+
+/// <summary>
+/// Per product-per-branch sales totals over the trailing 7- and 30-day windows.
+/// Backs the nightly velocity computation in the Intelligence module.
+/// </summary>
+public class ProductBranchSalesAggregate
+{
+    public Guid ProductId { get; set; }
+    public Guid BranchId { get; set; }
+
+    /// <summary>Units sold where SaleDate ≥ the 7-day window start.</summary>
+    public int QuantitySold7 { get; set; }
+
+    /// <summary>Units sold where SaleDate ≥ the 30-day window start.</summary>
+    public int QuantitySold30 { get; set; }
+
+    /// <summary>Revenue (qty × unit price) over the 30-day window.</summary>
+    public decimal Revenue30 { get; set; }
+}

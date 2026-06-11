@@ -1,0 +1,231 @@
+@page "/intelligence/product-velocity"
+@attribute [Authorize(IntelligencePermissions.DecisionLogs.Default)]
+@using System.Threading
+@using System.Threading.Tasks
+@using Microsoft.AspNetCore.Authorization
+@using Volo.Abp.Application.Dtos
+@using Volo.Abp.AspNetCore.Components.Web.Theming.Layout
+@using Intelligence.Velocity
+@using Intelligence.Permissions
+@using Intelligence.Localization
+@using Inventory.Branches
+@using Color = MudBlazor.Color
+@using Variant = MudBlazor.Variant
+@using Size = MudBlazor.Size
+@using Margin = MudBlazor.Margin
+@inherits patisserie_shopComponentBase
+@inject IProductVelocityAppService VelocityAppService
+@inject IBranchAppService BranchAppService
+@inject PageLayout PageLayout
+@inject IStringLocalizer<IntelligenceResource> IntL
+
+@{
+    PageLayout.Title = IntL["ProductVelocity"];
+}
+
+<SoftCard Elevation="2" Class="pa-2 page-flat">
+    <div class="page-head">
+        <div>
+            <h1 class="page-title">@IntL["ProductVelocity"]</h1>
+            <div class="page-sub">@IntL["ProductVelocitySubtitle"]</div>
+        </div>
+    </div>
+    <SoftCardContent>
+        <div class="toolbar">
+            <SoftTextField T="string"
+                           Placeholder="@IntL["ProductVelocity:Filter"]"
+                           @bind-Value="_filter"
+                           Variant="Variant.Outlined"
+                           Margin="Margin.Dense"
+                           Adornment="Adornment.Start"
+                           AdornmentIcon="@Icons.Material.Filled.Search"
+                           OnKeyUp="OnFilterKeyUpAsync"
+                           Immediate="true"
+                           Class="toolbar-search"
+                           Style="min-width: 220px; max-width: 320px;" />
+
+            <div class="filter-chip">
+                <SoftLookupSelect TItem="BranchLookupDto" TValue="Guid?"
+                                  Items="_branches"
+                                  ToValue="@(b => (Guid?)b.Id)"
+                                  ToLabel="@(b => b.Name)"
+                                  Value="_branchFilter"
+                                  ValueChanged="OnBranchFilterChangedAsync"
+                                  Label="@IntL["ProductVelocity:AllBranches"]"
+                                  Margin="Margin.Dense"
+                                  Clearable="true"
+                                  Dense="true" />
+            </div>
+
+            <div class="toolbar-right">
+                <SoftButton Variant="Variant.Text" Color="Color.Primary"
+                            OnClick="ReloadAsync" StartIcon="@Icons.Material.Filled.Refresh">
+                    @L["Refresh"]
+                </SoftButton>
+            </div>
+        </div>
+
+        <SoftDataGrid T="ProductVelocityDto"
+                      @ref="_grid"
+                      ServerData="LoadServerData"
+                      Dense="true"
+                      Hover="true"
+                      Bordered="false"
+                      Loading="_loading"
+                      SortMode="SortMode.Single">
+            <Columns>
+                <TemplateColumn T="ProductVelocityDto" Title="@IntL["Product"]" SortBy="x => x.ProductName">
+                    <CellTemplate>
+                        <SoftStack Spacing="0">
+                            <SoftText Typo="Typo.body2" Style="font-weight:600;">@context.Item.ProductName</SoftText>
+                            <SoftText Typo="Typo.caption" Color="Color.Default">@context.Item.ProductSku</SoftText>
+                        </SoftStack>
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn T="ProductVelocityDto" Title="@IntL["Branch"]" SortBy="x => x.BranchName">
+                    <CellTemplate>
+                        <SoftText Typo="Typo.body2">@context.Item.BranchName</SoftText>
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn T="ProductVelocityDto" Title="@IntL["ProductVelocity:AbcClass"]" SortBy="x => x.AbcClass">
+                    <CellTemplate>
+                        <SoftChip T="string" Size="Size.Small"
+                                  Variant="@AbcVariant(context.Item.AbcClass)"
+                                  Color="@AbcColor(context.Item.AbcClass)">
+                            @context.Item.AbcClass
+                        </SoftChip>
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn T="ProductVelocityDto" Title="@IntL["ProductVelocity:AvgDaily7"]" SortBy="x => x.AvgDailySales7">
+                    <CellTemplate>
+                        <SoftText Typo="Typo.body2">@context.Item.AvgDailySales7.ToString("0.##")</SoftText>
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn T="ProductVelocityDto" Title="@IntL["ProductVelocity:AvgDaily30"]" SortBy="x => x.AvgDailySales30">
+                    <CellTemplate>
+                        <SoftText Typo="Typo.body2">@context.Item.AvgDailySales30.ToString("0.##")</SoftText>
+                    </CellTemplate>
+                </TemplateColumn>
+                <PropertyColumn T="ProductVelocityDto" TProperty="int"
+                                Property="x => x.QuantitySold30"
+                                Title="@IntL["ProductVelocity:Sold30"]" />
+                <TemplateColumn T="ProductVelocityDto" Title="@IntL["ProductVelocity:Revenue30"]" SortBy="x => x.Revenue30">
+                    <CellTemplate>
+                        <SoftText Typo="Typo.body2">@context.Item.Revenue30.ToString("N2")</SoftText>
+                    </CellTemplate>
+                </TemplateColumn>
+                <PropertyColumn T="ProductVelocityDto" TProperty="int"
+                                Property="x => x.CurrentStock"
+                                Title="@IntL["ProductVelocity:CurrentStock"]" />
+                <TemplateColumn T="ProductVelocityDto" Title="@IntL["ProductVelocity:DaysOfCover"]" SortBy="x => x.DaysOfCover">
+                    <CellTemplate>
+                        @if (context.Item.DaysOfCover.HasValue)
+                        {
+                            <SoftText Typo="Typo.body2">@context.Item.DaysOfCover.Value.ToString("0.#")</SoftText>
+                        }
+                        else
+                        {
+                            <SoftText Typo="Typo.caption" Color="Color.Default">—</SoftText>
+                        }
+                    </CellTemplate>
+                </TemplateColumn>
+            </Columns>
+            <NoRecordsContent>
+                <SoftStack AlignItems="AlignItems.Center" Spacing="2" Class="pa-6">
+                    <SoftIcon Icon="@Icons.Material.Outlined.Speed" Style="font-size: 56px; opacity: 0.4;" />
+                    <SoftText Typo="Typo.body1" Color="Color.Default">@IntL["ProductVelocity:Empty"]</SoftText>
+                </SoftStack>
+            </NoRecordsContent>
+            <PagerContent>
+                <MudDataGridPager T="ProductVelocityDto" />
+            </PagerContent>
+        </SoftDataGrid>
+    </SoftCardContent>
+</SoftCard>
+
+@code {
+    private SoftDataGrid<ProductVelocityDto> _grid = null!;
+    private bool _loading;
+
+    private string? _filter;
+    private Guid? _branchFilter;
+
+    private List<BranchLookupDto> _branches = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _branches = await BranchAppService.GetLookupAsync();
+        }
+        catch (Exception ex)
+        {
+            await HandleErrorAsync(ex);
+        }
+    }
+
+    private async Task<GridData<ProductVelocityDto>> LoadServerData(GridState<ProductVelocityDto> state, CancellationToken cancellationToken)
+    {
+        _loading = true;
+        try
+        {
+            string? sorting = null;
+            var sort = state.SortDefinitions.FirstOrDefault();
+            if (sort != null)
+            {
+                sorting = $"{sort.SortBy} {(sort.Descending ? "desc" : "asc")}";
+            }
+
+            var result = await VelocityAppService.GetListAsync(new GetProductVelocitiesInput
+            {
+                Filter = _filter,
+                BranchId = _branchFilter,
+                SkipCount = state.Page * state.PageSize,
+                MaxResultCount = state.PageSize,
+                Sorting = sorting
+            });
+
+            return new GridData<ProductVelocityDto>
+            {
+                Items = result.Items,
+                TotalItems = (int)result.TotalCount
+            };
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task OnFilterKeyUpAsync(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await ReloadAsync();
+        }
+    }
+
+    private async Task OnBranchFilterChangedAsync(Guid? value)
+    {
+        _branchFilter = value;
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        if (_grid != null)
+        {
+            await _grid.ReloadServerData();
+        }
+    }
+
+    // A is loud (filled primary), B quieter (outlined primary), C muted.
+    private static Variant AbcVariant(string abcClass) => abcClass == "A" ? Variant.Filled : Variant.Outlined;
+
+    private static Color AbcColor(string abcClass) => abcClass switch
+    {
+        "A" => Color.Primary,
+        "B" => Color.Primary,
+        _ => Color.Default
+    };
+}

@@ -28,6 +28,11 @@ public static class InventoryDbContextModelCreatingExtensions
             b.Property(x => x.Phone).HasMaxLength(32);
             b.Property(x => x.Email).HasMaxLength(256);
             b.Property(x => x.Address).HasMaxLength(512);
+            // NOTE: no HasDefaultValue here — store defaults mark the property
+            // ValueGeneratedOnAdd and break ABP's disconnected update path (see the
+            // Status comment in IntelligenceDbContextModelCreatingExtensions).
+            // The entity initialises LeadTimeDays to 3 in code.
+            b.Property(x => x.LeadTimeDays).IsRequired();
         });
 
         builder.Entity<AppProduct>(b =>

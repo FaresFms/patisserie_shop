@@ -14,12 +14,19 @@ public static class InventoryRuleTypes
     public const string DeadStock = "DeadStock";
     public const string TransferSuggestion = "TransferSuggestion";
 
+    /// <summary>
+    /// Time-aware low-stock rule: fires when QuantityOnHand ÷ AvgDailySales30 falls
+    /// below ThresholdValue (interpreted as a number of days of cover).
+    /// </summary>
+    public const string DaysOfCover = "DaysOfCover";
+
     public static readonly string[] All =
     {
         LowStock,
         ExcessStock,
         DeadStock,
-        TransferSuggestion
+        TransferSuggestion,
+        DaysOfCover
     };
 
     public static bool IsValid(string? ruleType)
@@ -27,7 +34,8 @@ public static class InventoryRuleTypes
 
     /// <summary>
     /// DeadStock is the only type measured in days (ThresholdDays);
-    /// every other type uses a stock quantity (ThresholdValue).
+    /// every other type uses ThresholdValue. Note: DaysOfCover also reuses
+    /// ThresholdValue — the value is interpreted as days of cover, not a quantity.
     /// </summary>
     public static bool UsesThresholdDays(string ruleType)
         => ruleType == DeadStock;

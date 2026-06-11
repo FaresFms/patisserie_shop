@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using Intelligence.Decisions;
 using Intelligence.Entities;
 using Intelligence.Permissions;
 using Intelligence.Rules;
@@ -17,17 +18,20 @@ public class InventoryRuleAppService : IntelligenceAppService, IInventoryRuleApp
 {
     private readonly IInventoryRuleRepository _ruleRepository;
     private readonly InventoryRuleManager _ruleManager;
+    private readonly IDecisionLogRepository _decisionLogRepository;
     private readonly IProductAppService _productAppService;
     private readonly IBranchAppService _branchAppService;
 
     public InventoryRuleAppService(
         IInventoryRuleRepository ruleRepository,
         InventoryRuleManager ruleManager,
+        IDecisionLogRepository decisionLogRepository,
         IProductAppService productAppService,
         IBranchAppService branchAppService)
     {
         _ruleRepository = ruleRepository;
         _ruleManager = ruleManager;
+        _decisionLogRepository = decisionLogRepository;
         _productAppService = productAppService;
         _branchAppService = branchAppService;
     }
@@ -58,6 +62,29 @@ public class InventoryRuleAppService : IntelligenceAppService, IInventoryRuleApp
         return new PagedResultDto<InventoryRuleDto>(totalCount, dtos);
     }
 
+    /// <summary>
+    /// Per-rule effectiveness statistics (status workflow counts + 48h outcome counts).
+    /// Thin orchestration: one grouped repository query, field-copy to the DTO.
+    /// Gated by the class-level Rules.Default (read) permission.
+    /// </summary>
+    public async Task<List<RuleEffectivenessDto>> GetEffectivenessAsync()
+    {
+        var rows = await _decisionLogRepository.GetRuleEffectivenessAsync();
+
+        return rows.ConvertAll(r => new RuleEffectivenessDto
+        {
+            RuleId = r.RuleId,
+            TotalDecisions = r.TotalDecisions,
+            Pending = r.Pending,
+            Acknowledged = r.Acknowledged,
+            Dismissed = r.Dismissed,
+            Executed = r.Executed,
+            Resolved = r.Resolved,
+            StockedOut = r.StockedOut,
+            DismissedThenStockedOut = r.DismissedThenStockedOut
+        });
+    }
+
     [Authorize(IntelligencePermissions.Rules.Manage)]
     public async Task<InventoryRuleDto> CreateAsync(CreateInventoryRuleDto input)
     {
@@ -70,7 +97,8 @@ public class InventoryRuleAppService : IntelligenceAppService, IInventoryRuleApp
             input.ThresholdDays,
             input.SuggestedAction,
             input.Priority,
-            input.IsActive);
+            input.IsActive,
+            input.ActionMode);
 
         await _ruleRepository.InsertAsync(rule, autoSave: true);
 
@@ -93,7 +121,8 @@ public class InventoryRuleAppService : IntelligenceAppService, IInventoryRuleApp
             input.ThresholdDays,
             input.SuggestedAction,
             input.Priority,
-            input.IsActive);
+            input.IsActive,
+            input.ActionMode);
 
         await _ruleRepository.UpdateAsync(rule, autoSave: true);
 

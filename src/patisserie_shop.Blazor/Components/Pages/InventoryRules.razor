@@ -121,6 +121,15 @@
                     </CellTemplate>
                 </TemplateColumn>
                 <PropertyColumn T="InventoryRuleDto" TProperty="int" Property="x => x.Priority" Title="@IntL["Priority"]" />
+                <TemplateColumn T="InventoryRuleDto" Title="@IntL["ActionMode"]" SortBy="x => x.ActionMode">
+                    <CellTemplate>
+                        <SoftChip T="string" Size="Size.Small"
+                                  Variant="@(NormalizeActionMode(context.Item.ActionMode) == RuleActionModes.SuggestOnly ? Variant.Outlined : Variant.Filled)"
+                                  Color="@ActionModeColor(context.Item.ActionMode)">
+                            @IntL[$"ActionMode:{NormalizeActionMode(context.Item.ActionMode)}"]
+                        </SoftChip>
+                    </CellTemplate>
+                </TemplateColumn>
                 <TemplateColumn T="InventoryRuleDto" Title="@IntL["IsActive"]" SortBy="x => x.IsActive">
                     <CellTemplate>
                         @if (context.Item.IsActive)
@@ -130,6 +139,32 @@
                         else
                         {
                             <SoftChip T="string" Color="Color.Default" Size="Size.Small" Variant="Variant.Outlined">-</SoftChip>
+                        }
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn T="InventoryRuleDto" Title="@IntL["Effectiveness"]" Sortable="false">
+                    <CellTemplate>
+                        @{
+                            var eff = _effectiveness.GetValueOrDefault(context.Item.Id);
+                            var hint = eff == null ? null : GetHint(eff);
+                        }
+                        @if (eff == null || eff.TotalDecisions == 0)
+                        {
+                            <SoftText Typo="Typo.caption" Color="Color.Default">—</SoftText>
+                        }
+                        else
+                        {
+                            <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                <SoftText Typo="Typo.caption" Color="Color.Default" Style="white-space:nowrap; color: var(--fg-3);">
+                                    @EffectivenessStats(eff)
+                                </SoftText>
+                                @if (hint != null)
+                                {
+                                    <SoftTooltip Text="@hint.Text">
+                                        <MudIcon Icon="@hint.Icon" Size="Size.Small" Color="@hint.Color" />
+                                    </SoftTooltip>
+                                }
+                            </SoftStack>
                         }
                     </CellTemplate>
                 </TemplateColumn>
@@ -240,7 +275,7 @@
                                     else
                                     {
                                         <SoftNumericField T="int?"
-                                                          Label="@IntL["StockQuantityThreshold"]"
+                                                          Label="@(_editType == InventoryRuleTypes.DaysOfCover ? IntL["DaysOfCoverThreshold"] : IntL["StockQuantityThreshold"])"
                                                           @bind-Value="_editThresholdValue"
                                                           Variant="Variant.Outlined"
                                                           Min="0"
@@ -288,6 +323,16 @@
                                                Variant="Variant.Outlined"
                                                MaxLength="256"
                                                Placeholder="@IntL["SuggestedActionPlaceholder"]" />
+                                <SoftSelect T="string"
+                                            Label="@IntL["ActionMode"]"
+                                            @bind-Value="_editActionMode"
+                                            Variant="Variant.Outlined"
+                                            HelperText="@IntL["ActionModeHint"]">
+                                    @foreach (var m in RuleActionModes.All)
+                                    {
+                                        <MudSelectItem T="string" Value="@m">@IntL[$"ActionMode:{m}"]</MudSelectItem>
+                                    }
+                                </SoftSelect>
                                 <SoftNumericField T="int"
                                                   Label="@IntL["Priority"]"
                                                   @bind-Value="_editPriority"
@@ -360,6 +405,9 @@
     private List<ProductLookupDto> _products = new();
     private List<BranchLookupDto> _branches = new();
 
+    // Per-rule decision statistics, merged client-side by RuleId.
+    private Dictionary<Guid, RuleEffectivenessDto> _effectiveness = new();
+
     private List<RuleTypeOption> _typeOptions = new();
     private List<ActiveOption> _activeOptions = new();
 
@@ -374,6 +422,7 @@
     private string? _editSuggestedAction;
     private int _editPriority;
     private bool _editIsActive = true;
+    private string _editActionMode = RuleActionModes.SuggestOnly;
 
     private bool _confirmVisible;
     private InventoryRuleDto? _pendingDelete;
@@ -397,6 +446,20 @@
         };
 
         await LoadLookupsAsync();
+        await LoadEffectivenessAsync();
+    }
+
+    private async Task LoadEffectivenessAsync()
+    {
+        try
+        {
+            var rows = await RuleAppService.GetEffectivenessAsync();
+            _effectiveness = rows.ToDictionary(r => r.RuleId);
+        }
+        catch (Exception ex)
+        {
+            await HandleErrorAsync(ex);
+        }
     }
 
     private async Task LoadLookupsAsync()
@@ -475,6 +538,7 @@
 
     private async Task ReloadAsync()
     {
+        await LoadEffectivenessAsync();
         if (_grid != null)
         {
             await _grid.ReloadServerData();
@@ -507,6 +571,7 @@
         _editSuggestedAction = null;
         _editPriority = 0;
         _editIsActive = true;
+        _editActionMode = RuleActionModes.SuggestOnly;
         _dialogVisible = true;
     }
 
@@ -522,6 +587,7 @@
         _editSuggestedAction = rule.SuggestedAction;
         _editPriority = rule.Priority;
         _editIsActive = rule.IsActive;
+        _editActionMode = NormalizeActionMode(rule.ActionMode);
         _dialogVisible = true;
     }
 
@@ -574,7 +640,8 @@
                     ThresholdDays = _editThresholdDays,
                     SuggestedAction = _editSuggestedAction,
                     Priority = _editPriority,
-                    IsActive = _editIsActive
+                    IsActive = _editIsActive,
+                    ActionMode = _editActionMode
                 });
             }
             else
@@ -589,7 +656,8 @@
                     ThresholdDays = _editThresholdDays,
                     SuggestedAction = _editSuggestedAction,
                     Priority = _editPriority,
-                    IsActive = _editIsActive
+                    IsActive = _editIsActive,
+                    ActionMode = _editActionMode
                 });
             }
             Snackbar.Add(L["SuccessfullySaved"], Severity.Success);
@@ -629,12 +697,61 @@
         }
     }
 
+    private record EffectivenessHint(string Text, string Icon, Color Color);
+
+    /// <summary>"23 alerts · 61% exec · 17% dismissed" — compact muted stats line.</summary>
+    private string EffectivenessStats(RuleEffectivenessDto eff)
+    {
+        var execPct = (int)Math.Round(100.0 * eff.Executed / eff.TotalDecisions);
+        var dismissPct = (int)Math.Round(100.0 * eff.Dismissed / eff.TotalDecisions);
+        return string.Format(IntL["Effectiveness:Stats"], eff.TotalDecisions, execPct, dismissPct);
+    }
+
+    /// <summary>
+    /// Deterministic threshold-tuning hints, strongest signal first. All ratios are
+    /// computed client-side from the per-rule decision statistics.
+    /// </summary>
+    private EffectivenessHint? GetHint(RuleEffectivenessDto eff)
+    {
+        // Dismissed alerts were followed by stockouts — the alerts were warranted.
+        if (eff.DismissedThenStockedOut >= 2)
+        {
+            return new(IntL["Effectiveness:Hint:DismissedStockouts"], Icons.Material.Filled.ReportProblem, Color.Warning);
+        }
+
+        // Noisy: 70%+ of a meaningful sample dismissed — threshold probably too tight.
+        if (eff.TotalDecisions >= 10 && (double)eff.Dismissed / eff.TotalDecisions >= 0.7)
+        {
+            return new(IntL["Effectiveness:Hint:Noisy"], Icons.Material.Filled.NotificationsPaused, Color.Warning);
+        }
+
+        // Effective: most executed decisions ended up resolved.
+        if (eff.Executed > 0 && (double)eff.Resolved / eff.Executed >= 0.8)
+        {
+            return new(IntL["Effectiveness:Hint:Effective"], Icons.Material.Filled.Verified, Color.Success);
+        }
+
+        return null;
+    }
+
+    /// <summary>Defensive fallback for rows persisted before ActionMode existed.</summary>
+    private static string NormalizeActionMode(string? actionMode)
+        => RuleActionModes.IsValid(actionMode) ? actionMode! : RuleActionModes.SuggestOnly;
+
+    private static Color ActionModeColor(string? actionMode) => NormalizeActionMode(actionMode) switch
+    {
+        RuleActionModes.CreateDraft => Color.Primary,
+        RuleActionModes.AutoSubmit => Color.Warning,
+        _ => Color.Default // SuggestOnly — muted outlined chip
+    };
+
     private static Color TypeColor(string ruleType) => ruleType switch
     {
         InventoryRuleTypes.LowStock => Color.Warning,
         InventoryRuleTypes.ExcessStock => Color.Info,
         InventoryRuleTypes.DeadStock => Color.Error,
         InventoryRuleTypes.TransferSuggestion => Color.Tertiary,
+        InventoryRuleTypes.DaysOfCover => Color.Secondary,
         _ => Color.Default
     };
 
@@ -663,6 +780,11 @@
         if (rule.RuleType == InventoryRuleTypes.DeadStock)
         {
             return rule.ThresholdDays.HasValue ? $"{rule.ThresholdDays} {IntL["DaysSuffix"]}" : "—";
+        }
+        if (rule.RuleType == InventoryRuleTypes.DaysOfCover)
+        {
+            // ThresholdValue is interpreted as days of cover for this type.
+            return rule.ThresholdValue.HasValue ? $"{rule.ThresholdValue} {IntL["DaysSuffix"]}" : "—";
         }
         return rule.ThresholdValue?.ToString() ?? "—";
     }

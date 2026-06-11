@@ -17,6 +17,14 @@ public class AppInventoryRule : FullAuditedAggregateRoot<Guid>
     public int Priority { get; private set; }
     public bool IsActive { get; private set; } = true;
 
+    /// <summary>
+    /// Autopilot level applied when this rule fires (see <see cref="RuleActionModes"/>).
+    /// SuggestOnly = leave the decision Pending for a human (default);
+    /// CreateDraft = auto-create the corrective draft document and mark Executed;
+    /// AutoSubmit = same, plus submit the created document for approval.
+    /// </summary>
+    public string ActionMode { get; private set; } = RuleActionModes.SuggestOnly;
+
     protected AppInventoryRule() { }
 
     internal AppInventoryRule(
@@ -29,13 +37,15 @@ public class AppInventoryRule : FullAuditedAggregateRoot<Guid>
         int? thresholdDays = null,
         string? suggestedAction = null,
         int priority = 0,
-        bool isActive = true)
+        bool isActive = true,
+        string? actionMode = null)
         : base(id)
     {
         SetRuleName(ruleName);
         SetTypeAndThresholds(ruleType, thresholdValue, thresholdDays);
         SetScope(productId, branchId);
         SetSuggestedAction(suggestedAction);
+        SetActionMode(actionMode ?? RuleActionModes.SuggestOnly);
         Priority = priority;
         IsActive = isActive;
     }
@@ -50,12 +60,14 @@ public class AppInventoryRule : FullAuditedAggregateRoot<Guid>
         int? thresholdDays,
         string? suggestedAction,
         int priority,
-        bool isActive)
+        bool isActive,
+        string? actionMode = null)
     {
         SetRuleName(ruleName);
         SetTypeAndThresholds(ruleType, thresholdValue, thresholdDays);
         SetScope(productId, branchId);
         SetSuggestedAction(suggestedAction);
+        SetActionMode(actionMode ?? RuleActionModes.SuggestOnly);
         Priority = priority;
         IsActive = isActive;
     }
@@ -76,6 +88,17 @@ public class AppInventoryRule : FullAuditedAggregateRoot<Guid>
         SuggestedAction = string.IsNullOrWhiteSpace(suggestedAction)
             ? null
             : Check.Length(suggestedAction.Trim(), nameof(suggestedAction), maxLength: 256);
+    }
+
+    public void SetActionMode(string actionMode)
+    {
+        if (!RuleActionModes.IsValid(actionMode))
+        {
+            throw new BusinessException(IntelligenceErrorCodes.InvalidRuleActionMode)
+                .WithData("ActionMode", actionMode ?? "(null)");
+        }
+
+        ActionMode = actionMode;
     }
 
     public void Activate() => IsActive = true;

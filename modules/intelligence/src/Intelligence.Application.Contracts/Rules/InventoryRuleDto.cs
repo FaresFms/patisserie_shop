@@ -14,6 +14,10 @@ public class InventoryRuleDto : EntityDto<Guid>
     public string? SuggestedAction { get; set; }
     public int Priority { get; set; }
     public bool IsActive { get; set; }
+
+    /// <summary>Autopilot level applied when the rule fires (see RuleActionModes).</summary>
+    public string ActionMode { get; set; } = RuleActionModes.SuggestOnly;
+
     public DateTime CreationTime { get; set; }
 
     /// <summary>Resolved by the app service for the Scope column. Null when the rule is product-global.</summary>

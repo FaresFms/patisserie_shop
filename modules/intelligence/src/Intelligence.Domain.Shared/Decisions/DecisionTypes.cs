@@ -15,13 +15,17 @@ public static class DecisionTypes
     public const string TransferSuggestion = "TransferSuggestion";
     public const string ReorderSuggestion = "ReorderSuggestion";
 
+    /// <summary>Raised by DaysOfCover rules: stock will run out within the threshold days.</summary>
+    public const string StockoutRisk = "StockoutRisk";
+
     public static readonly string[] All =
     {
         LowStockAlert,
         ExcessStockAlert,
         DeadStockFlag,
         TransferSuggestion,
-        ReorderSuggestion
+        ReorderSuggestion,
+        StockoutRisk
     };
 
     public static bool IsValid(string? decisionType)

@@ -27,4 +27,9 @@ public class CreateInventoryRuleDto
     public int Priority { get; set; }
 
     public bool IsActive { get; set; } = true;
+
+    /// <summary>Autopilot level applied when the rule fires (see RuleActionModes).</summary>
+    [Required]
+    [StringLength(32)]
+    public string ActionMode { get; set; } = RuleActionModes.SuggestOnly;
 }

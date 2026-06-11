@@ -59,4 +59,15 @@ public interface ISaleRepository : IRepository<AppSale, Guid>
         DateTime toUtcExclusive,
         IReadOnlyCollection<Guid>? branchIdScope,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// One grouped query over sale items joined to their sales (SaleDate ≥ from30Utc,
+    /// &lt; toUtcExclusive), grouped by (ProductId, BranchId). QuantitySold7 is a
+    /// conditional sum counting only items whose SaleDate ≥ from7Utc.
+    /// </summary>
+    Task<List<ProductBranchSalesAggregate>> GetProductBranchSalesAggregatesAsync(
+        DateTime from7Utc,
+        DateTime from30Utc,
+        DateTime toUtcExclusive,
+        CancellationToken ct = default);
 }

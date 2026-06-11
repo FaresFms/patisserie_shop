@@ -74,6 +74,7 @@
                 <PropertyColumn T="SupplierDto" TProperty="string" Property="x => x.ContactPerson!" Title="@InvL["ContactPerson"]" />
                 <PropertyColumn T="SupplierDto" TProperty="string" Property="x => x.Phone!" Title="@InvL["Phone"]" Sortable="false" />
                 <PropertyColumn T="SupplierDto" TProperty="string" Property="x => x.Email!" Title="@InvL["Email"]" Sortable="false" />
+                <PropertyColumn T="SupplierDto" TProperty="int" Property="x => x.LeadTimeDays" Title="@InvL["LeadTimeDays"]" />
                 <TemplateColumn T="SupplierDto" Title="@InvL["IsActive"]" Sortable="true" SortBy="x => x.IsActive">
                     <CellTemplate>
                         @if (context.Item.IsActive)
@@ -169,6 +170,14 @@
                                        Variant="Variant.Outlined"
                                        Lines="2"
                                        MaxLength="512" />
+                        <SoftNumericField T="int"
+                                          Label="@InvL["LeadTimeDays"]"
+                                          @bind-Value="_editLeadTimeDays"
+                                          Variant="Variant.Outlined"
+                                          Min="0"
+                                          Max="365"
+                                          HideSpinButtons="true"
+                                          Style="max-width: 200px;" />
                         <SoftCheckBox T="bool" @bind-Value="_editIsActive" Label="@InvL["IsActive"]" Color="Color.Primary" />
                     </SoftStack>
                 </SoftCardContent>
@@ -233,6 +242,7 @@
     private string? _editEmail;
     private string? _editAddress;
     private bool _editIsActive = true;
+    private int _editLeadTimeDays = 3;
 
     private bool _confirmVisible;
     private SupplierDto? _pendingDelete;
@@ -299,6 +309,7 @@
         _editEmail = null;
         _editAddress = null;
         _editIsActive = true;
+        _editLeadTimeDays = 3;
         _dialogVisible = true;
     }
 
@@ -311,6 +322,7 @@
         _editEmail = supplier.Email;
         _editAddress = supplier.Address;
         _editIsActive = supplier.IsActive;
+        _editLeadTimeDays = supplier.LeadTimeDays;
         _dialogVisible = true;
     }
 
@@ -338,7 +350,8 @@
                     Phone = _editPhone,
                     Email = _editEmail,
                     Address = _editAddress,
-                    IsActive = _editIsActive
+                    IsActive = _editIsActive,
+                    LeadTimeDays = _editLeadTimeDays
                 });
             }
             else
@@ -350,7 +363,8 @@
                     Phone = _editPhone,
                     Email = _editEmail,
                     Address = _editAddress,
-                    IsActive = _editIsActive
+                    IsActive = _editIsActive,
+                    LeadTimeDays = _editLeadTimeDays
                 });
             }
             Snackbar.Add(L["SuccessfullySaved"], Severity.Success);

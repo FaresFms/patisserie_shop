@@ -22,7 +22,8 @@ public class SupplierManager : DomainService
         string? phone = null,
         string? email = null,
         string? address = null,
-        bool isActive = true)
+        bool isActive = true,
+        int leadTimeDays = 3)
     {
         await EnsureNameIsUniqueAsync(name);
 
@@ -33,7 +34,8 @@ public class SupplierManager : DomainService
             phone,
             email,
             address,
-            isActive);
+            isActive,
+            leadTimeDays);
     }
 
     public async Task ChangeNameAsync(AppSupplier supplier, string newName)

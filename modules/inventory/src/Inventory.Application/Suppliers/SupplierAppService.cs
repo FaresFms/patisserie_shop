@@ -52,7 +52,8 @@ public class SupplierAppService : InventoryAppService, ISupplierAppService
             input.Phone,
             input.Email,
             input.Address,
-            input.IsActive);
+            input.IsActive,
+            input.LeadTimeDays);
 
         await _supplierRepository.InsertAsync(supplier, autoSave: true);
         return ObjectMapper.Map<AppSupplier, SupplierDto>(supplier);
@@ -64,7 +65,7 @@ public class SupplierAppService : InventoryAppService, ISupplierAppService
         var supplier = await _supplierRepository.GetAsync(id);
 
         await _supplierManager.ChangeNameAsync(supplier, input.Name);
-        supplier.UpdateInfo(input.ContactPerson, input.Phone, input.Email, input.Address, input.IsActive);
+        supplier.UpdateInfo(input.ContactPerson, input.Phone, input.Email, input.Address, input.IsActive, input.LeadTimeDays);
 
         await _supplierRepository.UpdateAsync(supplier, autoSave: true);
         return ObjectMapper.Map<AppSupplier, SupplierDto>(supplier);

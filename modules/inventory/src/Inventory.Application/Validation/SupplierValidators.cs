@@ -24,6 +24,9 @@ public class CreateSupplierDtoValidator : AbstractValidator<CreateSupplierDto>
 
         RuleFor(x => x.Address)
             .MaximumLength(512).WithMessage("Address must not exceed 512 characters.");
+
+        RuleFor(x => x.LeadTimeDays)
+            .InclusiveBetween(0, 365).WithMessage("Lead time must be between 0 and 365 days.");
     }
 }
 
@@ -48,5 +51,8 @@ public class UpdateSupplierDtoValidator : AbstractValidator<UpdateSupplierDto>
 
         RuleFor(x => x.Address)
             .MaximumLength(512).WithMessage("Address must not exceed 512 characters.");
+
+        RuleFor(x => x.LeadTimeDays)
+            .InclusiveBetween(0, 365).WithMessage("Lead time must be between 0 and 365 days.");
     }
 }

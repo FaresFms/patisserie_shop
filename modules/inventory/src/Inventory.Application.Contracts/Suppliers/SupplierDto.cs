@@ -11,5 +11,6 @@ public class SupplierDto : EntityDto<Guid>
     public string? Email { get; set; }
     public string? Address { get; set; }
     public bool IsActive { get; set; }
+    public int LeadTimeDays { get; set; }
     public DateTime CreationTime { get; set; }
 }

@@ -25,11 +25,15 @@ public class IntelligenceApplicationModule : AbpModule
         context.Services.AddMapperlyObjectMapper<IntelligenceApplicationModule>();
         context.Services.AddTransient<DeadStockScannerWorker>();
         context.Services.AddTransient<TransferSuggestionScannerWorker>();
+        context.Services.AddTransient<VelocityScannerWorker>();
+        context.Services.AddTransient<DecisionOutcomeScannerWorker>();
     }
 
     public override async Task OnApplicationInitializationAsync(ApplicationInitializationContext context)
     {
         await context.AddBackgroundWorkerAsync<DeadStockScannerWorker>();
         await context.AddBackgroundWorkerAsync<TransferSuggestionScannerWorker>();
+        await context.AddBackgroundWorkerAsync<VelocityScannerWorker>();
+        await context.AddBackgroundWorkerAsync<DecisionOutcomeScannerWorker>();
     }
 }

@@ -201,4 +201,33 @@ public class SaleRepository
 
         return await grouped.ToListAsync(GetCancellationToken(cancellationToken));
     }
+
+    public async Task<List<ProductBranchSalesAggregate>> GetProductBranchSalesAggregatesAsync(
+        DateTime from7Utc,
+        DateTime from30Utc,
+        DateTime toUtcExclusive,
+        CancellationToken ct = default)
+    {
+        var dbContext = await GetDbContextAsync();
+
+        var sales = dbContext.Set<AppSale>()
+            .Where(s => s.SaleDate >= from30Utc && s.SaleDate < toUtcExclusive);
+
+        var lines = from s in sales
+                    from i in s.Items
+                    select new { s.BranchId, s.SaleDate, i.ProductId, i.Quantity, i.UnitPrice };
+
+        var grouped = lines
+            .GroupBy(x => new { x.ProductId, x.BranchId })
+            .Select(g => new ProductBranchSalesAggregate
+            {
+                ProductId = g.Key.ProductId,
+                BranchId = g.Key.BranchId,
+                QuantitySold7 = g.Sum(x => x.SaleDate >= from7Utc ? x.Quantity : 0),
+                QuantitySold30 = g.Sum(x => x.Quantity),
+                Revenue30 = g.Sum(x => x.Quantity * x.UnitPrice)
+            });
+
+        return await grouped.ToListAsync(GetCancellationToken(ct));
+    }
 }

@@ -33,6 +33,15 @@ public class AppDecisionLog : CreationAuditedAggregateRoot<Guid>
     /// <summary>Id of the document referenced by <see cref="ExecutedActionType"/>.</summary>
     public Guid? ExecutedActionId { get; private set; }
 
+    /// <summary>
+    /// Whether the underlying problem actually got resolved, recorded ~48h after creation
+    /// by the DecisionOutcomeScanner (see <see cref="DecisionOutcomes"/>). Null until evaluated.
+    /// </summary>
+    public string? Outcome { get; private set; }
+
+    /// <summary>UTC moment the <see cref="Outcome"/> was recorded.</summary>
+    public DateTime? OutcomeEvaluatedAt { get; private set; }
+
     protected AppDecisionLog() { }
 
     public AppDecisionLog(
@@ -85,6 +94,32 @@ public class AppDecisionLog : CreationAuditedAggregateRoot<Guid>
         ExecutedActionType = actionType;
         ExecutedActionId = actionId;
         TransitionTo(DecisionLogStatuses.Executed, userId);
+    }
+
+    /// <summary>
+    /// Records whether the problem behind this decision actually got resolved.
+    /// This is the SECOND AND LAST permitted mutation of the ledger row (the first
+    /// being the single Pending→Acknowledged/Dismissed/Executed status transition):
+    /// Outcome is write-once — any attempt to record it twice throws, keeping the
+    /// ledger immutable once evaluated.
+    /// </summary>
+    public void RecordOutcome(string outcome, DateTime evaluatedAtUtc)
+    {
+        if (Outcome != null)
+        {
+            throw new BusinessException(IntelligenceErrorCodes.DecisionOutcomeAlreadyRecorded)
+                .WithData("ExistingOutcome", Outcome)
+                .WithData("AttemptedOutcome", outcome);
+        }
+
+        if (!DecisionOutcomes.IsValid(outcome))
+        {
+            throw new BusinessException(IntelligenceErrorCodes.InvalidDecisionOutcome)
+                .WithData("Outcome", outcome ?? "(null)");
+        }
+
+        Outcome = outcome;
+        OutcomeEvaluatedAt = evaluatedAtUtc;
     }
 
     /// <summary>

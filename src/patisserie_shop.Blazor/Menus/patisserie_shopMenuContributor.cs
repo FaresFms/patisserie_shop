@@ -146,6 +146,12 @@ public class patisserie_shopMenuContributor : IMenuContributor
             "/intelligence/decision-log",
             icon: "fas fa-clipboard-check"
         ).RequirePermissions(IntelligencePermissions.DecisionLogs.Default));
+        intelligenceMenu.AddItem(new ApplicationMenuItem(
+            patisserie_shopMenus.ProductVelocity,
+            intelL["Menu:ProductVelocity"],
+            "/intelligence/product-velocity",
+            icon: "fas fa-tachometer-alt"
+        ).RequirePermissions(IntelligencePermissions.DecisionLogs.Default));
         context.Menu.AddItem(intelligenceMenu);
 
         //Administration

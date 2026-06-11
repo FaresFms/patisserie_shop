@@ -21,7 +21,8 @@ public class InventoryRuleManager : DomainService
         int? thresholdDays,
         string? suggestedAction,
         int priority,
-        bool isActive)
+        bool isActive,
+        string? actionMode = null)
     {
         var rule = new AppInventoryRule(
             GuidGenerator.Create(),
@@ -33,7 +34,8 @@ public class InventoryRuleManager : DomainService
             thresholdDays,
             suggestedAction,
             priority,
-            isActive);
+            isActive,
+            actionMode);
 
         return Task.FromResult(rule);
     }

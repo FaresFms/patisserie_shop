@@ -232,6 +232,16 @@
                                       Variant="@(item.Status == "Pending" ? Variant.Filled : Variant.Outlined)">
                                 @IntL[$"DecisionStatus:{item.Status}"]
                             </SoftChip>
+                            @if (!string.IsNullOrWhiteSpace(item.Outcome))
+                            {
+                                @* 48h outcome recorded by the outcome scanner: StockedOut is loud (filled red),
+                                   Resolved/Unresolved are quiet (outlined). *@
+                                <SoftChip T="string" Size="Size.Small"
+                                          Color="@OutcomeChipColor(item.Outcome)"
+                                          Variant="@(item.Outcome == DecisionOutcomes.StockedOut ? Variant.Filled : Variant.Outlined)">
+                                    @IntL[$"Outcome:{item.Outcome}"]
+                                </SoftChip>
+                            }
                             <div class="dl-time">@TimeAgo(item.CreationTime)</div>
                             @if (item.Status == DecisionLogStatuses.Executed
                                  && item.ExecutedActionId.HasValue
@@ -363,6 +373,7 @@
     .dl-card.dl-type-excessstockalert { border-left-color: #4a7da8; }
     .dl-card.dl-type-deadstockflag    { border-left-color: #b3543a; }
     .dl-card.dl-type-transfersuggestion { border-left-color: #4a8e8e; }
+    .dl-card.dl-type-stockoutrisk     { border-left-color: #a4313f; } /* crimson — distinct from amber LowStock and red DeadStock */
     .dl-card.dl-status-acknowledged,
     .dl-card.dl-status-dismissed,
     .dl-card.dl-status-executed {
@@ -382,6 +393,7 @@
     .dl-type-excessstockalert .dl-type-icon { color: #4a7da8; }
     .dl-type-deadstockflag    .dl-type-icon { color: #b3543a; }
     .dl-type-transfersuggestion .dl-type-icon { color: #4a8e8e; }
+    .dl-type-stockoutrisk     .dl-type-icon { color: #a4313f; }
 
     .dl-card-center { min-width: 0; }
     .dl-reasoning {
@@ -518,7 +530,8 @@
             new(DecisionTypes.ExcessStockAlert,  IntL["DecisionType:ExcessStockAlert"]),
             new(DecisionTypes.DeadStockFlag,     IntL["DecisionType:DeadStockFlag"]),
             new(DecisionTypes.TransferSuggestion, IntL["DecisionType:TransferSuggestion"]),
-            new(DecisionTypes.ReorderSuggestion,  IntL["DecisionType:ReorderSuggestion"])
+            new(DecisionTypes.ReorderSuggestion,  IntL["DecisionType:ReorderSuggestion"]),
+            new(DecisionTypes.StockoutRisk,       IntL["DecisionType:StockoutRisk"])
         };
 
         _statusOptions = new List<LabeledOption>
@@ -778,6 +791,7 @@
         DecisionTypes.DeadStockFlag => Icons.Material.Filled.Archive,
         DecisionTypes.TransferSuggestion => Icons.Material.Filled.SwapHoriz,
         DecisionTypes.ReorderSuggestion => Icons.Material.Filled.AddShoppingCart,
+        DecisionTypes.StockoutRisk => Icons.Material.Filled.HourglassBottom,
         _ => Icons.Material.Filled.Info
     };
 
@@ -788,7 +802,15 @@
         DecisionTypes.DeadStockFlag => Color.Error,
         DecisionTypes.TransferSuggestion => Color.Tertiary,
         DecisionTypes.ReorderSuggestion => Color.Primary,
+        DecisionTypes.StockoutRisk => Color.Secondary, // crimson family via CSS accents below
         _ => Color.Default
+    };
+
+    private static Color OutcomeChipColor(string? outcome) => outcome switch
+    {
+        DecisionOutcomes.Resolved => Color.Success,   // green outlined
+        DecisionOutcomes.StockedOut => Color.Error,   // red filled — the loud one
+        _ => Color.Default                            // Unresolved — grey outlined
     };
 
     private static Color StatusChipColor(string status) => status switch

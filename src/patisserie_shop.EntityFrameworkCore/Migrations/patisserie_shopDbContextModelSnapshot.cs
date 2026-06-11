@@ -74,6 +74,13 @@ namespace patisserie_shop.Migrations
                         .HasColumnType("text")
                         .HasColumnName("ExtraProperties");
 
+                    b.Property<string>("Outcome")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<DateTime?>("OutcomeEvaluatedAt")
+                        .HasColumnType("timestamp without time zone");
+
                     b.Property<Guid>("ProductId")
                         .HasColumnType("uuid");
 
@@ -128,6 +135,11 @@ namespace patisserie_shop.Migrations
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
+
+                    b.Property<string>("ActionMode")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
 
                     b.Property<Guid?>("BranchId")
                         .HasColumnType("uuid");
@@ -215,6 +227,53 @@ namespace patisserie_shop.Migrations
                         .HasDatabaseName("IX_InventoryRules_Type");
 
                     b.ToTable("IntelligenceInventoryRules", (string)null);
+                });
+
+            modelBuilder.Entity("Intelligence.Entities.AppProductVelocity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AbcClass")
+                        .IsRequired()
+                        .HasMaxLength(1)
+                        .HasColumnType("character varying(1)");
+
+                    b.Property<decimal>("AvgDailySales30")
+                        .HasPrecision(9, 2)
+                        .HasColumnType("numeric(9,2)");
+
+                    b.Property<decimal>("AvgDailySales7")
+                        .HasPrecision(9, 2)
+                        .HasColumnType("numeric(9,2)");
+
+                    b.Property<Guid>("BranchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("ComputedAtUtc")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<Guid>("ProductId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("QuantitySold30")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("Revenue30")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BranchId")
+                        .HasDatabaseName("IX_ProductVelocities_Branch");
+
+                    b.HasIndex("ProductId", "BranchId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_ProductVelocities_Product_Branch");
+
+                    b.ToTable("IntelligenceProductVelocities", (string)null);
                 });
 
             modelBuilder.Entity("Inventory.Entities.AppBranch", b =>
@@ -659,6 +718,9 @@ namespace patisserie_shop.Migrations
                     b.Property<Guid?>("LastModifierId")
                         .HasColumnType("uuid")
                         .HasColumnName("LastModifierId");
+
+                    b.Property<int>("LeadTimeDays")
+                        .HasColumnType("integer");
 
                     b.Property<string>("Name")
                         .IsRequired()

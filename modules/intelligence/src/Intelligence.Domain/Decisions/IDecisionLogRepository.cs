@@ -41,4 +41,11 @@ public interface IDecisionLogRepository : IRepository<AppDecisionLog, Guid>
     Task<DecisionLogSummary> GetSummaryAsync(
         IReadOnlyCollection<Guid>? scopedBranchIds,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Per-rule effectiveness aggregate over ALL decision logs (one grouped query):
+    /// workflow status counts plus 48h outcome counts (see <see cref="RuleEffectivenessRow"/>).
+    /// </summary>
+    Task<List<RuleEffectivenessRow>> GetRuleEffectivenessAsync(
+        CancellationToken cancellationToken = default);
 }

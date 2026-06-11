@@ -27,6 +27,12 @@ public class DecisionLogDto : EntityDto<Guid>
     /// <summary>Id of the corrective document created on execution.</summary>
     public Guid? ExecutedActionId { get; set; }
 
+    /// <summary>48h outcome recorded by the decision outcome scanner (see DecisionOutcomes). Null until evaluated.</summary>
+    public string? Outcome { get; set; }
+
+    /// <summary>UTC moment the outcome was recorded.</summary>
+    public DateTime? OutcomeEvaluatedAt { get; set; }
+
     public DateTime CreationTime { get; set; }
 
     /// <summary>Resolved by the app service from the originating AppInventoryRule.</summary>

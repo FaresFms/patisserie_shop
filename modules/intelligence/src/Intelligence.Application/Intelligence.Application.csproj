@@ -16,6 +16,7 @@
     <ProjectReference Include="..\Intelligence.Domain\Intelligence.Domain.csproj" />
     <ProjectReference Include="..\..\..\inventory\src\Inventory.Application.Contracts\Inventory.Application.Contracts.csproj" />
     <ProjectReference Include="..\..\..\inventory\src\Inventory.Domain\Inventory.Domain.csproj" />
+    <ProjectReference Include="..\..\..\operations\src\Operations.Domain\Operations.Domain.csproj" />
   </ItemGroup>
 
 </Project>

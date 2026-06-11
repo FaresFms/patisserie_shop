@@ -1,6 +1,7 @@
 using Intelligence.Decisions;
 using Intelligence.Entities;
 using Intelligence.Rules;
+using Intelligence.Velocity;
 using Riok.Mapperly.Abstractions;
 using Volo.Abp.Mapperly;
 
@@ -38,4 +39,24 @@ public partial class DecisionLogToDtoMapper : MapperBase<AppDecisionLog, Decisio
     [MapperIgnoreTarget(nameof(DecisionLogDto.TargetBranchName))]
     [MapperIgnoreTarget(nameof(DecisionLogDto.AcknowledgedByUserName))]
     public override partial void Map(AppDecisionLog source, DecisionLogDto destination);
+}
+
+[Mapper]
+public partial class ProductVelocityToDtoMapper : MapperBase<AppProductVelocity, ProductVelocityDto>
+{
+    // Joined data (product / branch / stock) resolved by the repository read model
+    // and overlaid manually by the app service.
+    [MapperIgnoreTarget(nameof(ProductVelocityDto.ProductName))]
+    [MapperIgnoreTarget(nameof(ProductVelocityDto.ProductSku))]
+    [MapperIgnoreTarget(nameof(ProductVelocityDto.BranchName))]
+    [MapperIgnoreTarget(nameof(ProductVelocityDto.CurrentStock))]
+    [MapperIgnoreTarget(nameof(ProductVelocityDto.DaysOfCover))]
+    public override partial ProductVelocityDto Map(AppProductVelocity source);
+
+    [MapperIgnoreTarget(nameof(ProductVelocityDto.ProductName))]
+    [MapperIgnoreTarget(nameof(ProductVelocityDto.ProductSku))]
+    [MapperIgnoreTarget(nameof(ProductVelocityDto.BranchName))]
+    [MapperIgnoreTarget(nameof(ProductVelocityDto.CurrentStock))]
+    [MapperIgnoreTarget(nameof(ProductVelocityDto.DaysOfCover))]
+    public override partial void Map(AppProductVelocity source, ProductVelocityDto destination);
 }

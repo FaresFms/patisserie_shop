@@ -11,6 +11,7 @@
   <ItemGroup>
     <PackageReference Include="Volo.Abp.EntityFrameworkCore" Version="10.1.1" />
     <ProjectReference Include="..\Intelligence.Domain\Intelligence.Domain.csproj" />
+    <ProjectReference Include="..\..\..\inventory\src\Inventory.Domain\Inventory.Domain.csproj" />
   </ItemGroup>
 
 </Project>

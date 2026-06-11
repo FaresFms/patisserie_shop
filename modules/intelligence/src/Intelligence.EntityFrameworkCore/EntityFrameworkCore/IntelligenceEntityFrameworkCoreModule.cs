@@ -1,6 +1,7 @@
 ﻿using Intelligence.Decisions;
 using Intelligence.Entities;
 using Intelligence.Rules;
+using Intelligence.Velocity;
 using Microsoft.Extensions.DependencyInjection;
 using Volo.Abp.EntityFrameworkCore;
 using Volo.Abp.Modularity;
@@ -21,6 +22,7 @@ public class IntelligenceEntityFrameworkCoreModule : AbpModule
 
             options.AddRepository<AppInventoryRule, InventoryRuleRepository>();
             options.AddRepository<AppDecisionLog, DecisionLogRepository>();
+            options.AddRepository<AppProductVelocity, ProductVelocityRepository>();
         });
     }
 }

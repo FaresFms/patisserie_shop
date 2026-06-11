@@ -40,6 +40,7 @@
     "Description": "Description",
     "IsActive": "Active",
     "ContactPerson": "Contact person",
+    "LeadTimeDays": "Lead time (days)",
     "Phone": "Phone",
     "Email": "Email",
     "Address": "Address",
@@ -140,6 +141,7 @@
     "Range:All": "All time",
     "NoMovements": "No movements match these filters",
     "Reference": "Source reference",
-    "Inventory:Products:DuplicateSku": "A product with SKU '{SKU}' already exists. SKUs must be unique."
+    "Inventory:Products:DuplicateSku": "A product with SKU '{SKU}' already exists. SKUs must be unique.",
+    "Inventory:Suppliers:InvalidLeadTime": "Lead time must be between 0 and 365 days (got {LeadTimeDays})."
   }
 }

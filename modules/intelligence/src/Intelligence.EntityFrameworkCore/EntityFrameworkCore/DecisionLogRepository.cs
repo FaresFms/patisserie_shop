@@ -133,6 +133,39 @@ public class DecisionLogRepository
         };
     }
 
+    public async Task<List<RuleEffectivenessRow>> GetRuleEffectivenessAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var query = await GetQueryableAsync();
+
+        // Local copies so EF translates the constants into parameters.
+        var pending = DecisionLogStatuses.Pending;
+        var acknowledged = DecisionLogStatuses.Acknowledged;
+        var dismissed = DecisionLogStatuses.Dismissed;
+        var executed = DecisionLogStatuses.Executed;
+        var resolved = DecisionOutcomes.Resolved;
+        var stockedOut = DecisionOutcomes.StockedOut;
+
+        // One grouped query — Npgsql translates the conditional counts to
+        // COUNT(*) FILTER (WHERE ...) aggregates.
+        var grouped = query
+            .GroupBy(l => l.RuleId)
+            .Select(g => new RuleEffectivenessRow
+            {
+                RuleId = g.Key,
+                TotalDecisions = g.Count(),
+                Pending = g.Count(l => l.Status == pending),
+                Acknowledged = g.Count(l => l.Status == acknowledged),
+                Dismissed = g.Count(l => l.Status == dismissed),
+                Executed = g.Count(l => l.Status == executed),
+                Resolved = g.Count(l => l.Outcome == resolved),
+                StockedOut = g.Count(l => l.Outcome == stockedOut),
+                DismissedThenStockedOut = g.Count(l => l.Status == dismissed && l.Outcome == stockedOut)
+            });
+
+        return await grouped.ToListAsync(GetCancellationToken(cancellationToken));
+    }
+
     private async Task<IQueryable<AppDecisionLog>> BuildFilteredQueryAsync(
         string? filter,
         string? decisionType,

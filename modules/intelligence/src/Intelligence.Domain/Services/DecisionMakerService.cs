@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Intelligence.Decisions;
 using Intelligence.Entities;
+using Intelligence.Rules;
 using Inventory.Events;
 using Volo.Abp.Domain.Repositories;
 using Volo.Abp.Domain.Services;
@@ -14,13 +15,16 @@ public class DecisionMakerService : DomainService
 {
     private readonly IRepository<AppInventoryRule, Guid> _rulesRepo;
     private readonly IRepository<AppDecisionLog, Guid> _logsRepo;
+    private readonly IRepository<AppProductVelocity, Guid> _velocityRepo;
 
     public DecisionMakerService(
         IRepository<AppInventoryRule, Guid> rulesRepo,
-        IRepository<AppDecisionLog, Guid> logsRepo)
+        IRepository<AppDecisionLog, Guid> logsRepo,
+        IRepository<AppProductVelocity, Guid> velocityRepo)
     {
         _rulesRepo = rulesRepo;
         _logsRepo = logsRepo;
+        _velocityRepo = velocityRepo;
     }
 
     public async Task EvaluateAsync(StockChangedEto eto)
@@ -38,6 +42,10 @@ public class DecisionMakerService : DomainService
         // don't both file a LowStockAlert. Rules are ordered by Priority desc, so the
         // highest-priority rule's message wins.
         var raisedTypes = new HashSet<string>();
+
+        // DaysOfCover rules all read the same velocity row; load it lazily, once.
+        var velocityLoaded = false;
+        decimal avgDailySales30 = 0m;
 
         foreach (var rule in rules)
         {
@@ -57,6 +65,33 @@ public class DecisionMakerService : DomainService
                     await TryCreateLogAsync(raisedTypes, rule, eto.ProductId, eto.BranchId, "ExcessStockAlert",
                         $"Stock={eto.NewQty} exceeds threshold={rule.ThresholdValue} (Rule: '{rule.RuleName}'). Suggested: redistribute.",
                         stockAtEval: eto.NewQty);
+                }
+            }
+            else if (rule.RuleType == InventoryRuleTypes.DaysOfCover && rule.ThresholdValue.HasValue)
+            {
+                // ThresholdValue is interpreted as days of cover for this rule type.
+                // Velocity comes from the nightly AppProductVelocity read model; if no
+                // row exists yet (or velocity is zero) we skip silently — dead stock
+                // is the DeadStock scanner's job.
+                if (!velocityLoaded)
+                {
+                    velocityLoaded = true;
+                    var velocityQuery = (await _velocityRepo.GetQueryableAsync())
+                        .Where(v => v.ProductId == eto.ProductId && v.BranchId == eto.BranchId);
+                    var velocityRow = await AsyncExecuter.FirstOrDefaultAsync(velocityQuery);
+                    avgDailySales30 = velocityRow?.AvgDailySales30 ?? 0m;
+                }
+
+                if (avgDailySales30 > 0)
+                {
+                    var daysOfCover = eto.NewQty / avgDailySales30;
+                    if (daysOfCover < rule.ThresholdValue.Value)
+                    {
+                        await TryCreateLogAsync(raisedTypes, rule, eto.ProductId, eto.BranchId, DecisionTypes.StockoutRisk,
+                            $"Stock={eto.NewQty} ÷ {avgDailySales30:0.##}/day avg (30-day) = {Math.Round(daysOfCover, 1):0.#} days of cover, " +
+                            $"below the {rule.ThresholdValue}-day threshold (Rule: '{rule.RuleName}'). Suggested: reorder soon.",
+                            stockAtEval: eto.NewQty);
+                    }
                 }
             }
             // TransferSuggestion and DeadStock are evaluated by a separate background job — not here

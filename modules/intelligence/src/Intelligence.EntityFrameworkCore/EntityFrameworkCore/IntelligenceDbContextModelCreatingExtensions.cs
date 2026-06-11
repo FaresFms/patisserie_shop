@@ -18,6 +18,10 @@ public static class IntelligenceDbContextModelCreatingExtensions
             b.Property(x => x.RuleName).IsRequired().HasMaxLength(128);
             b.Property(x => x.RuleType).IsRequired().HasMaxLength(32);
             b.Property(x => x.SuggestedAction).HasMaxLength(256);
+            // NOTE: no HasDefaultValue here — same reasoning as DecisionLogs.Status below:
+            // a store default makes the column ValueGeneratedOnAdd and breaks disconnected
+            // updates. The entity initialises ActionMode to SuggestOnly in code.
+            b.Property(x => x.ActionMode).IsRequired().HasMaxLength(32);
             b.HasIndex(x => x.RuleType).HasDatabaseName("IX_InventoryRules_Type");
             b.HasIndex(x => x.IsActive).HasDatabaseName("IX_InventoryRules_Active");
             b.HasIndex(x => x.Priority).HasDatabaseName("IX_InventoryRules_Priority");
@@ -42,6 +46,13 @@ public static class IntelligenceDbContextModelCreatingExtensions
             b.Property(x => x.ExecutedActionType).HasMaxLength(32);
             b.Property(x => x.ExecutedActionId);
 
+            // Write-once outcome recorded ~48h after creation by the
+            // DecisionOutcomeScanner (null = not yet evaluated). No index needed:
+            // the scanner's "Outcome IS NULL AND CreationTime < cutoff" scan is
+            // cheap at this table's scale.
+            b.Property(x => x.Outcome).HasMaxLength(32);
+            b.Property(x => x.OutcomeEvaluatedAt);
+
             // Nullable get-only auto-properties are silently skipped by EF's convention,
             // so map them explicitly. Without this, queries that reference BranchId etc.
             // fail with "translation of member ... failed; commonly occurs when unmapped".
@@ -56,6 +67,22 @@ public static class IntelligenceDbContextModelCreatingExtensions
             b.HasIndex(x => x.ProductId).HasDatabaseName("IX_DecisionLogs_Product");
             b.HasIndex(x => x.RuleId).HasDatabaseName("IX_DecisionLogs_Rule");
             b.HasIndex(x => x.BranchId).HasDatabaseName("IX_DecisionLogs_Branch");
+        });
+
+        builder.Entity<AppProductVelocity>(b =>
+        {
+            b.ToTable(IntelligenceDbProperties.DbTablePrefix + "ProductVelocities", IntelligenceDbProperties.DbSchema);
+            b.ConfigureByConvention();
+
+            b.Property(x => x.AvgDailySales7).HasPrecision(9, 2);
+            b.Property(x => x.AvgDailySales30).HasPrecision(9, 2);
+            b.Property(x => x.Revenue30).HasPrecision(18, 2);
+            b.Property(x => x.AbcClass).IsRequired().HasMaxLength(1);
+
+            b.HasIndex(x => new { x.ProductId, x.BranchId })
+                .IsUnique()
+                .HasDatabaseName("IX_ProductVelocities_Product_Branch");
+            b.HasIndex(x => x.BranchId).HasDatabaseName("IX_ProductVelocities_Branch");
         });
     }
 }
