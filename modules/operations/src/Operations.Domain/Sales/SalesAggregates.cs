@@ -24,6 +24,22 @@ public class BranchSalesAggregate
 }
 
 /// <summary>
+/// Units sold per product×branch×day-of-week over a window. DayOfWeek follows the
+/// .NET <see cref="System.DayOfWeek"/> convention (0 = Sunday … 6 = Saturday).
+/// Backs the weekday demand-index computation in the Intelligence module.
+/// </summary>
+public class ProductBranchWeekdaySalesAggregate
+{
+    public Guid ProductId { get; set; }
+    public Guid BranchId { get; set; }
+
+    /// <summary>0 = Sunday … 6 = Saturday (matches <see cref="System.DayOfWeek"/>).</summary>
+    public int DayOfWeek { get; set; }
+
+    public int QuantitySold { get; set; }
+}
+
+/// <summary>
 /// Per product-per-branch sales totals over the trailing 7- and 30-day windows.
 /// Backs the nightly velocity computation in the Intelligence module.
 /// </summary>

@@ -14,4 +14,6 @@ public static class IntelligenceErrorCodes
     public const string DecisionProductHasNoDefaultSupplier = "Intelligence:DecisionLogs:NoDefaultSupplier";
     public const string DecisionOutcomeAlreadyRecorded = "Intelligence:DecisionLogs:OutcomeAlreadyRecorded";
     public const string InvalidDecisionOutcome = "Intelligence:DecisionLogs:InvalidOutcome";
+    public const string WasteWriteOffBranchRequired = "Intelligence:DecisionLogs:WriteOffBranchRequired";
+    public const string WasteWriteOffNoInventory = "Intelligence:DecisionLogs:WriteOffNoInventory";
 }

@@ -79,6 +79,18 @@ public static class IntelligenceDbContextModelCreatingExtensions
             b.Property(x => x.Revenue30).HasPrecision(18, 2);
             b.Property(x => x.AbcClass).IsRequired().HasMaxLength(1);
 
+            // Per-weekday demand indices (Sunday-first). NOTE: no HasDefaultValue — a
+            // store default makes the column ValueGeneratedOnAdd and breaks disconnected
+            // updates (same reasoning as DecisionLogs.Status). The entity initialises
+            // each index to 1.0 in code.
+            b.Property(x => x.WeekdayIndexSun).HasPrecision(5, 2);
+            b.Property(x => x.WeekdayIndexMon).HasPrecision(5, 2);
+            b.Property(x => x.WeekdayIndexTue).HasPrecision(5, 2);
+            b.Property(x => x.WeekdayIndexWed).HasPrecision(5, 2);
+            b.Property(x => x.WeekdayIndexThu).HasPrecision(5, 2);
+            b.Property(x => x.WeekdayIndexFri).HasPrecision(5, 2);
+            b.Property(x => x.WeekdayIndexSat).HasPrecision(5, 2);
+
             b.HasIndex(x => new { x.ProductId, x.BranchId })
                 .IsUnique()
                 .HasDatabaseName("IX_ProductVelocities_Product_Branch");

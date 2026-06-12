@@ -1,0 +1,458 @@
+@page "/inventory/waste-analytics"
+@attribute [Authorize(InventoryPermissions.StockMovements.Default)]
+@using System.Threading.Tasks
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.Extensions.Localization
+@using Volo.Abp.AspNetCore.Components.Web.Theming.Layout
+@using patisserie_shop.Analytics
+@using Inventory.BranchInventory
+@using Inventory.Branches
+@using Inventory.Localization
+@using Inventory.Permissions
+@using ApexCharts
+@using Color = MudBlazor.Color
+@using Variant = MudBlazor.Variant
+@using Size = MudBlazor.Size
+@using Margin = MudBlazor.Margin
+@inherits patisserie_shopComponentBase
+@inject IWasteAnalyticsAppService AnalyticsAppService
+@inject IBranchInventoryAppService BranchInventoryAppService
+@inject IBranchAppService BranchAppService
+@inject PageLayout PageLayout
+@inject IStringLocalizer<InventoryResource> InvL
+
+@{
+    PageLayout.Title = InvL["WasteAnalytics"];
+}
+
+<SoftCard Elevation="2" Class="pa-2 page-flat waste-analytics">
+    <div class="page-head">
+        <div>
+            <h1 class="page-title">@InvL["WasteAnalytics"]</h1>
+            <div class="page-sub">@InvL["WasteAnalytics:Subtitle"]</div>
+        </div>
+        <div class="page-head-actions">
+            <SoftButton Variant="Variant.Text" Color="Color.Primary"
+                        StartIcon="@Icons.Material.Filled.Refresh"
+                        OnClick="LoadAsync" Disabled="_loading">
+                @L["Refresh"]
+            </SoftButton>
+        </div>
+    </div>
+
+    <SoftCardContent>
+        <div class="toolbar">
+            <div class="wa-range">
+                @foreach (var d in RangeOptions)
+                {
+                    var dd = d;
+                    <SoftButton Variant="@(_days == dd ? Variant.Filled : Variant.Text)"
+                                Color="Color.Primary"
+                                Size="Size.Small"
+                                Disabled="_loading"
+                                OnClick="@(() => SetDaysAsync(dd))">
+                        @InvL[$"WasteAnalytics:Days{dd}"]
+                    </SoftButton>
+                }
+            </div>
+
+            @if (_accessibleBranches.Count > 1)
+            {
+                <div class="filter-chip">
+                    <SoftLookupSelect TItem="BranchLookupDto" TValue="Guid?"
+                                      Items="_accessibleBranches"
+                                      ToValue="@(b => (Guid?)b.Id)"
+                                      ToLabel="@(b => b.Name)"
+                                      Value="_branchFilter"
+                                      ValueChanged="OnBranchChangedAsync"
+                                      Label="@InvL["Branch"]"
+                                      Margin="Margin.Dense"
+                                      Clearable="true"
+                                      Dense="true" />
+                </div>
+            }
+
+            <div class="toolbar-right"></div>
+        </div>
+
+        @if (_error != null)
+        {
+            <SoftAlert Severity="Severity.Error" Variant="Variant.Filled" Class="ma-4">
+                <strong>@InvL["WasteAnalytics:LoadFailed"]</strong> @_error
+            </SoftAlert>
+        }
+        else if (_data == null)
+        {
+            <div class="wa-skeleton-row">
+                @for (var i = 0; i < 4; i++)
+                {
+                    <SoftSkeleton SkeletonType="SkeletonType.Rectangle" Height="64px" Width="100%" />
+                }
+            </div>
+            <div class="wa-skeleton-row" style="margin-top:20px;">
+                <SoftSkeleton SkeletonType="SkeletonType.Rectangle" Height="300px" Width="100%" />
+            </div>
+            <div class="wa-skeleton-row" style="margin-top:20px;">
+                <SoftSkeleton SkeletonType="SkeletonType.Rectangle" Height="300px" Width="100%" />
+                <SoftSkeleton SkeletonType="SkeletonType.Rectangle" Height="300px" Width="100%" />
+            </div>
+        }
+        else
+        {
+            @* ── KPI stat row ── *@
+            <div class="stats">
+                <div>
+                    <span class="stat-label">@InvL["WasteAnalytics:TotalWasteCost"]</span>
+                    <span class="stat-value">@FormatMoney(_data.TotalWasteCost)</span>
+                </div>
+                <div>
+                    <span class="stat-label">@InvL["WasteAnalytics:UnitsWrittenOff"]</span>
+                    <span class="stat-value">@_data.TotalUnitsWrittenOff.ToString("N0")</span>
+                </div>
+                <div>
+                    <span class="stat-label">@InvL["WasteAnalytics:WasteToSalesRatio"]</span>
+                    <span class="stat-value">@($"{_data.WasteToSalesPercent:0.##}%")</span>
+                </div>
+                <div>
+                    <span class="stat-label">@InvL["WasteAnalytics:MostWastedProduct"]</span>
+                    <span class="stat-value">@(_data.TopWastedProductName ?? InvL["WasteAnalytics:None"].Value)</span>
+                </div>
+            </div>
+
+            @if (_data.TotalUnitsWrittenOff == 0)
+            {
+                <div class="wa-empty wa-empty--page">
+                    <SoftIcon Icon="@Icons.Material.Outlined.Inbox" />
+                    <span>@InvL["WasteAnalytics:NoData"]</span>
+                </div>
+            }
+            else
+            {
+                @* ── Waste over time (full width, weekly area) ── *@
+                <section class="wa-section">
+                    <header class="wa-section-head">
+                        <div>
+                            <h2 class="wa-section-title">@InvL["WasteAnalytics:WasteOverTime"]</h2>
+                            <div class="wa-section-sub">@InvL["WasteAnalytics:WasteOverTimeSub"]</div>
+                        </div>
+                    </header>
+                    <div class="wa-chart">
+                        <ApexChart TItem="WeeklyWastePointDto" @key="_data" Options="_trendOptions" Height="280">
+                            <ApexPointSeries TItem="WeeklyWastePointDto"
+                                             Items="_data.WeeklySeries"
+                                             Name="@InvL["WasteAnalytics:WasteCost"]"
+                                             SeriesType="SeriesType.Area"
+                                             XValue="@(w => WeekLabel(w.WeekStart))"
+                                             YValue="@(w => w.Cost)" />
+                        </ApexChart>
+                    </div>
+                </section>
+
+                @* ── Branch bar + top wasted products bar ── *@
+                <SoftGrid Spacing="3" Class="wa-grid">
+                    <SoftGridItem xs="12" md="6">
+                        <section class="wa-section wa-section--full">
+                            <header class="wa-section-head">
+                                <div>
+                                    <h2 class="wa-section-title">@InvL["WasteAnalytics:WasteByBranch"]</h2>
+                                    <div class="wa-section-sub">@InvL["WasteAnalytics:WasteByBranchSub"]</div>
+                                </div>
+                            </header>
+                            <div class="wa-chart">
+                                <ApexChart TItem="BranchWasteSliceDto" @key="_data" Options="_branchOptions" Height="300">
+                                    <ApexPointSeries TItem="BranchWasteSliceDto"
+                                                     Items="_data.Branches"
+                                                     Name="@InvL["WasteAnalytics:WasteCost"]"
+                                                     SeriesType="SeriesType.Bar"
+                                                     XValue="@(b => b.BranchName)"
+                                                     YValue="@(b => b.Cost)" />
+                                </ApexChart>
+                            </div>
+                        </section>
+                    </SoftGridItem>
+                    <SoftGridItem xs="12" md="6">
+                        <section class="wa-section wa-section--full">
+                            <header class="wa-section-head">
+                                <div>
+                                    <h2 class="wa-section-title">@InvL["WasteAnalytics:TopWastedProducts"]</h2>
+                                    <div class="wa-section-sub">@InvL["WasteAnalytics:TopWastedProductsSub"]</div>
+                                </div>
+                            </header>
+                            <table class="wa-table">
+                                <thead>
+                                    <tr>
+                                        <th>@InvL["WasteAnalytics:Product"]</th>
+                                        <th class="wa-num">@InvL["WasteAnalytics:Units"]</th>
+                                        <th class="wa-num">@InvL["WasteAnalytics:WasteCost"]</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var p in _data.TopProducts)
+                                    {
+                                        <tr>
+                                            <td>
+                                                <div class="wa-prod-name">@p.ProductName</div>
+                                                @if (!string.IsNullOrWhiteSpace(p.SKU))
+                                                {
+                                                    <div class="wa-prod-sku">@p.SKU</div>
+                                                }
+                                            </td>
+                                            <td class="wa-num">@p.Units.ToString("N0")</td>
+                                            <td class="wa-num">@FormatMoneyExact(p.Cost)</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </section>
+                    </SoftGridItem>
+                </SoftGrid>
+            }
+        }
+    </SoftCardContent>
+</SoftCard>
+
+<style>
+    .waste-analytics { animation: wa-fade .25s ease-out; }
+    @@keyframes wa-fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+    .wa-range { display: inline-flex; align-items: center; gap: 4px; }
+
+    .wa-skeleton-row {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 14px;
+        padding: 12px 32px 0;
+    }
+
+    .wa-grid { padding: 0 32px; margin-top: 14px; }
+    .waste-analytics .wa-grid .mud-grid-item { display: flex; }
+    .wa-section--full { flex: 1; }
+
+    .wa-section {
+        background: var(--surface);
+        border: 1px solid var(--bd-1);
+        border-radius: var(--r-md);
+        box-shadow: var(--shadow-sm);
+        padding: 16px 18px;
+        margin: 14px 32px 0;
+    }
+    .wa-grid .wa-section { margin: 0; width: 100%; }
+
+    .wa-section-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 10px;
+        margin-bottom: 14px;
+    }
+    .wa-section-title {
+        font-family: var(--font-serif);
+        font-size: 18px;
+        font-weight: 600;
+        color: var(--fg-1);
+        margin: 0;
+    }
+    .wa-section-sub {
+        font-size: 12.5px;
+        color: var(--fg-3);
+        margin-top: 2px;
+    }
+
+    .wa-chart { min-height: 260px; }
+    .wa-chart .apexcharts-svg { background: transparent !important; }
+
+    .wa-empty {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 18px 12px;
+        color: var(--fg-3);
+        font-size: 13px;
+        justify-content: center;
+    }
+    .wa-empty .mud-icon-root { font-size: 22px; }
+    .wa-empty--page { padding: 56px 12px; }
+
+    /* Top wasted products — page-flat hairline rows */
+    .wa-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13.5px;
+    }
+    .wa-table th {
+        text-align: left;
+        font-size: 11.5px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: .05em;
+        color: var(--fg-3);
+        padding: 6px 10px;
+        border-bottom: 1px solid var(--bd-2);
+    }
+    .wa-table td {
+        padding: 8px 10px;
+        border-bottom: 1px solid var(--bd-1);
+        color: var(--fg-1);
+        vertical-align: top;
+    }
+    .wa-table tbody tr:last-child td { border-bottom: none; }
+    .wa-table tbody tr:hover td { background: var(--hover); }
+    .wa-num {
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+    }
+    .wa-prod-name { font-weight: 600; }
+    .wa-prod-sku { font-size: 11.5px; color: var(--fg-3); font-family: var(--font-mono); }
+</style>
+
+@code {
+    private static readonly int[] RangeOptions = { 30, 90 };
+
+    private WasteAnalyticsDto? _data;
+    private bool _loading;
+    private string? _error;
+
+    private int _days = 30;
+    private Guid? _branchFilter;
+    private List<BranchLookupDto> _accessibleBranches = new();
+
+    // Warm-theme chart styling, mirroring SalesAnalytics.razor. ApexCharts cannot
+    // read CSS custom properties, so the hex values mirror glass-theme.css:
+    //   #b3543a (deep red — waste trend) · #c8633f (terracotta — branch bar)
+    //   labels #8a7e6e (--fg-3, legible in light & dark)
+    private readonly ApexChartOptions<WeeklyWastePointDto> _trendOptions = new()
+    {
+        Chart = new ApexCharts.Chart
+        {
+            Toolbar = new ApexCharts.Toolbar { Show = false },
+            Background = "transparent",
+            FontFamily = "Inter, sans-serif",
+            ForeColor = "#8a7e6e"
+        },
+        Colors = new List<string> { "#b3543a" },
+        Stroke = new ApexCharts.Stroke { Curve = ApexCharts.Curve.Smooth, Width = 3 },
+        DataLabels = new ApexCharts.DataLabels { Enabled = false },
+        Fill = new ApexCharts.Fill
+        {
+            Type = ApexCharts.FillType.Gradient,
+            Gradient = new ApexCharts.FillGradient
+            {
+                ShadeIntensity = 0.4,
+                OpacityFrom = 0.35,
+                OpacityTo = 0.05
+            }
+        },
+        Grid = new ApexCharts.Grid
+        {
+            BorderColor = "rgba(138, 126, 110, 0.25)",
+            StrokeDashArray = 3
+        },
+        Legend = new ApexCharts.Legend { Show = false },
+        Xaxis = new ApexCharts.XAxis
+        {
+            AxisBorder = new ApexCharts.AxisBorder { Show = false },
+            AxisTicks = new ApexCharts.AxisTicks { Show = false }
+        },
+        Yaxis = new List<ApexCharts.YAxis>
+        {
+            new ApexCharts.YAxis
+            {
+                Labels = new ApexCharts.YAxisLabels
+                {
+                    Formatter = "function (value) { return '$' + Math.round(value).toLocaleString(); }"
+                }
+            }
+        }
+    };
+
+    private readonly ApexChartOptions<BranchWasteSliceDto> _branchOptions = new()
+    {
+        Chart = new ApexCharts.Chart
+        {
+            Toolbar = new ApexCharts.Toolbar { Show = false },
+            Background = "transparent",
+            FontFamily = "Inter, sans-serif",
+            ForeColor = "#8a7e6e"
+        },
+        Colors = new List<string> { "#c8633f" },
+        PlotOptions = new ApexCharts.PlotOptions
+        {
+            Bar = new ApexCharts.PlotOptionsBar
+            {
+                Horizontal = true,
+                BorderRadius = 4,
+                BarHeight = "55%"
+            }
+        },
+        DataLabels = new ApexCharts.DataLabels { Enabled = false },
+        Grid = new ApexCharts.Grid
+        {
+            BorderColor = "rgba(138, 126, 110, 0.25)",
+            StrokeDashArray = 3
+        },
+        Legend = new ApexCharts.Legend { Show = false }
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var allBranches = await BranchAppService.GetLookupAsync();
+            var accessibleIds = await BranchInventoryAppService.GetAccessibleBranchIdsAsync();
+            var set = accessibleIds.ToHashSet();
+            _accessibleBranches = allBranches.Where(b => set.Contains(b.Id)).ToList();
+        }
+        catch (Exception ex)
+        {
+            await HandleErrorAsync(ex);
+        }
+
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error = null;
+        try
+        {
+            _data = await AnalyticsAppService.GetAsync(new GetWasteAnalyticsInput
+            {
+                Days = _days,
+                BranchId = _branchFilter
+            });
+        }
+        catch (Exception ex)
+        {
+            _error = $"{ex.GetType().Name}: {ex.Message}";
+            await HandleErrorAsync(ex);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task SetDaysAsync(int days)
+    {
+        if (_days == days) return;
+        _days = days;
+        await LoadAsync();
+    }
+
+    private async Task OnBranchChangedAsync(Guid? branchId)
+    {
+        _branchFilter = branchId;
+        await LoadAsync();
+    }
+
+    private string WeekLabel(DateTime weekStart)
+        => string.Format(InvL["WasteAnalytics:WeekOf"], weekStart.ToString("MMM d"));
+
+    private static string FormatMoney(decimal v)
+        => v.ToString("C0", System.Globalization.CultureInfo.GetCultureInfo("en-US"));
+
+    private static string FormatMoneyExact(decimal v)
+        => v.ToString("C2", System.Globalization.CultureInfo.GetCultureInfo("en-US"));
+}

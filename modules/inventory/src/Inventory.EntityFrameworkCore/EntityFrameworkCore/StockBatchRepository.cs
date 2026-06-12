@@ -49,6 +49,25 @@ public class StockBatchRepository
         ).ToListAsync(GetCancellationToken(cancellationToken));
     }
 
+    public async Task<int> GetExpiredQuantityAsync(
+        Guid branchId,
+        Guid productId,
+        DateTime todayUtc,
+        CancellationToken cancellationToken = default)
+    {
+        var dbContext = await GetDbContextAsync();
+        var today = todayUtc.Date;
+
+        // ExpiryDate is stored date-precision; "expired" means strictly before today
+        // (the expiry day itself still counts as sellable, see AppStockBatch.IsExpired).
+        return await dbContext.Set<AppStockBatch>()
+            .Where(b => b.BranchId == branchId
+                        && b.ProductId == productId
+                        && b.QuantityRemaining > 0
+                        && b.ExpiryDate < today)
+            .SumAsync(b => b.QuantityRemaining, GetCancellationToken(cancellationToken));
+    }
+
     public async Task<long> CountWithDetailsAsync(
         string? filter,
         Guid? branchId,

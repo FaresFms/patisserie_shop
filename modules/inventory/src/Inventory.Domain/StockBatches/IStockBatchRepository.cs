@@ -27,6 +27,18 @@ public interface IStockBatchRepository : IRepository<AppStockBatch, Guid>
         DateTime maxExpiryDate,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Total QuantityRemaining across a product+branch's live batches that are
+    /// already expired (ExpiryDate strictly before <paramref name="todayUtc"/> —
+    /// the expiry day itself still counts as sellable). Backs the waste write-off
+    /// execution path.
+    /// </summary>
+    Task<int> GetExpiredQuantityAsync(
+        Guid branchId,
+        Guid productId,
+        DateTime todayUtc,
+        CancellationToken cancellationToken = default);
+
     Task<long> CountWithDetailsAsync(
         string? filter,
         Guid? branchId,

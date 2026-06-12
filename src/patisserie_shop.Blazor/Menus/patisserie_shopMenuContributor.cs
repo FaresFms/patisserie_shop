@@ -105,6 +105,13 @@ public class patisserie_shopMenuContributor : IMenuContributor
             icon: "fas fa-hourglass-half"
         ).RequirePermissions(InventoryPermissions.BranchInventory.Default));
 
+        inventoryMenu.AddItem(new ApplicationMenuItem(
+            patisserie_shopMenus.WasteAnalytics,
+            invL["Menu:WasteAnalytics"],
+            "/inventory/waste-analytics",
+            icon: "fas fa-trash-alt"
+        ).RequirePermissions(InventoryPermissions.StockMovements.Default));
+
         context.Menu.AddItem(inventoryMenu);
 
         var opsL = context.GetLocalizer<OperationsResource>();

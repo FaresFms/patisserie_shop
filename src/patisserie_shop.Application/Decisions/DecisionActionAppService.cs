@@ -4,8 +4,10 @@ using Intelligence;
 using Intelligence.Decisions;
 using Intelligence.Entities;
 using Intelligence.Permissions;
+using Inventory;
 using Inventory.BranchInventory;
 using Inventory.Products;
+using Inventory.StockBatches;
 using Inventory.Suppliers;
 using Microsoft.AspNetCore.Authorization;
 using Operations.PurchaseOrders;
@@ -22,7 +24,9 @@ namespace patisserie_shop.Decisions;
 ///
 /// LowStockAlert / ReorderSuggestion / StockoutRisk → DRAFT purchase order to the
 /// product's default supplier. TransferSuggestion → DRAFT stock transfer from source
-/// to target branch. ExcessStockAlert / DeadStockFlag → no document; just executed.
+/// to target branch. WasteWriteOff → immediate WriteOff stock adjustment of the
+/// currently expired quantity (no draft document — the movement ledger is the audit
+/// trail). ExcessStockAlert / DeadStockFlag → no document; just executed.
 /// The created document's type/id is recorded on the decision log row.
 /// </summary>
 [Authorize(IntelligencePermissions.DecisionLogs.Acknowledge)]
@@ -38,6 +42,7 @@ public class DecisionActionAppService : patisserie_shopAppService, IDecisionActi
     private readonly IBranchInventoryAppService _branchInventoryAppService;
     private readonly ISupplierAppService _supplierAppService;
     private readonly IRepository<AppProductVelocity, Guid> _velocityRepository;
+    private readonly IStockBatchRepository _stockBatchRepository;
 
     public DecisionActionAppService(
         IDecisionLogAppService decisionLogAppService,
@@ -46,7 +51,8 @@ public class DecisionActionAppService : patisserie_shopAppService, IDecisionActi
         IProductAppService productAppService,
         IBranchInventoryAppService branchInventoryAppService,
         ISupplierAppService supplierAppService,
-        IRepository<AppProductVelocity, Guid> velocityRepository)
+        IRepository<AppProductVelocity, Guid> velocityRepository,
+        IStockBatchRepository stockBatchRepository)
     {
         _decisionLogAppService = decisionLogAppService;
         _purchaseOrderAppService = purchaseOrderAppService;
@@ -55,6 +61,7 @@ public class DecisionActionAppService : patisserie_shopAppService, IDecisionActi
         _branchInventoryAppService = branchInventoryAppService;
         _supplierAppService = supplierAppService;
         _velocityRepository = velocityRepository;
+        _stockBatchRepository = stockBatchRepository;
     }
 
     public async Task<DecisionActionResultDto> ExecuteDecisionAsync(Guid decisionLogId)
@@ -75,6 +82,8 @@ public class DecisionActionAppService : patisserie_shopAppService, IDecisionActi
                 => await CreateDraftPurchaseOrderAsync(decision),
             DecisionTypes.TransferSuggestion
                 => await CreateDraftStockTransferAsync(decision),
+            DecisionTypes.WasteWriteOff
+                => await ExecuteWasteWriteOffAsync(decision),
             _ => new DecisionActionResultDto { ActionCreated = false }
         };
 
@@ -206,6 +215,68 @@ public class DecisionActionAppService : patisserie_shopAppService, IDecisionActi
             ActionType = DecisionActionTypes.StockTransfer,
             ActionId = transfer.Id,
             ActionNumber = transfer.Reference
+        };
+    }
+
+    /// <summary>
+    /// Executes a WasteWriteOff decision: re-reads the CURRENTLY expired quantity
+    /// from the batch ledger (it may have shrunk since the scanner ran — sales and
+    /// transfers consume expired batches too), then decrements the stock through the
+    /// public adjust path (movement type WriteOff), which records the immutable
+    /// AppStockMovement and clears expired batches first via the FEFO hook.
+    /// No draft document is created — ActionType is StockAdjustment with a null
+    /// ActionId; the movement ledger is the audit trail.
+    ///
+    /// HUMAN-ONLY BY DESIGN: this arm is destructive (stock leaves the system), so
+    /// the rule autopilot never routes WasteWriteOff decisions here — see
+    /// <see cref="DecisionAutopilotHandler"/>.
+    /// </summary>
+    private async Task<DecisionActionResultDto> ExecuteWasteWriteOffAsync(DecisionLogDto decision)
+    {
+        if (!decision.BranchId.HasValue)
+        {
+            throw new BusinessException(IntelligenceErrorCodes.WasteWriteOffBranchRequired)
+                .WithData("DecisionId", decision.Id);
+        }
+
+        var branchId = decision.BranchId.Value;
+        var product = await _productAppService.GetAsync(decision.ProductId);
+
+        var expiredQty = await _stockBatchRepository.GetExpiredQuantityAsync(
+            branchId, decision.ProductId, DateTime.UtcNow);
+        if (expiredQty <= 0)
+        {
+            // Nothing expired remains (sold/transferred/already written off since the
+            // scan) — mark executed with no corrective action, like ExcessStockAlert.
+            return new DecisionActionResultDto { ActionCreated = false };
+        }
+
+        var inventory = await FindBranchInventoryAsync(branchId, decision.ProductId, product.SKU)
+            ?? throw new BusinessException(IntelligenceErrorCodes.WasteWriteOffNoInventory)
+                .WithData("ProductName", product.Name);
+
+        // The batch ledger is best-effort, so never write off more than is actually
+        // on hand (ledger drift must not drive the authoritative stock negative).
+        var writeOffQty = Math.Min(expiredQty, inventory.QuantityOnHand);
+        if (writeOffQty <= 0)
+        {
+            return new DecisionActionResultDto { ActionCreated = false };
+        }
+
+        await _branchInventoryAppService.AdjustStockAsync(inventory.Id, new AdjustStockDto
+        {
+            NewQuantity = inventory.QuantityOnHand - writeOffQty,
+            MovementType = StockMovementTypes.WriteOff,
+            Notes = $"Waste write-off from decision {decision.Id}: {writeOffQty} expired unit(s) removed.",
+            ConcurrencyStamp = inventory.ConcurrencyStamp
+        });
+
+        return new DecisionActionResultDto
+        {
+            ActionCreated = true,
+            ActionType = DecisionActionTypes.StockAdjustment,
+            ActionId = null, // no document — the AppStockMovement ledger is the trail
+            ActionNumber = $"WriteOff −{writeOffQty}"
         };
     }
 

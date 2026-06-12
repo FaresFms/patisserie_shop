@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.DependencyInjection;
 using Volo.Abp;
+using Volo.Abp.BackgroundWorkers;
 using Volo.Abp.EntityFrameworkCore;
 using Volo.Abp.EntityFrameworkCore.Sqlite;
 using Volo.Abp.FeatureManagement;
@@ -40,6 +41,14 @@ public class patisserie_shopEntityFrameworkCoreTestModule : AbpModule
             options.IsDynamicPermissionStoreEnabled = false;
         });
         context.Services.AddAlwaysDisableUnitOfWorkTransaction();
+
+        // The Intelligence module registers periodic scanner workers at application
+        // initialization. Tests invoke the scanner SERVICES explicitly; a timer firing
+        // mid-test would make assertions nondeterministic, so workers are disabled.
+        Configure<AbpBackgroundWorkerOptions>(options =>
+        {
+            options.IsEnabled = false;
+        });
 
         ConfigureInMemorySqlite(context.Services);
 

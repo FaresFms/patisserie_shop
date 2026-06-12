@@ -15,15 +15,23 @@ using Volo.Abp.Linq;
 namespace Intelligence.Decisions;
 
 /// <summary>
-/// Completes the intelligence loop for perishables. ExpiringSoon has no triggering
-/// event (a batch "expires soon" simply because time passed), so this scanner walks
-/// every live stock batch (QuantityRemaining &gt; 0) expiring inside the widest active
-/// rule window, groups them per product×branch, finds the best-fit ExpiringSoon rule
-/// (scope precedence + Priority) and raises a Pending <see cref="AppDecisionLog"/>
-/// (DecisionType ExpiryAlert) when at least one batch expires within the rule's
-/// ThresholdDays. The batch ledger is best-effort, so alerts are advisory — stock
-/// truth stays with AppBranchInventory. Mirrors the rule-loading / dedup conventions
-/// of DeadStockScannerService; invoked on a schedule by <c>ExpiryScannerWorker</c>.
+/// Completes the intelligence loop for perishables in two passes:
+///
+/// 1. ExpiringSoon — has no triggering event (a batch "expires soon" simply because
+///    time passed), so this scanner walks every live stock batch (QuantityRemaining
+///    &gt; 0) expiring inside the widest active rule window, groups them per
+///    product×branch, finds the best-fit ExpiringSoon rule (scope precedence +
+///    Priority) and raises a Pending <see cref="AppDecisionLog"/> (DecisionType
+///    ExpiryAlert) when at least one batch expires within the rule's ThresholdDays.
+///
+/// 2. ExpiredStock — live batches already PAST their expiry date raise a
+///    WasteWriteOff decision (no threshold: "expired" is absolute). The suggested
+///    action is destructive (stock write-off), so it NEVER runs on autopilot — a
+///    human executes it from the decision log.
+///
+/// The batch ledger is best-effort, so alerts are advisory — stock truth stays with
+/// AppBranchInventory. Mirrors the rule-loading / dedup conventions of
+/// DeadStockScannerService; invoked on a schedule by <c>ExpiryScannerWorker</c>.
 /// </summary>
 public class ExpiryScannerService : ITransientDependency
 {
@@ -55,6 +63,21 @@ public class ExpiryScannerService : ITransientDependency
 
     public async Task ScanAsync()
     {
+        var today = DateTime.UtcNow.Date;
+
+        // Branch lookup for names + active filtering, shared by both passes
+        // (one query, no N+1).
+        var branches = await _branchRepository.GetListAsync();
+        var branchById = branches.ToDictionary(b => b.Id);
+
+        await ScanExpiringSoonAsync(today, branchById);
+        await ScanExpiredStockAsync(today, branchById);
+    }
+
+    // ───────────────────────── Pass 1: ExpiringSoon ─────────────────────────
+
+    private async Task ScanExpiringSoonAsync(DateTime today, Dictionary<Guid, AppBranch> branchById)
+    {
         // Active ExpiringSoon rules, highest Priority first so RuleScopeMatcher picks
         // the winning rule inside each scope class.
         var rulesQuery = (await _ruleRepository.GetQueryableAsync())
@@ -78,7 +101,6 @@ public class ExpiryScannerService : ITransientDependency
         // Live batches (qty > 0, active products) expiring inside the widest rule
         // window — already-expired batches are included on purpose: stock that died
         // unsold is the loudest version of this alert.
-        var today = DateTime.UtcNow.Date;
         var batches = await _batchRepository.GetExpiringWithProductAsync(today.AddDays(maxThresholdDays));
         if (batches.Count == 0)
         {
@@ -86,20 +108,9 @@ public class ExpiryScannerService : ITransientDependency
             return;
         }
 
-        // Branch lookup for names + active filtering (one query, no N+1).
-        var branches = await _branchRepository.GetListAsync();
-        var branchById = branches.ToDictionary(b => b.Id);
-
         // Existing Pending ExpiryAlert (Product, Branch) pairs — skip duplicates without
         // a per-row query, exactly like the other scanners.
-        var pending = DecisionLogStatuses.Pending;
-        var expiryType = DecisionTypes.ExpiryAlert;
-        var existingQuery = (await _logRepository.GetQueryableAsync())
-            .Where(l => l.DecisionType == expiryType && l.Status == pending)
-            .Select(l => new { l.ProductId, l.BranchId });
-        var existingRows = await _asyncExecuter.ToListAsync(existingQuery);
-        var seen = new HashSet<(Guid ProductId, Guid? BranchId)>(
-            existingRows.Select(x => (x.ProductId, x.BranchId)));
+        var seen = await LoadPendingPairsAsync(DecisionTypes.ExpiryAlert);
 
         var created = 0;
 
@@ -168,6 +179,112 @@ public class ExpiryScannerService : ITransientDependency
         _logger.LogInformation(
             "ExpiryScanner: created {Created} ExpiryAlert decision(s) from {Batches} expiring batch(es) against {Rules} active rule(s).",
             created, batches.Count, rules.Count);
+    }
+
+    // ───────────────────────── Pass 2: ExpiredStock ─────────────────────────
+
+    /// <summary>
+    /// Flags stock that has already died: per product×branch, every live batch
+    /// (QuantityRemaining &gt; 0) whose ExpiryDate is strictly before today (the expiry
+    /// day itself still counts as sellable) — matched to the best-fit active
+    /// ExpiredStock rule — raises a Pending WasteWriteOff decision quantifying the
+    /// expired units, the oldest expiry and the estimated waste cost (qty × CostPrice).
+    /// Execution (the actual stock write-off) is strictly human-only.
+    /// </summary>
+    private async Task ScanExpiredStockAsync(DateTime today, Dictionary<Guid, AppBranch> branchById)
+    {
+        var rulesQuery = (await _ruleRepository.GetQueryableAsync())
+            .Where(r => r.IsActive && r.RuleType == InventoryRuleTypes.ExpiredStock)
+            .OrderByDescending(r => r.Priority);
+        var rules = await _asyncExecuter.ToListAsync(rulesQuery);
+
+        if (rules.Count == 0)
+        {
+            _logger.LogInformation("ExpiryScanner: no active ExpiredStock rules — skipping the waste pass.");
+            return;
+        }
+
+        // Live batches with ExpiryDate <= yesterday ⇔ strictly before today (the
+        // ledger stores date-precision expiries; see AppStockBatch.IsExpired).
+        var expiredBatches = await _batchRepository.GetExpiringWithProductAsync(today.AddDays(-1));
+        if (expiredBatches.Count == 0)
+        {
+            _logger.LogInformation("ExpiryScanner: no expired live batches — no waste to flag.");
+            return;
+        }
+
+        // Pending-dedup per product+branch+type, same convention as the other passes.
+        var seen = await LoadPendingPairsAsync(DecisionTypes.WasteWriteOff);
+
+        var created = 0;
+
+        foreach (var group in expiredBatches.GroupBy(b => (b.Batch.ProductId, b.Batch.BranchId)))
+        {
+            var (productId, branchId) = group.Key;
+            var product = group.First().Product;
+
+            // Skip inactive (or unknown) branches.
+            if (!branchById.TryGetValue(branchId, out var branch) || !branch.IsActive)
+            {
+                continue;
+            }
+
+            var rule = RuleScopeMatcher.MatchBestRule(rules, productId, branchId);
+            if (rule == null)
+            {
+                continue; // no governing ExpiredStock rule for this product/branch
+            }
+
+            var key = (productId, (Guid?)branchId);
+            if (!seen.Add(key))
+            {
+                continue; // already Pending (in the store or earlier in this batch)
+            }
+
+            var ordered = group.OrderBy(b => b.Batch.ExpiryDate).ToList();
+            var oldest = ordered[0].Batch;
+            var expiredQty = ordered.Sum(b => b.Batch.QuantityRemaining);
+            var wasteCost = expiredQty * product.CostPrice;
+
+            var reasoning =
+                $"Product '{product.Name}' at '{branch.Name}': {expiredQty} unit(s) across {ordered.Count} batch(es) " +
+                $"are past their expiry date — the oldest (batch {oldest.BatchNumber}) {DescribeExpiry(oldest.ExpiryDate, today)}. " +
+                $"Estimated waste cost {wasteCost:0.00} {product.Currency} ({expiredQty} × {product.CostPrice:0.00} cost). " +
+                $"Rule '{rule.RuleName}' flags expired stock for write-off.";
+
+            var log = new AppDecisionLog(
+                _guidGenerator.Create(),
+                ruleId: rule.Id,
+                productId: productId,
+                branchId: branchId,
+                decisionType: DecisionTypes.WasteWriteOff,
+                reasoning: reasoning,
+                suggestedAction: rule.SuggestedAction,
+                stockAtEvaluation: expiredQty,
+                daysWithoutSale: null);
+
+            await _logRepository.InsertAsync(log, autoSave: false);
+            created++;
+        }
+
+        _logger.LogInformation(
+            "ExpiryScanner: created {Created} WasteWriteOff decision(s) from {Batches} expired batch(es) against {Rules} active rule(s).",
+            created, expiredBatches.Count, rules.Count);
+    }
+
+    /// <summary>
+    /// Existing Pending (Product, Branch) pairs of one decision type — the per-run
+    /// dedup set shared by both passes.
+    /// </summary>
+    private async Task<HashSet<(Guid ProductId, Guid? BranchId)>> LoadPendingPairsAsync(string decisionType)
+    {
+        var pending = DecisionLogStatuses.Pending;
+        var existingQuery = (await _logRepository.GetQueryableAsync())
+            .Where(l => l.DecisionType == decisionType && l.Status == pending)
+            .Select(l => new { l.ProductId, l.BranchId });
+        var existingRows = await _asyncExecuter.ToListAsync(existingQuery);
+        return new HashSet<(Guid ProductId, Guid? BranchId)>(
+            existingRows.Select(x => (x.ProductId, x.BranchId)));
     }
 
     /// <summary>"expire in 2 days (2026-06-13)" / "expire today (…)" / "expired 3 days ago (…)".</summary>

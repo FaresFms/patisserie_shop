@@ -264,6 +264,34 @@ namespace patisserie_shop.Migrations
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
 
+                    b.Property<decimal>("WeekdayIndexFri")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
+                    b.Property<decimal>("WeekdayIndexMon")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
+                    b.Property<decimal>("WeekdayIndexSat")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
+                    b.Property<decimal>("WeekdayIndexSun")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
+                    b.Property<decimal>("WeekdayIndexThu")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
+                    b.Property<decimal>("WeekdayIndexTue")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
+                    b.Property<decimal>("WeekdayIndexWed")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
                     b.HasKey("Id");
 
                     b.HasIndex("BranchId")

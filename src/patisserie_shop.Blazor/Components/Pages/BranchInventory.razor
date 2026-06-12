@@ -216,7 +216,13 @@
                                 </TemplateColumn>
                                 <TemplateColumn T="BranchInventoryDto" Title="@InvL["Actions"]" Sortable="false">
                                     <CellTemplate>
-                                        <span class="row-actions">@RowActions(context.Item)</span>
+                                        <span class="row-actions">
+                                            <SoftTooltip Text="@L["ProductStory:OpenTimeline"]">
+                                                <SoftIconButton Icon="@Icons.Material.Filled.Timeline" Size="Size.Small"
+                                                                OnClick="() => GoToProductStory(context.Item)" />
+                                            </SoftTooltip>
+                                            @RowActions(context.Item)
+                                        </span>
                                     </CellTemplate>
                                 </TemplateColumn>
                             </Columns>
@@ -999,6 +1005,8 @@
     private async Task GoToDecisionLog() => Nav.NavigateTo("/intelligence/decision-log");
     private void GoToTransfers() => Nav.NavigateTo("/operations/stock-transfers");
     private void GoToMovements() => Nav.NavigateTo("/inventory/stock-movements");
+    private void GoToProductStory(BranchInventoryDto item)
+        => Nav.NavigateTo($"/inventory/product-story?productId={item.ProductId}&branchId={_branchId}");
     private void GoToProducts() => Nav.NavigateTo("/inventory/products");
 
     /// <summary>Full refresh: stats, banner, and the active view.</summary>

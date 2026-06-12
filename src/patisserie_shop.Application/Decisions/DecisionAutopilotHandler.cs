@@ -133,6 +133,10 @@ public class DecisionAutopilotHandler : IDistributedEventHandler<DecisionMadeEto
 
         // Only decision types that produce a corrective document run on autopilot.
         // ExcessStockAlert / DeadStockFlag stay Pending for a human even on autopilot.
+        // WasteWriteOff is deliberately ABSENT from this list and must never be
+        // added: executing it destroys stock (an irreversible WriteOff adjustment,
+        // not a draft document a human later approves), so it is HUMAN-ONLY — a
+        // manager executes it from the decision log, whatever the rule's ActionMode.
         var createsDocument = decision.DecisionType
             is DecisionTypes.LowStockAlert
             or DecisionTypes.ReorderSuggestion

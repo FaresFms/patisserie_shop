@@ -108,7 +108,7 @@ public class PatisserieDataSeedContributor : IDataSeedContributor, ITransientDep
         await BackfillShelfLifeAsync(products);
         var branches   = await SeedBranchesAsync();
         await SeedInventoryAsync(products, branches);
-        await SeedStockBatchesAsync(products);
+        await SeedStockBatchesAsync(products, branches);
         await SeedDemoRulesAsync();
     }
 
@@ -515,11 +515,15 @@ public class PatisserieDataSeedContributor : IDataSeedContributor, ITransientDep
     /// <summary>
     /// Splits each perishable product's on-hand quantity into 1–3 "Seed" batches with
     /// staggered expiries — the oldest batch expires within 1–2 days so the ExpiringSoon
-    /// rule demos instantly, the freshest gets the full shelf life. Deterministic
-    /// (fixed-seed Random, rows processed in a stable order) and idempotent (skipped
-    /// entirely once any batch exists).
+    /// rule demos instantly, the freshest gets the full shelf life. Each RETAIL branch
+    /// (everything except the central warehouse) additionally gets at least one batch
+    /// that is ALREADY expired with remaining quantity, so the ExpiredStock rule has
+    /// waste to flag out of the box. Deterministic (fixed-seed Random, rows processed
+    /// in a stable order) and idempotent (skipped entirely once any batch exists).
     /// </summary>
-    private async Task SeedStockBatchesAsync(Dictionary<string, AppProduct> products)
+    private async Task SeedStockBatchesAsync(
+        Dictionary<string, AppProduct> products,
+        Dictionary<string, AppBranch> branches)
     {
         if (await _batchRepo.AnyAsync())
         {
@@ -528,6 +532,14 @@ public class PatisserieDataSeedContributor : IDataSeedContributor, ITransientDep
         }
 
         var productById = products.Values.ToDictionary(p => p.Id);
+
+        // Retail = every branch except the central warehouse; these are the branches
+        // guaranteed an already-expired batch for the waste write-off demo.
+        var retailBranchIds = branches.Values
+            .Where(b => b.Name != "Central Kitchen & Warehouse")
+            .Select(b => b.Id)
+            .ToHashSet();
+        var expiredEnsured = new HashSet<Guid>();
 
         // Stable order (branch, then SKU) so the fixed-seed Random yields the same
         // batches on every fresh database.
@@ -566,6 +578,17 @@ public class PatisserieDataSeedContributor : IDataSeedContributor, ITransientDep
                 }
             };
 
+            // Waste demo: the FIRST multi-batch perishable row of each retail branch
+            // gets its oldest slice backdated to two days PAST expiry (only a slice —
+            // batchCount >= 2 keeps the rest of the stock sellable).
+            if (retailBranchIds.Contains(row.BranchId)
+                && !expiredEnsured.Contains(row.BranchId)
+                && batchCount >= 2)
+            {
+                offsets[0] = -2;
+                expiredEnsured.Add(row.BranchId);
+            }
+
             // Quantity split: ~30% / ~30% / remainder (older slices smaller).
             var quantities = batchCount switch
             {
@@ -590,8 +613,9 @@ public class PatisserieDataSeedContributor : IDataSeedContributor, ITransientDep
         }
 
         _logger.LogInformation(
-            "[Seed] Seeded {Count} stock batches across {Rows} perishable inventory rows.",
-            created, invRows.Count);
+            "[Seed] Seeded {Count} stock batches across {Rows} perishable inventory rows " +
+            "({Expired} retail branch(es) given an already-expired batch for the waste demo).",
+            created, invRows.Count, expiredEnsured.Count);
     }
 
     // ─────────────────────────── Demo Rules ───────────────────────────
@@ -634,6 +658,25 @@ public class PatisserieDataSeedContributor : IDataSeedContributor, ITransientDep
                 actionMode: RuleActionModes.SuggestOnly);
             await _ruleRepo.InsertAsync(rule, autoSave: true);
             _logger.LogInformation("[Seed] Seeded global ExpiringSoon demo rule.");
+        }
+
+        if (!await _ruleRepo.AnyAsync(r => r.RuleType == InventoryRuleTypes.ExpiredStock))
+        {
+            // SuggestOnly ON PURPOSE: the write-off is destructive, so the decision is
+            // never auto-executed — a human triggers it from the decision log.
+            var rule = await _ruleManager.CreateAsync(
+                ruleName: "Expired Stock Write-Off",
+                ruleType: InventoryRuleTypes.ExpiredStock,
+                productId: null,
+                branchId: null,
+                thresholdValue: null,
+                thresholdDays: null,
+                suggestedAction: "Write off the expired stock so inventory stays truthful — execute from the decision log",
+                priority: 6,
+                isActive: true,
+                actionMode: RuleActionModes.SuggestOnly);
+            await _ruleRepo.InsertAsync(rule, autoSave: true);
+            _logger.LogInformation("[Seed] Seeded global ExpiredStock demo rule.");
         }
     }
 }

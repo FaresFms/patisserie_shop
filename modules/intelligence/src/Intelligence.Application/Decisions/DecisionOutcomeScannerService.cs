@@ -106,9 +106,11 @@ public class DecisionOutcomeScannerService : ITransientDependency
             velocityByKey = velocities.ToDictionary(v => (v.ProductId, v.BranchId));
         }
 
-        // Live batch expiry dates are only needed to judge ExpiryAlert decisions.
+        // Live batch expiry dates are only needed to judge ExpiryAlert and
+        // WasteWriteOff decisions.
         var batchExpiriesByKey = new Dictionary<(Guid ProductId, Guid BranchId), List<DateTime>>();
-        if (decisions.Any(d => d.DecisionType == DecisionTypes.ExpiryAlert))
+        if (decisions.Any(d => d.DecisionType == DecisionTypes.ExpiryAlert
+                               || d.DecisionType == DecisionTypes.WasteWriteOff))
         {
             var liveBatches = await _batchRepository.GetListAsync(b => b.QuantityRemaining > 0);
             batchExpiriesByKey = liveBatches
@@ -231,6 +233,17 @@ public class DecisionOutcomeScannerService : ITransientDependency
                 var stillAtRisk = batchExpiriesByKey.TryGetValue((decision.ProductId, branchId.Value), out var expiries)
                     && expiries.Any(d => d.Date <= windowEnd);
                 return stillAtRisk ? DecisionOutcomes.Unresolved : DecisionOutcomes.Resolved;
+            }
+
+            case DecisionTypes.WasteWriteOff:
+            {
+                // Resolved when no expired live batch (qty > 0, ExpiryDate strictly
+                // before today) remains for this product+branch — i.e. the expired
+                // stock was actually written off (or otherwise cleared from the
+                // ledger). Anything still sitting there expired is Unresolved.
+                var stillExpired = batchExpiriesByKey.TryGetValue((decision.ProductId, branchId.Value), out var liveExpiries)
+                    && liveExpiries.Any(d => d.Date < todayUtc);
+                return stillExpired ? DecisionOutcomes.Unresolved : DecisionOutcomes.Resolved;
             }
 
             default:

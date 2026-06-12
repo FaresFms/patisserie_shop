@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Intelligence.Decisions;
 using Intelligence.Entities;
 using Intelligence.Rules;
+using Intelligence.Velocity;
 using Inventory.Events;
 using Volo.Abp.Domain.Repositories;
 using Volo.Abp.Domain.Services;
@@ -13,6 +14,12 @@ namespace Intelligence.Services;
 
 public class DecisionMakerService : DomainService
 {
+    /// <summary>
+    /// Horizon of the StockoutRisk forecast walk — mirrors the nightly
+    /// VelocityScannerService sweep so real-time and batch paths agree.
+    /// </summary>
+    private const int ForecastHorizonDays = 30;
+
     private readonly IRepository<AppInventoryRule, Guid> _rulesRepo;
     private readonly IRepository<AppDecisionLog, Guid> _logsRepo;
     private readonly IRepository<AppProductVelocity, Guid> _velocityRepo;
@@ -45,7 +52,7 @@ public class DecisionMakerService : DomainService
 
         // DaysOfCover rules all read the same velocity row; load it lazily, once.
         var velocityLoaded = false;
-        decimal avgDailySales30 = 0m;
+        AppProductVelocity? velocity = null;
 
         foreach (var rule in rules)
         {
@@ -78,19 +85,44 @@ public class DecisionMakerService : DomainService
                     velocityLoaded = true;
                     var velocityQuery = (await _velocityRepo.GetQueryableAsync())
                         .Where(v => v.ProductId == eto.ProductId && v.BranchId == eto.BranchId);
-                    var velocityRow = await AsyncExecuter.FirstOrDefaultAsync(velocityQuery);
-                    avgDailySales30 = velocityRow?.AvgDailySales30 ?? 0m;
+                    velocity = await AsyncExecuter.FirstOrDefaultAsync(velocityQuery);
                 }
 
-                if (avgDailySales30 > 0)
+                if (velocity is { AvgDailySales30: > 0 })
                 {
-                    var daysOfCover = eto.NewQty / avgDailySales30;
-                    if (daysOfCover < rule.ThresholdValue.Value)
+                    var avgDailySales30 = velocity.AvgDailySales30;
+                    var indices = velocity.GetWeekdayIndices();
+
+                    if (ForecastWalker.IsFlat(indices))
                     {
-                        await TryCreateLogAsync(raisedTypes, rule, eto.ProductId, eto.BranchId, DecisionTypes.StockoutRisk,
-                            $"Stock={eto.NewQty} ÷ {avgDailySales30:0.##}/day avg (30-day) = {Math.Round(daysOfCover, 1):0.#} days of cover, " +
-                            $"below the {rule.ThresholdValue}-day threshold (Rule: '{rule.RuleName}'). Suggested: reorder soon.",
-                            stockAtEval: eto.NewQty);
+                        // No weekday pattern → plain division, exactly as before.
+                        var daysOfCover = eto.NewQty / avgDailySales30;
+                        if (daysOfCover < rule.ThresholdValue.Value)
+                        {
+                            await TryCreateLogAsync(raisedTypes, rule, eto.ProductId, eto.BranchId, DecisionTypes.StockoutRisk,
+                                $"Stock={eto.NewQty} ÷ {avgDailySales30:0.##}/day avg (30-day) = {Math.Round(daysOfCover, 1):0.#} days of cover, " +
+                                $"below the {rule.ThresholdValue}-day threshold (Rule: '{rule.RuleName}'). " +
+                                $"No weekday sales pattern — flat 30-day average used. Suggested: reorder soon.",
+                                stockAtEval: eto.NewQty);
+                        }
+                    }
+                    else
+                    {
+                        // Weekday-indexed forecast walk starting tomorrow, same math as
+                        // the nightly StockoutRisk sweep (30-day horizon cap).
+                        var tomorrow = Clock.Now.ToUniversalTime().Date.AddDays(1).DayOfWeek;
+                        var daysUntilStockout = ForecastWalker.DaysUntilDepletion(
+                            eto.NewQty, avgDailySales30, indices, tomorrow, ForecastHorizonDays);
+
+                        if (daysUntilStockout is int depletionDay && depletionDay < rule.ThresholdValue.Value)
+                        {
+                            await TryCreateLogAsync(raisedTypes, rule, eto.ProductId, eto.BranchId, DecisionTypes.StockoutRisk,
+                                $"Stock={eto.NewQty}; weekday-indexed forecast ({avgDailySales30:0.##}/day avg over 30 days, " +
+                                $"weighted per weekday — {ForecastWalker.DescribeWeighting(indices)}) depletes stock in " +
+                                $"{depletionDay} day(s), below the {rule.ThresholdValue}-day threshold (Rule: '{rule.RuleName}'). " +
+                                $"Suggested: reorder soon.",
+                                stockAtEval: eto.NewQty);
+                        }
                     }
                 }
             }

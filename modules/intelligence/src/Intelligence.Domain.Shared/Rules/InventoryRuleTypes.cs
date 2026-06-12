@@ -26,6 +26,14 @@ public static class InventoryRuleTypes
     /// </summary>
     public const string ExpiringSoon = "ExpiringSoon";
 
+    /// <summary>
+    /// Waste rule: an active matching rule enables write-off flagging for its scope —
+    /// any live batch (QuantityRemaining &gt; 0) that is already PAST its expiry date
+    /// raises a WasteWriteOff decision. Thresholds are unused ("expired" is absolute).
+    /// Evaluated by the ExpiryScanner background job.
+    /// </summary>
+    public const string ExpiredStock = "ExpiredStock";
+
     public static readonly string[] All =
     {
         LowStock,
@@ -33,7 +41,8 @@ public static class InventoryRuleTypes
         DeadStock,
         TransferSuggestion,
         DaysOfCover,
-        ExpiringSoon
+        ExpiringSoon,
+        ExpiredStock
     };
 
     public static bool IsValid(string? ruleType)
@@ -47,4 +56,11 @@ public static class InventoryRuleTypes
     /// </summary>
     public static bool UsesThresholdDays(string ruleType)
         => ruleType == DeadStock || ruleType == ExpiringSoon;
+
+    /// <summary>
+    /// ExpiredStock uses NO threshold at all — a batch either is past its expiry
+    /// date or it isn't. Both ThresholdValue and ThresholdDays are forced to null.
+    /// </summary>
+    public static bool UsesNoThreshold(string ruleType)
+        => ruleType == ExpiredStock;
 }

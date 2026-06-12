@@ -80,12 +80,15 @@ public class StockBatchManager : DomainService
     /// FEFO consumption: walks the product+branch's live batches — non-expired ones
     /// first (earliest expiry first), then expired ones (oldest first, so dead stock
     /// is cleared from the ledger too) — consuming up to <paramref name="quantity"/>.
+    /// When <paramref name="expiredFirst"/> is true (waste write-offs) the order is
+    /// inverted: EXPIRED batches first (oldest expiry first), then the normal FEFO
+    /// order — a write-off must clear the dead stock before touching sellable lots.
     /// BEST-EFFORT BY DESIGN: if the batches cover less than the requested quantity
     /// it consumes what exists and returns the consumed amount — it never throws for
     /// a shortfall, because the authoritative stock mutation must not be blocked by
     /// ledger drift.
     /// </summary>
-    public async Task<int> ConsumeFefoAsync(Guid branchId, Guid productId, int quantity)
+    public async Task<int> ConsumeFefoAsync(Guid branchId, Guid productId, int quantity, bool expiredFirst = false)
     {
         if (quantity <= 0)
         {
@@ -98,10 +101,12 @@ public class StockBatchManager : DomainService
             return 0;
         }
 
+        // GetOpenBatchesAsync already orders by ExpiryDate ascending, so both
+        // partitions below keep "oldest expiry first" within themselves.
         var today = Clock.Now.Date;
-        var fefoOrder = batches
-            .Where(b => !b.IsExpired(today))
-            .Concat(batches.Where(b => b.IsExpired(today)));
+        var fefoOrder = expiredFirst
+            ? batches.Where(b => b.IsExpired(today)).Concat(batches.Where(b => !b.IsExpired(today)))
+            : batches.Where(b => !b.IsExpired(today)).Concat(batches.Where(b => b.IsExpired(today)));
 
         var remaining = quantity;
         foreach (var batch in fefoOrder)

@@ -142,7 +142,13 @@ public class BranchInventoryManager : DomainService
         {
             if (delta < 0)
             {
-                await _stockBatchManager.ConsumeFefoAsync(inventory.BranchId, inventory.ProductId, -delta);
+                // Waste write-offs clear EXPIRED batches first (oldest expiry first);
+                // every other decrement uses normal FEFO (sellable, earliest-expiry first).
+                await _stockBatchManager.ConsumeFefoAsync(
+                    inventory.BranchId,
+                    inventory.ProductId,
+                    -delta,
+                    expiredFirst: movementType == StockMovementTypes.WriteOff);
             }
             else if (delta > 0)
             {

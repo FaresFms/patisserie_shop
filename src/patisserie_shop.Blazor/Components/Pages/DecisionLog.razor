@@ -244,8 +244,18 @@
                             }
                             <div class="dl-time">@TimeAgo(item.CreationTime)</div>
                             @if (item.Status == DecisionLogStatuses.Executed
-                                 && item.ExecutedActionId.HasValue
-                                 && !string.IsNullOrWhiteSpace(item.ExecutedActionType))
+                                 && item.ExecutedActionType == DecisionActionTypes.StockAdjustment)
+                            {
+                                @* Write-offs create no document to view — the immutable
+                                   stock-movement ledger is the audit trail. Muted chip only. *@
+                                <SoftChip T="string" Size="Size.Small"
+                                          Color="Color.Default" Variant="Variant.Outlined">
+                                    @IntL["DecisionLog:WrittenOff"]
+                                </SoftChip>
+                            }
+                            else if (item.Status == DecisionLogStatuses.Executed
+                                     && item.ExecutedActionId.HasValue
+                                     && !string.IsNullOrWhiteSpace(item.ExecutedActionType))
                             {
                                 <a class="dl-action-link" href="@ActionLinkHref(item.ExecutedActionType)">
                                     <MudIcon Icon="@ActionLinkIcon(item.ExecutedActionType)" Size="Size.Small" />
@@ -375,6 +385,7 @@
     .dl-card.dl-type-transfersuggestion { border-left-color: #4a8e8e; }
     .dl-card.dl-type-stockoutrisk     { border-left-color: #a4313f; } /* crimson — distinct from amber LowStock and red DeadStock */
     .dl-card.dl-type-expiryalert      { border-left-color: #7d4a8e; } /* plum — perishables / expiry family */
+    .dl-card.dl-type-wastewriteoff    { border-left-color: #8d6e63; } /* brown-grey — waste, distinct from ExpiryAlert plum and DeadStock red */
     .dl-card.dl-status-acknowledged,
     .dl-card.dl-status-dismissed,
     .dl-card.dl-status-executed {
@@ -396,6 +407,7 @@
     .dl-type-transfersuggestion .dl-type-icon { color: #4a8e8e; }
     .dl-type-stockoutrisk     .dl-type-icon { color: #a4313f; }
     .dl-type-expiryalert      .dl-type-icon { color: #7d4a8e; }
+    .dl-type-wastewriteoff    .dl-type-icon { color: #8d6e63; }
 
     .dl-card-center { min-width: 0; }
     .dl-reasoning {
@@ -534,7 +546,8 @@
             new(DecisionTypes.TransferSuggestion, IntL["DecisionType:TransferSuggestion"]),
             new(DecisionTypes.ReorderSuggestion,  IntL["DecisionType:ReorderSuggestion"]),
             new(DecisionTypes.StockoutRisk,       IntL["DecisionType:StockoutRisk"]),
-            new(DecisionTypes.ExpiryAlert,        IntL["DecisionType:ExpiryAlert"])
+            new(DecisionTypes.ExpiryAlert,        IntL["DecisionType:ExpiryAlert"]),
+            new(DecisionTypes.WasteWriteOff,      IntL["DecisionType:WasteWriteOff"])
         };
 
         _statusOptions = new List<LabeledOption>
@@ -727,6 +740,10 @@
             {
                 Snackbar.Add(string.Format(IntL["DecisionLog:DraftTransferCreated"], result.ActionNumber), Severity.Success);
             }
+            else if (result.ActionCreated && result.ActionType == DecisionActionTypes.StockAdjustment)
+            {
+                Snackbar.Add(string.Format(IntL["DecisionLog:WriteOffRecorded"], result.ActionNumber), Severity.Success);
+            }
             else
             {
                 Snackbar.Add(L["SuccessfullySaved"], Severity.Success);
@@ -796,6 +813,7 @@
         DecisionTypes.ReorderSuggestion => Icons.Material.Filled.AddShoppingCart,
         DecisionTypes.StockoutRisk => Icons.Material.Filled.HourglassBottom,
         DecisionTypes.ExpiryAlert => Icons.Material.Filled.EventBusy,
+        DecisionTypes.WasteWriteOff => Icons.Material.Filled.DeleteSweep,
         _ => Icons.Material.Filled.Info
     };
 
@@ -808,6 +826,7 @@
         DecisionTypes.ReorderSuggestion => Color.Primary,
         DecisionTypes.StockoutRisk => Color.Secondary, // crimson family via CSS accents below
         DecisionTypes.ExpiryAlert => Color.Secondary,  // plum family via CSS accents below
+        DecisionTypes.WasteWriteOff => Color.Default,  // brown-grey family via CSS accents below
         _ => Color.Default
     };
 

@@ -41,6 +41,7 @@
     "RuleType:TransferSuggestion": "Transfer Suggestion",
     "RuleType:DaysOfCover": "Days of Cover",
     "RuleType:ExpiringSoon": "Expiring Soon",
+    "RuleType:ExpiredStock": "Expired Stock",
 
     "Status:All": "All",
     "Status:ActiveOnly": "Active Only",
@@ -76,6 +77,8 @@
     "Intelligence:DecisionLogs:NoDefaultSupplier": "The product has no default supplier, so a purchase order cannot be created automatically. Set a default supplier on the product first.",
     "Intelligence:DecisionLogs:OutcomeAlreadyRecorded": "This decision's outcome has already been recorded and cannot be changed.",
     "Intelligence:DecisionLogs:InvalidOutcome": "Invalid decision outcome.",
+    "Intelligence:DecisionLogs:WriteOffBranchRequired": "This decision has no branch, so a stock write-off cannot be recorded.",
+    "Intelligence:DecisionLogs:WriteOffNoInventory": "The product is not initialized at this branch, so a stock write-off cannot be recorded.",
 
     "Outcome:Resolved": "Resolved",
     "Outcome:Unresolved": "Unresolved",
@@ -121,8 +124,10 @@
 
     "DecisionLog:DraftPOCreated": "Draft purchase order {0} created",
     "DecisionLog:DraftTransferCreated": "Draft stock transfer {0} created",
+    "DecisionLog:WriteOffRecorded": "Stock write-off recorded ({0})",
     "DecisionLog:ViewPurchaseOrder": "View PO",
     "DecisionLog:ViewStockTransfer": "View Transfer",
+    "DecisionLog:WrittenOff": "Written off",
 
     "DecisionType:LowStockAlert": "Low Stock Alert",
     "DecisionType:ExcessStockAlert": "Excess Stock Alert",
@@ -131,10 +136,12 @@
     "DecisionType:ReorderSuggestion": "Reorder Suggestion",
     "DecisionType:StockoutRisk": "Stockout Risk",
     "DecisionType:ExpiryAlert": "Expiry Alert",
+    "DecisionType:WasteWriteOff": "Waste Write-Off",
 
     "Menu:ProductVelocity": "Product Velocity",
     "ProductVelocity": "Product Velocity",
-    "ProductVelocitySubtitle": "Nightly-computed sales velocity, ABC class and days of cover per product and branch.",
+    "ProductVelocitySubtitle": "Nightly-computed sales velocity, ABC class, weekday-indexed 7-day forecast and days of cover per product and branch.",
+    "ProductVelocity:Next7Days": "Next 7 days",
     "ProductVelocity:Filter": "Search by product name or SKU",
     "ProductVelocity:AllBranches": "All Branches",
     "ProductVelocity:AbcClass": "ABC",

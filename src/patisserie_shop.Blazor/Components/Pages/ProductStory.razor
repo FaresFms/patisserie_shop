@@ -1,0 +1,363 @@
+@page "/inventory/product-story"
+@attribute [Authorize(InventoryPermissions.BranchInventory.Default)]
+@using System.Threading.Tasks
+@using Microsoft.AspNetCore.Authorization
+@using Volo.Abp.AspNetCore.Components.Web.Theming.Layout
+@using patisserie_shop.Story
+@using Inventory.Permissions
+@using Color = MudBlazor.Color
+@using Variant = MudBlazor.Variant
+@using Size = MudBlazor.Size
+@inherits patisserie_shopComponentBase
+@inject IProductStoryAppService StoryAppService
+@inject NavigationManager Nav
+@inject PageLayout PageLayout
+
+@{
+    PageLayout.Title = L["ProductStory"];
+}
+
+<SoftCard Elevation="2" Class="pa-2 page-flat product-story">
+    @if (ProductId == null || BranchId == null)
+    {
+        <div class="ps-empty ps-empty--page">
+            <SoftIcon Icon="@Icons.Material.Outlined.Timeline" />
+            <span>@L["ProductStory:MissingParams"]</span>
+            <SoftButton Variant="Variant.Text" Color="Color.Primary"
+                        StartIcon="@Icons.Material.Filled.ArrowBack"
+                        OnClick="GoBack">
+                @L["ProductStory:Back"]
+            </SoftButton>
+        </div>
+    }
+    else
+    {
+        <div class="page-head">
+            <div class="ps-head-left">
+                <SoftTooltip Text="@L["ProductStory:Back"]">
+                    <SoftIconButton Icon="@Icons.Material.Filled.ArrowBack"
+                                    Size="Size.Small" OnClick="GoBack" />
+                </SoftTooltip>
+                <div>
+                    <h1 class="page-title">@(_data?.ProductName ?? L["ProductStory"])</h1>
+                    <div class="page-sub">
+                        @if (_data != null)
+                        {
+                            <span class="ps-sku">@_data.SKU</span>
+                            <span class="ps-sep">·</span>
+                            <span>@_data.BranchName</span>
+                        }
+                        else
+                        {
+                            <span>@L["ProductStory:Subtitle"]</span>
+                        }
+                    </div>
+                </div>
+            </div>
+            <div class="page-head-actions">
+                @if (_data != null)
+                {
+                    <SoftChip T="string" Size="Size.Small" Variant="Variant.Filled"
+                              Color="@(_data.CurrentStock > 0 ? Color.Success : Color.Error)">
+                        @L["ProductStory:InStock", _data.CurrentStock]
+                    </SoftChip>
+                }
+                <SoftButton Variant="Variant.Text" Color="Color.Primary"
+                            StartIcon="@Icons.Material.Filled.Refresh"
+                            OnClick="LoadAsync" Disabled="_loading">
+                    @L["Refresh"]
+                </SoftButton>
+            </div>
+        </div>
+
+        <SoftCardContent>
+            @if (_error != null)
+            {
+                <SoftAlert Severity="Severity.Error" Variant="Variant.Filled" Class="ma-4">
+                    <strong>@L["ProductStory:LoadFailed"]</strong> @_error
+                </SoftAlert>
+            }
+            else if (_data == null)
+            {
+                <div class="ps-skeletons">
+                    <SoftSkeleton SkeletonType="SkeletonType.Rectangle" Height="64px" Width="100%" />
+                    @for (var i = 0; i < 5; i++)
+                    {
+                        <SoftSkeleton SkeletonType="SkeletonType.Rectangle" Height="56px" Width="100%" />
+                    }
+                </div>
+            }
+            else
+            {
+                @* ── Header stat row ── *@
+                <div class="stats">
+                    <div>
+                        <span class="stat-label">@L["ProductStory:CurrentStock"]</span>
+                        <span class="stat-value">@_data.CurrentStock.ToString("N0")</span>
+                    </div>
+                    <div>
+                        <span class="stat-label">@L["ProductStory:Sold30"]</span>
+                        <span class="stat-value">@_data.TotalSold30Days.ToString("N0")</span>
+                    </div>
+                    <div>
+                        <span class="stat-label">@L["ProductStory:Batches"]</span>
+                        <span class="stat-value">@_data.BatchCount.ToString("N0")</span>
+                    </div>
+                    <div>
+                        <span class="stat-label">@L["ProductStory:DaysSinceLastSale"]</span>
+                        <span class="stat-value">@(_data.DaysSinceLastSale?.ToString("N0") ?? "—")</span>
+                    </div>
+                </div>
+
+                @if (_data.Events.Count == 0)
+                {
+                    <div class="ps-empty ps-empty--page">
+                        <SoftIcon Icon="@Icons.Material.Outlined.HistoryToggleOff" />
+                        <span>@L["ProductStory:Empty"]</span>
+                    </div>
+                }
+                else
+                {
+                    <div class="ps-timeline">
+                        @foreach (var day in _data.Events.GroupBy(e => e.OccurredAt.ToLocalTime().Date))
+                        {
+                            <div class="ps-day">@day.Key.ToString("ddd, dd MMM")</div>
+                            @foreach (var ev in day)
+                            {
+                                <div class="ps-event">
+                                    <span class="ps-dot @DotClass(ev.EventType)"></span>
+                                    <div class="ps-body">
+                                        <div class="ps-title-row">
+                                            <span class="ps-title">@ev.Title</span>
+                                            @if (ev.QuantityDelta is int delta && delta != 0)
+                                            {
+                                                <span class="ps-delta @(delta > 0 ? "ps-delta--pos" : "ps-delta--neg")">
+                                                    @(delta > 0 ? $"+{delta}" : $"−{-delta}")
+                                                </span>
+                                            }
+                                            <span class="ps-time" title="@ev.OccurredAt.ToLocalTime().ToString("f")">
+                                                @RelativeTime(ev.OccurredAt) · @ev.OccurredAt.ToLocalTime().ToString("HH:mm")
+                                            </span>
+                                        </div>
+                                        @if (!string.IsNullOrWhiteSpace(ev.Detail))
+                                        {
+                                            <div class="ps-detail">@ev.Detail</div>
+                                        }
+                                    </div>
+                                </div>
+                            }
+                        }
+                    </div>
+                }
+            }
+        </SoftCardContent>
+    }
+</SoftCard>
+
+<style>
+    .ps-head-left {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+    }
+    .ps-head-left > .mud-tooltip-root { margin-top: 4px; }
+    .ps-sku {
+        font-family: var(--font-mono);
+        color: var(--fg-3);
+    }
+    .ps-sep { margin: 0 6px; opacity: 0.4; }
+
+    .ps-skeletons {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        padding: 16px 4px;
+    }
+
+    /* ── Empty / missing-params state ── */
+    .ps-empty {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 10px;
+        color: var(--fg-3);
+        font-size: 0.9rem;
+    }
+    .ps-empty--page { padding: 56px 0; }
+    .ps-empty .mud-icon-root { font-size: 52px; opacity: 0.4; }
+
+    /* ── Vertical timeline ── */
+    .ps-timeline {
+        position: relative;
+        margin-top: 8px;
+        padding: 4px 4px 16px;
+    }
+    .ps-timeline::before {
+        content: "";
+        position: absolute;
+        left: 11px;
+        top: 8px;
+        bottom: 8px;
+        width: 2px;
+        background: var(--bd-1);
+        border-radius: 1px;
+    }
+
+    .ps-day {
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        margin-left: 28px;
+        padding: 8px 0 6px;
+        background: var(--bg);
+        font-size: 0.72rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--fg-3);
+        border-bottom: 1px solid var(--bd-1);
+    }
+
+    .ps-event {
+        position: relative;
+        padding: 10px 4px 10px 28px;
+        border-bottom: 1px solid var(--bd-1);
+    }
+    .ps-event:hover { background: var(--hover); }
+
+    .ps-dot {
+        position: absolute;
+        left: 5px;
+        top: 16px;
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        border: 3px solid var(--surface);
+        box-shadow: 0 0 0 1px var(--bd-2);
+        z-index: 1;
+    }
+    .ps-dot--sale       { background: var(--accent, #c8633f); }
+    .ps-dot--purchase   { background: var(--success, #6b8e4e); }
+    .ps-dot--transfer   { background: #3e8c8c; }
+    .ps-dot--adjustment { background: var(--fg-4, #9a9088); }
+    .ps-dot--decision   { background: var(--warn, #c89c4f); }
+    .ps-dot--batch      { background: #8a5d8a; }
+    .ps-dot--writeoff   { background: var(--danger, #b3543a); }
+
+    .ps-body { min-width: 0; }
+    .ps-title-row {
+        display: flex;
+        align-items: baseline;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+    .ps-title {
+        font-weight: 600;
+        font-size: 0.92rem;
+        color: var(--fg-1);
+    }
+    .ps-time {
+        margin-left: auto;
+        font-size: 0.78rem;
+        color: var(--fg-4);
+        white-space: nowrap;
+        font-variant-numeric: tabular-nums;
+    }
+    .ps-detail {
+        margin-top: 2px;
+        font-size: 0.84rem;
+        color: var(--fg-3);
+        line-height: 1.45;
+        overflow-wrap: anywhere;
+    }
+
+    .ps-delta {
+        font-family: var(--font-mono);
+        font-size: 0.78rem;
+        font-weight: 600;
+        padding: 1px 8px;
+        border-radius: 999px;
+        font-variant-numeric: tabular-nums;
+    }
+    .ps-delta--pos {
+        color: var(--green-text, var(--success));
+        background: color-mix(in srgb, var(--success, #6b8e4e) 14%, transparent);
+    }
+    .ps-delta--neg {
+        color: var(--danger);
+        background: color-mix(in srgb, var(--danger, #b3543a) 12%, transparent);
+    }
+</style>
+
+@code {
+    [SupplyParameterFromQuery(Name = "productId")]
+    public Guid? ProductId { get; set; }
+
+    [SupplyParameterFromQuery(Name = "branchId")]
+    public Guid? BranchId { get; set; }
+
+    private ProductStoryDto? _data;
+    private bool _loading;
+    private string? _error;
+
+    private Guid? _loadedProductId;
+    private Guid? _loadedBranchId;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // Reload only when the query-string pair actually changes.
+        if (ProductId == _loadedProductId && BranchId == _loadedBranchId) return;
+        _loadedProductId = ProductId;
+        _loadedBranchId = BranchId;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        if (ProductId == null || BranchId == null) return;
+
+        _loading = true;
+        _error = null;
+        try
+        {
+            _data = await StoryAppService.GetAsync(new GetProductStoryInput
+            {
+                ProductId = ProductId.Value,
+                BranchId = BranchId.Value
+            });
+        }
+        catch (Exception ex)
+        {
+            _data = null;
+            _error = ex.Message;
+            await HandleErrorAsync(ex);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void GoBack() => Nav.NavigateTo("/inventory/branch-inventory");
+
+    private string DotClass(string eventType) => eventType switch
+    {
+        StoryEventTypes.Sale => "ps-dot--sale",
+        StoryEventTypes.Purchase => "ps-dot--purchase",
+        StoryEventTypes.TransferIn => "ps-dot--transfer",
+        StoryEventTypes.TransferOut => "ps-dot--transfer",
+        StoryEventTypes.Decision => "ps-dot--decision",
+        StoryEventTypes.Batch => "ps-dot--batch",
+        StoryEventTypes.WriteOff => "ps-dot--writeoff",
+        _ => "ps-dot--adjustment"
+    };
+
+    private string RelativeTime(DateTime utc)
+    {
+        var span = DateTime.UtcNow - utc;
+        if (span.TotalMinutes < 1) return L["ProductStory:JustNow"];
+        if (span.TotalMinutes < 60) return L["ProductStory:MinutesAgo", (int)span.TotalMinutes];
+        if (span.TotalHours < 24) return L["ProductStory:HoursAgo", (int)span.TotalHours];
+        return L["ProductStory:DaysAgo", (int)span.TotalDays];
+    }
+}

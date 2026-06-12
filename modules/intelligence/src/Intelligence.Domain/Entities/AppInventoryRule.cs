@@ -107,7 +107,8 @@ public class AppInventoryRule : FullAuditedAggregateRoot<Guid>
 
     /// <summary>
     /// Validates the rule type and forces exactly the correct threshold field to be set:
-    /// DeadStock uses ThresholdDays (ThresholdValue nulled); every other type uses
+    /// DeadStock/ExpiringSoon use ThresholdDays (ThresholdValue nulled); ExpiredStock
+    /// uses NO threshold (both nulled — "expired" is absolute); every other type uses
     /// ThresholdValue (ThresholdDays nulled).
     /// </summary>
     private void SetTypeAndThresholds(string ruleType, int? thresholdValue, int? thresholdDays)
@@ -120,7 +121,14 @@ public class AppInventoryRule : FullAuditedAggregateRoot<Guid>
 
         RuleType = ruleType;
 
-        if (InventoryRuleTypes.UsesThresholdDays(ruleType))
+        if (InventoryRuleTypes.UsesNoThreshold(ruleType))
+        {
+            // ExpiredStock: a batch either is past its expiry date or it isn't —
+            // the rule only carries scope, priority and the suggested action.
+            ThresholdValue = null;
+            ThresholdDays = null;
+        }
+        else if (InventoryRuleTypes.UsesThresholdDays(ruleType))
         {
             if (!thresholdDays.HasValue)
             {

@@ -81,4 +81,14 @@ public interface ISaleRepository : IRepository<AppSale, Guid>
         DateTime from30Utc,
         DateTime toUtcExclusive,
         CancellationToken ct = default);
+
+    /// <summary>
+    /// Units sold grouped by (ProductId, BranchId, day-of-week of SaleDate) in the
+    /// window. DayOfWeek is 0 = Sunday … 6 = Saturday (the <see cref="DayOfWeek"/>
+    /// convention). Backs the weekday demand-index computation.
+    /// </summary>
+    Task<List<ProductBranchWeekdaySalesAggregate>> GetProductBranchWeekdaySalesAsync(
+        DateTime fromUtc,
+        DateTime toUtcExclusive,
+        CancellationToken ct = default);
 }

@@ -112,6 +112,41 @@ public class StockMovementRepository
         return result;
     }
 
+    public async Task<List<WasteAggregateRow>> GetWriteOffAggregatesAsync(
+        DateTime fromUtcInclusive,
+        DateTime toUtcExclusive,
+        IReadOnlyCollection<Guid>? branchIdScope,
+        CancellationToken cancellationToken = default)
+    {
+        var dbContext = await GetDbContextAsync();
+
+        var movements = dbContext.Set<AppStockMovement>()
+            .Where(m => m.MovementType == StockMovementTypes.WriteOff
+                        && m.Quantity < 0
+                        && m.CreationTime >= fromUtcInclusive
+                        && m.CreationTime < toUtcExclusive);
+
+        if (branchIdScope != null)
+        {
+            movements = movements.Where(m => branchIdScope.Contains(m.BranchId));
+        }
+
+        var grouped =
+            from m in movements
+            join p in dbContext.Set<AppProduct>() on m.ProductId equals p.Id
+            group new { m, p } by new { m.BranchId, m.ProductId, Day = m.CreationTime.Date } into g
+            select new WasteAggregateRow
+            {
+                BranchId = g.Key.BranchId,
+                ProductId = g.Key.ProductId,
+                Date = g.Key.Day,
+                Units = g.Sum(x => -x.m.Quantity),
+                Cost = g.Sum(x => -x.m.Quantity * x.p.CostPrice)
+            };
+
+        return await grouped.ToListAsync(GetCancellationToken(cancellationToken));
+    }
+
     private static IQueryable<AppStockMovement> ApplyScalarFilters(
         IQueryable<AppStockMovement> movements,
         StockMovementListFilter filter)

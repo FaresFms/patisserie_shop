@@ -262,4 +262,33 @@ public class SaleRepository
 
         return await grouped.ToListAsync(GetCancellationToken(ct));
     }
+
+    public async Task<List<ProductBranchWeekdaySalesAggregate>> GetProductBranchWeekdaySalesAsync(
+        DateTime fromUtc,
+        DateTime toUtcExclusive,
+        CancellationToken ct = default)
+    {
+        var dbContext = await GetDbContextAsync();
+
+        var sales = dbContext.Set<AppSale>()
+            .Where(s => s.SaleDate >= fromUtc && s.SaleDate < toUtcExclusive);
+
+        // s.SaleDate.DayOfWeek translates server-side on Npgsql (date_part('dow', ...)),
+        // already 0 = Sunday … 6 = Saturday — the same convention as System.DayOfWeek.
+        var lines = from s in sales
+                    from i in s.Items
+                    select new { i.ProductId, s.BranchId, s.SaleDate.DayOfWeek, i.Quantity };
+
+        var grouped = lines
+            .GroupBy(x => new { x.ProductId, x.BranchId, x.DayOfWeek })
+            .Select(g => new ProductBranchWeekdaySalesAggregate
+            {
+                ProductId = g.Key.ProductId,
+                BranchId = g.Key.BranchId,
+                DayOfWeek = (int)g.Key.DayOfWeek,
+                QuantitySold = g.Sum(x => x.Quantity)
+            });
+
+        return await grouped.ToListAsync(GetCancellationToken(ct));
+    }
 }

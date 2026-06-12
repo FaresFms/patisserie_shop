@@ -42,6 +42,22 @@
     "SalesAnalytics:Product": "Product",
     "SalesAnalytics:QtySold": "Qty sold",
     "SalesAnalytics:NoData": "No sales recorded in this period.",
-    "SalesAnalytics:LoadFailed": "Failed to load analytics:"
+    "SalesAnalytics:LoadFailed": "Failed to load analytics:",
+    "ProductStory": "Product Story",
+    "ProductStory:Subtitle": "The full history of one product at one branch.",
+    "ProductStory:OpenTimeline": "Product story",
+    "ProductStory:Back": "Back to Branch Inventory",
+    "ProductStory:InStock": "{0} in stock",
+    "ProductStory:CurrentStock": "Current stock",
+    "ProductStory:Sold30": "Sold (30d)",
+    "ProductStory:Batches": "Batches",
+    "ProductStory:DaysSinceLastSale": "Days since last sale",
+    "ProductStory:Empty": "No history recorded for this product at this branch yet.",
+    "ProductStory:MissingParams": "Pick a product from Branch Inventory to view its story.",
+    "ProductStory:LoadFailed": "Failed to load product story:",
+    "ProductStory:JustNow": "just now",
+    "ProductStory:MinutesAgo": "{0}m ago",
+    "ProductStory:HoursAgo": "{0}h ago",
+    "ProductStory:DaysAgo": "{0}d ago"
   }
 }

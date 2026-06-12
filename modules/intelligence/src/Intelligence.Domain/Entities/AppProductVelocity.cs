@@ -24,6 +24,19 @@ public class AppProductVelocity : BasicAggregateRoot<Guid>
 
     public DateTime ComputedAtUtc { get; private set; }
 
+    /// <summary>
+    /// Per-weekday demand indices: (avg units sold on that weekday) ÷ (overall avg
+    /// daily units) over the trailing 30 days. 1.0 = flat / no weekday pattern.
+    /// Clamped to [0, 5]. Sunday-first to match <see cref="DayOfWeek"/>.
+    /// </summary>
+    public decimal WeekdayIndexSun { get; private set; } = 1.0m;
+    public decimal WeekdayIndexMon { get; private set; } = 1.0m;
+    public decimal WeekdayIndexTue { get; private set; } = 1.0m;
+    public decimal WeekdayIndexWed { get; private set; } = 1.0m;
+    public decimal WeekdayIndexThu { get; private set; } = 1.0m;
+    public decimal WeekdayIndexFri { get; private set; } = 1.0m;
+    public decimal WeekdayIndexSat { get; private set; } = 1.0m;
+
     protected AppProductVelocity() { }
 
     public AppProductVelocity(Guid id, Guid productId, Guid branchId)
@@ -70,4 +83,55 @@ public class AppProductVelocity : BasicAggregateRoot<Guid>
         AbcClass = abcClass;
         ComputedAtUtc = computedAtUtc;
     }
+
+    /// <summary>
+    /// Sets the 7 per-weekday demand indices, Sunday-first (index 0 = Sunday …
+    /// index 6 = Saturday, the <see cref="DayOfWeek"/> convention). Each value
+    /// must be non-negative; values above 5 are clamped to 5 and everything is
+    /// rounded to 2 decimals (the column precision).
+    /// </summary>
+    public void SetWeekdayIndices(decimal[] indices)
+    {
+        if (indices == null)
+        {
+            throw new ArgumentNullException(nameof(indices));
+        }
+        if (indices.Length != 7)
+        {
+            throw new ArgumentException(
+                $"Exactly 7 weekday indices (Sunday-first) are required but {indices.Length} were supplied.",
+                nameof(indices));
+        }
+
+        var sanitized = new decimal[7];
+        for (var i = 0; i < 7; i++)
+        {
+            if (indices[i] < 0)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(indices), indices[i], "Weekday demand indices cannot be negative.");
+            }
+            sanitized[i] = Math.Round(Math.Min(indices[i], 5m), 2, MidpointRounding.AwayFromZero);
+        }
+
+        WeekdayIndexSun = sanitized[0];
+        WeekdayIndexMon = sanitized[1];
+        WeekdayIndexTue = sanitized[2];
+        WeekdayIndexWed = sanitized[3];
+        WeekdayIndexThu = sanitized[4];
+        WeekdayIndexFri = sanitized[5];
+        WeekdayIndexSat = sanitized[6];
+    }
+
+    /// <summary>Indices as a Sunday-first array (index = (int)DayOfWeek).</summary>
+    public decimal[] GetWeekdayIndices() =>
+    [
+        WeekdayIndexSun,
+        WeekdayIndexMon,
+        WeekdayIndexTue,
+        WeekdayIndexWed,
+        WeekdayIndexThu,
+        WeekdayIndexFri,
+        WeekdayIndexSat
+    ];
 }

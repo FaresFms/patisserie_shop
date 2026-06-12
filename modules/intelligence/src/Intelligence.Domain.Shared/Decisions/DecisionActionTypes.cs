@@ -12,10 +12,18 @@ public static class DecisionActionTypes
     public const string PurchaseOrder = "PurchaseOrder";
     public const string StockTransfer = "StockTransfer";
 
+    /// <summary>
+    /// The corrective action was a direct stock adjustment (e.g. a waste write-off
+    /// recorded through BranchInventory.AdjustStock) rather than a draft document.
+    /// ExecutedActionId stays null — the audit trail is the AppStockMovement ledger.
+    /// </summary>
+    public const string StockAdjustment = "StockAdjustment";
+
     public static readonly string[] All =
     {
         PurchaseOrder,
-        StockTransfer
+        StockTransfer,
+        StockAdjustment
     };
 
     public static bool IsValid(string? actionType)

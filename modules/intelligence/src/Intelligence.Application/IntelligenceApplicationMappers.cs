@@ -51,6 +51,7 @@ public partial class ProductVelocityToDtoMapper : MapperBase<AppProductVelocity,
     [MapperIgnoreTarget(nameof(ProductVelocityDto.BranchName))]
     [MapperIgnoreTarget(nameof(ProductVelocityDto.CurrentStock))]
     [MapperIgnoreTarget(nameof(ProductVelocityDto.DaysOfCover))]
+    [MapperIgnoreTarget(nameof(ProductVelocityDto.Next7DaysForecast))]
     public override partial ProductVelocityDto Map(AppProductVelocity source);
 
     [MapperIgnoreTarget(nameof(ProductVelocityDto.ProductName))]
@@ -58,5 +59,6 @@ public partial class ProductVelocityToDtoMapper : MapperBase<AppProductVelocity,
     [MapperIgnoreTarget(nameof(ProductVelocityDto.BranchName))]
     [MapperIgnoreTarget(nameof(ProductVelocityDto.CurrentStock))]
     [MapperIgnoreTarget(nameof(ProductVelocityDto.DaysOfCover))]
+    [MapperIgnoreTarget(nameof(ProductVelocityDto.Next7DaysForecast))]
     public override partial void Map(AppProductVelocity source, ProductVelocityDto destination);
 }
