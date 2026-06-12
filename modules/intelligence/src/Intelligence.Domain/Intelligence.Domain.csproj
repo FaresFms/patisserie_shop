@@ -15,4 +15,9 @@
     <ProjectReference Include="..\..\..\inventory\src\Inventory.Domain.Shared\Inventory.Domain.Shared.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Test-only: lets unit tests construct AppInventoryRule (internal ctor; normally built via InventoryRuleManager). -->
+    <InternalsVisibleTo Include="patisserie_shop.Application.Tests" />
+  </ItemGroup>
+
 </Project>

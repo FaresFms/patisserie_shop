@@ -8,6 +8,7 @@
 @using Inventory.Permissions
 @using Inventory.Localization
 @using Volo.Abp.AspNetCore.Components.Web.Theming.Layout
+@using ApexCharts
 @using Color = MudBlazor.Color
 @using Size = MudBlazor.Size
 @inherits patisserie_shopComponentBase
@@ -60,66 +61,66 @@
     {
         @* ── KPI Cards Row ── *@
         <div class="kpi-grid mb-5">
-            <div class="kpi-card kpi-blue">
+            <SoftCard Class="kpi-card accent-blue">
                 <div class="kpi-icon-wrap"><MudIcon Icon="@Icons.Material.Filled.Inventory2" /></div>
                 <div class="kpi-body">
                     <div class="kpi-value">@_data.TotalProducts</div>
                     <div class="kpi-label">Total Products</div>
                     <div class="kpi-sub">@_data.ActiveProducts active</div>
                 </div>
-            </div>
+            </SoftCard>
 
-            <div class="kpi-card kpi-purple">
+            <SoftCard Class="kpi-card accent-purple">
                 <div class="kpi-icon-wrap"><MudIcon Icon="@Icons.Material.Filled.Store" /></div>
                 <div class="kpi-body">
                     <div class="kpi-value">@_data.TotalBranches</div>
                     <div class="kpi-label">Branches</div>
                     <div class="kpi-sub">@_data.ActiveBranches active</div>
                 </div>
-            </div>
+            </SoftCard>
 
-            <div class="kpi-card kpi-teal">
+            <SoftCard Class="kpi-card accent-teal">
                 <div class="kpi-icon-wrap"><MudIcon Icon="@Icons.Material.Filled.Warehouse" /></div>
                 <div class="kpi-body">
                     <div class="kpi-value">@_data.TotalInventoryItems</div>
                     <div class="kpi-label">Inventory Items</div>
                     <div class="kpi-sub">@_data.HealthyStockCount healthy</div>
                 </div>
-            </div>
+            </SoftCard>
 
-            <div class="kpi-card @(_data.LowStockCount > 0 ? "kpi-orange" : "kpi-green")">
+            <SoftCard Class="@($"kpi-card { (_data.LowStockCount > 0 ? "accent-orange" : "accent-green") }")">
                 <div class="kpi-icon-wrap"><MudIcon Icon="@Icons.Material.Filled.TrendingDown" /></div>
                 <div class="kpi-body">
                     <div class="kpi-value">@_data.LowStockCount</div>
                     <div class="kpi-label">Low Stock</div>
                     <div class="kpi-sub">needs attention</div>
                 </div>
-            </div>
+            </SoftCard>
 
-            <div class="kpi-card @(_data.OutOfStockCount > 0 ? "kpi-red" : "kpi-green")">
+            <SoftCard Class="@($"kpi-card { (_data.OutOfStockCount > 0 ? "accent-red" : "accent-green") }")">
                 <div class="kpi-icon-wrap"><MudIcon Icon="@Icons.Material.Filled.RemoveShoppingCart" /></div>
                 <div class="kpi-body">
                     <div class="kpi-value">@_data.OutOfStockCount</div>
                     <div class="kpi-label">Out of Stock</div>
                     <div class="kpi-sub">@(_data.OutOfStockCount == 0 ? "all clear" : "critical")</div>
                 </div>
-            </div>
+            </SoftCard>
 
-            <div class="kpi-card kpi-indigo">
+            <SoftCard Class="kpi-card accent-indigo">
                 <div class="kpi-icon-wrap"><MudIcon Icon="@Icons.Material.Filled.Category" /></div>
                 <div class="kpi-body">
                     <div class="kpi-value">@_data.TotalCategories</div>
                     <div class="kpi-label">Categories</div>
                     <div class="kpi-sub">@_data.TotalSuppliers suppliers</div>
                 </div>
-            </div>
+            </SoftCard>
         </div>
 
         @* ── Middle Row: Health Overview + Movement Summary ── *@
         <div class="dash-row mb-5">
 
             @* Stock Health Overview *@
-            <div class="dash-panel dash-panel--health">
+            <SoftCard Class="dash-panel dash-panel--health">
                 <div class="panel-header">
                     <MudIcon Icon="@Icons.Material.Filled.MonitorHeart" Class="panel-header-icon" />
                     <MudText Typo="Typo.h6">Stock Health Overview</MudText>
@@ -167,20 +168,33 @@
                         <span class="health-pct">@(total > 0 ? $"{(double)_data.OutOfStockCount / total * 100:F1}" : "0")%</span>
                     </div>
 
-                    @* Visual ring *@
-                    <div class="health-ring-wrap">
-                        <div class="health-ring" style="@BuildRingStyle()">
-                            <div class="health-ring-inner">
-                                <div class="health-ring-pct">@(total > 0 ? $"{(double)_data.HealthyStockCount / total * 100:F0}" : "0")%</div>
-                                <div class="health-ring-text">healthy</div>
+                    @* Visual donut (ApexCharts) *@
+                    <div class="health-donut-wrap">
+                        @if (total > 0)
+                        {
+                            <ApexChart TItem="HealthSlice" @key="_data" Options="_healthChartOptions" Height="230">
+                                <ApexPointSeries TItem="HealthSlice"
+                                                 Items="_healthSlices"
+                                                 Name="Items"
+                                                 SeriesType="SeriesType.Donut"
+                                                 XValue="@(s => s.Label)"
+                                                 YValue="@(s => s.Count)" />
+                            </ApexChart>
+                            <div class="health-donut-center">
+                                <div class="health-donut-pct">@($"{(double)_data.HealthyStockCount / total * 100:F0}")%</div>
+                                <div class="health-donut-text">healthy</div>
                             </div>
-                        </div>
+                        }
+                        else
+                        {
+                            <div class="health-donut-empty">No inventory items yet</div>
+                        }
                     </div>
                 </div>
-            </div>
+            </SoftCard>
 
             @* Movement Summary (last 30 days) *@
-            <div class="dash-panel dash-panel--movements">
+            <SoftCard Class="dash-panel dash-panel--movements">
                 <div class="panel-header">
                     <MudIcon Icon="@Icons.Material.Filled.SwapHoriz" Class="panel-header-icon" />
                     <MudText Typo="Typo.h6">Stock Movements</MudText>
@@ -219,14 +233,14 @@
                         </div>
                     </div>
                 </div>
-            </div>
+            </SoftCard>
 
         </div>
 
         @* ── Branch Performance ── *@
         @if (_data.BranchStats.Any())
         {
-            <div class="dash-panel dash-panel--full mb-5">
+            <SoftCard Class="dash-panel dash-panel--full mb-5">
                 <div class="panel-header">
                     <MudIcon Icon="@Icons.Material.Filled.BusinessCenter" Class="panel-header-icon" />
                     <MudText Typo="Typo.h6">Branch Performance</MudText>
@@ -284,14 +298,14 @@
                         </tbody>
                     </table>
                 </div>
-            </div>
+            </SoftCard>
         }
 
         @* ── Bottom Row: Critical Items + Recent Movements ── *@
         <div class="dash-row mb-4">
 
             @* Critical Stock Items *@
-            <div class="dash-panel dash-panel--critical">
+            <SoftCard Class="dash-panel dash-panel--critical">
                 <div class="panel-header">
                     <MudIcon Icon="@Icons.Material.Filled.Warning" Class="panel-header-icon panel-header-icon--warning" />
                     <MudText Typo="Typo.h6">Critical Stock Items</MudText>
@@ -351,10 +365,10 @@
                         </table>
                     }
                 </div>
-            </div>
+            </SoftCard>
 
             @* Recent Movements *@
-            <div class="dash-panel dash-panel--recent">
+            <SoftCard Class="dash-panel dash-panel--recent">
                 <div class="panel-header">
                     <MudIcon Icon="@Icons.Material.Filled.History" Class="panel-header-icon" />
                     <MudText Typo="Typo.h6">Recent Movements</MudText>
@@ -393,7 +407,7 @@
                         </div>
                     }
                 </div>
-            </div>
+            </SoftCard>
 
         </div>
     }
@@ -449,15 +463,12 @@
         grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
         gap: 16px;
     }
+    /* Direct children of SoftCard (.mud-card) — the glass theme handles the surface */
     .kpi-card {
-        border-radius: 14px;
-        padding: 20px 18px;
-        display: flex;
+        padding: 20px 18px !important;
+        display: flex !important;
         align-items: flex-start;
         gap: 14px;
-        box-shadow: 0 2px 8px rgba(0,0,0,.08);
-        transition: transform .15s, box-shadow .15s;
-        color: white;
         position: relative;
         overflow: hidden;
     }
@@ -467,34 +478,44 @@
         top: -20px; right: -20px;
         width: 80px; height: 80px;
         border-radius: 50%;
-        background: rgba(255,255,255,.12);
+        background: rgba(255,255,255,.10);
+        pointer-events: none;
     }
-    .kpi-card:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 6px 20px rgba(0,0,0,.14);
+    .kpi-card:hover { transform: translateY(-2px); }
+
+    /* Coloured glow strip — accent stays visible through the glass */
+    .kpi-card::before {
+        content: '';
+        position: absolute;
+        left: 0; top: 0; bottom: 0;
+        width: 4px;
+        background: var(--kpi-accent, rgba(255,255,255,.4));
+        box-shadow: 0 0 24px var(--kpi-accent, rgba(255,255,255,.4));
     }
+
     .kpi-icon-wrap {
-        background: rgba(255,255,255,.22);
+        background: var(--kpi-accent, rgba(255,255,255,.18));
         border-radius: 10px;
         padding: 10px;
         display: flex;
         align-items: center;
         justify-content: center;
         flex-shrink: 0;
+        box-shadow: 0 4px 12px rgba(0,0,0,.18);
     }
     .kpi-icon-wrap .mud-icon-root { font-size: 24px; color: white; }
-    .kpi-body { flex: 1; }
-    .kpi-value { font-size: 2rem; font-weight: 700; line-height: 1; }
-    .kpi-label { font-size: .78rem; font-weight: 600; opacity: .85; margin-top: 4px; text-transform: uppercase; letter-spacing: .04em; }
-    .kpi-sub { font-size: .75rem; opacity: .7; margin-top: 2px; }
+    .kpi-body { flex: 1; z-index: 1; }
+    .kpi-value { font-size: 2rem; font-weight: 700; line-height: 1; color: #fff; }
+    .kpi-label { font-size: .78rem; font-weight: 600; opacity: .85; margin-top: 4px; text-transform: uppercase; letter-spacing: .04em; color: rgba(255,255,255,.85); }
+    .kpi-sub   { font-size: .75rem; opacity: .7;  margin-top: 2px; color: rgba(255,255,255,.7); }
 
-    .kpi-blue   { background: linear-gradient(135deg, #1976d2, #42a5f5); }
-    .kpi-purple { background: linear-gradient(135deg, #7b1fa2, #ba68c8); }
-    .kpi-teal   { background: linear-gradient(135deg, #00796b, #4db6ac); }
-    .kpi-orange { background: linear-gradient(135deg, #e65100, #ffa726); }
-    .kpi-red    { background: linear-gradient(135deg, #c62828, #ef5350); }
-    .kpi-green  { background: linear-gradient(135deg, #2e7d32, #66bb6a); }
-    .kpi-indigo { background: linear-gradient(135deg, #283593, #5c6bc0); }
+    .accent-blue   { --kpi-accent: rgba( 66,165,245, .9); }
+    .accent-purple { --kpi-accent: rgba(186,104,200, .9); }
+    .accent-teal   { --kpi-accent: rgba( 77,182,172, .9); }
+    .accent-orange { --kpi-accent: rgba(255,167, 38, .9); }
+    .accent-red    { --kpi-accent: rgba(239, 83, 80, .9); }
+    .accent-green  { --kpi-accent: rgba(102,187,106, .9); }
+    .accent-indigo { --kpi-accent: rgba(121,134,203, .9); }
 
     /* ─── Panels ────────────────────────────────────────── */
     .dash-row {
@@ -504,11 +525,10 @@
     }
     @@media (max-width: 900px) { .dash-row { grid-template-columns: 1fr; } }
 
+    /* dash-panel is a SoftCard — let the glass theme drive bg/border/shadow */
     .dash-panel {
-        background: var(--mud-palette-surface);
-        border-radius: 14px;
-        box-shadow: 0 2px 8px rgba(0,0,0,.07);
         overflow: hidden;
+        display: block;
     }
     .dash-panel--full { width: 100%; }
 
@@ -517,7 +537,7 @@
         align-items: center;
         gap: 10px;
         padding: 16px 20px 12px;
-        border-bottom: 1px solid var(--mud-palette-lines-default);
+        border-bottom: 1px solid rgba(255,255,255,.14);
         flex-wrap: wrap;
     }
     .panel-header-icon {
@@ -572,29 +592,31 @@
     .health-bar { margin-bottom: 2px; }
     .health-pct { font-size: .75rem; color: var(--mud-palette-text-secondary); display: block; text-align: right; }
 
-    .health-ring-wrap {
-        display: flex;
-        justify-content: center;
-        margin-top: 20px;
+    .health-donut-wrap {
+        position: relative;
+        margin-top: 16px;
+        min-height: 230px;
     }
-    .health-ring {
-        width: 120px; height: 120px;
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-    }
-    .health-ring-inner {
-        width: 82px; height: 82px;
-        border-radius: 50%;
-        background: var(--mud-palette-surface);
+    .health-donut-wrap .apexcharts-svg { background: transparent !important; }
+    .health-donut-center {
+        position: absolute;
+        inset: 0;
         display: flex;
         flex-direction: column;
         align-items: center;
         justify-content: center;
+        pointer-events: none;
     }
-    .health-ring-pct { font-size: 1.3rem; font-weight: 700; line-height: 1; }
-    .health-ring-text { font-size: .65rem; opacity: .55; text-transform: uppercase; letter-spacing: .06em; }
+    .health-donut-pct { font-size: 1.4rem; font-weight: 700; line-height: 1; color: var(--fg-1); }
+    .health-donut-text { font-size: .65rem; color: var(--fg-3); text-transform: uppercase; letter-spacing: .06em; margin-top: 3px; }
+    .health-donut-empty {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 230px;
+        color: var(--fg-3);
+        font-size: .85rem;
+    }
 
     /* ─── Movement Summary Panel ────────────────────────── */
     .movement-total { text-align: center; padding-top: 4px; }
@@ -639,16 +661,16 @@
         text-transform: uppercase;
         letter-spacing: .05em;
         color: var(--mud-palette-text-secondary);
-        border-bottom: 2px solid var(--mud-palette-lines-default);
+        border-bottom: 2px solid rgba(255,255,255,.18);
         white-space: nowrap;
     }
     .branch-table td {
         padding: 12px 16px;
-        border-bottom: 1px solid var(--mud-palette-lines-default);
+        border-bottom: 1px solid rgba(255,255,255,.08);
         vertical-align: middle;
     }
     .branch-table tr:last-child td { border-bottom: none; }
-    .branch-table tr:hover td { background: var(--mud-palette-action-hover); }
+    .branch-table tr:hover td { background: rgba(255,255,255,.06); }
     .branch-row--inactive td { opacity: .55; }
 
     .branch-name-cell { display: flex; align-items: center; }
@@ -694,15 +716,15 @@
         text-transform: uppercase;
         letter-spacing: .05em;
         color: var(--mud-palette-text-secondary);
-        border-bottom: 2px solid var(--mud-palette-lines-default);
+        border-bottom: 2px solid rgba(255,255,255,.18);
     }
     .critical-table td {
         padding: 11px 16px;
-        border-bottom: 1px solid var(--mud-palette-lines-default);
+        border-bottom: 1px solid rgba(255,255,255,.08);
         vertical-align: middle;
     }
     .critical-table tr:last-child td { border-bottom: none; }
-    .critical-table tr:hover td { background: var(--mud-palette-action-hover); }
+    .critical-table tr:hover td { background: rgba(255,255,255,.06); }
 
     .product-name-cell { display: flex; flex-direction: column; gap: 2px; }
     .product-name { font-weight: 600; font-size: .875rem; }
@@ -734,7 +756,7 @@
         padding: 10px 16px;
         transition: background .1s;
     }
-    .movement-item:hover { background: var(--mud-palette-action-hover); }
+    .movement-item:hover { background: rgba(255,255,255,.06); }
     .mv-type-dot {
         width: 10px; height: 10px;
         border-radius: 50%;
@@ -791,6 +813,37 @@
     private InventoryDashboardDto? _data;
     private bool _loading;
     private DateTime? _lastRefreshed;
+    private List<HealthSlice> _healthSlices = new();
+
+    private sealed class HealthSlice
+    {
+        public string Label { get; set; } = string.Empty;
+        public int Count { get; set; }
+    }
+
+    // Warm-theme chart styling — hex values mirror glass-theme.css tokens:
+    // --success #6b8e4e, --warn #c89c4f, --danger #b3543a, --fg-3 #8a7e6e.
+    private readonly ApexChartOptions<HealthSlice> _healthChartOptions = new()
+    {
+        Chart = new ApexCharts.Chart
+        {
+            Toolbar = new ApexCharts.Toolbar { Show = false },
+            Background = "transparent",
+            FontFamily = "Inter, sans-serif",
+            ForeColor = "#8a7e6e"
+        },
+        Colors = new List<string> { "#6b8e4e", "#c89c4f", "#b3543a" },
+        DataLabels = new ApexCharts.DataLabels { Enabled = false },
+        Legend = new ApexCharts.Legend { Show = false },
+        Stroke = new ApexCharts.Stroke { Show = false },
+        PlotOptions = new ApexCharts.PlotOptions
+        {
+            Pie = new ApexCharts.PlotOptionsPie
+            {
+                Donut = new ApexCharts.PlotOptionsDonut { Size = "74%" }
+            }
+        }
+    };
 
     protected override async Task OnInitializedAsync()
     {
@@ -803,6 +856,12 @@
         try
         {
             _data = await DashboardAppService.GetAsync();
+            _healthSlices = new List<HealthSlice>
+            {
+                new() { Label = "Healthy", Count = _data.HealthyStockCount },
+                new() { Label = "Low Stock", Count = _data.LowStockCount },
+                new() { Label = "Out of Stock", Count = _data.OutOfStockCount }
+            };
             _lastRefreshed = DateTime.Now;
         }
         catch (Exception ex)
@@ -823,21 +882,6 @@
         >= 70 => Color.Warning,
         _     => Color.Error
     };
-
-    private string BuildRingStyle()
-    {
-        if (_data == null) return "";
-        var total = _data.TotalInventoryItems;
-        if (total == 0) return "background: conic-gradient(#4caf50 0%, #e0e0e0 0%);";
-
-        double healthy = (double)_data.HealthyStockCount / total * 100;
-        double low = (double)_data.LowStockCount / total * 100;
-
-        return $"background: conic-gradient(" +
-               $"#4caf50 0% {healthy:F1}%, " +
-               $"#ff9800 {healthy:F1}% {healthy + low:F1}%, " +
-               $"#f44336 {healthy + low:F1}% 100%);";
-    }
 
     private static string FormatMovementType(string type) => type switch
     {

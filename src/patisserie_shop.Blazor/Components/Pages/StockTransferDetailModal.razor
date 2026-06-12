@@ -1,0 +1,613 @@
+@using System.Threading
+@using System.Threading.Tasks
+@using Microsoft.AspNetCore.Components
+@using Operations
+@using Operations.StockTransfers
+@using Operations.Permissions
+@using Operations.Localization
+@using Color = MudBlazor.Color
+@using Variant = MudBlazor.Variant
+@using Size = MudBlazor.Size
+@using Margin = MudBlazor.Margin
+@inherits patisserie_shopComponentBase
+@inject IStockTransferAppService StockTransferAppService
+@inject ISnackbar Snackbar
+@inject IStringLocalizer<OperationsResource> OpsL
+
+@if (_transfer == null)
+{
+    return;
+}
+
+<div class="soft-modal-backdrop" @onclick="CloseAsync">
+    <div class="soft-modal-container soft-modal-container--xl" @onclick:stopPropagation="true">
+        <SoftCard Elevation="24" Class="soft-modal-card">
+
+            <SoftCardHeader Class="pa-4">
+                <CardHeaderContent>
+                    <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <SoftIcon Icon="@Icons.Material.Filled.SwapHoriz" Color="Color.Primary" Size="Size.Medium" />
+                        <div>
+                            <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                <SoftText Typo="Typo.h6">@_transfer.Reference</SoftText>
+                                <div class="@($"sts-status sts-status-{_transfer.Status.ToLower()}")">
+                                    <MudIcon Icon="@StatusIcon(_transfer.Status)" Size="Size.Small" />
+                                    <span>@OpsL[$"Status:{_transfer.Status}"]</span>
+                                </div>
+                            </SoftStack>
+                            <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                <SoftText Typo="Typo.caption" Color="Color.Default">@_transfer.FromBranchName</SoftText>
+                                <MudIcon Icon="@Icons.Material.Filled.ArrowRightAlt" Size="Size.Small" />
+                                <SoftText Typo="Typo.caption" Color="Color.Default">@_transfer.ToBranchName</SoftText>
+                            </SoftStack>
+                        </div>
+                    </SoftStack>
+                </CardHeaderContent>
+                <CardHeaderActions>
+                    <SoftIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="CloseAsync" />
+                </CardHeaderActions>
+            </SoftCardHeader>
+            <SoftDivider />
+
+            <SoftCardContent Class="pa-4 sts-modal-body">
+                <SoftStack Spacing="4">
+
+                    <!-- Transfer info -->
+                    @{
+                        var requestedText = _transfer.RequestedDate.ToString("MMM d, yyyy");
+                        var approvedText  = _transfer.ApprovedDate?.ToString("MMM d, yyyy") ?? "-";
+                        var completedText = _transfer.CompletedDate?.ToString("MMM d, yyyy") ?? "-";
+                        var requestedBy   = _transfer.RequestedByUserName ?? "-";
+                        var approvedBy    = _transfer.ApprovedByUserName ?? "-";
+                    }
+                    <div>
+                        <SoftText Typo="Typo.overline" Color="Color.Primary">@OpsL["TransferInfo"]</SoftText>
+                        <SoftDivider Class="mb-3" />
+                        <div class="sts-info-grid">
+                            <InfoRow Label="@OpsL["RequestedDate"]" Value="@requestedText" />
+                            <InfoRow Label="@OpsL["ApprovedDate"]" Value="@approvedText" />
+                            <InfoRow Label="@OpsL["CompletedDate"]" Value="@completedText" />
+                            <InfoRow Label="@OpsL["RequestedBy"]" Value="@requestedBy" />
+                            <InfoRow Label="@OpsL["ApprovedBy"]" Value="@approvedBy" />
+                        </div>
+                        @if (!string.IsNullOrWhiteSpace(_transfer.Notes))
+                        {
+                            <div class="sts-notes">
+                                <SoftText Typo="Typo.caption" Color="Color.Default">@OpsL["Notes"]</SoftText>
+                                <SoftText Typo="Typo.body2">@_transfer.Notes</SoftText>
+                            </div>
+                        }
+                    </div>
+
+                    <!-- Items -->
+                    <div>
+                        <SoftStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                            <SoftText Typo="Typo.overline" Color="Color.Primary">@OpsL["Items"] (@_transfer.Items.Count)</SoftText>
+                            @if (_transfer.Status == StockTransferStatuses.Draft && _canCreate)
+                            {
+                                <SoftButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary"
+                                            StartIcon="@Icons.Material.Filled.Add"
+                                            OnClick="OpenAddItem">@OpsL["AddProduct"]</SoftButton>
+                            }
+                        </SoftStack>
+                        <SoftDivider Class="mb-3" />
+
+                        @if (_transfer.Items.Count == 0)
+                        {
+                            <SoftStack AlignItems="AlignItems.Center" Spacing="1" Class="pa-4">
+                                <SoftIcon Icon="@Icons.Material.Outlined.Inbox" Style="font-size:42px; opacity:0.4;" />
+                                <SoftText Typo="Typo.body2" Color="Color.Default">@OpsL["NoItemsYet"]</SoftText>
+                            </SoftStack>
+                        }
+                        else
+                        {
+                            <MudTable T="StockTransferItemDto" Items="@_transfer.Items" Dense="true" Hover="true" Bordered="false" Striped="true">
+                                <HeaderContent>
+                                    <MudTh>@OpsL["Product"]</MudTh>
+                                    <MudTh Style="text-align:right;">@OpsL["RequestedQuantity"]</MudTh>
+                                    <MudTh Style="text-align:center;">@OpsL["ApprovedQuantity"]</MudTh>
+                                    <MudTh Style="text-align:right;">@OpsL["TransferredQuantity"]</MudTh>
+                                    <MudTh></MudTh>
+                                </HeaderContent>
+                                <RowTemplate Context="item">
+                                    <MudTd>
+                                        <SoftStack Spacing="0">
+                                            <SoftText Typo="Typo.body2" Style="font-weight:500;">@item.ProductName</SoftText>
+                                            <SoftText Typo="Typo.caption" Color="Color.Default">@item.ProductSKU</SoftText>
+                                        </SoftStack>
+                                    </MudTd>
+                                    <MudTd Style="text-align:right;">@item.RequestedQuantity @item.ProductUnit</MudTd>
+                                    <MudTd Style="text-align:center;">
+                                        @if (_transfer.Status == StockTransferStatuses.Approved && _canApprove)
+                                        {
+                                            <SoftStack Row="true" Spacing="1" AlignItems="AlignItems.Center" Justify="Justify.Center">
+                                                <SoftNumericField T="int" Value="@GetApprovedEdit(item)"
+                                                                  ValueChanged="@(v => _approvedEdits[item.Id] = v)"
+                                                                  Variant="Variant.Outlined" Min="0"
+                                                                  Margin="Margin.Dense"
+                                                                  Style="max-width: 90px;" />
+                                                <SoftIconButton Icon="@Icons.Material.Filled.Check"
+                                                                Color="Color.Success" Size="Size.Small"
+                                                                OnClick="@(() => SaveApprovedAsync(item))" />
+                                            </SoftStack>
+                                        }
+                                        else if (item.ApprovedQuantity.HasValue)
+                                        {
+                                            <SoftChip T="string"
+                                                      Color="@(item.ApprovedQuantity == item.RequestedQuantity ? Color.Success : Color.Warning)"
+                                                      Size="Size.Small"
+                                                      Variant="Variant.Filled">
+                                                @item.ApprovedQuantity
+                                            </SoftChip>
+                                        }
+                                        else
+                                        {
+                                            <SoftText Color="Color.Default">-</SoftText>
+                                        }
+                                    </MudTd>
+                                    <MudTd Style="text-align:right;">
+                                        @(item.TransferredQuantity?.ToString() ?? "-")
+                                    </MudTd>
+                                    <MudTd>
+                                        @if (_transfer.Status == StockTransferStatuses.Draft && _canCreate)
+                                        {
+                                            <SoftIconButton Icon="@Icons.Material.Filled.Delete"
+                                                            Color="Color.Error"
+                                                            Size="Size.Small"
+                                                            OnClick="@(() => RemoveItemAsync(item))" />
+                                        }
+                                    </MudTd>
+                                </RowTemplate>
+                            </MudTable>
+                        }
+                    </div>
+
+                </SoftStack>
+            </SoftCardContent>
+
+            <SoftDivider />
+            <div class="pa-3 d-flex justify-end flex-wrap" style="gap: 8px;">
+                <SoftButton Variant="Variant.Text" OnClick="CloseAsync">@L["Close"]</SoftButton>
+
+                @if (_transfer.Status == StockTransferStatuses.Draft && _transfer.Items.Count > 0 && _canCreate)
+                {
+                    <SoftButton Variant="Variant.Filled" Color="Color.Primary"
+                                StartIcon="@Icons.Material.Filled.Send"
+                                OnClick="SubmitAsync" Disabled="_saving">@OpsL["SubmitRequest"]</SoftButton>
+                }
+                @if (_transfer.Status == StockTransferStatuses.Pending && _canApprove)
+                {
+                    <SoftButton Variant="Variant.Filled" Color="Color.Success"
+                                StartIcon="@Icons.Material.Filled.CheckCircle"
+                                OnClick="ApproveAsync" Disabled="_saving">@OpsL["Approve"]</SoftButton>
+                }
+                @if (_transfer.Status == StockTransferStatuses.Approved && _canShip)
+                {
+                    <SoftButton Variant="Variant.Filled" Color="Color.Info"
+                                StartIcon="@Icons.Material.Filled.LocalShipping"
+                                OnClick="ShipAsync" Disabled="_saving">@OpsL["Ship"]</SoftButton>
+                }
+                @if (_transfer.Status == StockTransferStatuses.InTransit && _canComplete)
+                {
+                    <SoftButton Variant="Variant.Filled" Color="Color.Tertiary"
+                                StartIcon="@Icons.Material.Filled.TaskAlt"
+                                OnClick="OpenCompleteDialog" Disabled="_saving">@OpsL["MarkCompleted"]</SoftButton>
+                }
+                @if ((_transfer.Status == StockTransferStatuses.Draft
+                      || _transfer.Status == StockTransferStatuses.Pending
+                      || _transfer.Status == StockTransferStatuses.Approved) && _canCancel)
+                {
+                    <SoftButton Variant="Variant.Outlined" Color="Color.Error"
+                                StartIcon="@Icons.Material.Filled.Cancel"
+                                OnClick="CancelAsync" Disabled="_saving">@OpsL["Cancel"]</SoftButton>
+                }
+            </div>
+
+        </SoftCard>
+    </div>
+</div>
+
+<!-- ── Add Item dialog ── -->
+@if (_addItemVisible)
+{
+    <div class="soft-modal-backdrop" @onclick="CloseAddItem">
+        <div class="soft-modal-container" @onclick:stopPropagation="true">
+            <SoftCard Elevation="24" Class="soft-modal-card">
+                <SoftCardHeader Class="pa-4">
+                    <CardHeaderContent>
+                        <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <SoftIcon Icon="@Icons.Material.Filled.AddBox" Color="Color.Primary" Size="Size.Medium" />
+                            <SoftText Typo="Typo.h6">@OpsL["AddProduct"]</SoftText>
+                        </SoftStack>
+                    </CardHeaderContent>
+                    <CardHeaderActions>
+                        <SoftIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="CloseAddItem" />
+                    </CardHeaderActions>
+                </SoftCardHeader>
+                <SoftDivider />
+                <SoftCardContent Class="pa-4">
+                    <SoftStack Spacing="3">
+                        <SoftLookupSelect TItem="StockTransferProductLookupDto" TValue="Guid?"
+                                          Items="_availableProducts"
+                                          ToValue="@(p => (Guid?)p.ProductId)"
+                                          ToLabel="@(p => $"{p.Name} — {p.SKU} — {p.QuantityOnHand} in stock")"
+                                          Value="_newItemProductId"
+                                          ValueChanged="OnAddItemProductChanged"
+                                          Label="@OpsL["Product"]"
+                                          Required="true" />
+                        <SoftNumericField T="int" Label="@OpsL["RequestedQuantity"]"
+                                          @bind-Value="_newItemQty"
+                                          Variant="Variant.Outlined" Min="1" />
+                        @if (_selectedAvailableStock.HasValue && _newItemQty > _selectedAvailableStock.Value)
+                        {
+                            <SoftAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true">
+                                @string.Format(OpsL["OnlyXInStock"], _selectedAvailableStock.Value)
+                            </SoftAlert>
+                        }
+                    </SoftStack>
+                </SoftCardContent>
+                <SoftDivider />
+                <div class="pa-3 d-flex justify-end" style="gap: 8px;">
+                    <SoftButton Variant="Variant.Text" OnClick="CloseAddItem">@L["Cancel"]</SoftButton>
+                    <SoftButton Variant="Variant.Filled" Color="Color.Primary"
+                                StartIcon="@Icons.Material.Filled.Save"
+                                OnClick="ConfirmAddItem" Disabled="_saving">@L["Save"]</SoftButton>
+                </div>
+            </SoftCard>
+        </div>
+    </div>
+}
+
+<!-- ── Completion dialog ── -->
+@if (_completeVisible)
+{
+    <div class="soft-modal-backdrop" @onclick="CloseComplete">
+        <div class="soft-modal-container soft-modal-container--lg" @onclick:stopPropagation="true">
+            <SoftCard Elevation="24" Class="soft-modal-card">
+                <SoftCardHeader Class="pa-4">
+                    <CardHeaderContent>
+                        <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <SoftIcon Icon="@Icons.Material.Filled.TaskAlt" Color="Color.Tertiary" Size="Size.Medium" />
+                            <div>
+                                <SoftText Typo="Typo.h6">@OpsL["CompleteTransfer"]</SoftText>
+                                <SoftText Typo="Typo.caption" Color="Color.Default">
+                                    @OpsL["CompleteTransferHint"]
+                                </SoftText>
+                            </div>
+                        </SoftStack>
+                    </CardHeaderContent>
+                    <CardHeaderActions>
+                        <SoftIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="CloseComplete" />
+                    </CardHeaderActions>
+                </SoftCardHeader>
+                <SoftDivider />
+                <SoftCardContent Class="pa-4 sts-modal-body">
+                    <MudTable T="CompleteRow" Items="@_completeRows" Dense="true" Hover="true" Bordered="false">
+                        <HeaderContent>
+                            <MudTh>@OpsL["Product"]</MudTh>
+                            <MudTh Style="text-align:right;">@OpsL["ApprovedQuantity"]</MudTh>
+                            <MudTh Style="text-align:right;">@OpsL["SourceStock"]</MudTh>
+                            <MudTh Style="text-align:center; min-width: 140px;">@OpsL["TransferredQuantity"]</MudTh>
+                        </HeaderContent>
+                        <RowTemplate Context="row">
+                            <MudTd>
+                                <SoftStack Spacing="0">
+                                    <SoftText Typo="Typo.body2" Style="font-weight:500;">@row.Item.ProductName</SoftText>
+                                    <SoftText Typo="Typo.caption" Color="Color.Default">@row.Item.ProductSKU</SoftText>
+                                </SoftStack>
+                            </MudTd>
+                            <MudTd Style="text-align:right;">@(row.Item.ApprovedQuantity ?? row.Item.RequestedQuantity)</MudTd>
+                            <MudTd Style="text-align:right;">
+                                <SoftText Color="@(row.SourceStock < row.TransferNow ? Color.Error : Color.Default)">
+                                    @row.SourceStock
+                                </SoftText>
+                            </MudTd>
+                            <MudTd Style="text-align:center;">
+                                <SoftNumericField T="int" @bind-Value="row.TransferNow"
+                                                  Variant="Variant.Outlined" Min="0"
+                                                  Margin="Margin.Dense" />
+                            </MudTd>
+                        </RowTemplate>
+                    </MudTable>
+                </SoftCardContent>
+                <SoftDivider />
+                <div class="pa-3 d-flex justify-end" style="gap: 8px;">
+                    <SoftButton Variant="Variant.Text" OnClick="CloseComplete">@L["Cancel"]</SoftButton>
+                    <SoftButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="TransferAll">
+                        @OpsL["TransferAll"]
+                    </SoftButton>
+                    <SoftButton Variant="Variant.Filled" Color="Color.Tertiary"
+                                StartIcon="@Icons.Material.Filled.CheckCircle"
+                                OnClick="ConfirmComplete" Disabled="_saving">@OpsL["ConfirmComplete"]</SoftButton>
+                </div>
+            </SoftCard>
+        </div>
+    </div>
+}
+
+<style>
+    .soft-modal-container--xl { max-width: 980px; }
+    .soft-modal-container--lg { max-width: 760px; }
+
+    .sts-modal-body { max-height: 72vh; overflow-y: auto; }
+
+    .sts-info-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 10px 24px;
+    }
+
+    .sts-notes {
+        margin-top: 12px;
+        padding: 10px 12px;
+        background: var(--mud-palette-background-grey);
+        border-radius: 8px;
+    }
+
+    .sts-status {
+        display: inline-flex; align-items: center; gap: 6px;
+        padding: 3px 10px; border-radius: 999px;
+        font-size: 0.78rem; font-weight: 600;
+    }
+    .sts-status-draft     { background: rgba(120,120,120,0.18); color: #444; }
+    .sts-status-pending   { background: rgba(255,167,38,0.18);  color: #b26a00; }
+    .sts-status-approved  { background: rgba(33,150,243,0.15);  color: #1565c0; }
+    .sts-status-intransit { background: rgba(0,150,136,0.15);   color: #00695c; }
+    .sts-status-completed { background: rgba(76,175,80,0.15);   color: #2e7d32; }
+    .sts-status-cancelled { background: rgba(244,67,54,0.15);   color: #c62828; }
+</style>
+
+@code {
+    [Parameter, EditorRequired] public Guid TransferId { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public EventCallback Changed { get; set; }
+
+    private StockTransferDto? _transfer;
+    private bool _saving;
+
+    private bool _canCreate;
+    private bool _canApprove;
+    private bool _canShip;
+    private bool _canComplete;
+    private bool _canCancel;
+
+    private readonly Dictionary<Guid, int> _approvedEdits = new();
+
+    private bool _addItemVisible;
+    private List<StockTransferProductLookupDto> _availableProducts = new();
+    private Guid? _newItemProductId;
+    private int _newItemQty = 1;
+    private int? _selectedAvailableStock;
+
+    private bool _completeVisible;
+    private List<CompleteRow> _completeRows = new();
+
+    public class CompleteRow
+    {
+        public StockTransferItemDto Item { get; set; } = null!;
+        public int TransferNow { get; set; }
+        public int SourceStock { get; set; }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        _canCreate   = await AuthorizationService.IsGrantedAsync(OperationsPermissions.Transfers.Create);
+        _canApprove  = await AuthorizationService.IsGrantedAsync(OperationsPermissions.Transfers.Approve);
+        _canShip     = await AuthorizationService.IsGrantedAsync(OperationsPermissions.Transfers.Ship);
+        _canComplete = await AuthorizationService.IsGrantedAsync(OperationsPermissions.Transfers.Complete);
+        _canCancel   = await AuthorizationService.IsGrantedAsync(OperationsPermissions.Transfers.Cancel);
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            _transfer = await StockTransferAppService.GetAsync(TransferId);
+            _approvedEdits.Clear();
+            foreach (var i in _transfer.Items)
+            {
+                _approvedEdits[i.Id] = i.ApprovedQuantity ?? i.RequestedQuantity;
+            }
+        }
+        catch (Exception ex)
+        {
+            await HandleErrorAsync(ex);
+        }
+    }
+
+    private int GetApprovedEdit(StockTransferItemDto item)
+        => _approvedEdits.TryGetValue(item.Id, out var v) ? v : (item.ApprovedQuantity ?? item.RequestedQuantity);
+
+    private async Task CloseAsync()
+    {
+        if (OnClose.HasDelegate) await OnClose.InvokeAsync();
+    }
+
+    private async Task NotifyChanged()
+    {
+        if (Changed.HasDelegate) await Changed.InvokeAsync();
+    }
+
+    // ─── Item editing ───
+
+    private async Task OpenAddItem()
+    {
+        _newItemProductId = null;
+        _newItemQty = 1;
+        _selectedAvailableStock = null;
+        try
+        {
+            var products = await StockTransferAppService.GetSourceProductsAsync(TransferId);
+            var existing = _transfer!.Items.Select(i => i.ProductId).ToHashSet();
+            _availableProducts = products.Where(p => !existing.Contains(p.ProductId)).ToList();
+        }
+        catch (Exception ex)
+        {
+            await HandleErrorAsync(ex);
+        }
+        _addItemVisible = true;
+    }
+
+    private void OnAddItemProductChanged(Guid? id)
+    {
+        _newItemProductId = id;
+        _selectedAvailableStock = id.HasValue
+            ? _availableProducts.FirstOrDefault(p => p.ProductId == id.Value)?.QuantityOnHand
+            : null;
+    }
+
+    private void CloseAddItem() => _addItemVisible = false;
+
+    private async Task ConfirmAddItem()
+    {
+        if (!_newItemProductId.HasValue || _newItemQty <= 0)
+        {
+            Snackbar.Add(L["ThisFieldIsRequired", OpsL["Product"]], Severity.Warning);
+            return;
+        }
+        _saving = true;
+        try
+        {
+            await StockTransferAppService.AddItemAsync(TransferId, new AddStockTransferItemDto
+            {
+                ProductId = _newItemProductId.Value,
+                RequestedQuantity = _newItemQty
+            });
+            _addItemVisible = false;
+            await LoadAsync();
+            await NotifyChanged();
+        }
+        catch (Exception ex)
+        {
+            await HandleErrorAsync(ex);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task RemoveItemAsync(StockTransferItemDto item)
+    {
+        try
+        {
+            await StockTransferAppService.RemoveItemAsync(TransferId, item.Id);
+            await LoadAsync();
+            await NotifyChanged();
+        }
+        catch (Exception ex)
+        {
+            await HandleErrorAsync(ex);
+        }
+    }
+
+    private async Task SaveApprovedAsync(StockTransferItemDto item)
+    {
+        try
+        {
+            var qty = GetApprovedEdit(item);
+            await StockTransferAppService.UpdateApprovedQuantityAsync(TransferId, item.Id, new UpdateApprovedQuantityDto
+            {
+                ApprovedQuantity = qty
+            });
+            Snackbar.Add(OpsL["ApprovedQtyUpdated"], Severity.Success);
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            await HandleErrorAsync(ex);
+        }
+    }
+
+    // ─── Status actions ───
+
+    private async Task SubmitAsync() => await RunAsync(
+        () => StockTransferAppService.SubmitAsync(TransferId), OpsL["TransferSubmitted"], Severity.Success);
+
+    private async Task ApproveAsync() => await RunAsync(
+        () => StockTransferAppService.ApproveAsync(TransferId), OpsL["TransferApproved"], Severity.Success);
+
+    private async Task ShipAsync() => await RunAsync(
+        () => StockTransferAppService.ShipAsync(TransferId), OpsL["TransferShipped"], Severity.Success);
+
+    private async Task CancelAsync() => await RunAsync(
+        () => StockTransferAppService.CancelAsync(TransferId), OpsL["TransferCancelled"], Severity.Warning);
+
+    private async Task RunAsync(Func<Task<StockTransferDto>> action, string message, Severity severity)
+    {
+        _saving = true;
+        try
+        {
+            await action();
+            Snackbar.Add(message, severity);
+            await NotifyChanged();
+            await CloseAsync();
+        }
+        catch (Exception ex) { await HandleErrorAsync(ex); }
+        finally { _saving = false; }
+    }
+
+    // ─── Completion flow ───
+
+    private async Task OpenCompleteDialog()
+    {
+        try
+        {
+            var source = await StockTransferAppService.GetSourceProductsAsync(TransferId);
+            var stockByProduct = source.ToDictionary(p => p.ProductId, p => p.QuantityOnHand);
+
+            _completeRows = _transfer!.Items.Select(i => new CompleteRow
+            {
+                Item = i,
+                TransferNow = i.ApprovedQuantity ?? i.RequestedQuantity,
+                SourceStock = stockByProduct.GetValueOrDefault(i.ProductId, 0)
+            }).ToList();
+            _completeVisible = true;
+        }
+        catch (Exception ex)
+        {
+            await HandleErrorAsync(ex);
+        }
+    }
+
+    private void CloseComplete() => _completeVisible = false;
+
+    private void TransferAll()
+    {
+        foreach (var row in _completeRows)
+        {
+            row.TransferNow = row.Item.ApprovedQuantity ?? row.Item.RequestedQuantity;
+        }
+    }
+
+    private async Task ConfirmComplete()
+    {
+        var lines = _completeRows
+            .Select(r => new CompleteTransferLineDto { ItemId = r.Item.Id, TransferredQuantity = r.TransferNow })
+            .ToList();
+
+        _saving = true;
+        try
+        {
+            var updated = await StockTransferAppService.CompleteAsync(TransferId, new CompleteStockTransferDto { Lines = lines });
+            _completeVisible = false;
+            Snackbar.Add($"Transfer {updated.Reference} completed — stock moved between branches.", Severity.Success);
+            await NotifyChanged();
+            await CloseAsync();
+        }
+        catch (Exception ex) { await HandleErrorAsync(ex); }
+        finally { _saving = false; }
+    }
+
+    private static string StatusIcon(string status) => status switch
+    {
+        StockTransferStatuses.Draft => Icons.Material.Filled.EditNote,
+        StockTransferStatuses.Pending => Icons.Material.Filled.Send,
+        StockTransferStatuses.Approved => Icons.Material.Filled.CheckCircle,
+        StockTransferStatuses.InTransit => Icons.Material.Filled.LocalShipping,
+        StockTransferStatuses.Completed => Icons.Material.Filled.TaskAlt,
+        StockTransferStatuses.Cancelled => Icons.Material.Filled.Cancel,
+        _ => Icons.Material.Filled.HelpOutline
+    };
+}

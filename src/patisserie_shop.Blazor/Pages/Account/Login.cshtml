@@ -1,0 +1,163 @@
+@page
+@using Microsoft.AspNetCore.Mvc.Localization
+@using Volo.Abp.Account.Localization
+@using Volo.Abp.AspNetCore.Mvc.UI.Alerts
+@model Volo.Abp.Account.Web.Pages.Account.LoginModel
+@inject IHtmlLocalizer<AccountResource> L
+@inject IAlertManager AlertManager
+@{
+    Layout = "_LoginLayout";
+    var hasErrors = !ViewData.ModelState.IsValid || AlertManager.Alerts.Count > 0;
+}
+
+<div class="login-layout">
+
+    <!-- LEFT — brand panel -->
+    <div class="login-panel">
+        <div class="panel-deco"></div>
+        <div class="panel-top">
+            <div class="panel-brand">
+                <span class="panel-brand-mark">
+                    <span class="material-icons-outlined">storefront</span>
+                </span>
+                Patisserie
+            </div>
+        </div>
+        <div class="panel-body">
+            <h1 class="panel-headline">
+                Every pastry,<br>
+                every stock count,<br>
+                <em>accounted for.</em>
+            </h1>
+            <p class="panel-tagline">
+                Inventory, sales, suppliers and stock movements — all in one place,
+                so you can focus on what you bake.
+            </p>
+        </div>
+    </div>
+
+    <!-- RIGHT — form -->
+    <div class="login-form-side">
+
+        <!-- Top-right controls -->
+        <div class="login-form-top">
+            <button type="button" class="lang-btn">AR</button>
+            <button type="button" class="login-icon-btn" id="themeBtn" aria-label="Toggle theme">
+                <span class="material-icons-outlined" id="themeIcon">dark_mode</span>
+            </button>
+        </div>
+
+        <div class="login-card">
+            <h2 class="login-title">Sign in</h2>
+            <p class="login-sub">Welcome back — enter your credentials to continue.</p>
+
+            <!-- ABP alerts + model validation errors -->
+            <div class="login-error @(hasErrors ? "show" : "")" role="alert">
+                <span class="material-icons-outlined">error_outline</span>
+                <div>
+                    @foreach (var alert in AlertManager.Alerts)
+                    {
+                        <div>@alert.Text</div>
+                    }
+                    <div asp-validation-summary="All"></div>
+                </div>
+            </div>
+
+            <form method="post" asp-page="./Login">
+                <input asp-for="ReturnUrl" type="hidden" />
+                <input asp-for="ReturnUrlHash" type="hidden" />
+
+                <div class="login-field">
+                    <label class="login-label" asp-for="LoginInput.UserNameOrEmailAddress">
+                        Email or username
+                    </label>
+                    <div class="login-input-wrap">
+                        <span class="material-icons-outlined">mail_outline</span>
+                        <input asp-for="LoginInput.UserNameOrEmailAddress"
+                               type="text"
+                               placeholder="you@patisserie.com"
+                               autocomplete="username"
+                               autofocus />
+                    </div>
+                    <span asp-validation-for="LoginInput.UserNameOrEmailAddress" class="text-danger"></span>
+                </div>
+
+                <div class="login-field">
+                    <div class="login-label-row">
+                        <label class="login-label" asp-for="LoginInput.Password">Password</label>
+                        <a asp-page="./ForgotPassword"
+                           asp-route-returnUrl="@Model.ReturnUrl"
+                           asp-route-returnUrlHash="@Model.ReturnUrlHash"
+                           class="login-forgot">Forgot password?</a>
+                    </div>
+                    <div class="login-input-wrap">
+                        <span class="material-icons-outlined">lock_outline</span>
+                        <input asp-for="LoginInput.Password"
+                               type="password"
+                               placeholder="••••••••"
+                               autocomplete="current-password"
+                               id="loginPassword" />
+                        <button type="button" class="pw-toggle" id="pwToggle" aria-label="Show password">
+                            <span class="material-icons-outlined" id="pwIcon">visibility_off</span>
+                        </button>
+                    </div>
+                    <span asp-validation-for="LoginInput.Password" class="text-danger"></span>
+                </div>
+
+                <div class="remember-row">
+                    <input asp-for="LoginInput.RememberMe" type="checkbox" id="rememberMe" />
+                    <label class="remember-label" for="rememberMe">Keep me signed in</label>
+                </div>
+
+                <button type="submit" class="login-submit">
+                    <span class="material-icons-outlined">login</span>
+                    Sign in
+                </button>
+            </form>
+
+            <div class="login-footer">
+                Need access? <a href="mailto:admin@patisserie.com">Contact your administrator.</a>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+@section scripts {
+    <script>
+        // Theme toggle (shares the app's `warm-theme` localStorage key via theme-bridge.js)
+        (function () {
+            const root = document.documentElement;
+            const themeBtn = document.getElementById('themeBtn');
+            const themeIcon = document.getElementById('themeIcon');
+
+            function syncIcon() {
+                const isDark = root.getAttribute('data-theme') === 'dark';
+                themeIcon.textContent = isDark ? 'light_mode' : 'dark_mode';
+            }
+            syncIcon();
+
+            themeBtn.addEventListener('click', function () {
+                const isDark = root.getAttribute('data-theme') === 'dark';
+                if (window.applyDataTheme) {
+                    window.applyDataTheme(!isDark);
+                } else {
+                    root.setAttribute('data-theme', isDark ? 'light' : 'dark');
+                }
+                syncIcon();
+            });
+
+            // Password visibility toggle
+            const pwToggle = document.getElementById('pwToggle');
+            const pwInput = document.getElementById('loginPassword');
+            const pwIcon = document.getElementById('pwIcon');
+            if (pwToggle && pwInput) {
+                pwToggle.addEventListener('click', function () {
+                    const show = pwInput.type === 'password';
+                    pwInput.type = show ? 'text' : 'password';
+                    pwIcon.textContent = show ? 'visibility' : 'visibility_off';
+                });
+            }
+        })();
+    </script>
+}

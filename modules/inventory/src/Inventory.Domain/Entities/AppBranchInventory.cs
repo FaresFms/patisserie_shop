@@ -6,17 +6,20 @@ namespace Inventory.Entities;
 
 public class AppBranchInventory : AuditedAggregateRoot<Guid>
 {
-    public Guid BranchId { get; set; }
-    public Guid ProductId { get; set; }
-    public int QuantityOnHand { get; set; }
-    public int MinimumStock { get; set; }
-    public int? MaximumStock { get; set; }
-    public DateTime? LastRestockedDate { get; set; }
-    public DateTime? LastSoldDate { get; set; }
+    public Guid BranchId { get; private set; }
+    public Guid ProductId { get; private set; }
+    public int QuantityOnHand { get; private set; }
+    public int MinimumStock { get; internal set; }
+    public int? MaximumStock { get; internal set; }
+    public DateTime? LastRestockedDate { get; internal set; }
+    public DateTime? LastSoldDate { get; internal set; }
+
+    public bool IsOutOfStock => QuantityOnHand <= 0;
+    public bool IsLowStock => QuantityOnHand <= MinimumStock;
 
     protected AppBranchInventory() { }
 
-    public AppBranchInventory(
+    internal AppBranchInventory(
         Guid id,
         Guid branchId,
         Guid productId,
@@ -32,7 +35,7 @@ public class AppBranchInventory : AuditedAggregateRoot<Guid>
         MaximumStock = maximumStock;
     }
 
-    public void UpdateStock(int newQty)
+    internal void UpdateStock(int newQty)
     {
         var old = QuantityOnHand;
         QuantityOnHand = newQty;

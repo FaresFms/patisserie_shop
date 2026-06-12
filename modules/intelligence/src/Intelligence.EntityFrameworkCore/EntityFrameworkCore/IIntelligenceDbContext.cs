@@ -10,4 +10,5 @@ public interface IIntelligenceDbContext : IEfCoreDbContext
 {
     DbSet<AppInventoryRule> InventoryRules { get; }
     DbSet<AppDecisionLog> DecisionLogs { get; }
+    DbSet<AppProductVelocity> ProductVelocities { get; }
 }

@@ -1,0 +1,836 @@
+@using System.Threading.Tasks
+@using patisserie_shop.Dashboard
+@using Intelligence.Decisions
+@using ApexCharts
+@using Color = MudBlazor.Color
+@using Variant = MudBlazor.Variant
+@using Size = MudBlazor.Size
+@inherits patisserie_shopComponentBase
+@inject IAdminDashboardAppService AdminDashboardService
+@inject NavigationManager Nav
+
+<SoftCard Elevation="2" Class="pa-2 page-flat admin-dash">
+    <div class="page-head">
+        <div>
+            <h1 class="page-title">Admin Dashboard</h1>
+            <div class="page-sub">
+                @if (_lastRefresh.HasValue)
+                {
+                    <span>Across all branches · Last updated @_lastRefresh.Value.ToLocalTime().ToString("MMM d, HH:mm")</span>
+                }
+                else
+                {
+                    <span>Loading…</span>
+                }
+            </div>
+        </div>
+        <div class="page-head-actions">
+            <SoftButton Variant="Variant.Text" Color="Color.Primary"
+                        StartIcon="@Icons.Material.Filled.Refresh"
+                        OnClick="LoadAsync" Disabled="_loading">
+                @(_loading ? "Refreshing…" : "Refresh")
+            </SoftButton>
+        </div>
+    </div>
+
+    <SoftCardContent>
+
+        @if (_error != null)
+        {
+            <SoftAlert Severity="Severity.Error" Variant="Variant.Filled" Class="ma-4">
+                <strong>Failed to load dashboard:</strong> @_error
+            </SoftAlert>
+        }
+        else if (_data == null)
+        {
+            <div class="ad-skeleton-row">
+                @for (var i = 0; i < 5; i++)
+                {
+                    <SoftSkeleton SkeletonType="SkeletonType.Rectangle" Height="120px" Width="100%" />
+                }
+            </div>
+            <div class="ad-skeleton-row" style="margin-top:20px;">
+                <SoftSkeleton SkeletonType="SkeletonType.Rectangle" Height="320px" Width="100%" />
+                <SoftSkeleton SkeletonType="SkeletonType.Rectangle" Height="320px" Width="100%" />
+            </div>
+        }
+        else
+        {
+            @* ───────── ROW 1 — KPI Cards ───────── *@
+            <div class="ad-kpi-grid">
+                <div class="ad-kpi-card">
+                    <div class="ad-kpi-icon ad-kpi-icon--neutral">
+                        <SoftIcon Icon="@Icons.Material.Filled.Inventory2" />
+                    </div>
+                    <div class="ad-kpi-body">
+                        <div class="ad-kpi-value">@_data.TotalProducts</div>
+                        <div class="ad-kpi-label">Total Products</div>
+                        <div class="ad-kpi-sub">across @_data.TotalBranches branch@(_data.TotalBranches == 1 ? "" : "es")</div>
+                    </div>
+                </div>
+
+                <div class="ad-kpi-card ad-kpi-clickable @(_data.PendingDecisions > 0 ? "ad-kpi-warn" : "")"
+                     @onclick='() => Nav.NavigateTo("/intelligence/decision-log")'>
+                    <div class="ad-kpi-icon ad-kpi-icon--warn">
+                        <SoftIcon Icon="@Icons.Material.Filled.WarningAmber" />
+                    </div>
+                    <div class="ad-kpi-body">
+                        <div class="ad-kpi-value">@_data.PendingDecisions</div>
+                        <div class="ad-kpi-label">Pending Decisions</div>
+                        <div class="ad-kpi-sub">
+                            @if (_data.PendingDecisions == 0) { <span>all clear</span> }
+                            else { <span>need attention</span> }
+                        </div>
+                    </div>
+                </div>
+
+                <div class="ad-kpi-card @(_data.LowStockProductCount > 0 ? "ad-kpi-danger" : "")">
+                    <div class="ad-kpi-icon ad-kpi-icon--danger">
+                        <SoftIcon Icon="@Icons.Material.Filled.TrendingDown" />
+                    </div>
+                    <div class="ad-kpi-body">
+                        <div class="ad-kpi-value">@_data.LowStockProductCount</div>
+                        <div class="ad-kpi-label">Low Stock Products</div>
+                        <div class="ad-kpi-sub">below threshold</div>
+                    </div>
+                </div>
+
+                <div class="ad-kpi-card">
+                    <div class="ad-kpi-icon ad-kpi-icon--accent">
+                        @if (TodayDelta > 0)
+                        {
+                            <SoftIcon Icon="@Icons.Material.Filled.TrendingUp" />
+                        }
+                        else if (TodayDelta < 0)
+                        {
+                            <SoftIcon Icon="@Icons.Material.Filled.TrendingDown" />
+                        }
+                        else
+                        {
+                            <SoftIcon Icon="@Icons.Material.Filled.TrendingFlat" />
+                        }
+                    </div>
+                    <div class="ad-kpi-body">
+                        <div class="ad-kpi-value">@FormatMoney(_data.TodaySalesTotal)</div>
+                        <div class="ad-kpi-label">Today's Sales</div>
+                        <div class="ad-kpi-sub">
+                            @_data.TodaySalesCount sale@(_data.TodaySalesCount == 1 ? "" : "s")
+                            @if (_data.YesterdaySalesTotal > 0)
+                            {
+                                <span> · </span>
+                                <span class="@(TodayDelta >= 0 ? "ad-delta-up" : "ad-delta-down")">
+                                    @(TodayDelta >= 0 ? "+" : "")@TodayDelta.ToString("0")% vs yesterday
+                                </span>
+                            }
+                        </div>
+                    </div>
+                </div>
+
+                <div class="ad-kpi-card">
+                    <div class="ad-kpi-icon ad-kpi-icon--info">
+                        <SoftIcon Icon="@Icons.Material.Filled.LocalShipping" />
+                    </div>
+                    <div class="ad-kpi-body">
+                        <div class="ad-kpi-label">PO Pipeline</div>
+                        <div class="ad-pipeline">
+                            <span class="ad-pipe-dot ad-pipe-draft"></span>
+                            <span class="ad-pipe-num">@_data.PurchaseOrderPipeline.DraftCount</span><span class="ad-pipe-name">Draft</span>
+
+                            <span class="ad-pipe-dot ad-pipe-approved"></span>
+                            <span class="ad-pipe-num">@_data.PurchaseOrderPipeline.ApprovedCount</span><span class="ad-pipe-name">Approved</span>
+
+                            <span class="ad-pipe-dot ad-pipe-partial"></span>
+                            <span class="ad-pipe-num">@_data.PurchaseOrderPipeline.PartialReceivedCount</span><span class="ad-pipe-name">Receiving</span>
+                        </div>
+                        <div class="ad-kpi-sub">@_data.PurchaseOrderPipeline.SubmittedCount submitted · @_data.PurchaseOrderPipeline.ReceivedCount received</div>
+                    </div>
+                </div>
+            </div>
+
+            @* ───────── ROW 2 — Sales + Top Products | Decisions + Movements ───────── *@
+            <div class="ad-row-2">
+                <div class="ad-col-left">
+                    <section class="ad-section">
+                        <header class="ad-section-head">
+                            <div>
+                                <h2 class="ad-section-title">Sales — Last 7 Days</h2>
+                                <div class="ad-section-sub">@FormatMoney(_data.WeekSalesTotal) total this week</div>
+                            </div>
+                        </header>
+
+                        <div class="ad-chart">
+                            <ApexChart TItem="DailySalesDto" @key="_data" Options="_salesChartOptions" Height="260">
+                                <ApexPointSeries TItem="DailySalesDto"
+                                                 Items="_data.SalesLast7Days"
+                                                 Name="Sales"
+                                                 SeriesType="SeriesType.Area"
+                                                 XValue='@(d => d.Date.ToString("ddd"))'
+                                                 YValue="@(d => d.TotalAmount)" />
+                            </ApexChart>
+                        </div>
+                    </section>
+
+                    <section class="ad-section">
+                        <header class="ad-section-head">
+                            <div>
+                                <h2 class="ad-section-title">Top Selling Products</h2>
+                                <div class="ad-section-sub">Last 7 days</div>
+                            </div>
+                        </header>
+
+                        @if (_data.TopSellingProducts.Count == 0)
+                        {
+                            <div class="ad-empty">
+                                <SoftIcon Icon="@Icons.Material.Outlined.Inbox" />
+                                <span>No sales recorded in the last 7 days.</span>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="ad-topchart">
+                                <ApexChart TItem="TopProductDto" @key="_data" Options="_topProductsOptions" Height="280">
+                                    <ApexPointSeries TItem="TopProductDto"
+                                                     Items="_data.TopSellingProducts.Take(5).ToList()"
+                                                     Name="Qty Sold"
+                                                     SeriesType="SeriesType.Bar"
+                                                     XValue="@(p => p.ProductName)"
+                                                     YValue="@(p => p.TotalQuantitySold)" />
+                                </ApexChart>
+                            </div>
+                        }
+                    </section>
+                </div>
+
+                <div class="ad-col-right">
+                    <section class="ad-section">
+                        <header class="ad-section-head">
+                            <div>
+                                <h2 class="ad-section-title">Recent Decisions</h2>
+                                <div class="ad-section-sub">Pending items needing attention</div>
+                            </div>
+                            <a class="ad-section-link" href="/intelligence/decision-log">View all →</a>
+                        </header>
+
+                        @if (_data.RecentDecisions.Count == 0)
+                        {
+                            <div class="ad-empty ad-empty--success">
+                                <SoftIcon Icon="@Icons.Material.Filled.CheckCircle" />
+                                <span>All clear — no pending decisions.</span>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="ad-decisions">
+                                @foreach (var d in _data.RecentDecisions.Take(5))
+                                {
+                                    var typeClass = d.DecisionType.ToLowerInvariant();
+                                    <div class="ad-decision-card ad-dec-@typeClass">
+                                        <div class="ad-dec-head">
+                                            <SoftChip T="string" Size="Size.Small" Variant="Variant.Filled"
+                                                      Color="@DecisionTypeColor(d.DecisionType)">
+                                                @FormatDecisionType(d.DecisionType)
+                                            </SoftChip>
+                                            <span class="ad-dec-time">@TimeAgo(d.CreationTime)</span>
+                                        </div>
+                                        <div class="ad-dec-reason">@Truncate(d.Reasoning, 110)</div>
+                                        <div class="ad-dec-meta">
+                                            @if (!string.IsNullOrWhiteSpace(d.ProductName))
+                                            {
+                                                <span class="ad-dec-pill"><SoftIcon Icon="@Icons.Material.Outlined.Inventory2" />@d.ProductName</span>
+                                            }
+                                            @if (!string.IsNullOrWhiteSpace(d.BranchName))
+                                            {
+                                                <span class="ad-dec-pill"><SoftIcon Icon="@Icons.Material.Outlined.Storefront" />@d.BranchName</span>
+                                            }
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </section>
+
+                    <section class="ad-section">
+                        <header class="ad-section-head">
+                            <div>
+                                <h2 class="ad-section-title">Recent Activity</h2>
+                                <div class="ad-section-sub">Last @Math.Min(_data.RecentMovements.Count, 8) movements</div>
+                            </div>
+                        </header>
+
+                        @if (_data.RecentMovements.Count == 0)
+                        {
+                            <div class="ad-empty">
+                                <SoftIcon Icon="@Icons.Material.Outlined.Inbox" />
+                                <span>No recent stock activity.</span>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="ad-timeline">
+                                @foreach (var m in _data.RecentMovements.Take(8))
+                                {
+                                    var key = m.MovementType.ToLowerInvariant();
+                                    <div class="ad-tl-item">
+                                        <div class="ad-tl-dot ad-tl-@key"></div>
+                                        <div class="ad-tl-body">
+                                            <div class="ad-tl-line">
+                                                <strong>@FormatMovementType(m.MovementType)</strong>
+                                                <span class="@(m.Quantity >= 0 ? "ad-q-pos" : "ad-q-neg")">
+                                                    @(m.Quantity >= 0 ? "+" : "")@m.Quantity
+                                                </span>
+                                                <span class="ad-tl-name">@m.ProductName</span>
+                                            </div>
+                                            <div class="ad-tl-sub">
+                                                <span>@m.BranchName</span>
+                                                <span class="ad-tl-time">@TimeAgo(m.CreationTime)</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </section>
+                </div>
+            </div>
+
+            @* ───────── ROW 3 — Branch Performance ───────── *@
+            <section class="ad-section">
+                <header class="ad-section-head">
+                    <div>
+                        <h2 class="ad-section-title">Branch Performance</h2>
+                        <div class="ad-section-sub">Sorted by urgency · click a card to drill in</div>
+                    </div>
+                </header>
+
+                @if (_data.BranchPerformance.Count == 0)
+                {
+                    <div class="ad-empty">
+                        <SoftIcon Icon="@Icons.Material.Outlined.Store" />
+                        <span>No branches configured yet.</span>
+                    </div>
+                }
+                else
+                {
+                    <div class="ad-branch-grid">
+                        @foreach (var b in _data.BranchPerformance)
+                        {
+                            var total = b.LowStockItems + b.HealthyItems + b.ExcessItems;
+                            var lowPct = total > 0 ? (double)b.LowStockItems / total * 100.0 : 0;
+                            var healthyPct = total > 0 ? (double)b.HealthyItems / total * 100.0 : 0;
+                            var excessPct = total > 0 ? (double)b.ExcessItems / total * 100.0 : 0;
+
+                            var branchUrl = $"/inventory/branch-inventory?branchId={b.BranchId}";
+                            <div class="ad-branch-card" @onclick="() => Nav.NavigateTo(branchUrl)">
+                                <div class="ad-branch-head">
+                                    <SoftIcon Icon="@Icons.Material.Outlined.Store" />
+                                    <h3 class="ad-branch-name">@b.BranchName</h3>
+                                    @if (b.PendingAlerts > 0)
+                                    {
+                                        <span class="ad-branch-badge">@b.PendingAlerts</span>
+                                    }
+                                </div>
+
+                                <div class="ad-branch-bar">
+                                    <div class="ad-bb-low" style="width:@(lowPct.ToString("0.##"))%"></div>
+                                    <div class="ad-bb-ok"  style="width:@(healthyPct.ToString("0.##"))%"></div>
+                                    <div class="ad-bb-hi"  style="width:@(excessPct.ToString("0.##"))%"></div>
+                                </div>
+                                <div class="ad-branch-bar-legend">
+                                    <span><span class="ad-dot ad-dot-low"></span>@b.LowStockItems low</span>
+                                    <span><span class="ad-dot ad-dot-ok"></span>@b.HealthyItems healthy</span>
+                                    <span><span class="ad-dot ad-dot-hi"></span>@b.ExcessItems excess</span>
+                                </div>
+
+                                <div class="ad-branch-stats">
+                                    <div>
+                                        <div class="ad-stat-label">Today</div>
+                                        <div class="ad-stat-value">@FormatMoney(b.SalesToday)</div>
+                                    </div>
+                                    <div>
+                                        <div class="ad-stat-label">This Week</div>
+                                        <div class="ad-stat-value">@FormatMoney(b.SalesThisWeek)</div>
+                                    </div>
+                                    <div>
+                                        <div class="ad-stat-label">Stock Value</div>
+                                        <div class="ad-stat-value">@FormatMoney(b.TotalStockValue)</div>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+            </section>
+        }
+    </SoftCardContent>
+</SoftCard>
+
+<style>
+    .admin-dash { animation: ad-fade .25s ease-out; }
+    @@keyframes ad-fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+    .ad-skeleton-row {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 14px;
+        padding: 12px 32px 0;
+    }
+
+    /* ── KPI cards ── */
+    .ad-kpi-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 14px;
+        padding: 4px 32px 8px;
+    }
+    .ad-kpi-card {
+        display: flex;
+        align-items: flex-start;
+        gap: 14px;
+        padding: 16px 18px;
+        background: var(--surface);
+        border: 1px solid var(--bd-1);
+        border-radius: var(--r-md);
+        box-shadow: var(--shadow-sm);
+        transition: transform .15s, box-shadow .15s, border-color .15s;
+        position: relative;
+        overflow: hidden;
+    }
+    .ad-kpi-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
+    .ad-kpi-clickable { cursor: pointer; }
+    .ad-kpi-warn { border-color: var(--accent-line); background: var(--accent-soft); }
+    .ad-kpi-danger { border-color: rgba(179, 84, 58, .35); }
+
+    .ad-kpi-icon {
+        width: 42px; height: 42px;
+        flex-shrink: 0;
+        border-radius: var(--r-sm);
+        display: flex; align-items: center; justify-content: center;
+    }
+    .ad-kpi-icon .mud-icon-root { font-size: 22px; }
+    .ad-kpi-icon--neutral { background: var(--hover); color: var(--fg-2); }
+    .ad-kpi-icon--warn    { background: rgba(200, 156, 79, .12); color: #c89c4f; }
+    .ad-kpi-icon--danger  { background: rgba(179, 84, 58, .12); color: #b3543a; }
+    .ad-kpi-icon--accent  { background: var(--accent-soft); color: var(--accent); }
+    .ad-kpi-icon--info    { background: rgba(74, 125, 168, .12); color: #4a7da8; }
+
+    .ad-kpi-body { flex: 1; min-width: 0; }
+    .ad-kpi-value {
+        font-family: var(--font-serif);
+        font-size: 28px;
+        font-weight: 600;
+        color: var(--fg-1);
+        line-height: 1;
+        font-variant-numeric: tabular-nums;
+    }
+    .ad-kpi-label {
+        font-size: 11.5px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--fg-3);
+        margin-top: 6px;
+    }
+    .ad-kpi-sub { font-size: 12.5px; color: var(--fg-2); margin-top: 2px; }
+    .ad-delta-up   { color: var(--success, #6b8e4e); font-weight: 600; }
+    .ad-delta-down { color: var(--danger, #b3543a); font-weight: 600; }
+
+    .ad-pipeline {
+        margin-top: 6px;
+        display: grid;
+        grid-template-columns: auto auto 1fr auto auto 1fr auto auto 1fr;
+        gap: 4px 6px;
+        align-items: center;
+        font-size: 13px;
+    }
+    .ad-pipe-dot { width: 8px; height: 8px; border-radius: 50%; }
+    .ad-pipe-draft    { background: var(--fg-4); }
+    .ad-pipe-approved { background: #4a7da8; }
+    .ad-pipe-partial  { background: #c89c4f; }
+    .ad-pipe-num  { font-weight: 600; font-variant-numeric: tabular-nums; color: var(--fg-1); }
+    .ad-pipe-name { color: var(--fg-3); font-size: 11.5px; text-transform: uppercase; letter-spacing: .04em; }
+
+    /* ── Row 2 split ── */
+    .ad-row-2 {
+        display: grid;
+        grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+        gap: 18px;
+        padding: 14px 32px 0;
+    }
+    @@media (max-width: 1100px) {
+        .ad-row-2 { grid-template-columns: 1fr; }
+    }
+    .ad-col-left, .ad-col-right { display: flex; flex-direction: column; gap: 18px; }
+
+    .ad-section {
+        background: var(--surface);
+        border: 1px solid var(--bd-1);
+        border-radius: var(--r-md);
+        box-shadow: var(--shadow-sm);
+        padding: 16px 18px;
+    }
+    .ad-section-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 10px;
+        margin-bottom: 14px;
+    }
+    .ad-section-title {
+        font-family: var(--font-serif);
+        font-size: 18px;
+        font-weight: 600;
+        color: var(--fg-1);
+        margin: 0;
+    }
+    .ad-section-sub {
+        font-size: 12.5px;
+        color: var(--fg-3);
+        margin-top: 2px;
+    }
+    .ad-section-link {
+        font-size: 12.5px;
+        color: var(--accent);
+        text-decoration: none;
+        white-space: nowrap;
+    }
+    .ad-section-link:hover { text-decoration: underline; }
+
+    /* ── Charts (ApexCharts) ── */
+    .ad-chart { min-height: 260px; }
+    .ad-topchart { min-height: 280px; }
+    .ad-chart .apexcharts-svg, .ad-topchart .apexcharts-svg { background: transparent !important; }
+
+    /* ── Decisions cards ── */
+    .ad-decisions { display: flex; flex-direction: column; gap: 10px; }
+    .ad-decision-card {
+        padding: 10px 12px;
+        background: var(--bg-2);
+        border: 1px solid var(--bd-1);
+        border-left: 3px solid var(--accent);
+        border-radius: var(--r-sm);
+    }
+    .ad-dec-lowstockalert    { border-left-color: #c89c4f; }
+    .ad-dec-excessstockalert { border-left-color: #4a7da8; }
+    .ad-dec-deadstockflag    { border-left-color: #b3543a; }
+    .ad-dec-transfersuggestion { border-left-color: #4a8e8e; }
+    .ad-dec-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+    .ad-dec-time { font-size: 11.5px; color: var(--fg-3); }
+    .ad-dec-reason {
+        font-family: var(--font-serif);
+        font-size: 14px;
+        color: var(--fg-1);
+        line-height: 1.4;
+        margin-bottom: 6px;
+    }
+    .ad-dec-meta { display: flex; flex-wrap: wrap; gap: 6px; }
+    .ad-dec-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 11.5px;
+        color: var(--fg-2);
+        background: var(--hover);
+        padding: 2px 8px;
+        border-radius: 999px;
+    }
+    .ad-dec-pill .mud-icon-root { font-size: 12px; }
+
+    /* ── Timeline ── */
+    .ad-timeline { display: flex; flex-direction: column; gap: 8px; }
+    .ad-tl-item { display: flex; gap: 10px; padding: 4px 0; }
+    .ad-tl-dot {
+        width: 8px; height: 8px;
+        border-radius: 50%;
+        margin-top: 7px;
+        flex-shrink: 0;
+    }
+    .ad-tl-purchase     { background: #6b8e4e; }
+    .ad-tl-sale         { background: #4a7da8; }
+    .ad-tl-transferin   { background: #4a8e8e; }
+    .ad-tl-transferout  { background: #c89c4f; }
+    .ad-tl-manualadjustment { background: var(--fg-4); }
+    .ad-tl-body { flex: 1; min-width: 0; }
+    .ad-tl-line {
+        display: flex;
+        align-items: baseline;
+        gap: 8px;
+        font-size: 13.5px;
+        color: var(--fg-1);
+        flex-wrap: wrap;
+    }
+    .ad-tl-line strong { color: var(--fg-1); font-weight: 600; }
+    .ad-tl-name { color: var(--fg-2); }
+    .ad-q-pos { color: var(--success, #6b8e4e); font-weight: 600; font-variant-numeric: tabular-nums; }
+    .ad-q-neg { color: var(--danger, #b3543a); font-weight: 600; font-variant-numeric: tabular-nums; }
+    .ad-tl-sub { display: flex; gap: 10px; font-size: 11.5px; color: var(--fg-3); margin-top: 2px; }
+    .ad-tl-time { margin-left: auto; }
+
+    /* ── Empty states ── */
+    .ad-empty {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 18px 12px;
+        color: var(--fg-3);
+        font-size: 13px;
+        justify-content: center;
+    }
+    .ad-empty .mud-icon-root { font-size: 22px; }
+    .ad-empty--success { color: var(--success, #6b8e4e); }
+    .ad-empty--success .mud-icon-root { color: var(--success, #6b8e4e); }
+
+    /* ── Branch cards ── */
+    .ad-branch-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+        gap: 14px;
+    }
+    .ad-branch-card {
+        padding: 14px;
+        background: var(--bg-2);
+        border: 1px solid var(--bd-1);
+        border-radius: var(--r-md);
+        cursor: pointer;
+        transition: transform .15s, box-shadow .15s, border-color .15s;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+    .ad-branch-card:hover {
+        transform: translateY(-2px);
+        box-shadow: var(--shadow-md);
+        border-color: var(--accent-line);
+    }
+    .ad-branch-head {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    .ad-branch-head .mud-icon-root { color: var(--accent); font-size: 18px; }
+    .ad-branch-name {
+        font-family: var(--font-serif);
+        font-size: 16px;
+        font-weight: 600;
+        color: var(--fg-1);
+        margin: 0;
+        flex: 1;
+    }
+    .ad-branch-badge {
+        background: #c89c4f;
+        color: white;
+        font-size: 11px;
+        font-weight: 700;
+        padding: 2px 8px;
+        border-radius: 999px;
+        font-variant-numeric: tabular-nums;
+    }
+    .ad-branch-bar {
+        display: flex;
+        height: 8px;
+        border-radius: 4px;
+        overflow: hidden;
+        background: var(--hover);
+    }
+    .ad-bb-low { background: #b3543a; }
+    .ad-bb-ok  { background: #6b8e4e; }
+    .ad-bb-hi  { background: #4a7da8; }
+    .ad-branch-bar-legend {
+        display: flex;
+        gap: 12px;
+        font-size: 11.5px;
+        color: var(--fg-3);
+    }
+    .ad-branch-bar-legend span { display: inline-flex; align-items: center; gap: 4px; }
+    .ad-dot { width: 8px; height: 8px; border-radius: 50%; }
+    .ad-dot-low { background: #b3543a; }
+    .ad-dot-ok  { background: #6b8e4e; }
+    .ad-dot-hi  { background: #4a7da8; }
+
+    .ad-branch-stats {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px;
+        margin-top: 4px;
+        padding-top: 10px;
+        border-top: 1px solid var(--bd-1);
+    }
+    .ad-stat-label {
+        font-size: 10.5px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: .05em;
+        color: var(--fg-3);
+    }
+    .ad-stat-value {
+        font-family: var(--font-serif);
+        font-size: 15px;
+        font-weight: 600;
+        color: var(--fg-1);
+        font-variant-numeric: tabular-nums;
+        margin-top: 2px;
+    }
+</style>
+
+@code {
+    private AdminDashboardDto? _data;
+    private bool _loading;
+    private DateTime? _lastRefresh;
+    private string? _error;
+
+    // Warm-theme chart styling. ApexCharts cannot read CSS custom properties,
+    // so the hex values below mirror glass-theme.css:
+    //   --accent #c8633f (terracotta) · --fg-3 #8a7e6e (mid-tone, legible in light & dark)
+    private readonly ApexChartOptions<DailySalesDto> _salesChartOptions = new()
+    {
+        Chart = new ApexCharts.Chart
+        {
+            Toolbar = new ApexCharts.Toolbar { Show = false },
+            Background = "transparent",
+            FontFamily = "Inter, sans-serif",
+            ForeColor = "#8a7e6e"
+        },
+        Colors = new List<string> { "#c8633f" },
+        Stroke = new ApexCharts.Stroke { Curve = ApexCharts.Curve.Smooth, Width = 3 },
+        DataLabels = new ApexCharts.DataLabels { Enabled = false },
+        Fill = new ApexCharts.Fill
+        {
+            Type = ApexCharts.FillType.Gradient,
+            Gradient = new ApexCharts.FillGradient
+            {
+                ShadeIntensity = 0.4,
+                OpacityFrom = 0.35,
+                OpacityTo = 0.05
+            }
+        },
+        Grid = new ApexCharts.Grid
+        {
+            BorderColor = "rgba(138, 126, 110, 0.25)",
+            StrokeDashArray = 3
+        },
+        Legend = new ApexCharts.Legend { Show = false },
+        Xaxis = new ApexCharts.XAxis
+        {
+            AxisBorder = new ApexCharts.AxisBorder { Show = false },
+            AxisTicks = new ApexCharts.AxisTicks { Show = false }
+        },
+        Yaxis = new List<ApexCharts.YAxis>
+        {
+            new ApexCharts.YAxis
+            {
+                Labels = new ApexCharts.YAxisLabels
+                {
+                    Formatter = "function (value) { return '$' + Math.round(value).toLocaleString(); }"
+                }
+            }
+        }
+    };
+
+    private readonly ApexChartOptions<TopProductDto> _topProductsOptions = new()
+    {
+        Chart = new ApexCharts.Chart
+        {
+            Toolbar = new ApexCharts.Toolbar { Show = false },
+            Background = "transparent",
+            FontFamily = "Inter, sans-serif",
+            ForeColor = "#8a7e6e"
+        },
+        Colors = new List<string> { "#c8633f" },
+        PlotOptions = new ApexCharts.PlotOptions
+        {
+            Bar = new ApexCharts.PlotOptionsBar
+            {
+                Horizontal = true,
+                BorderRadius = 4,
+                BarHeight = "55%"
+            }
+        },
+        DataLabels = new ApexCharts.DataLabels { Enabled = false },
+        Grid = new ApexCharts.Grid
+        {
+            BorderColor = "rgba(138, 126, 110, 0.25)",
+            StrokeDashArray = 3
+        },
+        Legend = new ApexCharts.Legend { Show = false }
+    };
+
+    private double TodayDelta
+    {
+        get
+        {
+            if (_data == null) return 0;
+            if (_data.YesterdaySalesTotal <= 0) return _data.TodaySalesTotal > 0 ? 100 : 0;
+            return (double)((_data.TodaySalesTotal - _data.YesterdaySalesTotal) / _data.YesterdaySalesTotal) * 100.0;
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error = null;
+        try
+        {
+            _data = await AdminDashboardService.GetAdminDashboardAsync();
+            _lastRefresh = DateTime.UtcNow;
+        }
+        catch (Exception ex)
+        {
+            _error = $"{ex.GetType().Name}: {ex.Message}";
+            Console.Error.WriteLine($"[AdminDashboard] {ex}");
+            await HandleErrorAsync(ex);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private static string FormatMoney(decimal v) => v.ToString("C0", System.Globalization.CultureInfo.GetCultureInfo("en-US"));
+
+    private static string Truncate(string s, int max)
+        => string.IsNullOrEmpty(s) || s.Length <= max ? s : s[..max].TrimEnd() + "…";
+
+    private static Color DecisionTypeColor(string type) => type switch
+    {
+        DecisionTypes.LowStockAlert => Color.Warning,
+        DecisionTypes.ExcessStockAlert => Color.Info,
+        DecisionTypes.DeadStockFlag => Color.Error,
+        DecisionTypes.TransferSuggestion => Color.Tertiary,
+        DecisionTypes.ReorderSuggestion => Color.Primary,
+        _ => Color.Default
+    };
+
+    private static string FormatDecisionType(string type) => type switch
+    {
+        DecisionTypes.LowStockAlert => "Low Stock",
+        DecisionTypes.ExcessStockAlert => "Excess Stock",
+        DecisionTypes.DeadStockFlag => "Dead Stock",
+        DecisionTypes.TransferSuggestion => "Transfer",
+        DecisionTypes.ReorderSuggestion => "Reorder",
+        _ => type
+    };
+
+    private static string FormatMovementType(string type) => type switch
+    {
+        "Purchase" => "Purchase",
+        "Sale" => "Sale",
+        "TransferIn" => "Transfer In",
+        "TransferOut" => "Transfer Out",
+        "ManualAdjustment" => "Adjustment",
+        _ => type
+    };
+
+    private static string TimeAgo(DateTime utc)
+    {
+        var diff = DateTime.UtcNow - utc;
+        if (diff.TotalSeconds < 60) return "just now";
+        if (diff.TotalMinutes < 60) return $"{(int)diff.TotalMinutes}m ago";
+        if (diff.TotalHours < 24) return $"{(int)diff.TotalHours}h ago";
+        if (diff.TotalDays < 2) return "yesterday";
+        return $"{(int)diff.TotalDays}d ago";
+    }
+}

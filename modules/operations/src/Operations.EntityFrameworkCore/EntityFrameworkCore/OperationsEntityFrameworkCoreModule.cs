@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
+using Operations.Entities;
 using Volo.Abp.EntityFrameworkCore;
 using Volo.Abp.Modularity;
 
@@ -15,10 +16,8 @@ public class OperationsEntityFrameworkCoreModule : AbpModule
         context.Services.AddAbpDbContext<OperationsDbContext>(options =>
         {
             options.AddDefaultRepositories<IOperationsDbContext>();
-            
-            /* Add custom repositories here. Example:
-            * options.AddRepository<Question, EfCoreQuestionRepository>();
-            */
+            options.AddRepository<AppSale, SaleRepository>();
+            options.AddRepository<AppStockTransfer, StockTransferRepository>();
         });
     }
 }

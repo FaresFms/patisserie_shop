@@ -36,6 +36,9 @@ namespace patisserie_shop.Migrations
                     b.Property<Guid?>("AcknowledgedByUserId")
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("BranchId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("ConcurrencyStamp")
                         .IsConcurrencyToken()
                         .IsRequired()
@@ -51,8 +54,18 @@ namespace patisserie_shop.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("CreatorId");
 
+                    b.Property<int?>("DaysWithoutSale")
+                        .HasColumnType("integer");
+
                     b.Property<string>("DecisionType")
                         .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<Guid?>("ExecutedActionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ExecutedActionType")
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");
 
@@ -60,6 +73,13 @@ namespace patisserie_shop.Migrations
                         .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("ExtraProperties");
+
+                    b.Property<string>("Outcome")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<DateTime?>("OutcomeEvaluatedAt")
+                        .HasColumnType("timestamp without time zone");
 
                     b.Property<Guid>("ProductId")
                         .HasColumnType("uuid");
@@ -72,18 +92,28 @@ namespace patisserie_shop.Migrations
                     b.Property<Guid>("RuleId")
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("SourceBranchId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("Status")
                         .IsRequired()
-                        .ValueGeneratedOnAdd()
                         .HasMaxLength(32)
-                        .HasColumnType("character varying(32)")
-                        .HasDefaultValue("Pending");
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<int?>("StockAtEvaluation")
+                        .HasColumnType("integer");
 
                     b.Property<string>("SuggestedAction")
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)");
 
+                    b.Property<Guid?>("TargetBranchId")
+                        .HasColumnType("uuid");
+
                     b.HasKey("Id");
+
+                    b.HasIndex("BranchId")
+                        .HasDatabaseName("IX_DecisionLogs_Branch");
 
                     b.HasIndex("DecisionType")
                         .HasDatabaseName("IX_DecisionLogs_Type");
@@ -105,6 +135,11 @@ namespace patisserie_shop.Migrations
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
+
+                    b.Property<string>("ActionMode")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
 
                     b.Property<Guid?>("BranchId")
                         .HasColumnType("uuid");
@@ -192,6 +227,81 @@ namespace patisserie_shop.Migrations
                         .HasDatabaseName("IX_InventoryRules_Type");
 
                     b.ToTable("IntelligenceInventoryRules", (string)null);
+                });
+
+            modelBuilder.Entity("Intelligence.Entities.AppProductVelocity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AbcClass")
+                        .IsRequired()
+                        .HasMaxLength(1)
+                        .HasColumnType("character varying(1)");
+
+                    b.Property<decimal>("AvgDailySales30")
+                        .HasPrecision(9, 2)
+                        .HasColumnType("numeric(9,2)");
+
+                    b.Property<decimal>("AvgDailySales7")
+                        .HasPrecision(9, 2)
+                        .HasColumnType("numeric(9,2)");
+
+                    b.Property<Guid>("BranchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("ComputedAtUtc")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<Guid>("ProductId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("QuantitySold30")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("Revenue30")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<decimal>("WeekdayIndexFri")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
+                    b.Property<decimal>("WeekdayIndexMon")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
+                    b.Property<decimal>("WeekdayIndexSat")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
+                    b.Property<decimal>("WeekdayIndexSun")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
+                    b.Property<decimal>("WeekdayIndexThu")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
+                    b.Property<decimal>("WeekdayIndexTue")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
+                    b.Property<decimal>("WeekdayIndexWed")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BranchId")
+                        .HasDatabaseName("IX_ProductVelocities_Branch");
+
+                    b.HasIndex("ProductId", "BranchId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_ProductVelocities_Product_Branch");
+
+                    b.ToTable("IntelligenceProductVelocities", (string)null);
                 });
 
             modelBuilder.Entity("Inventory.Entities.AppBranch", b =>
@@ -490,6 +600,9 @@ namespace patisserie_shop.Migrations
                     b.Property<decimal>("SalePrice")
                         .HasColumnType("numeric");
 
+                    b.Property<int?>("ShelfLifeDays")
+                        .HasColumnType("integer");
+
                     b.Property<string>("Unit")
                         .IsRequired()
                         .HasMaxLength(32)
@@ -501,6 +614,79 @@ namespace patisserie_shop.Migrations
                         .IsUnique();
 
                     b.ToTable("InventoryProducts", (string)null);
+                });
+
+            modelBuilder.Entity("Inventory.Entities.AppStockBatch", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("BatchNumber")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<Guid>("BranchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ConcurrencyStamp")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("ConcurrencyStamp");
+
+                    b.Property<DateTime>("CreationTime")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("CreationTime");
+
+                    b.Property<Guid?>("CreatorId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("CreatorId");
+
+                    b.Property<DateTime>("ExpiryDate")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("ExtraProperties")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("ExtraProperties");
+
+                    b.Property<DateTime?>("LastModificationTime")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("LastModificationTime");
+
+                    b.Property<Guid?>("LastModifierId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("LastModifierId");
+
+                    b.Property<Guid>("ProductId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("QuantityReceived")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("QuantityRemaining")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("SourceId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("SourceType")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ExpiryDate")
+                        .HasDatabaseName("IX_StockBatches_Expiry");
+
+                    b.HasIndex("BranchId", "ProductId", "ExpiryDate")
+                        .HasDatabaseName("IX_StockBatches_Branch_Product_Expiry");
+
+                    b.ToTable("InventoryStockBatches", (string)null);
                 });
 
             modelBuilder.Entity("Inventory.Entities.AppStockMovement", b =>
@@ -542,6 +728,18 @@ namespace patisserie_shop.Migrations
                         .HasColumnType("character varying(512)");
 
                     b.Property<Guid>("ProductId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Quantity")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("QuantityAfter")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("QuantityBefore")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("ReferenceId")
                         .HasColumnType("uuid");
 
                     b.Property<string>("ReferenceType")
@@ -624,6 +822,9 @@ namespace patisserie_shop.Migrations
                     b.Property<Guid?>("LastModifierId")
                         .HasColumnType("uuid")
                         .HasColumnName("LastModifierId");
+
+                    b.Property<int>("LeadTimeDays")
+                        .HasColumnType("integer");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -728,8 +929,12 @@ namespace patisserie_shop.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("OrderDate");
+
                     b.HasIndex("PONumber")
                         .IsUnique();
+
+                    b.HasIndex("Status");
 
                     b.ToTable("OperationsPurchaseOrders", (string)null);
                 });
@@ -840,8 +1045,12 @@ namespace patisserie_shop.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("BranchId");
+
                     b.HasIndex("InvoiceNumber")
                         .IsUnique();
+
+                    b.HasIndex("SaleDate");
 
                     b.ToTable("OperationsSales", (string)null);
                 });

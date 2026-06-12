@@ -1,0 +1,60 @@
+# Continuous integration for the patisserie_shop solution.
+#
+# Builds the whole .slnx (host app + inventory/operations/intelligence modules)
+# and runs the test projects under test/. The EF Core integration tests use an
+# in-memory SQLite database (see test/patisserie_shop.EntityFrameworkCore.Tests/
+# EntityFrameworkCore/patisserie_shopEntityFrameworkCoreTestModule.cs), so no
+# PostgreSQL service container is required.
+
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - "feat/**"
+      - "fix/**"
+  pull_request:
+    branches:
+      - main
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+
+jobs:
+  build-and-test:
+    name: Build & Test (Release)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 10 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', 'common.props', 'modules/*/common.props', 'NuGet.Config') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
+
+      - name: Restore
+        run: dotnet restore patisserie_shop.slnx
+
+      - name: Build
+        run: dotnet build patisserie_shop.slnx --no-restore -c Release
+
+      - name: Test
+        run: dotnet test patisserie_shop.slnx --no-build -c Release --verbosity normal

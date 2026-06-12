@@ -1,0 +1,372 @@
+@using System
+@using System.Collections.Generic
+@using System.Linq
+@using System.Threading.Tasks
+@using Microsoft.AspNetCore.Authorization
+@using Intelligence.Decisions
+@using Intelligence.Localization
+@using Intelligence.Permissions
+@using Microsoft.Extensions.Localization
+@using patisserie_shop.Blazor.Services
+@using Color = MudBlazor.Color
+@using Size = MudBlazor.Size
+@using Placement = MudBlazor.Placement
+@namespace patisserie_shop.Blazor.Components.Layout
+@inherits patisserie_shopComponentBase
+@implements IDisposable
+@inject DecisionNotificationBridge Bridge
+@inject IDecisionLogAppService DecisionLogAppService
+@inject ISnackbar Snackbar
+@inject NavigationManager Navigation
+@inject IStringLocalizer<IntelligenceResource> IntL
+
+@if (_canView)
+{
+    <div class="notif-bell">
+        <SoftTooltip Text="@L["Notifications"]" Placement="Placement.Bottom">
+            <SoftBadge Content="@_pendingCount"
+                       Max="99"
+                       Color="Color.Error"
+                       Overlap="true"
+                       Visible="@(_pendingCount > 0)">
+                <SoftIconButton Icon="@(_open ? Icons.Material.Filled.Notifications : Icons.Material.Outlined.Notifications)"
+                                Color="Color.Inherit"
+                                Size="Size.Medium"
+                                OnClick="ToggleDropdownAsync" />
+            </SoftBadge>
+        </SoftTooltip>
+
+        @if (_open)
+        {
+            <div class="notif-backdrop" @onclick="CloseDropdown"></div>
+            <div class="notif-popover" @onclick:stopPropagation="true">
+                <div class="notif-head">
+                    <span class="notif-head-title">@L["Notifications"]</span>
+                    @if (_pendingCount > 0)
+                    {
+                        <span class="notif-head-count">@_pendingCount @L["Notifications:Pending"]</span>
+                    }
+                </div>
+
+                @if (_recent.Count == 0)
+                {
+                    <div class="notif-empty">
+                        <SoftIcon Icon="@Icons.Material.Outlined.NotificationsNone" Size="Size.Medium" />
+                        <span>@L["Notifications:Empty"]</span>
+                    </div>
+                }
+                else
+                {
+                    <div class="notif-list">
+                        @foreach (var item in _recent)
+                        {
+                            <div class="notif-item" @onclick="() => GoToDecisionLog()">
+                                <span class="notif-dot" style="background:@TypeColor(item.DecisionType);"></span>
+                                <div class="notif-item-body">
+                                    <div class="notif-item-type">@TypeLabel(item.DecisionType)</div>
+                                    <div class="notif-item-text">
+                                        @item.ProductName
+                                        @if (!string.IsNullOrWhiteSpace(item.BranchName))
+                                        {
+                                            <span class="notif-item-branch"> · @item.BranchName</span>
+                                        }
+                                    </div>
+                                </div>
+                                <span class="notif-item-time">@RelativeTime(item.CreationTime)</span>
+                            </div>
+                        }
+                    </div>
+                }
+
+                <div class="notif-foot">
+                    <span class="notif-view-all" @onclick="() => GoToDecisionLog()">@L["Notifications:ViewAll"]</span>
+                </div>
+            </div>
+        }
+    </div>
+
+    <style>
+        .notif-bell {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+            margin-right: 2px;
+        }
+
+        .notif-backdrop {
+            position: fixed;
+            inset: 0;
+            z-index: 1399;
+            background: transparent;
+        }
+
+        .notif-popover {
+            position: absolute;
+            top: calc(100% + 10px);
+            right: 0;
+            width: 340px;
+            max-width: 90vw;
+            z-index: 1400;
+            background: var(--surface);
+            border: 1px solid var(--bd-2);
+            border-radius: var(--r-md);
+            box-shadow: var(--shadow-md);
+            overflow: hidden;
+        }
+
+        .notif-head {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            gap: 8px;
+            padding: 10px 14px;
+            border-bottom: 1px solid var(--bd-1);
+        }
+
+        .notif-head-title {
+            font-family: var(--font-serif);
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: var(--fg-1);
+        }
+
+        .notif-head-count {
+            font-size: 0.72rem;
+            color: var(--fg-3);
+        }
+
+        .notif-list {
+            max-height: 320px;
+            overflow-y: auto;
+        }
+
+        .notif-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            padding: 10px 14px;
+            cursor: pointer;
+            border-bottom: 1px solid var(--bd-1);
+        }
+
+        .notif-item:last-child {
+            border-bottom: none;
+        }
+
+        .notif-item:hover {
+            background: var(--hover);
+        }
+
+        .notif-dot {
+            flex: 0 0 auto;
+            width: 9px;
+            height: 9px;
+            border-radius: 50%;
+            margin-top: 5px;
+        }
+
+        .notif-item-body {
+            flex: 1 1 auto;
+            min-width: 0;
+        }
+
+        .notif-item-type {
+            font-size: 0.78rem;
+            font-weight: 600;
+            color: var(--fg-1);
+            line-height: 1.3;
+        }
+
+        .notif-item-text {
+            font-size: 0.74rem;
+            color: var(--fg-2);
+            line-height: 1.35;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .notif-item-branch {
+            color: var(--fg-3);
+        }
+
+        .notif-item-time {
+            flex: 0 0 auto;
+            font-size: 0.7rem;
+            color: var(--fg-4);
+            font-variant-numeric: tabular-nums;
+            margin-top: 1px;
+        }
+
+        .notif-empty {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
+            padding: 26px 14px;
+            color: var(--fg-3);
+            font-size: 0.8rem;
+        }
+
+        .notif-foot {
+            padding: 8px 14px;
+            border-top: 1px solid var(--bd-1);
+            text-align: center;
+        }
+
+        .notif-view-all {
+            font-size: 0.78rem;
+            font-weight: 600;
+            color: var(--accent);
+            cursor: pointer;
+        }
+
+        .notif-view-all:hover {
+            color: var(--accent-hover);
+            text-decoration: underline;
+        }
+    </style>
+}
+
+@code {
+    private const int RecentItemsCount = 8;
+
+    private bool _canView;
+    private bool _subscribed;
+    private bool _open;
+    private int _pendingCount;
+    private List<DecisionLogDto> _recent = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _canView = await AuthorizationService.IsGrantedAsync(IntelligencePermissions.DecisionLogs.Default);
+        if (!_canView)
+        {
+            return;
+        }
+
+        await RefreshAsync();
+
+        Bridge.DecisionMade += OnDecisionMade;
+        _subscribed = true;
+    }
+
+    private async Task RefreshAsync()
+    {
+        var summary = await DecisionLogAppService.GetSummaryAsync();
+
+        var pending = await DecisionLogAppService.GetListAsync(new GetDecisionLogsInput
+        {
+            Status = DecisionLogStatuses.Pending,
+            Sorting = "CreationTime desc",
+            SkipCount = 0,
+            MaxResultCount = RecentItemsCount
+        });
+
+        _pendingCount = summary.TotalPending;
+        _recent = pending.Items.ToList();
+    }
+
+    /// <summary>
+    /// Fires on a non-circuit thread (event bus). All UI work is marshalled
+    /// through InvokeAsync; visibility is enforced by re-querying the already
+    /// branch-scoped app service and only toasting when the new decision shows
+    /// up in this user's visible pending list.
+    /// </summary>
+    private void OnDecisionMade(DecisionNotification notification)
+    {
+        _ = InvokeAsync(async () =>
+        {
+            try
+            {
+                await RefreshAsync();
+
+                var visible = _recent.FirstOrDefault(d => d.Id == notification.DecisionLogId);
+                if (visible != null)
+                {
+                    Snackbar.Add(
+                        L["Notifications:NewDecisionToast", TypeLabel(visible.DecisionType), visible.ProductName ?? string.Empty],
+                        Severity.Info);
+                }
+
+                StateHasChanged();
+            }
+            catch
+            {
+                // The circuit may be tearing down — ignore.
+            }
+        });
+    }
+
+    private async Task ToggleDropdownAsync()
+    {
+        _open = !_open;
+        if (_open)
+        {
+            try
+            {
+                await RefreshAsync();
+            }
+            catch
+            {
+                // Keep the previously loaded items if the refresh fails.
+            }
+        }
+    }
+
+    private void CloseDropdown() => _open = false;
+
+    private void GoToDecisionLog()
+    {
+        _open = false;
+        Navigation.NavigateTo("/intelligence/decision-log");
+    }
+
+    private string TypeLabel(string decisionType) => decisionType switch
+    {
+        DecisionTypes.LowStockAlert => IntL["DecisionType:LowStockAlert"],
+        DecisionTypes.ExcessStockAlert => IntL["DecisionType:ExcessStockAlert"],
+        DecisionTypes.DeadStockFlag => IntL["DecisionType:DeadStockFlag"],
+        DecisionTypes.TransferSuggestion => IntL["DecisionType:TransferSuggestion"],
+        DecisionTypes.ReorderSuggestion => IntL["DecisionType:ReorderSuggestion"],
+        _ => decisionType
+    };
+
+    // Matches the per-type accent colors used on the Decision Log page cards.
+    private static string TypeColor(string decisionType) => decisionType switch
+    {
+        DecisionTypes.LowStockAlert => "#c89c4f",
+        DecisionTypes.ExcessStockAlert => "#4a7da8",
+        DecisionTypes.DeadStockFlag => "#b3543a",
+        DecisionTypes.TransferSuggestion => "#4a8e8e",
+        DecisionTypes.ReorderSuggestion => "var(--accent)",
+        _ => "var(--fg-3)"
+    };
+
+    private string RelativeTime(DateTime creationTime)
+    {
+        var delta = DateTime.Now - creationTime;
+        if (delta < TimeSpan.Zero)
+        {
+            delta = DateTime.UtcNow - creationTime;
+        }
+        if (delta < TimeSpan.Zero)
+        {
+            delta = TimeSpan.Zero;
+        }
+
+        if (delta.TotalMinutes < 1) return L["Notifications:JustNow"];
+        if (delta.TotalHours < 1) return $"{(int)delta.TotalMinutes}m";
+        if (delta.TotalDays < 1) return $"{(int)delta.TotalHours}h";
+        return $"{(int)delta.TotalDays}d";
+    }
+
+    public void Dispose()
+    {
+        if (_subscribed)
+        {
+            Bridge.DecisionMade -= OnDecisionMade;
+            _subscribed = false;
+        }
+    }
+}

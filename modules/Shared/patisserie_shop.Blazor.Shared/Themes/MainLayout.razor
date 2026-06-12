@@ -45,6 +45,13 @@
             </SoftButton>
         </SoftTooltip>
 
+        @* ── Decision notification bell (host-app component, resolved at runtime
+             because this shared layout cannot reference the Blazor host project) ── *@
+        @if (CurrentUser.IsAuthenticated && _notificationBellType is not null)
+        {
+            <DynamicComponent Type="_notificationBellType" />
+        }
+
         @* ── Dark / Light mode toggle ── *@
         <SoftTooltip Text="@(_isDarkMode ? L["Nav:SwitchToLight"] : L["Nav:SwitchToDark"])" Placement="MudBlazor.Placement.Bottom">
             <SoftIconButton Icon="@(_isDarkMode ? Icons.Material.Filled.LightMode : Icons.Material.Filled.DarkMode)"
@@ -107,9 +114,6 @@
         <SoftDrawerHeader Class="pa-3">
             <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
                 <SoftIcon Icon ="@Icons.Material.Filled.Apps" Color="MudBlazor.Color.Primary" />
-                <SoftText Typo="Typo.subtitle1" Color="MudBlazor.Color.Primary" Style="font-weight:600">
-                    @L["Nav:Navigation"]
-                </SoftText>
             </SoftStack>
         </SoftDrawerHeader>
 
@@ -173,6 +177,12 @@
 </SoftLayout>
 
 @code {
+    // Resolved by name so the shared theme project stays free of a reference
+    // to the host application. Null (and silently skipped) if the host app
+    // does not provide the component.
+    private static readonly Type? _notificationBellType =
+        Type.GetType("patisserie_shop.Blazor.Components.Layout.NotificationBell, patisserie_shop.Blazor");
+
     private MudMenu _userMenu = default!;
     private MudBlazor.MudTheme _theme = MyTheme.Create();
     private bool _drawerOpen = true;
@@ -201,6 +211,13 @@
                 {
                     await JS.InvokeVoidAsync("eval", "document.body.classList.add('dark-mode'); document.documentElement.classList.add('dark-mode');");
                 }
+                StateHasChanged();
+            }
+
+            var saved = await JS.InvokeAsync<string>("localStorage.getItem", "warm-theme");
+            if (saved == "dark" && !_isDarkMode)
+            {
+                _isDarkMode = true;
                 StateHasChanged();
             }
         }
@@ -237,6 +254,7 @@
     private async Task ToggleDarkMode()
     {
         _isDarkMode = !_isDarkMode;
+        await JS.InvokeVoidAsync("applyDataTheme", _isDarkMode);
         await JS.InvokeVoidAsync("localStorage.setItem", "ewallet-darkMode", _isDarkMode.ToString().ToLower());
         await JS.InvokeVoidAsync("eval",
             _isDarkMode
@@ -257,6 +275,14 @@
         if (!string.IsNullOrWhiteSpace(icon))
         {
             var i = icon.ToLowerInvariant();
+            // Specific mappings for menu items that previously fell through to the bullet/dot fallback
+            if (i.Contains("boxes")) return Icons.Material.Filled.Inventory2;          // Inventory group
+            if (i.Contains("chart-pie")) return Icons.Material.Filled.SpaceDashboard;  // Dashboard
+            if (i.Contains("tags") || i.Contains("tag")) return Icons.Material.Filled.Category; // Categories
+            if (i.Contains("cookie")) return Icons.Material.Filled.Inventory2;         // Products
+            if (i.Contains("warehouse")) return Icons.Material.Filled.Warehouse;       // Branch inventory
+            if (i.Contains("cash-register")) return Icons.Material.Filled.PointOfSale; // Sales
+            if (i.Contains("file-invoice")) return Icons.Material.Filled.ReceiptLong;  // Purchase orders
             if (i.Contains("home")) return Icons.Material.Filled.Home;
             if (i.Contains("users")) return Icons.Material.Filled.People;
             if (i.Contains("user-tie")) return Icons.Material.Filled.ManageAccounts;

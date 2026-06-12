@@ -1,0 +1,66 @@
+using System;
+
+namespace Intelligence.Rules;
+
+/// <summary>
+/// The supported inventory rule types evaluated by the DecisionMakerService
+/// (real-time) and the background jobs (DeadStock / TransferSuggestion).
+/// Stored as a flat string on AppInventoryRule.RuleType.
+/// </summary>
+public static class InventoryRuleTypes
+{
+    public const string LowStock = "LowStock";
+    public const string ExcessStock = "ExcessStock";
+    public const string DeadStock = "DeadStock";
+    public const string TransferSuggestion = "TransferSuggestion";
+
+    /// <summary>
+    /// Time-aware low-stock rule: fires when QuantityOnHand ÷ AvgDailySales30 falls
+    /// below ThresholdValue (interpreted as a number of days of cover).
+    /// </summary>
+    public const string DaysOfCover = "DaysOfCover";
+
+    /// <summary>
+    /// Perishability rule: fires when a live stock batch (QuantityRemaining &gt; 0)
+    /// expires within ThresholdDays. Evaluated by the ExpiryScanner background job.
+    /// </summary>
+    public const string ExpiringSoon = "ExpiringSoon";
+
+    /// <summary>
+    /// Waste rule: an active matching rule enables write-off flagging for its scope —
+    /// any live batch (QuantityRemaining &gt; 0) that is already PAST its expiry date
+    /// raises a WasteWriteOff decision. Thresholds are unused ("expired" is absolute).
+    /// Evaluated by the ExpiryScanner background job.
+    /// </summary>
+    public const string ExpiredStock = "ExpiredStock";
+
+    public static readonly string[] All =
+    {
+        LowStock,
+        ExcessStock,
+        DeadStock,
+        TransferSuggestion,
+        DaysOfCover,
+        ExpiringSoon,
+        ExpiredStock
+    };
+
+    public static bool IsValid(string? ruleType)
+        => !string.IsNullOrWhiteSpace(ruleType) && Array.IndexOf(All, ruleType) >= 0;
+
+    /// <summary>
+    /// DeadStock (days without sale) and ExpiringSoon (days until expiry) are measured
+    /// in days (ThresholdDays); every other type uses ThresholdValue. Note: DaysOfCover
+    /// also reuses ThresholdValue — the value is interpreted as days of cover, not a
+    /// quantity.
+    /// </summary>
+    public static bool UsesThresholdDays(string ruleType)
+        => ruleType == DeadStock || ruleType == ExpiringSoon;
+
+    /// <summary>
+    /// ExpiredStock uses NO threshold at all — a batch either is past its expiry
+    /// date or it isn't. Both ThresholdValue and ThresholdDays are forced to null.
+    /// </summary>
+    public static bool UsesNoThreshold(string ruleType)
+        => ruleType == ExpiredStock;
+}

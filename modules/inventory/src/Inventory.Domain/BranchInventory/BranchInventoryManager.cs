@@ -1,6 +1,8 @@
 using System;
 using System.Threading.Tasks;
 using Inventory.Entities;
+using Inventory.StockBatches;
+using Microsoft.Extensions.Logging;
 using Volo.Abp;
 using Volo.Abp.Domain.Repositories;
 using Volo.Abp.Domain.Services;
@@ -12,13 +14,19 @@ public class BranchInventoryManager : DomainService
 {
     private readonly IRepository<AppBranchInventory, Guid> _inventoryRepository;
     private readonly IRepository<AppStockMovement, Guid> _movementRepository;
+    private readonly IRepository<AppProduct, Guid> _productRepository;
+    private readonly StockBatchManager _stockBatchManager;
 
     public BranchInventoryManager(
         IRepository<AppBranchInventory, Guid> inventoryRepository,
-        IRepository<AppStockMovement, Guid> movementRepository)
+        IRepository<AppStockMovement, Guid> movementRepository,
+        IRepository<AppProduct, Guid> productRepository,
+        StockBatchManager stockBatchManager)
     {
         _inventoryRepository = inventoryRepository;
         _movementRepository = movementRepository;
+        _productRepository = productRepository;
+        _stockBatchManager = stockBatchManager;
     }
 
     public async Task<AppBranchInventory> InitializeAsync(
@@ -104,7 +112,87 @@ public class BranchInventoryManager : DomainService
             notes);
 
         await _movementRepository.InsertAsync(movement);
+
+        // Parallel best-effort batch (expiry) ledger. Runs AFTER the authoritative
+        // stock mutation and may never fail it.
+        await TrackBatchLedgerBestEffortAsync(inventory, delta, movementType, referenceId);
+
         return movement;
+    }
+
+    /// <summary>
+    /// Keeps the FEFO batch ledger roughly in sync with the authoritative stock row:
+    ///   delta &lt; 0 → consume |delta| across the product+branch's batches, FEFO
+    ///                (non-expired earliest-expiry first, then expired oldest first);
+    ///   delta &gt; 0 → if the product is perishable (ShelfLifeDays set), create ONE
+    ///                batch of |delta| expiring at utcToday + ShelfLifeDays.
+    /// KNOWN SCOPE DECISION: TransferIn batches get a fresh ShelfLifeDays expiry —
+    /// the source batch's age is NOT carried across branches, so transferred stock
+    /// looks slightly fresher in the ledger than it really is.
+    /// The whole block is try/catch-logged: batch bookkeeping is best-effort and a
+    /// failure here must never roll back the stock operation.
+    /// </summary>
+    private async Task TrackBatchLedgerBestEffortAsync(
+        AppBranchInventory inventory,
+        int delta,
+        string movementType,
+        Guid? referenceId)
+    {
+        try
+        {
+            if (delta < 0)
+            {
+                // Waste write-offs clear EXPIRED batches first (oldest expiry first);
+                // every other decrement uses normal FEFO (sellable, earliest-expiry first).
+                await _stockBatchManager.ConsumeFefoAsync(
+                    inventory.BranchId,
+                    inventory.ProductId,
+                    -delta,
+                    expiredFirst: movementType == StockMovementTypes.WriteOff);
+            }
+            else if (delta > 0)
+            {
+                var product = await _productRepository.FindAsync(inventory.ProductId);
+                if (product?.ShelfLifeDays is int shelfLifeDays)
+                {
+                    await _stockBatchManager.ReceiveAsync(
+                        inventory.BranchId,
+                        inventory.ProductId,
+                        delta,
+                        shelfLifeDays,
+                        MapBatchSourceType(movementType),
+                        referenceId);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(
+                ex,
+                "Stock batch ledger update failed for product {ProductId} at branch {BranchId} " +
+                "(movement {MovementType}, delta {Delta}). The stock mutation itself is unaffected.",
+                inventory.ProductId, inventory.BranchId, movementType, delta);
+        }
+    }
+
+    private static string MapBatchSourceType(string movementType) => movementType switch
+    {
+        StockMovementTypes.Purchase => StockBatchSourceTypes.Purchase,
+        StockMovementTypes.TransferIn => StockBatchSourceTypes.TransferIn,
+        _ => StockBatchSourceTypes.Adjustment
+    };
+
+    public static void EnsureConcurrencyStamp(AppBranchInventory inventory, string? expectedStamp)
+    {
+        Check.NotNull(inventory, nameof(inventory));
+        if (string.IsNullOrEmpty(expectedStamp))
+        {
+            return;
+        }
+        if (!string.Equals(inventory.ConcurrencyStamp, expectedStamp, StringComparison.Ordinal))
+        {
+            throw new BusinessException(InventoryErrorCodes.BranchInventoryConcurrency);
+        }
     }
 
     public void UpdateLimits(AppBranchInventory inventory, int minimumStock, int? maximumStock)

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Inventory.BranchInventory;
+using Inventory.Categories;
 using Inventory.Entities;
 using Inventory.Permissions;
 using Inventory.StockMovements;
@@ -14,20 +15,26 @@ namespace Inventory.Dashboard;
 [Authorize(InventoryPermissions.BranchInventory.Default)]
 public class InventoryDashboardAppService : InventoryAppService, IInventoryDashboardAppService
 {
+    private const int CriticalItemsLimit = 10;
+    private const int RecentMovementsLimit = 8;
+    private const int MovementWindowDays = 30;
+
     private readonly IRepository<AppProduct, Guid> _productRepository;
     private readonly IRepository<AppBranch, Guid> _branchRepository;
-    private readonly IRepository<AppCategory, Guid> _categoryRepository;
+    private readonly ICategoryRepository _categoryRepository;
     private readonly IRepository<AppSupplier, Guid> _supplierRepository;
-    private readonly IRepository<AppBranchInventory, Guid> _inventoryRepository;
-    private readonly IRepository<AppStockMovement, Guid> _movementRepository;
+    private readonly IBranchInventoryRepository _inventoryRepository;
+    private readonly IStockMovementRepository _movementRepository;
+    private readonly BranchAccessChecker _branchAccess;
 
     public InventoryDashboardAppService(
         IRepository<AppProduct, Guid> productRepository,
         IRepository<AppBranch, Guid> branchRepository,
-        IRepository<AppCategory, Guid> categoryRepository,
+        ICategoryRepository categoryRepository,
         IRepository<AppSupplier, Guid> supplierRepository,
-        IRepository<AppBranchInventory, Guid> inventoryRepository,
-        IRepository<AppStockMovement, Guid> movementRepository)
+        IBranchInventoryRepository inventoryRepository,
+        IStockMovementRepository movementRepository,
+        BranchAccessChecker branchAccess)
     {
         _productRepository = productRepository;
         _branchRepository = branchRepository;
@@ -35,187 +42,119 @@ public class InventoryDashboardAppService : InventoryAppService, IInventoryDashb
         _supplierRepository = supplierRepository;
         _inventoryRepository = inventoryRepository;
         _movementRepository = movementRepository;
+        _branchAccess = branchAccess;
     }
 
     public async Task<InventoryDashboardDto> GetAsync()
     {
-        var accessibleBranchIds = await GetAccessibleBranchIdsAsync();
+        var scope = await _branchAccess.GetScopedBranchIdsAsync(InventoryPermissions.BranchInventory.ManageAll);
 
-        var productsQ = await _productRepository.GetQueryableAsync();
-        var branchesQ = await _branchRepository.GetQueryableAsync();
-        var inventoryQ = await _inventoryRepository.GetQueryableAsync();
-        var productsForJoin = await _productRepository.GetQueryableAsync();
-        var movementsQ = await _movementRepository.GetQueryableAsync();
+        var totalProducts = await _productRepository.CountAsync();
+        var activeProducts = await _productRepository.CountAsync(p => p.IsActive);
+        var totalCategories = await _categoryRepository.CountAsync();
+        var totalSuppliers = await _supplierRepository.CountAsync();
 
-        // Scope inventory and movements to accessible branches
-        if (accessibleBranchIds != null)
-        {
-            var set = accessibleBranchIds.ToHashSet();
-            inventoryQ = inventoryQ.Where(i => set.Contains(i.BranchId));
-            movementsQ = movementsQ.Where(m => set.Contains(m.BranchId));
-            branchesQ = branchesQ.Where(b => set.Contains(b.Id));
-        }
+        var branches = scope == null
+            ? await _branchRepository.GetListAsync()
+            : await _branchRepository.GetListAsync(b => scope.Contains(b.Id));
 
-        // KPI counts
-        var totalProducts = await AsyncExecuter.CountAsync(productsQ);
-        var activeProducts = await AsyncExecuter.CountAsync(productsQ.Where(p => p.IsActive));
-        var allBranches = await AsyncExecuter.ToListAsync(branchesQ.Select(b => new { b.Id, b.Name, b.IsActive }));
-        var totalCategories = await AsyncExecuter.CountAsync(await _categoryRepository.GetQueryableAsync());
-        var totalSuppliers = await AsyncExecuter.CountAsync(await _supplierRepository.GetQueryableAsync());
+        var stockRows = await _inventoryRepository.GetActiveStockRowsAsync(scope);
 
-        // Stock health across all accessible branches (active products only)
-        var invRows = await AsyncExecuter.ToListAsync(
-            from inv in inventoryQ
-            join p in productsForJoin on inv.ProductId equals p.Id
-            where p.IsActive
-            select new
-            {
-                inv.BranchId,
-                inv.QuantityOnHand,
-                inv.MinimumStock,
-                p.Name,
-                p.SKU,
-                p.Unit,
-                inv.Id,
-                inv.ProductId,
-                inv.MaximumStock,
-                inv.LastRestockedDate,
-                inv.LastSoldDate,
-                inv.ConcurrencyStamp
-            });
-
-        var totalItems = invRows.Count;
-        var outOfStock = invRows.Where(r => r.QuantityOnHand <= 0).ToList();
-        var lowStock = invRows.Where(r => r.QuantityOnHand > 0 && r.QuantityOnHand <= r.MinimumStock).ToList();
-        var healthyStock = invRows.Where(r => r.QuantityOnHand > r.MinimumStock).ToList();
-
-        // Per-branch stats
-        var branchStats = allBranches.Select(b =>
-        {
-            var branchRows = invRows.Where(r => r.BranchId == b.Id).ToList();
-            var bTotal = branchRows.Count;
-            var bOut = branchRows.Count(r => r.QuantityOnHand <= 0);
-            var bLow = branchRows.Count(r => r.QuantityOnHand > 0 && r.QuantityOnHand <= r.MinimumStock);
-            return new BranchDashboardStatsDto
-            {
-                BranchId = b.Id,
-                BranchName = b.Name,
-                IsActive = b.IsActive,
-                TotalItems = bTotal,
-                OutOfStockCount = bOut,
-                LowStockCount = bLow,
-                HealthyStockCount = bTotal - bOut - bLow
-            };
-        }).OrderByDescending(b => b.TotalItems).ToList();
-
-        // Critical stock items (out of stock first, then low stock, top 10)
-        var criticalRows = outOfStock.Concat(lowStock)
-            .OrderBy(r => r.QuantityOnHand)
-            .Take(10)
-            .Select(r => new BranchInventoryDto
-            {
-                Id = r.Id,
-                BranchId = r.BranchId,
-                ProductId = r.ProductId,
-                ProductName = r.Name,
-                ProductSKU = r.SKU,
-                ProductUnit = r.Unit,
-                ProductIsActive = true,
-                QuantityOnHand = r.QuantityOnHand,
-                MinimumStock = r.MinimumStock,
-                MaximumStock = r.MaximumStock,
-                LastRestockedDate = r.LastRestockedDate,
-                LastSoldDate = r.LastSoldDate,
-                ConcurrencyStamp = r.ConcurrencyStamp
-            }).ToList();
-
-        // Movement summary (last 30 days)
-        var thirtyDaysAgo = Clock.Now.AddDays(-30);
-        var recentMovementsQ = movementsQ.Where(m => m.CreationTime >= thirtyDaysAgo);
-        var branchesForMovements = await _branchRepository.GetQueryableAsync();
-        var productsForMovements = await _productRepository.GetQueryableAsync();
-
-        var movementRows = await AsyncExecuter.ToListAsync(
-            from m in recentMovementsQ
-            join b in branchesForMovements on m.BranchId equals b.Id
-            join p in productsForMovements on m.ProductId equals p.Id
-            orderby m.CreationTime descending
-            select new
-            {
-                m.Id,
-                m.CreationTime,
-                m.BranchId,
-                BranchName = b.Name,
-                m.ProductId,
-                ProductName = p.Name,
-                ProductSKU = p.SKU,
-                ProductUnit = p.Unit,
-                m.MovementType,
-                m.Quantity,
-                m.QuantityBefore,
-                m.QuantityAfter,
-                m.ReferenceId,
-                m.ReferenceType,
-                m.Notes
-            });
-
-        var movementSummary = new StockMovementSummaryDto
-        {
-            TotalCount = movementRows.Count,
-            PurchaseCount = movementRows.Count(r => r.MovementType == StockMovementTypes.Purchase),
-            SaleCount = movementRows.Count(r => r.MovementType == StockMovementTypes.Sale),
-            TransferInCount = movementRows.Count(r => r.MovementType == StockMovementTypes.TransferIn),
-            TransferOutCount = movementRows.Count(r => r.MovementType == StockMovementTypes.TransferOut),
-            ManualAdjustmentCount = movementRows.Count(r => r.MovementType == StockMovementTypes.ManualAdjustment)
-        };
-
-        var recentMovements = movementRows.Take(8).Select(r => new StockMovementDto
-        {
-            Id = r.Id,
-            CreationTime = r.CreationTime,
-            BranchId = r.BranchId,
-            BranchName = r.BranchName,
-            ProductId = r.ProductId,
-            ProductName = r.ProductName,
-            ProductSKU = r.ProductSKU,
-            ProductUnit = r.ProductUnit,
-            MovementType = r.MovementType,
-            Quantity = r.Quantity,
-            QuantityBefore = r.QuantityBefore,
-            QuantityAfter = r.QuantityAfter,
-            ReferenceId = r.ReferenceId,
-            ReferenceType = r.ReferenceType,
-            Notes = r.Notes
-        }).ToList();
+        var since = Clock.Now.AddDays(-MovementWindowDays);
+        var movementRows = await _movementRepository.GetRecentWithContextAsync(scope, since);
 
         return new InventoryDashboardDto
         {
             TotalProducts = totalProducts,
             ActiveProducts = activeProducts,
-            TotalBranches = allBranches.Count,
-            ActiveBranches = allBranches.Count(b => b.IsActive),
+            TotalBranches = branches.Count,
+            ActiveBranches = branches.Count(b => b.IsActive),
             TotalCategories = totalCategories,
             TotalSuppliers = totalSuppliers,
-            TotalInventoryItems = totalItems,
-            HealthyStockCount = healthyStock.Count,
-            LowStockCount = lowStock.Count,
-            OutOfStockCount = outOfStock.Count,
-            MovementSummary = movementSummary,
-            BranchStats = branchStats,
-            RecentMovements = recentMovements,
-            CriticalStockItems = criticalRows
+
+            TotalInventoryItems = stockRows.Count,
+            HealthyStockCount = stockRows.Count(r => !r.Inventory.IsLowStock),
+            LowStockCount = stockRows.Count(r => !r.Inventory.IsOutOfStock && r.Inventory.IsLowStock),
+            OutOfStockCount = stockRows.Count(r => r.Inventory.IsOutOfStock),
+
+            BranchStats = BuildBranchStats(branches, stockRows),
+            CriticalStockItems = BuildCriticalItems(stockRows),
+            MovementSummary = BuildMovementSummary(movementRows),
+            RecentMovements = BuildRecentMovements(movementRows),
         };
     }
 
-    private async Task<List<Guid>?> GetAccessibleBranchIdsAsync()
+    private static List<BranchDashboardStatsDto> BuildBranchStats(
+        List<AppBranch> branches,
+        List<InventoryStockRow> stockRows)
     {
-        if (await AuthorizationService.IsGrantedAsync(InventoryPermissions.BranchInventory.ManageAll))
-            return null;
+        var byBranch = stockRows.GroupBy(r => r.Inventory.BranchId).ToDictionary(g => g.Key, g => g.ToList());
 
-        var userId = CurrentUser.Id;
-        if (userId == null) return new List<Guid>();
+        return branches
+            .Select(b =>
+            {
+                var rows = byBranch.TryGetValue(b.Id, out var list) ? list : new List<InventoryStockRow>();
+                var bOut = rows.Count(r => r.Inventory.IsOutOfStock);
+                var bLow = rows.Count(r => !r.Inventory.IsOutOfStock && r.Inventory.IsLowStock);
+                return new BranchDashboardStatsDto
+                {
+                    BranchId = b.Id,
+                    BranchName = b.Name,
+                    IsActive = b.IsActive,
+                    TotalItems = rows.Count,
+                    OutOfStockCount = bOut,
+                    LowStockCount = bLow,
+                    HealthyStockCount = rows.Count - bOut - bLow
+                };
+            })
+            .OrderByDescending(b => b.TotalItems)
+            .ToList();
+    }
 
-        var mine = await _branchRepository.GetListAsync(b => b.IsActive && b.ManagerUserId == userId);
-        return mine.Select(b => b.Id).ToList();
+    private List<BranchInventoryDto> BuildCriticalItems(List<InventoryStockRow> stockRows)
+    {
+        return stockRows
+            .Where(r => r.Inventory.IsLowStock)
+            .OrderBy(r => r.Inventory.QuantityOnHand)
+            .Take(CriticalItemsLimit)
+            .Select(r =>
+            {
+                var dto = ObjectMapper.Map<AppBranchInventory, BranchInventoryDto>(r.Inventory);
+                dto.ProductName = r.Product.Name;
+                dto.ProductSKU = r.Product.SKU;
+                dto.ProductUnit = r.Product.Unit;
+                dto.ProductIsActive = r.Product.IsActive;
+                return dto;
+            })
+            .ToList();
+    }
+
+    private static StockMovementSummaryDto BuildMovementSummary(List<StockMovementWithContext> rows)
+    {
+        return new StockMovementSummaryDto
+        {
+            TotalCount = rows.Count,
+            PurchaseCount = rows.Count(r => r.Movement.MovementType == StockMovementTypes.Purchase),
+            SaleCount = rows.Count(r => r.Movement.MovementType == StockMovementTypes.Sale),
+            TransferInCount = rows.Count(r => r.Movement.MovementType == StockMovementTypes.TransferIn),
+            TransferOutCount = rows.Count(r => r.Movement.MovementType == StockMovementTypes.TransferOut),
+            ManualAdjustmentCount = rows.Count(r => r.Movement.MovementType == StockMovementTypes.ManualAdjustment)
+        };
+    }
+
+    private List<StockMovementDto> BuildRecentMovements(List<StockMovementWithContext> rows)
+    {
+        return rows
+            .Take(RecentMovementsLimit)
+            .Select(r =>
+            {
+                var dto = ObjectMapper.Map<AppStockMovement, StockMovementDto>(r.Movement);
+                dto.BranchName = r.Branch.Name;
+                dto.ProductName = r.Product.Name;
+                dto.ProductSKU = r.Product.SKU;
+                dto.ProductUnit = r.Product.Unit;
+                return dto;
+            })
+            .ToList();
     }
 }

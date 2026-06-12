@@ -28,26 +28,26 @@
     PageLayout.Title = OpsL["PurchaseOrders"];
 }
 
-<SoftCard Elevation="2" Class="pa-2">
-    <SoftCardHeader>
-        <CardHeaderContent>
-            <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                <SoftIcon Icon="@Icons.Material.Filled.RequestQuote" Color="Color.Primary" Size="Size.Large" />
-                <SoftText Typo="Typo.h5">@OpsL["PurchaseOrders"]</SoftText>
-            </SoftStack>
-        </CardHeaderContent>
-        <CardHeaderActions>
-            <SoftButton Variant="Variant.Filled"
-                        Color="Color.Primary"
-                        StartIcon="@Icons.Material.Filled.Add"
-                        OnClick="OpenCreateDialog"
-                        Disabled="!_canCreate">
-                @OpsL["NewPurchaseOrder"]
-            </SoftButton>
-        </CardHeaderActions>
-    </SoftCardHeader>
+<SoftCard Elevation="2" Class="pa-2 page-flat">
+    <div class="page-head">
+        <div>
+            <h1 class="page-title">@OpsL["PurchaseOrders"]</h1>
+            <div class="page-sub">Incoming stock orders from suppliers.</div>
+        </div>
+        <div class="page-head-actions">
+            @if (_canCreate)
+            {
+                <SoftButton Variant="Variant.Filled"
+                            Color="Color.Primary"
+                            StartIcon="@Icons.Material.Filled.Add"
+                            OnClick="OpenCreateDialog">
+                    @OpsL["NewPurchaseOrder"]
+                </SoftButton>
+            }
+        </div>
+    </div>
     <SoftCardContent>
-        <SoftStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Class="mb-4 flex-wrap">
+        <div class="toolbar">
             <SoftTextField T="string"
                            Placeholder="@OpsL["Filter"]"
                            @bind-Value="_filter"
@@ -57,9 +57,10 @@
                            AdornmentIcon="@Icons.Material.Filled.Search"
                            OnKeyUp="OnFilterKeyUpAsync"
                            Immediate="true"
+                           Class="toolbar-search"
                            Style="min-width: 220px; max-width: 320px;" />
 
-            <div style="min-width: 180px;">
+            <div class="filter-chip">
                 <SoftLookupSelect TItem="StatusOption" TValue="string"
                                   Items="_statusOptions"
                                   ToValue="@(o => o.Value)"
@@ -69,11 +70,10 @@
                                   Label="@OpsL["AllStatuses"]"
                                   Margin="Margin.Dense"
                                   Clearable="true"
-                                  Dense="true"
-                                  AdornmentIcon="@Icons.Material.Filled.FlagCircle" />
+                                  Dense="true" />
             </div>
 
-            <div style="min-width: 200px;">
+            <div class="filter-chip">
                 <SoftLookupSelect TItem="SupplierDto" TValue="Guid?"
                                   Items="_suppliers"
                                   ToValue="@(s => (Guid?)s.Id)"
@@ -83,11 +83,10 @@
                                   Label="@OpsL["Supplier"]"
                                   Margin="Margin.Dense"
                                   Clearable="true"
-                                  Dense="true"
-                                  AdornmentIcon="@Icons.Material.Filled.LocalShipping" />
+                                  Dense="true" />
             </div>
 
-            <div style="min-width: 200px;">
+            <div class="filter-chip">
                 <SoftLookupSelect TItem="BranchLookupDto" TValue="Guid?"
                                   Items="_branches"
                                   ToValue="@(b => (Guid?)b.Id)"
@@ -97,15 +96,16 @@
                                   Label="@OpsL["DestinationBranch"]"
                                   Margin="Margin.Dense"
                                   Clearable="true"
-                                  Dense="true"
-                                  AdornmentIcon="@Icons.Material.Filled.Store" />
+                                  Dense="true" />
             </div>
 
-            <SoftButton Variant="Variant.Outlined" Color="Color.Primary"
-                        OnClick="ReloadAsync" StartIcon="@Icons.Material.Filled.Refresh">
-                @L["Refresh"]
-            </SoftButton>
-        </SoftStack>
+            <div class="toolbar-right">
+                <SoftButton Variant="Variant.Text" Color="Color.Primary"
+                            OnClick="ReloadAsync" StartIcon="@Icons.Material.Filled.Refresh">
+                    @L["Refresh"]
+                </SoftButton>
+            </div>
+        </div>
 
         <SoftDataGrid T="PurchaseOrderDto"
                       @ref="_grid"
@@ -146,10 +146,12 @@
                 <PropertyColumn T="PurchaseOrderDto" TProperty="string" Property="x => x.CreatorUserName!" Title="@OpsL["CreatedBy"]" Sortable="false" />
                 <TemplateColumn T="PurchaseOrderDto" Title="" Sortable="false">
                     <CellTemplate>
-                        <SoftIconButton Icon="@Icons.Material.Filled.OpenInNew"
-                                        Color="Color.Primary"
-                                        Size="Size.Small"
-                                        OnClick="@(() => OpenDetail(context.Item.Id))" />
+                        <span class="row-actions">
+                            <SoftIconButton Icon="@Icons.Material.Filled.OpenInNew"
+                                            Color="Color.Primary"
+                                            Size="Size.Small"
+                                            OnClick="@(() => OpenDetail(context.Item.Id))" />
+                        </span>
                     </CellTemplate>
                 </TemplateColumn>
             </Columns>
@@ -168,9 +170,9 @@
 
 @if (_createVisible)
 {
-    <div class="soft-modal-backdrop" @onclick="CloseCreate">
-        <div class="soft-modal-container soft-modal-container--md" @onclick:stopPropagation="true">
-            <SoftCard Elevation="24" Class="soft-modal-card">
+    <div class="glass-modal-backdrop" @onclick="CloseCreate">
+        <div class="glass-modal-container glass-modal-container--md" @onclick:stopPropagation="true">
+            <SoftCard Elevation="24" Class="glass-modal">
                 <SoftCardHeader Class="pa-4">
                     <CardHeaderContent>
                         <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
@@ -195,8 +197,7 @@
                                           Value="_newSupplierId"
                                           ValueChanged="@(v => _newSupplierId = v)"
                                           Label="@OpsL["Supplier"]"
-                                          Required="true"
-                                          AdornmentIcon="@Icons.Material.Filled.LocalShipping" />
+                                          Required="true" />
                         <SoftLookupSelect TItem="BranchLookupDto" TValue="Guid?"
                                           Items="_branches"
                                           ToValue="@(b => (Guid?)b.Id)"
@@ -204,18 +205,21 @@
                                           Value="_newBranchId"
                                           ValueChanged="@(v => _newBranchId = v)"
                                           Label="@OpsL["DestinationBranch"]"
-                                          Required="true"
-                                          AdornmentIcon="@Icons.Material.Filled.Store" />
+                                          Required="true" />
                         <SoftStack Row="true" Spacing="2">
                             <MudDatePicker Label="@OpsL["OrderDate"]" Variant="Variant.Outlined"
                                            @bind-Date="_newOrderDate" />
                             <MudDatePicker Label="@OpsL["ExpectedDeliveryDate"]" Variant="Variant.Outlined"
                                            @bind-Date="_newExpectedDate" Clearable="true" />
-                            <SoftTextField T="string" Label="@OpsL["Currency"]"
-                                           @bind-Value="_newCurrency"
-                                           Variant="Variant.Outlined"
-                                           MaxLength="3"
-                                           Style="max-width: 110px;" />
+                            <SoftSelect T="string" Label="@OpsL["Currency"]"
+                                        @bind-Value="_newCurrency"
+                                        Variant="Variant.Outlined"
+                                        Required="true"
+                                        Style="max-width: 160px;">
+                                <MudSelectItem T="string" Value="@("USD")">USD — $</MudSelectItem>
+                                <MudSelectItem T="string" Value="@("EUR")">EUR — €</MudSelectItem>
+                                <MudSelectItem T="string" Value="@("GBP")">GBP — £</MudSelectItem>
+                            </SoftSelect>
                         </SoftStack>
                         <SoftTextField T="string"
                                        Label="@OpsL["Notes"]"
@@ -249,31 +253,20 @@
 }
 
 <style>
-    .soft-modal-backdrop {
-        position: fixed; inset: 0;
-        background: rgba(0, 0, 0, 0.5);
-        z-index: 1400;
-        display: flex; align-items: center; justify-content: center;
-        padding: 16px;
-        animation: soft-modal-fade-in 0.15s ease-out;
-    }
-    .soft-modal-container { width: 100%; max-width: 560px; animation: soft-modal-scale-in 0.18s ease-out; }
-    .soft-modal-container--md { max-width: 640px; }
-    .soft-modal-card { border-radius: 12px; overflow: hidden; }
-    @@keyframes soft-modal-fade-in { from { opacity: 0; } to { opacity: 1; } }
-    @@keyframes soft-modal-scale-in { from { opacity: 0; transform: scale(0.96); } to { opacity: 1; transform: scale(1); } }
-
     .po-status {
         display: inline-flex; align-items: center; gap: 6px;
         padding: 3px 10px; border-radius: 999px;
-        font-size: 0.78rem; font-weight: 500;
+        font-size: 0.78rem; font-weight: 600;
+        border: 1px solid transparent;
+        backdrop-filter: var(--glass-blur);
+        -webkit-backdrop-filter: var(--glass-blur);
     }
-    .po-status-draft           { background: rgba(120,120,120,0.18); color: #444; }
-    .po-status-submitted       { background: rgba(33,150,243,0.15);  color: #1565c0; }
-    .po-status-approved        { background: rgba(76,175,80,0.15);   color: #2e7d32; }
-    .po-status-partialreceived { background: rgba(255,167,38,0.18);  color: #b26a00; }
-    .po-status-received        { background: rgba(0,150,136,0.15);   color: #00695c; }
-    .po-status-cancelled       { background: rgba(244,67,54,0.15);   color: #c62828; }
+    .po-status-draft           { background: rgba(255,255,255, 0.10); border-color: rgba(255,255,255, 0.20); color: var(--glass-text-secondary); }
+    .po-status-submitted       { background: rgba( 59,130,246, 0.20); border-color: rgba( 59,130,246, 0.40); color: #93c5fd; }
+    .po-status-approved        { background: rgba( 34,197, 94, 0.20); border-color: rgba( 34,197, 94, 0.40); color: #86efac; }
+    .po-status-partialreceived { background: rgba(251,191, 36, 0.20); border-color: rgba(251,191, 36, 0.40); color: #fde68a; }
+    .po-status-received        { background: rgba( 20,184,166, 0.20); border-color: rgba( 20,184,166, 0.40); color: #5eead4; }
+    .po-status-cancelled       { background: rgba(239, 68, 68, 0.20); border-color: rgba(239, 68, 68, 0.40); color: #fca5a5; }
 </style>
 
 @code {

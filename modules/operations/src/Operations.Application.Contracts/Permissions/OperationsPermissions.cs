@@ -26,6 +26,16 @@ public class OperationsPermissions
         public const string ManageAll = Default + ".ManageAll";
     }
 
+    public static class Transfers
+    {
+        public const string Default = GroupName + ".Transfers";
+        public const string Create = Default + ".Create";
+        public const string Approve = Default + ".Approve";
+        public const string Ship = Default + ".Ship";
+        public const string Complete = Default + ".Complete";
+        public const string Cancel = Default + ".Cancel";
+    }
+
     public static string[] GetAll()
     {
         return ReflectionHelper.GetPublicConstantsRecursively(typeof(OperationsPermissions));

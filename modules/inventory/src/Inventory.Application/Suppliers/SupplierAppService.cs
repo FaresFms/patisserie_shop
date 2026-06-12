@@ -1,23 +1,24 @@
 using System;
-using System.Linq;
-using System.Linq.Dynamic.Core;
 using System.Threading.Tasks;
 using Inventory.Entities;
 using Inventory.Permissions;
 using Microsoft.AspNetCore.Authorization;
 using Volo.Abp.Application.Dtos;
-using Volo.Abp.Domain.Repositories;
 
 namespace Inventory.Suppliers;
 
 [Authorize(InventoryPermissions.Suppliers.Default)]
 public class SupplierAppService : InventoryAppService, ISupplierAppService
 {
-    private readonly IRepository<AppSupplier, Guid> _supplierRepository;
+    private readonly ISupplierRepository _supplierRepository;
+    private readonly SupplierManager _supplierManager;
 
-    public SupplierAppService(IRepository<AppSupplier, Guid> supplierRepository)
+    public SupplierAppService(
+        ISupplierRepository supplierRepository,
+        SupplierManager supplierManager)
     {
         _supplierRepository = supplierRepository;
+        _supplierManager = supplierManager;
     }
 
     public async Task<SupplierDto> GetAsync(Guid id)
@@ -28,44 +29,31 @@ public class SupplierAppService : InventoryAppService, ISupplierAppService
 
     public async Task<PagedResultDto<SupplierDto>> GetListAsync(GetSuppliersInput input)
     {
-        var queryable = await _supplierRepository.GetQueryableAsync();
+        var totalCount = await _supplierRepository.CountFilteredAsync(input.Filter, input.IsActive);
 
-        if (!string.IsNullOrWhiteSpace(input.Filter))
-        {
-            var filter = input.Filter.Trim().ToLower();
-            queryable = queryable.Where(s => s.Name.ToLower().Contains(filter));
-        }
-
-        if (input.IsActive.HasValue)
-        {
-            queryable = queryable.Where(s => s.IsActive == input.IsActive.Value);
-        }
-
-        var totalCount = await AsyncExecuter.CountAsync(queryable);
-
-        var sorting = string.IsNullOrWhiteSpace(input.Sorting) ? nameof(AppSupplier.Name) : input.Sorting;
-        queryable = queryable.OrderBy(sorting).Skip(input.SkipCount).Take(input.MaxResultCount);
-
-        var items = await AsyncExecuter.ToListAsync(queryable);
+        var items = await _supplierRepository.GetFilteredListAsync(
+            input.Filter,
+            input.IsActive,
+            input.Sorting ?? string.Empty,
+            input.SkipCount,
+            input.MaxResultCount);
 
         return new PagedResultDto<SupplierDto>(
             totalCount,
-            items.Select(s => ObjectMapper.Map<AppSupplier, SupplierDto>(s)).ToList()
-        );
+            [.. items.ConvertAll(s => ObjectMapper.Map<AppSupplier, SupplierDto>(s))]);
     }
 
     [Authorize(InventoryPermissions.Suppliers.Manage)]
     public async Task<SupplierDto> CreateAsync(CreateSupplierDto input)
     {
-        var supplier = new AppSupplier(
-            GuidGenerator.Create(),
+        var supplier = await _supplierManager.CreateAsync(
             input.Name,
             input.ContactPerson,
             input.Phone,
             input.Email,
             input.Address,
-            input.IsActive
-        );
+            input.IsActive,
+            input.LeadTimeDays);
 
         await _supplierRepository.InsertAsync(supplier, autoSave: true);
         return ObjectMapper.Map<AppSupplier, SupplierDto>(supplier);
@@ -75,12 +63,10 @@ public class SupplierAppService : InventoryAppService, ISupplierAppService
     public async Task<SupplierDto> UpdateAsync(Guid id, UpdateSupplierDto input)
     {
         var supplier = await _supplierRepository.GetAsync(id);
-        supplier.Name = input.Name;
-        supplier.ContactPerson = input.ContactPerson;
-        supplier.Phone = input.Phone;
-        supplier.Email = input.Email;
-        supplier.Address = input.Address;
-        supplier.IsActive = input.IsActive;
+
+        await _supplierManager.ChangeNameAsync(supplier, input.Name);
+        supplier.UpdateInfo(input.ContactPerson, input.Phone, input.Email, input.Address, input.IsActive, input.LeadTimeDays);
+
         await _supplierRepository.UpdateAsync(supplier, autoSave: true);
         return ObjectMapper.Map<AppSupplier, SupplierDto>(supplier);
     }

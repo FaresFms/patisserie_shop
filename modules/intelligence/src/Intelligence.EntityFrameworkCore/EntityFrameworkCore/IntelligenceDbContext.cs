@@ -10,6 +10,7 @@ public class IntelligenceDbContext : AbpDbContext<IntelligenceDbContext>, IIntel
 {
     public DbSet<AppInventoryRule> InventoryRules { get; set; } = null!;
     public DbSet<AppDecisionLog> DecisionLogs { get; set; } = null!;
+    public DbSet<AppProductVelocity> ProductVelocities { get; set; } = null!;
 
     public IntelligenceDbContext(DbContextOptions<IntelligenceDbContext> options)
         : base(options)

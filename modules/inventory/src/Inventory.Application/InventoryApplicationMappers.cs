@@ -1,7 +1,10 @@
+using Inventory.BranchInventory;
 using Inventory.Branches;
 using Inventory.Categories;
 using Inventory.Entities;
 using Inventory.Products;
+using Inventory.StockBatches;
+using Inventory.StockMovements;
 using Inventory.Suppliers;
 using Riok.Mapperly.Abstractions;
 using Volo.Abp.Mapperly;
@@ -44,8 +47,56 @@ public partial class BranchToDtoMapper : MapperBase<AppBranch, BranchDto>
 }
 
 [Mapper]
+public partial class BranchInventoryToDtoMapper : MapperBase<AppBranchInventory, BranchInventoryDto>
+{
+    [MapperIgnoreTarget(nameof(BranchInventoryDto.ProductName))]
+    [MapperIgnoreTarget(nameof(BranchInventoryDto.ProductSKU))]
+    [MapperIgnoreTarget(nameof(BranchInventoryDto.ProductUnit))]
+    [MapperIgnoreTarget(nameof(BranchInventoryDto.ProductIsActive))]
+    public override partial BranchInventoryDto Map(AppBranchInventory source);
+
+    [MapperIgnoreTarget(nameof(BranchInventoryDto.ProductName))]
+    [MapperIgnoreTarget(nameof(BranchInventoryDto.ProductSKU))]
+    [MapperIgnoreTarget(nameof(BranchInventoryDto.ProductUnit))]
+    [MapperIgnoreTarget(nameof(BranchInventoryDto.ProductIsActive))]
+    public override partial void Map(AppBranchInventory source, BranchInventoryDto destination);
+}
+
+[Mapper]
+public partial class StockMovementToDtoMapper : MapperBase<AppStockMovement, StockMovementDto>
+{
+    [MapperIgnoreTarget(nameof(StockMovementDto.BranchName))]
+    [MapperIgnoreTarget(nameof(StockMovementDto.ProductName))]
+    [MapperIgnoreTarget(nameof(StockMovementDto.ProductSKU))]
+    [MapperIgnoreTarget(nameof(StockMovementDto.ProductUnit))]
+    public override partial StockMovementDto Map(AppStockMovement source);
+
+    [MapperIgnoreTarget(nameof(StockMovementDto.BranchName))]
+    [MapperIgnoreTarget(nameof(StockMovementDto.ProductName))]
+    [MapperIgnoreTarget(nameof(StockMovementDto.ProductSKU))]
+    [MapperIgnoreTarget(nameof(StockMovementDto.ProductUnit))]
+    public override partial void Map(AppStockMovement source, StockMovementDto destination);
+}
+
+[Mapper]
 public partial class BranchToLookupMapper : MapperBase<AppBranch, BranchLookupDto>
 {
     public override partial BranchLookupDto Map(AppBranch source);
     public override partial void Map(AppBranch source, BranchLookupDto destination);
+}
+
+[Mapper]
+public partial class StockBatchToDtoMapper : MapperBase<AppStockBatch, StockBatchDto>
+{
+    [MapperIgnoreTarget(nameof(StockBatchDto.ProductName))]
+    [MapperIgnoreTarget(nameof(StockBatchDto.ProductSKU))]
+    [MapperIgnoreTarget(nameof(StockBatchDto.ProductUnit))]
+    [MapperIgnoreTarget(nameof(StockBatchDto.BranchName))]
+    public override partial StockBatchDto Map(AppStockBatch source);
+
+    [MapperIgnoreTarget(nameof(StockBatchDto.ProductName))]
+    [MapperIgnoreTarget(nameof(StockBatchDto.ProductSKU))]
+    [MapperIgnoreTarget(nameof(StockBatchDto.ProductUnit))]
+    [MapperIgnoreTarget(nameof(StockBatchDto.BranchName))]
+    public override partial void Map(AppStockBatch source, StockBatchDto destination);
 }

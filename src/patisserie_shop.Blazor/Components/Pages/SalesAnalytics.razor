@@ -1,0 +1,536 @@
+@page "/operations/sales-analytics"
+@attribute [Authorize(OperationsPermissions.Sales.Default)]
+@using System.Threading.Tasks
+@using Microsoft.AspNetCore.Authorization
+@using Volo.Abp.AspNetCore.Components.Web.Theming.Layout
+@using patisserie_shop.Analytics
+@using Operations.Sales
+@using Operations.Permissions
+@using Inventory.Branches
+@using ApexCharts
+@using Color = MudBlazor.Color
+@using Variant = MudBlazor.Variant
+@using Size = MudBlazor.Size
+@using Margin = MudBlazor.Margin
+@inherits patisserie_shopComponentBase
+@inject ISalesAnalyticsAppService AnalyticsAppService
+@inject ISaleAppService SaleAppService
+@inject IBranchAppService BranchAppService
+@inject PageLayout PageLayout
+
+@{
+    PageLayout.Title = L["SalesAnalytics"];
+}
+
+<SoftCard Elevation="2" Class="pa-2 page-flat sales-analytics">
+    <div class="page-head">
+        <div>
+            <h1 class="page-title">@L["SalesAnalytics"]</h1>
+            <div class="page-sub">@L["SalesAnalytics:Subtitle"]</div>
+        </div>
+        <div class="page-head-actions">
+            <SoftButton Variant="Variant.Text" Color="Color.Primary"
+                        StartIcon="@Icons.Material.Filled.Refresh"
+                        OnClick="LoadAsync" Disabled="_loading">
+                @L["Refresh"]
+            </SoftButton>
+        </div>
+    </div>
+
+    <SoftCardContent>
+        <div class="toolbar">
+            <div class="sa-range">
+                @foreach (var d in RangeOptions)
+                {
+                    var dd = d;
+                    <SoftButton Variant="@(_days == dd ? Variant.Filled : Variant.Text)"
+                                Color="Color.Primary"
+                                Size="Size.Small"
+                                Disabled="_loading"
+                                OnClick="@(() => SetDaysAsync(dd))">
+                        @L[$"SalesAnalytics:Days{dd}"]
+                    </SoftButton>
+                }
+            </div>
+
+            @if (_accessibleBranches.Count > 1)
+            {
+                <div class="filter-chip">
+                    <SoftLookupSelect TItem="BranchLookupDto" TValue="Guid?"
+                                      Items="_accessibleBranches"
+                                      ToValue="@(b => (Guid?)b.Id)"
+                                      ToLabel="@(b => b.Name)"
+                                      Value="_branchFilter"
+                                      ValueChanged="OnBranchChangedAsync"
+                                      Label="@L["SalesAnalytics:Branch"]"
+                                      Margin="Margin.Dense"
+                                      Clearable="true"
+                                      Dense="true" />
+                </div>
+            }
+
+            <div class="toolbar-right"></div>
+        </div>
+
+        @if (_error != null)
+        {
+            <SoftAlert Severity="Severity.Error" Variant="Variant.Filled" Class="ma-4">
+                <strong>@L["SalesAnalytics:LoadFailed"]</strong> @_error
+            </SoftAlert>
+        }
+        else if (_data == null)
+        {
+            <div class="sa-skeleton-row">
+                @for (var i = 0; i < 4; i++)
+                {
+                    <SoftSkeleton SkeletonType="SkeletonType.Rectangle" Height="64px" Width="100%" />
+                }
+            </div>
+            <div class="sa-skeleton-row" style="margin-top:20px;">
+                <SoftSkeleton SkeletonType="SkeletonType.Rectangle" Height="300px" Width="100%" />
+            </div>
+            <div class="sa-skeleton-row" style="margin-top:20px;">
+                <SoftSkeleton SkeletonType="SkeletonType.Rectangle" Height="300px" Width="100%" />
+                <SoftSkeleton SkeletonType="SkeletonType.Rectangle" Height="300px" Width="100%" />
+            </div>
+        }
+        else
+        {
+            @* ── KPI stat row ── *@
+            <div class="stats">
+                <div>
+                    <span class="stat-label">@L["SalesAnalytics:TotalRevenue"]</span>
+                    <span class="stat-value">@FormatMoney(_data.TotalRevenue)</span>
+                </div>
+                <div>
+                    <span class="stat-label">@L["SalesAnalytics:SalesCount"]</span>
+                    <span class="stat-value">@_data.TotalSales.ToString("N0")</span>
+                </div>
+                <div>
+                    <span class="stat-label">@L["SalesAnalytics:AvgSale"]</span>
+                    <span class="stat-value">@FormatMoneyExact(_data.AvgSaleValue)</span>
+                </div>
+                <div>
+                    <span class="stat-label">@L["SalesAnalytics:ProductsSold"]</span>
+                    <span class="stat-value">@_data.DistinctProductsSold.ToString("N0")</span>
+                </div>
+            </div>
+
+            @if (_data.TotalSales == 0)
+            {
+                <div class="sa-empty sa-empty--page">
+                    <SoftIcon Icon="@Icons.Material.Outlined.Inbox" />
+                    <span>@L["SalesAnalytics:NoData"]</span>
+                </div>
+            }
+            else
+            {
+                @* ── Revenue trend (full width) ── *@
+                <section class="sa-section">
+                    <header class="sa-section-head">
+                        <div>
+                            <h2 class="sa-section-title">@L["SalesAnalytics:RevenueTrend"]</h2>
+                            <div class="sa-section-sub">@L["SalesAnalytics:RevenueTrendSub"]</div>
+                        </div>
+                    </header>
+                    <div class="sa-chart">
+                        <ApexChart TItem="DailySalesPointDto" @key="_data" Options="_trendOptions" Height="280">
+                            <ApexPointSeries TItem="DailySalesPointDto"
+                                             Items="_data.DailySeries"
+                                             Name="@L["SalesAnalytics:Revenue"]"
+                                             SeriesType="SeriesType.Area"
+                                             XValue="@(d => d.Date.ToString("MMM d"))"
+                                             YValue="@(d => d.Revenue)" />
+                        </ApexChart>
+                    </div>
+                </section>
+
+                @* ── Branch bar + category donut ── *@
+                <SoftGrid Spacing="3" Class="sa-grid">
+                    <SoftGridItem xs="12" md="6">
+                        <section class="sa-section sa-section--full">
+                            <header class="sa-section-head">
+                                <div>
+                                    <h2 class="sa-section-title">@L["SalesAnalytics:SalesByBranch"]</h2>
+                                    <div class="sa-section-sub">@L["SalesAnalytics:SalesByBranchSub"]</div>
+                                </div>
+                            </header>
+                            <div class="sa-chart">
+                                <ApexChart TItem="BranchSalesSliceDto" @key="_data" Options="_branchOptions" Height="300">
+                                    <ApexPointSeries TItem="BranchSalesSliceDto"
+                                                     Items="_data.Branches"
+                                                     Name="@L["SalesAnalytics:Revenue"]"
+                                                     SeriesType="SeriesType.Bar"
+                                                     XValue="@(b => b.BranchName)"
+                                                     YValue="@(b => b.Revenue)" />
+                                </ApexChart>
+                            </div>
+                        </section>
+                    </SoftGridItem>
+                    <SoftGridItem xs="12" md="6">
+                        <section class="sa-section sa-section--full">
+                            <header class="sa-section-head">
+                                <div>
+                                    <h2 class="sa-section-title">@L["SalesAnalytics:CategoryMix"]</h2>
+                                    <div class="sa-section-sub">@L["SalesAnalytics:CategoryMixSub"]</div>
+                                </div>
+                            </header>
+                            <div class="sa-chart">
+                                <ApexChart TItem="CategorySalesSliceDto" @key="_data" Options="_categoryOptions" Height="300">
+                                    <ApexPointSeries TItem="CategorySalesSliceDto"
+                                                     Items="_data.CategoryMix"
+                                                     Name="@L["SalesAnalytics:Revenue"]"
+                                                     SeriesType="SeriesType.Donut"
+                                                     XValue="@(c => c.CategoryName)"
+                                                     YValue="@(c => c.Revenue)" />
+                                </ApexChart>
+                            </div>
+                        </section>
+                    </SoftGridItem>
+                </SoftGrid>
+
+                @* ── Top movers ── *@
+                <section class="sa-section">
+                    <header class="sa-section-head">
+                        <div>
+                            <h2 class="sa-section-title">@L["SalesAnalytics:TopMovers"]</h2>
+                            <div class="sa-section-sub">@L["SalesAnalytics:TopMoversSub"]</div>
+                        </div>
+                    </header>
+                    <div class="sa-chart">
+                        <ApexChart TItem="ProductSalesRowDto" @key="_data" Options="_topMoversOptions" Height="320">
+                            <ApexPointSeries TItem="ProductSalesRowDto"
+                                             Items="_data.TopMovers"
+                                             Name="@L["SalesAnalytics:Revenue"]"
+                                             SeriesType="SeriesType.Bar"
+                                             XValue="@(p => p.ProductName)"
+                                             YValue="@(p => p.Revenue)" />
+                        </ApexChart>
+                    </div>
+                </section>
+
+                @* ── Slow movers (compact table — tiny values chart poorly) ── *@
+                <section class="sa-section">
+                    <header class="sa-section-head">
+                        <div>
+                            <h2 class="sa-section-title">@L["SalesAnalytics:SlowMovers"]</h2>
+                            <div class="sa-section-sub">@L["SalesAnalytics:SlowMoversSub"]</div>
+                        </div>
+                    </header>
+                    <table class="sa-table">
+                        <thead>
+                            <tr>
+                                <th>@L["SalesAnalytics:Product"]</th>
+                                <th class="sa-num">@L["SalesAnalytics:QtySold"]</th>
+                                <th class="sa-num">@L["SalesAnalytics:Revenue"]</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var p in _data.SlowMovers)
+                            {
+                                <tr>
+                                    <td>
+                                        <div class="sa-prod-name">@p.ProductName</div>
+                                        @if (!string.IsNullOrWhiteSpace(p.SKU))
+                                        {
+                                            <div class="sa-prod-sku">@p.SKU</div>
+                                        }
+                                    </td>
+                                    <td class="sa-num">@p.QuantitySold.ToString("N0")</td>
+                                    <td class="sa-num">@FormatMoneyExact(p.Revenue)</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </section>
+            }
+        }
+    </SoftCardContent>
+</SoftCard>
+
+<style>
+    .sales-analytics { animation: sa-fade .25s ease-out; }
+    @@keyframes sa-fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+    .sa-range { display: inline-flex; align-items: center; gap: 4px; }
+
+    .sa-skeleton-row {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 14px;
+        padding: 12px 32px 0;
+    }
+
+    .sa-grid { padding: 0 32px; margin-top: 14px; }
+    .sales-analytics .sa-grid .mud-grid-item { display: flex; }
+    .sa-section--full { flex: 1; }
+
+    .sa-section {
+        background: var(--surface);
+        border: 1px solid var(--bd-1);
+        border-radius: var(--r-md);
+        box-shadow: var(--shadow-sm);
+        padding: 16px 18px;
+        margin: 14px 32px 0;
+    }
+    .sa-grid .sa-section { margin: 0; width: 100%; }
+
+    .sa-section-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 10px;
+        margin-bottom: 14px;
+    }
+    .sa-section-title {
+        font-family: var(--font-serif);
+        font-size: 18px;
+        font-weight: 600;
+        color: var(--fg-1);
+        margin: 0;
+    }
+    .sa-section-sub {
+        font-size: 12.5px;
+        color: var(--fg-3);
+        margin-top: 2px;
+    }
+
+    .sa-chart { min-height: 260px; }
+    .sa-chart .apexcharts-svg { background: transparent !important; }
+
+    .sa-empty {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 18px 12px;
+        color: var(--fg-3);
+        font-size: 13px;
+        justify-content: center;
+    }
+    .sa-empty .mud-icon-root { font-size: 22px; }
+    .sa-empty--page { padding: 56px 12px; }
+
+    /* Slow movers — page-flat hairline rows */
+    .sa-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13.5px;
+    }
+    .sa-table th {
+        text-align: left;
+        font-size: 11.5px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: .05em;
+        color: var(--fg-3);
+        padding: 6px 10px;
+        border-bottom: 1px solid var(--bd-2);
+    }
+    .sa-table td {
+        padding: 8px 10px;
+        border-bottom: 1px solid var(--bd-1);
+        color: var(--fg-1);
+        vertical-align: top;
+    }
+    .sa-table tbody tr:last-child td { border-bottom: none; }
+    .sa-table tbody tr:hover td { background: var(--hover); }
+    .sa-num {
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+    }
+    .sa-prod-name { font-weight: 600; }
+    .sa-prod-sku { font-size: 11.5px; color: var(--fg-3); font-family: var(--font-mono); }
+</style>
+
+@code {
+    private static readonly int[] RangeOptions = { 7, 30, 90 };
+
+    private SalesAnalyticsDto? _data;
+    private bool _loading;
+    private string? _error;
+
+    private int _days = 30;
+    private Guid? _branchFilter;
+    private List<BranchLookupDto> _accessibleBranches = new();
+
+    // Warm-theme chart styling. ApexCharts cannot read CSS custom properties,
+    // so the hex values below mirror glass-theme.css:
+    //   --accent #c8633f (terracotta) · --fg-3 #8a7e6e (mid-tone, legible in light & dark)
+    private static readonly List<string> WarmPalette = new()
+    {
+        "#c8633f", "#6b8e4e", "#c89c4f", "#4a7da8", "#4a8e8e", "#b3543a", "#8a7e6e"
+    };
+
+    private readonly ApexChartOptions<DailySalesPointDto> _trendOptions = new()
+    {
+        Chart = new ApexCharts.Chart
+        {
+            Toolbar = new ApexCharts.Toolbar { Show = false },
+            Background = "transparent",
+            FontFamily = "Inter, sans-serif",
+            ForeColor = "#8a7e6e"
+        },
+        Colors = new List<string> { "#c8633f" },
+        Stroke = new ApexCharts.Stroke { Curve = ApexCharts.Curve.Smooth, Width = 3 },
+        DataLabels = new ApexCharts.DataLabels { Enabled = false },
+        Fill = new ApexCharts.Fill
+        {
+            Type = ApexCharts.FillType.Gradient,
+            Gradient = new ApexCharts.FillGradient
+            {
+                ShadeIntensity = 0.4,
+                OpacityFrom = 0.35,
+                OpacityTo = 0.05
+            }
+        },
+        Grid = new ApexCharts.Grid
+        {
+            BorderColor = "rgba(138, 126, 110, 0.25)",
+            StrokeDashArray = 3
+        },
+        Legend = new ApexCharts.Legend { Show = false },
+        Xaxis = new ApexCharts.XAxis
+        {
+            AxisBorder = new ApexCharts.AxisBorder { Show = false },
+            AxisTicks = new ApexCharts.AxisTicks { Show = false }
+        },
+        Yaxis = new List<ApexCharts.YAxis>
+        {
+            new ApexCharts.YAxis
+            {
+                Labels = new ApexCharts.YAxisLabels
+                {
+                    Formatter = "function (value) { return '$' + Math.round(value).toLocaleString(); }"
+                }
+            }
+        }
+    };
+
+    private readonly ApexChartOptions<BranchSalesSliceDto> _branchOptions = new()
+    {
+        Chart = new ApexCharts.Chart
+        {
+            Toolbar = new ApexCharts.Toolbar { Show = false },
+            Background = "transparent",
+            FontFamily = "Inter, sans-serif",
+            ForeColor = "#8a7e6e"
+        },
+        Colors = new List<string> { "#c8633f" },
+        PlotOptions = new ApexCharts.PlotOptions
+        {
+            Bar = new ApexCharts.PlotOptionsBar
+            {
+                Horizontal = true,
+                BorderRadius = 4,
+                BarHeight = "55%"
+            }
+        },
+        DataLabels = new ApexCharts.DataLabels { Enabled = false },
+        Grid = new ApexCharts.Grid
+        {
+            BorderColor = "rgba(138, 126, 110, 0.25)",
+            StrokeDashArray = 3
+        },
+        Legend = new ApexCharts.Legend { Show = false }
+    };
+
+    private readonly ApexChartOptions<CategorySalesSliceDto> _categoryOptions = new()
+    {
+        Chart = new ApexCharts.Chart
+        {
+            Toolbar = new ApexCharts.Toolbar { Show = false },
+            Background = "transparent",
+            FontFamily = "Inter, sans-serif",
+            ForeColor = "#8a7e6e"
+        },
+        Colors = WarmPalette
+    };
+
+    private readonly ApexChartOptions<ProductSalesRowDto> _topMoversOptions = new()
+    {
+        Chart = new ApexCharts.Chart
+        {
+            Toolbar = new ApexCharts.Toolbar { Show = false },
+            Background = "transparent",
+            FontFamily = "Inter, sans-serif",
+            ForeColor = "#8a7e6e"
+        },
+        Colors = new List<string> { "#c8633f" },
+        PlotOptions = new ApexCharts.PlotOptions
+        {
+            Bar = new ApexCharts.PlotOptionsBar
+            {
+                Horizontal = true,
+                BorderRadius = 4,
+                BarHeight = "60%"
+            }
+        },
+        DataLabels = new ApexCharts.DataLabels { Enabled = false },
+        Grid = new ApexCharts.Grid
+        {
+            BorderColor = "rgba(138, 126, 110, 0.25)",
+            StrokeDashArray = 3
+        },
+        Legend = new ApexCharts.Legend { Show = false }
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var allBranches = await BranchAppService.GetLookupAsync();
+            var accessibleIds = await SaleAppService.GetAccessibleBranchIdsAsync();
+            var set = accessibleIds.ToHashSet();
+            _accessibleBranches = allBranches.Where(b => set.Contains(b.Id)).ToList();
+        }
+        catch (Exception ex)
+        {
+            await HandleErrorAsync(ex);
+        }
+
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error = null;
+        try
+        {
+            _data = await AnalyticsAppService.GetAsync(new GetSalesAnalyticsInput
+            {
+                Days = _days,
+                BranchId = _branchFilter
+            });
+        }
+        catch (Exception ex)
+        {
+            _error = $"{ex.GetType().Name}: {ex.Message}";
+            await HandleErrorAsync(ex);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task SetDaysAsync(int days)
+    {
+        if (_days == days) return;
+        _days = days;
+        await LoadAsync();
+    }
+
+    private async Task OnBranchChangedAsync(Guid? branchId)
+    {
+        _branchFilter = branchId;
+        await LoadAsync();
+    }
+
+    private static string FormatMoney(decimal v)
+        => v.ToString("C0", System.Globalization.CultureInfo.GetCultureInfo("en-US"));
+
+    private static string FormatMoneyExact(decimal v)
+        => v.ToString("C2", System.Globalization.CultureInfo.GetCultureInfo("en-US"));
+}

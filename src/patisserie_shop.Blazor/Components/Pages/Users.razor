@@ -1,0 +1,467 @@
+@page "/identity/users"
+@attribute [Authorize(IdentityPermissions.Users.Default)]
+@using System.Threading
+@using System.Threading.Tasks
+@using Microsoft.AspNetCore.Authorization
+@using Volo.Abp.Application.Dtos
+@using Volo.Abp.AspNetCore.Components.Web.Theming.Layout
+@using Volo.Abp.Identity
+@using Color = MudBlazor.Color
+@using Variant = MudBlazor.Variant
+@using Size = MudBlazor.Size
+@using Margin = MudBlazor.Margin
+@inherits patisserie_shopComponentBase
+@inject IIdentityUserAppService UserAppService
+@inject PageLayout PageLayout
+@inject ISnackbar Snackbar
+
+@{
+    PageLayout.Title = "Users";
+}
+
+<SoftCard Elevation="2" Class="pa-2 page-flat">
+    <div class="page-head">
+        <div>
+            <h1 class="page-title">Users</h1>
+            <div class="page-sub">Manage accounts, roles and per-user permissions.</div>
+        </div>
+        <div class="page-head-actions">
+            @if (_canCreate)
+            {
+                <SoftButton Variant="Variant.Filled" Color="Color.Primary"
+                            StartIcon="@Icons.Material.Filled.Add" OnClick="OpenCreateDialog">
+                    New user
+                </SoftButton>
+            }
+        </div>
+    </div>
+    <SoftCardContent>
+        <div class="toolbar">
+            <SoftTextField T="string"
+                           Placeholder="@L["Filter"]"
+                           @bind-Value="_filter"
+                           Variant="Variant.Outlined"
+                           Margin="Margin.Dense"
+                           Adornment="Adornment.Start"
+                           AdornmentIcon="@Icons.Material.Filled.Search"
+                           OnKeyUp="OnFilterKeyUpAsync"
+                           Immediate="true"
+                           Class="toolbar-search"
+                           Style="max-width: 320px;" />
+            <div class="toolbar-right">
+                <SoftButton Variant="Variant.Text" Color="Color.Primary"
+                            StartIcon="@Icons.Material.Filled.Refresh" OnClick="ReloadAsync">
+                    @L["Refresh"]
+                </SoftButton>
+            </div>
+        </div>
+
+        <SoftDataGrid T="IdentityUserDto"
+                      @ref="_grid"
+                      ServerData="LoadServerData"
+                      Dense="true" Hover="true" Bordered="false" Striped="true"
+                      Loading="_loading" SortMode="SortMode.Single">
+            <Columns>
+                <PropertyColumn T="IdentityUserDto" TProperty="string" Property="x => x.UserName" Title="Username" />
+                <TemplateColumn T="IdentityUserDto" Title="Name" Sortable="false">
+                    <CellTemplate>@($"{context.Item.Name} {context.Item.Surname}".Trim())</CellTemplate>
+                </TemplateColumn>
+                <PropertyColumn T="IdentityUserDto" TProperty="string" Property="x => x.Email!" Title="Email" Sortable="false" />
+                <PropertyColumn T="IdentityUserDto" TProperty="string" Property="x => x.PhoneNumber!" Title="Phone" Sortable="false" />
+                <TemplateColumn T="IdentityUserDto" Title="Status" Sortable="true" SortBy="x => x.IsActive">
+                    <CellTemplate>
+                        @if (context.Item.IsActive)
+                        {
+                            <SoftChip T="string" Color="Color.Success" Size="Size.Small" Variant="Variant.Filled">Active</SoftChip>
+                        }
+                        else
+                        {
+                            <SoftChip T="string" Color="Color.Default" Size="Size.Small" Variant="Variant.Outlined">Inactive</SoftChip>
+                        }
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn T="IdentityUserDto" Title="@L["Actions"]" Sortable="false">
+                    <CellTemplate>
+                        <span class="row-actions">
+                            <SoftStack Row="true" Spacing="1">
+                                @if (_canManagePermissions)
+                                {
+                                    <SoftIconButton Icon="@Icons.Material.Filled.Security"
+                                                    Color="Color.Default" Size="Size.Small"
+                                                    OnClick="() => OpenPermissions(context.Item)" />
+                                }
+                                @if (_canUpdate)
+                                {
+                                    <SoftIconButton Icon="@Icons.Material.Filled.Edit"
+                                                    Color="Color.Primary" Size="Size.Small"
+                                                    OnClick="() => OpenEditDialogAsync(context.Item)" />
+                                }
+                                @if (_canDelete)
+                                {
+                                    <SoftIconButton Icon="@Icons.Material.Filled.Delete"
+                                                    Color="Color.Error" Size="Size.Small"
+                                                    OnClick="() => DeleteAsync(context.Item)" />
+                                }
+                            </SoftStack>
+                        </span>
+                    </CellTemplate>
+                </TemplateColumn>
+            </Columns>
+            <PagerContent>
+                <MudDataGridPager T="IdentityUserDto" />
+            </PagerContent>
+        </SoftDataGrid>
+    </SoftCardContent>
+</SoftCard>
+
+@if (_dialogVisible)
+{
+    <div class="glass-modal-backdrop" @onclick="CloseDialog">
+        <div class="glass-modal-container glass-modal-container--md" @onclick:stopPropagation="true">
+            <SoftCard Elevation="24" Class="glass-modal">
+                <SoftCardHeader Class="pa-4">
+                    <CardHeaderContent>
+                        <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <SoftIcon Icon="@(_editingId.HasValue ? Icons.Material.Filled.Edit : Icons.Material.Filled.AddCircle)"
+                                      Color="Color.Primary" Size="Size.Medium" />
+                            <SoftText Typo="Typo.h6">@(_editingId.HasValue ? "Edit user" : "New user")</SoftText>
+                        </SoftStack>
+                    </CardHeaderContent>
+                    <CardHeaderActions>
+                        <SoftIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="CloseDialog" />
+                    </CardHeaderActions>
+                </SoftCardHeader>
+                <SoftDivider />
+                <SoftCardContent Class="pa-4 glass-modal-body" Style="max-height: 65vh; overflow-y: auto;">
+                    <SoftStack Spacing="3">
+                        <SoftTextField T="string" Label="Username" @bind-Value="_editUserName"
+                                       Variant="Variant.Outlined" MaxLength="256" Required="true" Immediate="true" />
+                        <SoftStack Row="true" Spacing="2">
+                            <SoftTextField T="string" Label="Name" @bind-Value="_editName"
+                                           Variant="Variant.Outlined" MaxLength="64" />
+                            <SoftTextField T="string" Label="Surname" @bind-Value="_editSurname"
+                                           Variant="Variant.Outlined" MaxLength="64" />
+                        </SoftStack>
+                        <SoftTextField T="string" Label="@(_editingId.HasValue ? "New password (leave blank to keep)" : "Password")"
+                                       @bind-Value="_editPassword" Variant="Variant.Outlined"
+                                       InputType="InputType.Password" MaxLength="128"
+                                       Required="@(!_editingId.HasValue)" />
+                        <SoftStack Row="true" Spacing="2">
+                            <SoftTextField T="string" Label="Email" @bind-Value="_editEmail"
+                                           Variant="Variant.Outlined" InputType="InputType.Email" MaxLength="256" Required="true" />
+                            <SoftTextField T="string" Label="Phone" @bind-Value="_editPhone"
+                                           Variant="Variant.Outlined" MaxLength="32" />
+                        </SoftStack>
+                        <SoftStack Row="true" Spacing="3">
+                            <SoftCheckBox T="bool" @bind-Value="_editIsActive" Label="Active" Color="Color.Primary" />
+                            <SoftCheckBox T="bool" @bind-Value="_editLockoutEnabled" Label="Lockout enabled" Color="Color.Primary" />
+                        </SoftStack>
+
+                        <SoftDivider />
+                        <SoftText Typo="Typo.subtitle2">Roles</SoftText>
+                        @if (_allRoles.Count == 0)
+                        {
+                            <SoftText Style="color: var(--fg-3);">No roles available.</SoftText>
+                        }
+                        else
+                        {
+                            <div class="perm-group-body">
+                                @foreach (var role in _allRoles)
+                                {
+                                    <div class="perm-item">
+                                        <SoftCheckBox T="bool"
+                                                      Value="@_selectedRoles.Contains(role.Name)"
+                                                      ValueChanged="@(v => ToggleRole(role.Name, v))"
+                                                      Label="@role.Name"
+                                                      Color="Color.Primary" />
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </SoftStack>
+                </SoftCardContent>
+                <SoftDivider />
+                <div class="pa-3 d-flex justify-end" style="gap: 8px;">
+                    <SoftButton Variant="Variant.Text" OnClick="CloseDialog">@L["Cancel"]</SoftButton>
+                    <SoftButton Variant="Variant.Filled" Color="Color.Primary"
+                                StartIcon="@Icons.Material.Filled.Save" OnClick="SaveAsync">
+                        @L["Save"]
+                    </SoftButton>
+                </div>
+            </SoftCard>
+        </div>
+    </div>
+}
+
+@if (_confirmVisible)
+{
+    <div class="glass-modal-backdrop" @onclick="() => _confirmVisible = false">
+        <div class="glass-modal-container glass-modal-container--sm" @onclick:stopPropagation="true">
+            <SoftCard Elevation="24" Class="glass-modal">
+                <SoftCardHeader Class="pa-4">
+                    <CardHeaderContent>
+                        <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <SoftIcon Icon="@Icons.Material.Filled.Warning" Color="Color.Error" Size="Size.Medium" />
+                            <SoftText Typo="Typo.h6">@L["AreYouSure"]</SoftText>
+                        </SoftStack>
+                    </CardHeaderContent>
+                </SoftCardHeader>
+                <SoftDivider />
+                <SoftCardContent Class="pa-4">
+                    <SoftText>@L["AreYouSureToDelete"]</SoftText>
+                </SoftCardContent>
+                <SoftDivider />
+                <div class="pa-3 d-flex justify-end" style="gap: 8px;">
+                    <SoftButton Variant="Variant.Text" OnClick="() => _confirmVisible = false">@L["Cancel"]</SoftButton>
+                    <SoftButton Variant="Variant.Filled" Color="Color.Error"
+                                StartIcon="@Icons.Material.Filled.Delete" OnClick="ConfirmDeleteAsync">
+                        @L["Yes"]
+                    </SoftButton>
+                </div>
+            </SoftCard>
+        </div>
+    </div>
+}
+
+<PermissionModal Visible="_permVisible"
+                 ProviderName="U"
+                 ProviderKey="@_permUserId"
+                 EntityName="@_permUserName"
+                 CanManage="_canManagePermissions"
+                 OnClose="OnPermissionsClosed" />
+
+@code {
+    private SoftDataGrid<IdentityUserDto> _grid = null!;
+    private bool _loading;
+    private string? _filter;
+
+    private bool _canCreate;
+    private bool _canUpdate;
+    private bool _canDelete;
+    private bool _canManagePermissions;
+
+    private List<IdentityRoleDto> _allRoles = new();
+
+    private bool _dialogVisible;
+    private Guid? _editingId;
+    private string _editConcurrencyStamp = string.Empty;
+    private string _editUserName = string.Empty;
+    private string? _editName;
+    private string? _editSurname;
+    private string? _editEmail;
+    private string? _editPhone;
+    private string _editPassword = string.Empty;
+    private bool _editIsActive = true;
+    private bool _editLockoutEnabled = true;
+    private readonly HashSet<string> _selectedRoles = new();
+
+    private bool _confirmVisible;
+    private IdentityUserDto? _pendingDelete;
+
+    private bool _permVisible;
+    private string? _permUserId;
+    private string? _permUserName;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _canCreate = await AuthorizationService.IsGrantedAsync(IdentityPermissions.Users.Create);
+        _canUpdate = await AuthorizationService.IsGrantedAsync(IdentityPermissions.Users.Update);
+        _canDelete = await AuthorizationService.IsGrantedAsync(IdentityPermissions.Users.Delete);
+        _canManagePermissions = await AuthorizationService.IsGrantedAsync(IdentityPermissions.Users.ManagePermissions);
+
+        var roles = await UserAppService.GetAssignableRolesAsync();
+        _allRoles = roles.Items.ToList();
+    }
+
+    private async Task<GridData<IdentityUserDto>> LoadServerData(GridState<IdentityUserDto> state, CancellationToken cancellationToken)
+    {
+        _loading = true;
+        try
+        {
+            string? sorting = null;
+            var sort = state.SortDefinitions.FirstOrDefault();
+            if (sort != null)
+            {
+                sorting = $"{sort.SortBy} {(sort.Descending ? "desc" : "asc")}";
+            }
+
+            var result = await UserAppService.GetListAsync(new GetIdentityUsersInput
+            {
+                Filter = _filter,
+                SkipCount = state.Page * state.PageSize,
+                MaxResultCount = state.PageSize,
+                Sorting = sorting
+            });
+
+            return new GridData<IdentityUserDto>
+            {
+                Items = result.Items,
+                TotalItems = (int)result.TotalCount
+            };
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task OnFilterKeyUpAsync(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        if (_grid != null) await _grid.ReloadServerData();
+    }
+
+    private void ToggleRole(string roleName, bool selected)
+    {
+        if (selected) _selectedRoles.Add(roleName);
+        else _selectedRoles.Remove(roleName);
+    }
+
+    private void OpenCreateDialog()
+    {
+        _editingId = null;
+        _editConcurrencyStamp = string.Empty;
+        _editUserName = string.Empty;
+        _editName = null;
+        _editSurname = null;
+        _editEmail = null;
+        _editPhone = null;
+        _editPassword = string.Empty;
+        _editIsActive = true;
+        _editLockoutEnabled = true;
+        _selectedRoles.Clear();
+        foreach (var role in _allRoles.Where(r => r.IsDefault))
+        {
+            _selectedRoles.Add(role.Name);
+        }
+        _dialogVisible = true;
+    }
+
+    private async Task OpenEditDialogAsync(IdentityUserDto user)
+    {
+        _editingId = user.Id;
+        _editConcurrencyStamp = user.ConcurrencyStamp;
+        _editUserName = user.UserName;
+        _editName = user.Name;
+        _editSurname = user.Surname;
+        _editEmail = user.Email;
+        _editPhone = user.PhoneNumber;
+        _editPassword = string.Empty;
+        _editIsActive = user.IsActive;
+        _editLockoutEnabled = user.LockoutEnabled;
+
+        _selectedRoles.Clear();
+        try
+        {
+            var roles = await UserAppService.GetRolesAsync(user.Id);
+            foreach (var role in roles.Items)
+            {
+                _selectedRoles.Add(role.Name);
+            }
+        }
+        catch (Exception ex)
+        {
+            await HandleErrorAsync(ex);
+        }
+
+        _dialogVisible = true;
+    }
+
+    private void CloseDialog() => _dialogVisible = false;
+
+    private async Task SaveAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_editUserName))
+        {
+            Snackbar.Add(L["ThisFieldIsRequired", "Username"], Severity.Warning);
+            return;
+        }
+
+        try
+        {
+            if (_editingId.HasValue)
+            {
+                var update = new IdentityUserUpdateDto
+                {
+                    UserName = _editUserName,
+                    Name = _editName,
+                    Surname = _editSurname,
+                    Email = _editEmail,
+                    PhoneNumber = _editPhone,
+                    IsActive = _editIsActive,
+                    LockoutEnabled = _editLockoutEnabled,
+                    RoleNames = _selectedRoles.ToArray(),
+                    ConcurrencyStamp = _editConcurrencyStamp
+                };
+                if (!string.IsNullOrEmpty(_editPassword))
+                {
+                    update.Password = _editPassword;
+                }
+                await UserAppService.UpdateAsync(_editingId.Value, update);
+            }
+            else
+            {
+                await UserAppService.CreateAsync(new IdentityUserCreateDto
+                {
+                    UserName = _editUserName,
+                    Name = _editName,
+                    Surname = _editSurname,
+                    Email = _editEmail,
+                    PhoneNumber = _editPhone,
+                    IsActive = _editIsActive,
+                    LockoutEnabled = _editLockoutEnabled,
+                    RoleNames = _selectedRoles.ToArray(),
+                    Password = _editPassword
+                });
+            }
+            Snackbar.Add(L["SuccessfullySaved"], Severity.Success);
+            _dialogVisible = false;
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            await HandleErrorAsync(ex);
+        }
+    }
+
+    private void DeleteAsync(IdentityUserDto user)
+    {
+        _pendingDelete = user;
+        _confirmVisible = true;
+    }
+
+    private async Task ConfirmDeleteAsync()
+    {
+        if (_pendingDelete == null) return;
+        try
+        {
+            await UserAppService.DeleteAsync(_pendingDelete.Id);
+            Snackbar.Add(L["SuccessfullyDeleted"], Severity.Success);
+            _confirmVisible = false;
+            _pendingDelete = null;
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            await HandleErrorAsync(ex);
+        }
+    }
+
+    private void OpenPermissions(IdentityUserDto user)
+    {
+        _permUserId = user.Id.ToString();
+        _permUserName = user.UserName;
+        _permVisible = true;
+    }
+
+    private void OnPermissionsClosed()
+    {
+        _permVisible = false;
+        _permUserId = null;
+        _permUserName = null;
+    }
+}

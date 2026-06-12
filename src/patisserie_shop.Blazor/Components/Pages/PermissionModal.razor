@@ -1,0 +1,245 @@
+@using System.Threading.Tasks
+@using Volo.Abp.PermissionManagement
+@using Color = MudBlazor.Color
+@using Variant = MudBlazor.Variant
+@using Size = MudBlazor.Size
+@inherits patisserie_shopComponentBase
+@inject IPermissionAppService PermissionAppService
+
+@if (Visible)
+{
+    <div class="glass-modal-backdrop" @onclick="CloseAsync">
+        <div class="glass-modal-container glass-modal-container--md" @onclick:stopPropagation="true">
+            <SoftCard Elevation="24" Class="glass-modal">
+                <SoftCardHeader Class="pa-4">
+                    <CardHeaderContent>
+                        <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <SoftIcon Icon="@Icons.Material.Filled.Security" Color="Color.Primary" Size="Size.Medium" />
+                            <div>
+                                <SoftText Typo="Typo.h6">@L["Permissions"]</SoftText>
+                                @if (!string.IsNullOrWhiteSpace(EntityName))
+                                {
+                                    <SoftText Typo="Typo.caption" Style="color: var(--fg-3);">@EntityName</SoftText>
+                                }
+                            </div>
+                        </SoftStack>
+                    </CardHeaderContent>
+                    <CardHeaderActions>
+                        <SoftIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="CloseAsync" />
+                    </CardHeaderActions>
+                </SoftCardHeader>
+                <SoftDivider />
+                <SoftCardContent Class="pa-4 glass-modal-body" Style="max-height: 60vh; overflow-y: auto;">
+                    @if (_loading)
+                    {
+                        <SoftProgressLinear Indeterminate="true" Color="Color.Primary" />
+                    }
+                    else if (_groups.Count == 0)
+                    {
+                        <SoftText Style="color: var(--fg-3);">@L["NoPermissionsAvailable"]</SoftText>
+                    }
+                    else
+                    {
+                        <div class="perm-toolbar">
+                            <SoftCheckBox T="bool"
+                                          Value="@AllGranted"
+                                          ValueChanged="@(v => ToggleAll(v))"
+                                          Label="@L["SelectAllInAllTabs"]"
+                                          Color="Color.Primary"
+                                          Disabled="@(!CanManage)" />
+                        </div>
+                        <SoftDivider Class="my-2" />
+
+                        @foreach (var group in _groups)
+                        {
+                            <div class="perm-group">
+                                <div class="perm-group-head">
+                                    <SoftCheckBox T="bool"
+                                                  Value="@IsGroupAllGranted(group)"
+                                                  ValueChanged="@(v => ToggleGroup(group, v))"
+                                                  Label="@group.DisplayName"
+                                                  Color="Color.Primary"
+                                                  Disabled="@(!CanManage)" />
+                                </div>
+                                <div class="perm-group-body">
+                                    @foreach (var perm in group.Permissions)
+                                    {
+                                        <div class="perm-item" style="@($"padding-left: {Depth(perm) * 22}px;")">
+                                            <SoftCheckBox T="bool"
+                                                          Value="@_state[perm.Name]"
+                                                          ValueChanged="@(v => TogglePermission(group, perm, v))"
+                                                          Label="@perm.DisplayName"
+                                                          Color="Color.Primary"
+                                                          Disabled="@(!CanManage)" />
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                        }
+                    }
+                </SoftCardContent>
+                <SoftDivider />
+                <div class="pa-3 d-flex justify-end" style="gap: 8px;">
+                    <SoftButton Variant="Variant.Text" OnClick="CloseAsync">@L["Cancel"]</SoftButton>
+                    @if (CanManage)
+                    {
+                        <SoftButton Variant="Variant.Filled" Color="Color.Primary"
+                                    StartIcon="@Icons.Material.Filled.Save"
+                                    Disabled="@(_loading || _saving)"
+                                    OnClick="SaveAsync">
+                            @L["Save"]
+                        </SoftButton>
+                    }
+                </div>
+            </SoftCard>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool Visible { get; set; }
+    [Parameter] public string ProviderName { get; set; } = "R";
+    [Parameter] public string? ProviderKey { get; set; }
+    [Parameter] public string? EntityName { get; set; }
+    [Parameter] public bool CanManage { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private bool _loading;
+    private bool _saving;
+    private string? _loadedKey;
+    private List<PermissionGroupDto> _groups = new();
+    private readonly Dictionary<string, bool> _state = new();
+
+    private bool AllGranted => _state.Count > 0 && _state.Values.All(v => v);
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (Visible && ProviderKey != null && _loadedKey != ProviderKey)
+        {
+            await LoadAsync();
+        }
+        else if (!Visible)
+        {
+            _loadedKey = null;
+        }
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        try
+        {
+            var result = await PermissionAppService.GetAsync(ProviderName, ProviderKey!);
+            _groups = result.Groups.ToList();
+            _state.Clear();
+            foreach (var perm in _groups.SelectMany(g => g.Permissions))
+            {
+                _state[perm.Name] = perm.IsGranted;
+            }
+            _loadedKey = ProviderKey;
+        }
+        catch (Exception ex)
+        {
+            await HandleErrorAsync(ex);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private int Depth(PermissionGrantInfoDto perm)
+    {
+        var depth = 0;
+        var current = perm;
+        var lookup = _groups.SelectMany(g => g.Permissions).ToDictionary(p => p.Name, p => p);
+        while (!string.IsNullOrEmpty(current.ParentName) && lookup.TryGetValue(current.ParentName, out var parent))
+        {
+            depth++;
+            current = parent;
+        }
+        return depth;
+    }
+
+    private bool IsGroupAllGranted(PermissionGroupDto group)
+        => group.Permissions.Count > 0 && group.Permissions.All(p => _state[p.Name]);
+
+    private void TogglePermission(PermissionGroupDto group, PermissionGrantInfoDto perm, bool granted)
+    {
+        _state[perm.Name] = granted;
+        var all = _groups.SelectMany(g => g.Permissions).ToList();
+
+        if (granted)
+        {
+            // Grant ancestors so a child permission is not orphaned.
+            var current = perm;
+            while (!string.IsNullOrEmpty(current.ParentName))
+            {
+                var parent = all.FirstOrDefault(p => p.Name == current.ParentName);
+                if (parent == null) break;
+                _state[parent.Name] = true;
+                current = parent;
+            }
+        }
+        else
+        {
+            // Revoke descendants.
+            RevokeDescendants(perm.Name, all);
+        }
+    }
+
+    private void RevokeDescendants(string parentName, List<PermissionGrantInfoDto> all)
+    {
+        foreach (var child in all.Where(p => p.ParentName == parentName))
+        {
+            _state[child.Name] = false;
+            RevokeDescendants(child.Name, all);
+        }
+    }
+
+    private void ToggleGroup(PermissionGroupDto group, bool granted)
+    {
+        foreach (var perm in group.Permissions)
+        {
+            _state[perm.Name] = granted;
+        }
+    }
+
+    private void ToggleAll(bool granted)
+    {
+        foreach (var key in _state.Keys.ToList())
+        {
+            _state[key] = granted;
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        if (!CanManage) return;
+        _saving = true;
+        try
+        {
+            var input = new UpdatePermissionsDto
+            {
+                Permissions = _state
+                    .Select(kvp => new UpdatePermissionDto { Name = kvp.Key, IsGranted = kvp.Value })
+                    .ToArray()
+            };
+            await PermissionAppService.UpdateAsync(ProviderName, ProviderKey!, input);
+            await OnClose.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            await HandleErrorAsync(ex);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task CloseAsync()
+    {
+        await OnClose.InvokeAsync();
+    }
+}

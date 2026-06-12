@@ -26,26 +26,26 @@
     PageLayout.Title = InvL["Products"];
 }
 
-<SoftCard Elevation="2" Class="pa-2">
-    <SoftCardHeader>
-        <CardHeaderContent>
-            <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                <SoftIcon Icon="@Icons.Material.Filled.Inventory2" Color="Color.Primary" Size="Size.Large" />
-                <SoftText Typo="Typo.h5">@InvL["Products"]</SoftText>
-            </SoftStack>
-        </CardHeaderContent>
-        <CardHeaderActions>
-            <SoftButton Variant="Variant.Filled"
-                        Color="Color.Primary"
-                        StartIcon="@Icons.Material.Filled.Add"
-                        OnClick="OpenCreateDialog"
-                        Disabled="!_canManage">
-                @InvL["NewProduct"]
-            </SoftButton>
-        </CardHeaderActions>
-    </SoftCardHeader>
+<SoftCard Elevation="2" Class="pa-2 page-flat">
+    <div class="page-head">
+        <div>
+            <h1 class="page-title">@InvL["Products"]</h1>
+            <div class="page-sub">Catalogue, pricing and stock.</div>
+        </div>
+        <div class="page-head-actions">
+            @if (_canManage)
+            {
+                <SoftButton Variant="Variant.Filled"
+                            Color="Color.Primary"
+                            StartIcon="@Icons.Material.Filled.Add"
+                            OnClick="OpenCreateDialog">
+                    @InvL["NewProduct"]
+                </SoftButton>
+            }
+        </div>
+    </div>
     <SoftCardContent>
-        <SoftStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Class="mb-4 flex-wrap">
+        <div class="toolbar">
             <SoftTextField T="string"
                            Placeholder="@InvL["Filter"]"
                            @bind-Value="_filter"
@@ -55,9 +55,10 @@
                            AdornmentIcon="@Icons.Material.Filled.Search"
                            OnKeyUp="OnFilterKeyUpAsync"
                            Immediate="true"
+                           Class="toolbar-search"
                            Style="min-width: 240px; max-width: 320px;" />
 
-            <div style="min-width: 220px;">
+            <div class="filter-chip">
                 <SoftLookupSelect TItem="CategoryDto" TValue="Guid?"
                                   Items="_categories"
                                   ToValue="@(c => (Guid?)c.Id)"
@@ -67,11 +68,10 @@
                                   Label="@InvL["AllCategories"]"
                                   Margin="Margin.Dense"
                                   Clearable="true"
-                                  Dense="true"
-                                  AdornmentIcon="@Icons.Material.Filled.Category" />
+                                  Dense="true" />
             </div>
 
-            <div style="min-width: 220px;">
+            <div class="filter-chip">
                 <SoftLookupSelect TItem="SupplierDto" TValue="Guid?"
                                   Items="_suppliers"
                                   ToValue="@(s => (Guid?)s.Id)"
@@ -81,14 +81,15 @@
                                   Label="@InvL["AllSuppliers"]"
                                   Margin="Margin.Dense"
                                   Clearable="true"
-                                  Dense="true"
-                                  AdornmentIcon="@Icons.Material.Filled.LocalShipping" />
+                                  Dense="true" />
             </div>
 
-            <SoftButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="ReloadAsync" StartIcon="@Icons.Material.Filled.Refresh">
-                @L["Refresh"]
-            </SoftButton>
-        </SoftStack>
+            <div class="toolbar-right">
+                <SoftButton Variant="Variant.Text" Color="Color.Primary" OnClick="ReloadAsync" StartIcon="@Icons.Material.Filled.Refresh">
+                    @L["Refresh"]
+                </SoftButton>
+            </div>
+        </div>
 
         <SoftDataGrid T="ProductDto"
                       @ref="_grid"
@@ -113,6 +114,18 @@
                         <SoftText>@FormatMoney(context.Item.SalePrice, context.Item.Currency)</SoftText>
                     </CellTemplate>
                 </TemplateColumn>
+                <TemplateColumn T="ProductDto" Title="@InvL["ShelfLife"]" SortBy="x => x.ShelfLifeDays">
+                    <CellTemplate>
+                        @if (context.Item.ShelfLifeDays.HasValue)
+                        {
+                            <SoftText Typo="Typo.body2">@($"{context.Item.ShelfLifeDays}d")</SoftText>
+                        }
+                        else
+                        {
+                            <SoftText Typo="Typo.caption" Color="Color.Default">—</SoftText>
+                        }
+                    </CellTemplate>
+                </TemplateColumn>
                 <TemplateColumn T="ProductDto" Title="@InvL["IsActive"]" Sortable="true" SortBy="x => x.IsActive">
                     <CellTemplate>
                         @if (context.Item.IsActive)
@@ -127,18 +140,21 @@
                 </TemplateColumn>
                 <TemplateColumn T="ProductDto" Title="@InvL["Actions"]" Sortable="false">
                     <CellTemplate>
-                        <SoftStack Row="true" Spacing="1">
-                            <SoftIconButton Icon="@Icons.Material.Filled.Edit"
-                                            Color="Color.Primary"
-                                            Size="Size.Small"
-                                            OnClick="() => OpenEditDialog(context.Item)"
-                                            Disabled="!_canManage" />
-                            <SoftIconButton Icon="@Icons.Material.Filled.Delete"
-                                            Color="Color.Error"
-                                            Size="Size.Small"
-                                            OnClick="() => DeleteAsync(context.Item)"
-                                            Disabled="!_canManage" />
-                        </SoftStack>
+                        <span class="row-actions">
+                            @if (_canManage)
+                            {
+                                <SoftStack Row="true" Spacing="1">
+                                    <SoftIconButton Icon="@Icons.Material.Filled.Edit"
+                                                    Color="Color.Primary"
+                                                    Size="Size.Small"
+                                                    OnClick="() => OpenEditDialog(context.Item)" />
+                                    <SoftIconButton Icon="@Icons.Material.Filled.Delete"
+                                                    Color="Color.Error"
+                                                    Size="Size.Small"
+                                                    OnClick="() => DeleteAsync(context.Item)" />
+                                </SoftStack>
+                            }
+                        </span>
                     </CellTemplate>
                 </TemplateColumn>
             </Columns>
@@ -151,9 +167,9 @@
 
 @if (_dialogVisible)
 {
-    <div class="soft-modal-backdrop" @onclick="CloseDialog">
-        <div class="soft-modal-container soft-modal-container--lg" @onclick:stopPropagation="true">
-            <SoftCard Elevation="24" Class="soft-modal-card">
+    <div class="glass-modal-backdrop" @onclick="CloseDialog">
+        <div class="glass-modal-container glass-modal-container--lg" @onclick:stopPropagation="true">
+            <SoftCard Elevation="24" Class="glass-modal">
                 <SoftCardHeader Class="pa-4">
                     <CardHeaderContent>
                         <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
@@ -165,13 +181,16 @@
                         </SoftStack>
                     </CardHeaderContent>
                     <CardHeaderActions>
-                        <SoftIconButton Icon="@Icons.Material.Filled.Close"
-                                        Size="Size.Small"
-                                        OnClick="CloseDialog" />
+                        <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <MudSwitch T="bool" @bind-Value="_editIsActive" Color="Color.Primary" Label="@InvL["IsActive"]" />
+                            <SoftIconButton Icon="@Icons.Material.Filled.Close"
+                                            Size="Size.Small"
+                                            OnClick="CloseDialog" />
+                        </SoftStack>
                     </CardHeaderActions>
                 </SoftCardHeader>
                 <SoftDivider />
-                <SoftCardContent Class="pa-4 soft-modal-body">
+                <SoftCardContent Class="pa-4 glass-modal-body">
                     <SoftStack Spacing="4">
                         <div>
                             <SoftText Typo="Typo.overline" Color="Color.Primary">@InvL["BasicInfo"]</SoftText>
@@ -184,18 +203,14 @@
                                                    Variant="Variant.Outlined"
                                                    MaxLength="128"
                                                    Required="true"
-                                                   Immediate="true"
-                                                   Adornment="Adornment.Start"
-                                                   AdornmentIcon="@Icons.Material.Filled.LocalDining" />
+                                                   Immediate="true" />
                                     <SoftTextField T="string"
                                                    Label="@InvL["SKU"]"
                                                    @bind-Value="_editSku"
                                                    Variant="Variant.Outlined"
                                                    MaxLength="64"
                                                    Required="true"
-                                                   Immediate="true"
-                                                   Adornment="Adornment.Start"
-                                                   AdornmentIcon="@Icons.Material.Filled.QrCode" />
+                                                   Immediate="true" />
                                 </SoftStack>
                                 <SoftStack Row="true" Spacing="2">
                                     <SoftLookupSelect TItem="CategoryDto" TValue="Guid?"
@@ -206,8 +221,7 @@
                                                       ValueChanged="@(v => _editCategoryId = v)"
                                                       Label="@InvL["Category"]"
                                                       Placeholder="@InvL["SelectCategory"]"
-                                                      Required="true"
-                                                      AdornmentIcon="@Icons.Material.Filled.Category" />
+                                                      Required="true" />
                                     <SoftLookupSelect TItem="SupplierDto" TValue="Guid?"
                                                       Items="_suppliers"
                                                       ToValue="@(s => (Guid?)s.Id)"
@@ -216,8 +230,7 @@
                                                       ValueChanged="@(v => _editSupplierId = v)"
                                                       Label="@InvL["DefaultSupplier"]"
                                                       Placeholder="@InvL["SelectSupplier"]"
-                                                      Clearable="true"
-                                                      AdornmentIcon="@Icons.Material.Filled.LocalShipping" />
+                                                      Clearable="true" />
                                 </SoftStack>
                                 <SoftTextField T="string"
                                                Label="@InvL["Description"]"
@@ -237,30 +250,33 @@
                                                @bind-Value="_editUnit"
                                                Variant="Variant.Outlined"
                                                MaxLength="32"
-                                               Required="true"
-                                               Adornment="Adornment.Start"
-                                               AdornmentIcon="@Icons.Material.Filled.Straighten" />
+                                               Required="true" />
                                 <SoftNumericField T="decimal"
                                                   Label="@InvL["CostPrice"]"
                                                   @bind-Value="_editCostPrice"
                                                   Variant="Variant.Outlined"
                                                   Min="0"
+                                                  HideSpinButtons="true"
                                                   Adornment="Adornment.Start"
-                                                  AdornmentIcon="@Icons.Material.Filled.AttachMoney" />
+                                                  AdornmentText="$" />
                                 <SoftNumericField T="decimal"
                                                   Label="@InvL["SalePrice"]"
                                                   @bind-Value="_editSalePrice"
                                                   Variant="Variant.Outlined"
                                                   Min="0"
+                                                  HideSpinButtons="true"
                                                   Adornment="Adornment.Start"
-                                                  AdornmentIcon="@Icons.Material.Filled.Sell" />
-                                <SoftTextField T="string"
-                                               Label="@InvL["Currency"]"
-                                               @bind-Value="_editCurrency"
-                                               Variant="Variant.Outlined"
-                                               MaxLength="3"
-                                               Required="true"
-                                               Style="max-width: 110px;" />
+                                                  AdornmentText="$" />
+                                <SoftSelect T="string"
+                                            Label="@InvL["Currency"]"
+                                            @bind-Value="_editCurrency"
+                                            Variant="Variant.Outlined"
+                                            Required="true"
+                                            Style="max-width: 160px;">
+                                    <MudSelectItem T="string" Value="@("USD")">USD — $</MudSelectItem>
+                                    <MudSelectItem T="string" Value="@("EUR")">EUR — €</MudSelectItem>
+                                    <MudSelectItem T="string" Value="@("GBP")">GBP — £</MudSelectItem>
+                                </SoftSelect>
                             </SoftStack>
                         </div>
 
@@ -273,17 +289,23 @@
                                                   @bind-Value="_editReorderLevel"
                                                   Variant="Variant.Outlined"
                                                   Min="0"
-                                                  Adornment="Adornment.Start"
-                                                  AdornmentIcon="@Icons.Material.Filled.Warning"
+                                                  HideSpinButtons="true"
                                                   Style="max-width: 200px;" />
+                                <SoftNumericField T="int?"
+                                                  Label="@InvL["ShelfLifeDays"]"
+                                                  @bind-Value="_editShelfLifeDays"
+                                                  Variant="Variant.Outlined"
+                                                  Min="1"
+                                                  Max="3650"
+                                                  Clearable="true"
+                                                  HideSpinButtons="true"
+                                                  HelperText="@InvL["ShelfLifeHint"]"
+                                                  Style="max-width: 220px;" />
                                 <SoftTextField T="string"
                                                Label="@InvL["ImageUrl"]"
                                                @bind-Value="_editImageUrl"
                                                Variant="Variant.Outlined"
-                                               MaxLength="512"
-                                               Adornment="Adornment.Start"
-                                               AdornmentIcon="@Icons.Material.Filled.Image" />
-                                <SoftCheckBox T="bool" @bind-Value="_editIsActive" Label="@InvL["IsActive"]" Color="Color.Primary" />
+                                               MaxLength="512" />
                             </SoftStack>
                         </div>
                     </SoftStack>
@@ -306,9 +328,9 @@
 
 @if (_confirmVisible)
 {
-    <div class="soft-modal-backdrop" @onclick="() => _confirmVisible = false">
-        <div class="soft-modal-container soft-modal-container--sm" @onclick:stopPropagation="true">
-            <SoftCard Elevation="24" Class="soft-modal-card">
+    <div class="glass-modal-backdrop" @onclick="() => _confirmVisible = false">
+        <div class="glass-modal-container glass-modal-container--sm" @onclick:stopPropagation="true">
+            <SoftCard Elevation="24" Class="glass-modal">
                 <SoftCardHeader Class="pa-4">
                     <CardHeaderContent>
                         <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
@@ -335,50 +357,6 @@
         </div>
     </div>
 }
-
-<style>
-    .soft-modal-backdrop {
-        position: fixed;
-        inset: 0;
-        background: rgba(0, 0, 0, 0.5);
-        z-index: 1400;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        padding: 16px;
-        animation: soft-modal-fade-in 0.15s ease-out;
-    }
-
-    .soft-modal-container {
-        width: 100%;
-        max-width: 560px;
-        animation: soft-modal-scale-in 0.18s ease-out;
-    }
-
-    .soft-modal-container--sm { max-width: 420px; }
-    .soft-modal-container--md { max-width: 640px; }
-    .soft-modal-container--lg { max-width: 880px; }
-
-    .soft-modal-card {
-        border-radius: 12px;
-        overflow: hidden;
-    }
-
-    .soft-modal-body {
-        max-height: 70vh;
-        overflow-y: auto;
-    }
-
-    @@keyframes soft-modal-fade-in {
-        from { opacity: 0; }
-        to { opacity: 1; }
-    }
-
-    @@keyframes soft-modal-scale-in {
-        from { opacity: 0; transform: scale(0.96); }
-        to { opacity: 1; transform: scale(1); }
-    }
-</style>
 
 @code {
     private SoftDataGrid<ProductDto> _grid = null!;
@@ -407,6 +385,7 @@
     private int _editReorderLevel = 5;
     private string? _editImageUrl;
     private bool _editIsActive = true;
+    private int? _editShelfLifeDays;
 
     private bool _confirmVisible;
     private ProductDto? _pendingDelete;
@@ -528,6 +507,7 @@
         _editReorderLevel = 5;
         _editImageUrl = null;
         _editIsActive = true;
+        _editShelfLifeDays = null;
         _dialogVisible = true;
     }
 
@@ -546,6 +526,7 @@
         _editReorderLevel = p.ReorderLevel;
         _editImageUrl = p.ImageUrl;
         _editIsActive = p.IsActive;
+        _editShelfLifeDays = p.ShelfLifeDays;
         _dialogVisible = true;
     }
 
@@ -600,7 +581,8 @@
                     Currency = _editCurrency.ToUpper(),
                     ReorderLevel = _editReorderLevel,
                     ImageUrl = _editImageUrl,
-                    IsActive = _editIsActive
+                    IsActive = _editIsActive,
+                    ShelfLifeDays = _editShelfLifeDays
                 });
             }
             else
@@ -618,7 +600,8 @@
                     Currency = _editCurrency.ToUpper(),
                     ReorderLevel = _editReorderLevel,
                     ImageUrl = _editImageUrl,
-                    IsActive = _editIsActive
+                    IsActive = _editIsActive,
+                    ShelfLifeDays = _editShelfLifeDays
                 });
             }
             Snackbar.Add(L["SuccessfullySaved"], Severity.Success);

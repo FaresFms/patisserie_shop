@@ -22,4 +22,7 @@ public class UpdateSupplierDto
     public string? Address { get; set; }
 
     public bool IsActive { get; set; } = true;
+
+    [Range(0, 365)]
+    public int LeadTimeDays { get; set; } = 3;
 }

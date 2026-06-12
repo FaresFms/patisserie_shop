@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Linq.Dynamic.Core;
 using System.Threading.Tasks;
 using Inventory.Entities;
 using Inventory.Permissions;
@@ -15,118 +14,82 @@ namespace Inventory.BranchInventory;
 [Authorize(InventoryPermissions.BranchInventory.Default)]
 public class BranchInventoryAppService : InventoryAppService, IBranchInventoryAppService
 {
-    private readonly IRepository<AppBranchInventory, Guid> _inventoryRepository;
+    private readonly IBranchInventoryRepository _inventoryRepository;
     private readonly IRepository<AppBranch, Guid> _branchRepository;
     private readonly IRepository<AppProduct, Guid> _productRepository;
     private readonly BranchInventoryManager _manager;
+    private readonly BranchAccessChecker _branchAccess;
 
     public BranchInventoryAppService(
-        IRepository<AppBranchInventory, Guid> inventoryRepository,
+        IBranchInventoryRepository inventoryRepository,
         IRepository<AppBranch, Guid> branchRepository,
         IRepository<AppProduct, Guid> productRepository,
-        BranchInventoryManager manager)
+        BranchInventoryManager manager,
+        BranchAccessChecker branchAccess)
     {
         _inventoryRepository = inventoryRepository;
         _branchRepository = branchRepository;
         _productRepository = productRepository;
         _manager = manager;
+        _branchAccess = branchAccess;
     }
 
     public async Task<BranchInventoryDto> GetAsync(Guid id)
     {
-        var inv = await _inventoryRepository.GetAsync(id);
-        await EnsureBranchAccessAsync(inv.BranchId);
-        return await ProjectAsync(inv);
+        var row = await _inventoryRepository.GetWithProductAsync(id);
+        await _branchAccess.EnsureAccessAsync(row.Inventory.BranchId);
+        return Project(row);
     }
 
     public async Task<PagedResultDto<BranchInventoryDto>> GetListAsync(GetBranchInventoryInput input)
     {
         if (input.BranchId == Guid.Empty)
         {
-            throw new BusinessException("Inventory:BranchInventory:BranchIdRequired");
+            throw new BusinessException(InventoryErrorCodes.BranchIdRequired);
         }
-        await EnsureBranchAccessAsync(input.BranchId);
+        await _branchAccess.EnsureAccessAsync(input.BranchId);
 
-        var invQ = await _inventoryRepository.GetQueryableAsync();
-        var prodQ = await _productRepository.GetQueryableAsync();
+        var totalCount = await _inventoryRepository.CountWithProductAsync(
+            input.BranchId, input.Filter,
+            input.OnlyOutOfStock == true,
+            input.OnlyLowStock == true,
+            input.IncludeInactiveProducts == true);
 
-        var query = from inv in invQ
-                    join p in prodQ on inv.ProductId equals p.Id
-                    where inv.BranchId == input.BranchId
-                    select new { inv, p };
+        var rows = await _inventoryRepository.GetListWithProductAsync(
+            input.BranchId, input.Filter,
+            input.OnlyOutOfStock == true,
+            input.OnlyLowStock == true,
+            input.IncludeInactiveProducts == true,
+            input.Sorting ?? string.Empty,
+            input.SkipCount,
+            input.MaxResultCount);
 
-        if (!string.IsNullOrWhiteSpace(input.Filter))
-        {
-            var f = input.Filter.Trim().ToLower();
-            query = query.Where(x => x.p.Name.ToLower().Contains(f) || x.p.SKU.ToLower().Contains(f));
-        }
-
-        if (input.OnlyOutOfStock == true)
-        {
-            query = query.Where(x => x.inv.QuantityOnHand <= 0);
-        }
-        else if (input.OnlyLowStock == true)
-        {
-            query = query.Where(x => x.inv.QuantityOnHand <= x.inv.MinimumStock);
-        }
-
-        if (input.IncludeInactiveProducts != true)
-        {
-            query = query.Where(x => x.p.IsActive);
-        }
-
-        var totalCount = await AsyncExecuter.CountAsync(query);
-
-        var sorting = ResolveSorting(input.Sorting);
-        var ordered = query.OrderBy(sorting).Skip(input.SkipCount).Take(input.MaxResultCount);
-
-        var rows = await AsyncExecuter.ToListAsync(ordered);
-
-        var items = rows.Select(r => Project(r.inv, r.p)).ToList();
-        return new PagedResultDto<BranchInventoryDto>(totalCount, items);
+        return new PagedResultDto<BranchInventoryDto>(totalCount, [.. rows.Select(Project)]);
     }
 
     public async Task<BranchInventoryStatsDto> GetStatsAsync(Guid branchId)
     {
-        await EnsureBranchAccessAsync(branchId);
-        var q = await _inventoryRepository.GetQueryableAsync();
-        var pq = await _productRepository.GetQueryableAsync();
+        await _branchAccess.EnsureAccessAsync(branchId);
 
-        var rows = await AsyncExecuter.ToListAsync(
-            from inv in q
-            join p in pq on inv.ProductId equals p.Id
-            where inv.BranchId == branchId && p.IsActive
-            select new { inv.QuantityOnHand, inv.MinimumStock });
+        var snapshots = await _inventoryRepository.GetActiveStockSnapshotsAsync(branchId);
 
         var stats = new BranchInventoryStatsDto
         {
-            TotalItems = rows.Count,
-            OutOfStockCount = rows.Count(r => r.QuantityOnHand <= 0),
-            LowStockCount = rows.Count(r => r.QuantityOnHand > 0 && r.QuantityOnHand <= r.MinimumStock),
+            TotalItems = snapshots.Count,
+            OutOfStockCount = snapshots.Count(r => r.QuantityOnHand <= 0),
+            LowStockCount = snapshots.Count(r => r.QuantityOnHand > 0 && r.QuantityOnHand <= r.MinimumStock),
         };
         stats.HealthyStockCount = stats.TotalItems - stats.LowStockCount - stats.OutOfStockCount;
         return stats;
     }
 
-    public async Task<List<Guid>> GetAccessibleBranchIdsAsync()
-    {
-        if (await IsManageAllAsync())
-        {
-            var all = await _branchRepository.GetListAsync(b => b.IsActive);
-            return all.Select(b => b.Id).ToList();
-        }
-
-        var userId = CurrentUser.Id;
-        if (userId == null) return new List<Guid>();
-
-        var mine = await _branchRepository.GetListAsync(b => b.IsActive && b.ManagerUserId == userId);
-        return mine.Select(b => b.Id).ToList();
-    }
+    public Task<List<Guid>> GetAccessibleBranchIdsAsync()
+        => _branchAccess.GetAccessibleBranchIdsAsync();
 
     [Authorize(InventoryPermissions.BranchInventory.Initialize)]
     public async Task<BranchInventoryDto> InitializeAsync(InitializeBranchInventoryDto input)
     {
-        await EnsureBranchAccessAsync(input.BranchId);
+        await _branchAccess.EnsureAccessAsync(input.BranchId);
         await _branchRepository.GetAsync(input.BranchId);
         await _productRepository.GetAsync(input.ProductId);
 
@@ -145,13 +108,9 @@ public class BranchInventoryAppService : InventoryAppService, IBranchInventoryAp
     public async Task<BranchInventoryDto> AdjustStockAsync(Guid id, AdjustStockDto input)
     {
         var inv = await _inventoryRepository.GetAsync(id);
-        await EnsureBranchAccessAsync(inv.BranchId);
+        await _branchAccess.EnsureAccessAsync(inv.BranchId);
 
-        if (!string.IsNullOrEmpty(input.ConcurrencyStamp) &&
-            !string.Equals(inv.ConcurrencyStamp, input.ConcurrencyStamp, StringComparison.Ordinal))
-        {
-            throw new BusinessException("Inventory:BranchInventory:Concurrency");
-        }
+        BranchInventoryManager.EnsureConcurrencyStamp(inv, input.ConcurrencyStamp);
 
         await _manager.AdjustStockAsync(inv, input.NewQuantity, input.MovementType, input.Notes);
         await _inventoryRepository.UpdateAsync(inv, autoSave: true);
@@ -162,7 +121,7 @@ public class BranchInventoryAppService : InventoryAppService, IBranchInventoryAp
     public async Task<BranchInventoryDto> UpdateLimitsAsync(Guid id, UpdateStockLimitsDto input)
     {
         var inv = await _inventoryRepository.GetAsync(id);
-        await EnsureBranchAccessAsync(inv.BranchId);
+        await _branchAccess.EnsureAccessAsync(inv.BranchId);
 
         _manager.UpdateLimits(inv, input.MinimumStock, input.MaximumStock);
         await _inventoryRepository.UpdateAsync(inv, autoSave: true);
@@ -175,61 +134,19 @@ public class BranchInventoryAppService : InventoryAppService, IBranchInventoryAp
         await _inventoryRepository.DeleteAsync(id);
     }
 
-    private async Task<bool> IsManageAllAsync()
-    {
-        return await AuthorizationService.IsGrantedAsync(InventoryPermissions.BranchInventory.ManageAll);
-    }
-
-    private async Task EnsureBranchAccessAsync(Guid branchId)
-    {
-        if (await IsManageAllAsync()) return;
-
-        var userId = CurrentUser.Id;
-        if (userId == null ||
-            !await _branchRepository.AnyAsync(b => b.Id == branchId && b.ManagerUserId == userId))
-        {
-            throw new BusinessException(InventoryErrorCodes.BranchAccessDenied)
-                .WithData("BranchId", branchId);
-        }
-    }
-
     private async Task<BranchInventoryDto> ProjectAsync(AppBranchInventory inv)
     {
         var product = await _productRepository.GetAsync(inv.ProductId);
-        return Project(inv, product);
+        return Project(new BranchInventoryWithProduct { Inventory = inv, Product = product });
     }
 
-    private static BranchInventoryDto Project(AppBranchInventory inv, AppProduct product)
+    private BranchInventoryDto Project(BranchInventoryWithProduct row)
     {
-        return new BranchInventoryDto
-        {
-            Id = inv.Id,
-            BranchId = inv.BranchId,
-            ProductId = inv.ProductId,
-            ProductName = product.Name,
-            ProductSKU = product.SKU,
-            ProductUnit = product.Unit,
-            ProductIsActive = product.IsActive,
-            QuantityOnHand = inv.QuantityOnHand,
-            MinimumStock = inv.MinimumStock,
-            MaximumStock = inv.MaximumStock,
-            LastRestockedDate = inv.LastRestockedDate,
-            LastSoldDate = inv.LastSoldDate,
-            ConcurrencyStamp = inv.ConcurrencyStamp
-        };
-    }
-
-    private static string ResolveSorting(string? sorting)
-    {
-        if (string.IsNullOrWhiteSpace(sorting)) return "p.Name";
-        var s = sorting.Trim();
-        if (s.StartsWith("ProductName", StringComparison.OrdinalIgnoreCase))
-            return s.Replace("ProductName", "p.Name", StringComparison.OrdinalIgnoreCase);
-        if (s.StartsWith("ProductSKU", StringComparison.OrdinalIgnoreCase))
-            return s.Replace("ProductSKU", "p.SKU", StringComparison.OrdinalIgnoreCase);
-        if (s.StartsWith("ProductUnit", StringComparison.OrdinalIgnoreCase))
-            return s.Replace("ProductUnit", "p.Unit", StringComparison.OrdinalIgnoreCase);
-        // Default: inventory columns
-        return $"inv.{s}";
+        var dto = ObjectMapper.Map<AppBranchInventory, BranchInventoryDto>(row.Inventory);
+        dto.ProductName = row.Product.Name;
+        dto.ProductSKU = row.Product.SKU;
+        dto.ProductUnit = row.Product.Unit;
+        dto.ProductIsActive = row.Product.IsActive;
+        return dto;
     }
 }

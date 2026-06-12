@@ -13,8 +13,17 @@ public class patisserie_shopMenus
     public const string Branches = Inventory + ".Branches";
     public const string BranchInventory = Inventory + ".BranchInventory";
     public const string StockMovements = Inventory + ".StockMovements";
+    public const string StockBatches = Inventory + ".StockBatches";
+    public const string WasteAnalytics = Inventory + ".WasteAnalytics";
 
     public const string Operations = Prefix + ".Operations";
     public const string PurchaseOrders = Operations + ".PurchaseOrders";
     public const string Sales = Operations + ".Sales";
+    public const string StockTransfers = Operations + ".StockTransfers";
+    public const string SalesAnalytics = Operations + ".SalesAnalytics";
+
+    public const string Intelligence = Prefix + ".Intelligence";
+    public const string InventoryRules = Intelligence + ".InventoryRules";
+    public const string DecisionLog = Intelligence + ".DecisionLog";
+    public const string ProductVelocity = Intelligence + ".ProductVelocity";
 }

@@ -1,0 +1,362 @@
+@page "/identity/roles"
+@attribute [Authorize(IdentityPermissions.Roles.Default)]
+@using System.Threading
+@using System.Threading.Tasks
+@using Microsoft.AspNetCore.Authorization
+@using Volo.Abp.Application.Dtos
+@using Volo.Abp.AspNetCore.Components.Web.Theming.Layout
+@using Volo.Abp.Identity
+@using Color = MudBlazor.Color
+@using Variant = MudBlazor.Variant
+@using Size = MudBlazor.Size
+@using Margin = MudBlazor.Margin
+@inherits patisserie_shopComponentBase
+@inject IIdentityRoleAppService RoleAppService
+@inject PageLayout PageLayout
+@inject ISnackbar Snackbar
+
+@{
+    PageLayout.Title = "Roles";
+}
+
+<SoftCard Elevation="2" Class="pa-2 page-flat">
+    <div class="page-head">
+        <div>
+            <h1 class="page-title">Roles</h1>
+            <div class="page-sub">Define roles and the permissions granted to them.</div>
+        </div>
+        <div class="page-head-actions">
+            @if (_canCreate)
+            {
+                <SoftButton Variant="Variant.Filled" Color="Color.Primary"
+                            StartIcon="@Icons.Material.Filled.Add" OnClick="OpenCreateDialog">
+                    New role
+                </SoftButton>
+            }
+        </div>
+    </div>
+    <SoftCardContent>
+        <div class="toolbar">
+            <SoftTextField T="string"
+                           Placeholder="@L["Filter"]"
+                           @bind-Value="_filter"
+                           Variant="Variant.Outlined"
+                           Margin="Margin.Dense"
+                           Adornment="Adornment.Start"
+                           AdornmentIcon="@Icons.Material.Filled.Search"
+                           OnKeyUp="OnFilterKeyUpAsync"
+                           Immediate="true"
+                           Class="toolbar-search"
+                           Style="max-width: 320px;" />
+            <div class="toolbar-right">
+                <SoftButton Variant="Variant.Text" Color="Color.Primary"
+                            StartIcon="@Icons.Material.Filled.Refresh" OnClick="ReloadAsync">
+                    @L["Refresh"]
+                </SoftButton>
+            </div>
+        </div>
+
+        <SoftDataGrid T="IdentityRoleDto"
+                      @ref="_grid"
+                      ServerData="LoadServerData"
+                      Dense="true" Hover="true" Bordered="false" Striped="true"
+                      Loading="_loading" SortMode="SortMode.Single">
+            <Columns>
+                <PropertyColumn T="IdentityRoleDto" TProperty="string" Property="x => x.Name" Title="Role name" />
+                <TemplateColumn T="IdentityRoleDto" Title="Flags" Sortable="false">
+                    <CellTemplate>
+                        <SoftStack Row="true" Spacing="1">
+                            @if (context.Item.IsDefault)
+                            {
+                                <SoftChip T="string" Color="Color.Info" Size="Size.Small" Variant="Variant.Filled">Default</SoftChip>
+                            }
+                            @if (context.Item.IsPublic)
+                            {
+                                <SoftChip T="string" Color="Color.Success" Size="Size.Small" Variant="Variant.Outlined">Public</SoftChip>
+                            }
+                            @if (context.Item.IsStatic)
+                            {
+                                <SoftChip T="string" Color="Color.Default" Size="Size.Small" Variant="Variant.Outlined">Static</SoftChip>
+                            }
+                        </SoftStack>
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn T="IdentityRoleDto" Title="@L["Actions"]" Sortable="false">
+                    <CellTemplate>
+                        <span class="row-actions">
+                            <SoftStack Row="true" Spacing="1">
+                                @if (_canManagePermissions)
+                                {
+                                    <SoftIconButton Icon="@Icons.Material.Filled.Security"
+                                                    Color="Color.Default" Size="Size.Small"
+                                                    OnClick="() => OpenPermissions(context.Item)" />
+                                }
+                                @if (_canUpdate)
+                                {
+                                    <SoftIconButton Icon="@Icons.Material.Filled.Edit"
+                                                    Color="Color.Primary" Size="Size.Small"
+                                                    OnClick="() => OpenEditDialog(context.Item)" />
+                                }
+                                @if (_canDelete && !context.Item.IsStatic)
+                                {
+                                    <SoftIconButton Icon="@Icons.Material.Filled.Delete"
+                                                    Color="Color.Error" Size="Size.Small"
+                                                    OnClick="() => DeleteAsync(context.Item)" />
+                                }
+                            </SoftStack>
+                        </span>
+                    </CellTemplate>
+                </TemplateColumn>
+            </Columns>
+            <PagerContent>
+                <MudDataGridPager T="IdentityRoleDto" />
+            </PagerContent>
+        </SoftDataGrid>
+    </SoftCardContent>
+</SoftCard>
+
+@if (_dialogVisible)
+{
+    <div class="glass-modal-backdrop" @onclick="CloseDialog">
+        <div class="glass-modal-container" @onclick:stopPropagation="true">
+            <SoftCard Elevation="24" Class="glass-modal">
+                <SoftCardHeader Class="pa-4">
+                    <CardHeaderContent>
+                        <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <SoftIcon Icon="@(_editingId.HasValue ? Icons.Material.Filled.Edit : Icons.Material.Filled.AddCircle)"
+                                      Color="Color.Primary" Size="Size.Medium" />
+                            <SoftText Typo="Typo.h6">@(_editingId.HasValue ? "Edit role" : "New role")</SoftText>
+                        </SoftStack>
+                    </CardHeaderContent>
+                    <CardHeaderActions>
+                        <SoftIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="CloseDialog" />
+                    </CardHeaderActions>
+                </SoftCardHeader>
+                <SoftDivider />
+                <SoftCardContent Class="pa-4">
+                    <SoftStack Spacing="3">
+                        <SoftTextField T="string" Label="Role name" @bind-Value="_editName"
+                                       Variant="Variant.Outlined" MaxLength="256" Required="true" Immediate="true" />
+                        <SoftCheckBox T="bool" @bind-Value="_editIsDefault" Label="Default — auto-assigned to new users" Color="Color.Primary" />
+                        <SoftCheckBox T="bool" @bind-Value="_editIsPublic" Label="Public — visible to other users" Color="Color.Primary" />
+                    </SoftStack>
+                </SoftCardContent>
+                <SoftDivider />
+                <div class="pa-3 d-flex justify-end" style="gap: 8px;">
+                    <SoftButton Variant="Variant.Text" OnClick="CloseDialog">@L["Cancel"]</SoftButton>
+                    <SoftButton Variant="Variant.Filled" Color="Color.Primary"
+                                StartIcon="@Icons.Material.Filled.Save" OnClick="SaveAsync">
+                        @L["Save"]
+                    </SoftButton>
+                </div>
+            </SoftCard>
+        </div>
+    </div>
+}
+
+@if (_confirmVisible)
+{
+    <div class="glass-modal-backdrop" @onclick="() => _confirmVisible = false">
+        <div class="glass-modal-container glass-modal-container--sm" @onclick:stopPropagation="true">
+            <SoftCard Elevation="24" Class="glass-modal">
+                <SoftCardHeader Class="pa-4">
+                    <CardHeaderContent>
+                        <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <SoftIcon Icon="@Icons.Material.Filled.Warning" Color="Color.Error" Size="Size.Medium" />
+                            <SoftText Typo="Typo.h6">@L["AreYouSure"]</SoftText>
+                        </SoftStack>
+                    </CardHeaderContent>
+                </SoftCardHeader>
+                <SoftDivider />
+                <SoftCardContent Class="pa-4">
+                    <SoftText>@L["AreYouSureToDelete"]</SoftText>
+                </SoftCardContent>
+                <SoftDivider />
+                <div class="pa-3 d-flex justify-end" style="gap: 8px;">
+                    <SoftButton Variant="Variant.Text" OnClick="() => _confirmVisible = false">@L["Cancel"]</SoftButton>
+                    <SoftButton Variant="Variant.Filled" Color="Color.Error"
+                                StartIcon="@Icons.Material.Filled.Delete" OnClick="ConfirmDeleteAsync">
+                        @L["Yes"]
+                    </SoftButton>
+                </div>
+            </SoftCard>
+        </div>
+    </div>
+}
+
+<PermissionModal Visible="_permVisible"
+                 ProviderName="R"
+                 ProviderKey="@_permRoleName"
+                 EntityName="@_permRoleName"
+                 CanManage="_canManagePermissions"
+                 OnClose="OnPermissionsClosed" />
+
+@code {
+    private SoftDataGrid<IdentityRoleDto> _grid = null!;
+    private bool _loading;
+    private string? _filter;
+
+    private bool _canCreate;
+    private bool _canUpdate;
+    private bool _canDelete;
+    private bool _canManagePermissions;
+
+    private bool _dialogVisible;
+    private Guid? _editingId;
+    private string _editConcurrencyStamp = string.Empty;
+    private string _editName = string.Empty;
+    private bool _editIsDefault;
+    private bool _editIsPublic = true;
+
+    private bool _confirmVisible;
+    private IdentityRoleDto? _pendingDelete;
+
+    private bool _permVisible;
+    private string? _permRoleName;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _canCreate = await AuthorizationService.IsGrantedAsync(IdentityPermissions.Roles.Create);
+        _canUpdate = await AuthorizationService.IsGrantedAsync(IdentityPermissions.Roles.Update);
+        _canDelete = await AuthorizationService.IsGrantedAsync(IdentityPermissions.Roles.Delete);
+        _canManagePermissions = await AuthorizationService.IsGrantedAsync(IdentityPermissions.Roles.ManagePermissions);
+    }
+
+    private async Task<GridData<IdentityRoleDto>> LoadServerData(GridState<IdentityRoleDto> state, CancellationToken cancellationToken)
+    {
+        _loading = true;
+        try
+        {
+            string? sorting = null;
+            var sort = state.SortDefinitions.FirstOrDefault();
+            if (sort != null)
+            {
+                sorting = $"{sort.SortBy} {(sort.Descending ? "desc" : "asc")}";
+            }
+
+            var result = await RoleAppService.GetListAsync(new GetIdentityRolesInput
+            {
+                Filter = _filter,
+                SkipCount = state.Page * state.PageSize,
+                MaxResultCount = state.PageSize,
+                Sorting = sorting
+            });
+
+            return new GridData<IdentityRoleDto>
+            {
+                Items = result.Items,
+                TotalItems = (int)result.TotalCount
+            };
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task OnFilterKeyUpAsync(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        if (_grid != null) await _grid.ReloadServerData();
+    }
+
+    private void OpenCreateDialog()
+    {
+        _editingId = null;
+        _editName = string.Empty;
+        _editIsDefault = false;
+        _editIsPublic = true;
+        _editConcurrencyStamp = string.Empty;
+        _dialogVisible = true;
+    }
+
+    private void OpenEditDialog(IdentityRoleDto role)
+    {
+        _editingId = role.Id;
+        _editName = role.Name;
+        _editIsDefault = role.IsDefault;
+        _editIsPublic = role.IsPublic;
+        _editConcurrencyStamp = role.ConcurrencyStamp;
+        _dialogVisible = true;
+    }
+
+    private void CloseDialog() => _dialogVisible = false;
+
+    private async Task SaveAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_editName))
+        {
+            Snackbar.Add(L["ThisFieldIsRequired", "Role name"], Severity.Warning);
+            return;
+        }
+
+        try
+        {
+            if (_editingId.HasValue)
+            {
+                await RoleAppService.UpdateAsync(_editingId.Value, new IdentityRoleUpdateDto
+                {
+                    Name = _editName,
+                    IsDefault = _editIsDefault,
+                    IsPublic = _editIsPublic,
+                    ConcurrencyStamp = _editConcurrencyStamp
+                });
+            }
+            else
+            {
+                await RoleAppService.CreateAsync(new IdentityRoleCreateDto
+                {
+                    Name = _editName,
+                    IsDefault = _editIsDefault,
+                    IsPublic = _editIsPublic
+                });
+            }
+            Snackbar.Add(L["SuccessfullySaved"], Severity.Success);
+            _dialogVisible = false;
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            await HandleErrorAsync(ex);
+        }
+    }
+
+    private void DeleteAsync(IdentityRoleDto role)
+    {
+        _pendingDelete = role;
+        _confirmVisible = true;
+    }
+
+    private async Task ConfirmDeleteAsync()
+    {
+        if (_pendingDelete == null) return;
+        try
+        {
+            await RoleAppService.DeleteAsync(_pendingDelete.Id);
+            Snackbar.Add(L["SuccessfullyDeleted"], Severity.Success);
+            _confirmVisible = false;
+            _pendingDelete = null;
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            await HandleErrorAsync(ex);
+        }
+    }
+
+    private void OpenPermissions(IdentityRoleDto role)
+    {
+        _permRoleName = role.Name;
+        _permVisible = true;
+    }
+
+    private void OnPermissionsClosed()
+    {
+        _permVisible = false;
+        _permRoleName = null;
+    }
+}

@@ -1,9 +1,88 @@
-﻿@page "/"
-@inherits patisserie_shopComponentBase
+@page "/"
+@using System.Threading.Tasks
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@using Inventory.Permissions
 @using Volo.Abp.AspNetCore.Components.Web.Theming.Layout
+@inherits patisserie_shopComponentBase
+@attribute [Authorize]
+@inject AuthenticationStateProvider AuthState
+@inject NavigationManager Nav
 @inject PageLayout PageLayout
+
 @{
-    PageLayout.Title = L["Menu:Home"];
-    PageLayout.ShowToolbar = false;
+    PageLayout.Title = "Dashboard";
 }
-hello
+
+@if (_role == DashboardRole.Loading)
+{
+    <SoftCard Elevation="0" Class="pa-2 page-flat">
+        <div class="page-head">
+            <div>
+                <h1 class="page-title">Dashboard</h1>
+                <div class="page-sub">Loading…</div>
+            </div>
+        </div>
+        <SoftCardContent>
+            <SoftStack AlignItems="AlignItems.Center" Spacing="2" Class="pa-6">
+                <SoftProgressCircular Indeterminate="true" Color="MudBlazor.Color.Primary" />
+            </SoftStack>
+        </SoftCardContent>
+    </SoftCard>
+}
+else if (_role == DashboardRole.Admin)
+{
+    <AdminDashboard />
+}
+else if (_role == DashboardRole.BranchManager)
+{
+    <BranchManagerDashboard />
+}
+else
+{
+    <SoftCard Elevation="2" Class="pa-2 page-flat">
+        <div class="page-head">
+            <div>
+                <h1 class="page-title">Access denied</h1>
+                <div class="page-sub">Your account doesn't have a role that can view this dashboard.</div>
+            </div>
+        </div>
+        <SoftCardContent>
+            <SoftStack AlignItems="AlignItems.Center" Spacing="2" Class="pa-6">
+                <SoftIcon Icon="@Icons.Material.Outlined.Block" Style="font-size:48px; opacity:.45;" />
+                <SoftText Typo="Typo.body1">Contact your administrator to be assigned an Admin or BranchManager role.</SoftText>
+            </SoftStack>
+        </SoftCardContent>
+    </SoftCard>
+}
+
+@code {
+    private enum DashboardRole { Loading, Admin, BranchManager, None }
+
+    private DashboardRole _role = DashboardRole.Loading;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await AuthState.GetAuthenticationStateAsync();
+        if (state.User.Identity?.IsAuthenticated != true)
+        {
+            // [Authorize] should already have redirected — bail just in case.
+            return;
+        }
+
+        // Admin = has ManageAll on branch inventory. BranchManager = at minimum
+        // BranchInventory.Default. Anything weaker → no dashboard.
+        if (await AuthorizationService.IsGrantedAsync(InventoryPermissions.BranchInventory.ManageAll))
+        {
+            _role = DashboardRole.Admin;
+        }
+        else if (await AuthorizationService.IsGrantedAsync(InventoryPermissions.BranchInventory.Default))
+        {
+            _role = DashboardRole.BranchManager;
+        }
+        else
+        {
+            _role = DashboardRole.None;
+        }
+    }
+}
