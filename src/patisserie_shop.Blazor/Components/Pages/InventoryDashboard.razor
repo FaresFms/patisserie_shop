@@ -17,7 +17,7 @@
 @inject IStringLocalizer<InventoryResource> InvL
 
 @{
-    PageLayout.Title = "Inventory Dashboard";
+    PageLayout.Title = L["InvDash:Title"].Value;
 }
 
 <div class="dashboard-root">
@@ -27,15 +27,15 @@
         <div class="dash-header-left">
             <MudIcon Icon="@Icons.Material.Filled.Dashboard" Class="dash-header-icon" />
             <div>
-                <MudText Typo="Typo.h5" Class="dash-title">Inventory Dashboard</MudText>
+                <MudText Typo="Typo.h5" Class="dash-title">@L["InvDash:Title"]</MudText>
                 <MudText Typo="Typo.body2" Class="dash-subtitle">
                     @if (_lastRefreshed.HasValue)
                     {
-                        <span>Last updated @_lastRefreshed.Value.ToString("HH:mm:ss")</span>
+                        <span>@L["InvDash:LastUpdated", _lastRefreshed.Value.ToString("HH:mm:ss")]</span>
                     }
                     else
                     {
-                        <span>Loading data…</span>
+                        <span>@L["InvDash:LoadingData"]</span>
                     }
                 </MudText>
             </div>
@@ -46,7 +46,7 @@
                    OnClick="RefreshAsync"
                    Disabled="_loading"
                    Class="dash-refresh-btn">
-            @(_loading ? "Refreshing…" : "Refresh")
+            @(_loading ? L["InvDash:Refreshing"] : L["InvDash:Refresh"])
         </MudButton>
     </div>
 
@@ -54,7 +54,7 @@
     {
         <div class="dash-loading-wrap">
             <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Large" />
-            <MudText Typo="Typo.body1" Class="mt-4" Style="opacity:.6">Loading dashboard…</MudText>
+            <MudText Typo="Typo.body1" Class="mt-4" Style="opacity:.6">@L["InvDash:LoadingDashboard"]</MudText>
         </div>
     }
     else if (_data != null)
@@ -65,8 +65,8 @@
                 <div class="kpi-icon-wrap"><MudIcon Icon="@Icons.Material.Filled.Inventory2" /></div>
                 <div class="kpi-body">
                     <div class="kpi-value">@_data.TotalProducts</div>
-                    <div class="kpi-label">Total Products</div>
-                    <div class="kpi-sub">@_data.ActiveProducts active</div>
+                    <div class="kpi-label">@L["InvDash:TotalProducts"]</div>
+                    <div class="kpi-sub">@L["InvDash:CountActive", _data.ActiveProducts]</div>
                 </div>
             </SoftCard>
 
@@ -74,8 +74,8 @@
                 <div class="kpi-icon-wrap"><MudIcon Icon="@Icons.Material.Filled.Store" /></div>
                 <div class="kpi-body">
                     <div class="kpi-value">@_data.TotalBranches</div>
-                    <div class="kpi-label">Branches</div>
-                    <div class="kpi-sub">@_data.ActiveBranches active</div>
+                    <div class="kpi-label">@L["InvDash:Branches"]</div>
+                    <div class="kpi-sub">@L["InvDash:CountActive", _data.ActiveBranches]</div>
                 </div>
             </SoftCard>
 
@@ -83,8 +83,8 @@
                 <div class="kpi-icon-wrap"><MudIcon Icon="@Icons.Material.Filled.Warehouse" /></div>
                 <div class="kpi-body">
                     <div class="kpi-value">@_data.TotalInventoryItems</div>
-                    <div class="kpi-label">Inventory Items</div>
-                    <div class="kpi-sub">@_data.HealthyStockCount healthy</div>
+                    <div class="kpi-label">@L["InvDash:InventoryItems"]</div>
+                    <div class="kpi-sub">@L["InvDash:CountHealthy", _data.HealthyStockCount]</div>
                 </div>
             </SoftCard>
 
@@ -92,8 +92,8 @@
                 <div class="kpi-icon-wrap"><MudIcon Icon="@Icons.Material.Filled.TrendingDown" /></div>
                 <div class="kpi-body">
                     <div class="kpi-value">@_data.LowStockCount</div>
-                    <div class="kpi-label">Low Stock</div>
-                    <div class="kpi-sub">needs attention</div>
+                    <div class="kpi-label">@L["InvDash:LowStock"]</div>
+                    <div class="kpi-sub">@L["InvDash:NeedsAttention"]</div>
                 </div>
             </SoftCard>
 
@@ -101,8 +101,8 @@
                 <div class="kpi-icon-wrap"><MudIcon Icon="@Icons.Material.Filled.RemoveShoppingCart" /></div>
                 <div class="kpi-body">
                     <div class="kpi-value">@_data.OutOfStockCount</div>
-                    <div class="kpi-label">Out of Stock</div>
-                    <div class="kpi-sub">@(_data.OutOfStockCount == 0 ? "all clear" : "critical")</div>
+                    <div class="kpi-label">@L["InvDash:OutOfStock"]</div>
+                    <div class="kpi-sub">@(_data.OutOfStockCount == 0 ? L["InvDash:AllClear"] : L["InvDash:Critical"])</div>
                 </div>
             </SoftCard>
 
@@ -110,8 +110,8 @@
                 <div class="kpi-icon-wrap"><MudIcon Icon="@Icons.Material.Filled.Category" /></div>
                 <div class="kpi-body">
                     <div class="kpi-value">@_data.TotalCategories</div>
-                    <div class="kpi-label">Categories</div>
-                    <div class="kpi-sub">@_data.TotalSuppliers suppliers</div>
+                    <div class="kpi-label">@L["InvDash:Categories"]</div>
+                    <div class="kpi-sub">@L["InvDash:CountSuppliers", _data.TotalSuppliers]</div>
                 </div>
             </SoftCard>
         </div>
@@ -123,7 +123,7 @@
             <SoftCard Class="dash-panel dash-panel--health">
                 <div class="panel-header">
                     <MudIcon Icon="@Icons.Material.Filled.MonitorHeart" Class="panel-header-icon" />
-                    <MudText Typo="Typo.h6">Stock Health Overview</MudText>
+                    <MudText Typo="Typo.h6">@L["InvDash:StockHealthOverview"]</MudText>
                 </div>
                 <div class="panel-body">
 
@@ -133,7 +133,7 @@
                     <div class="health-row mb-3">
                         <div class="health-row-top">
                             <div class="health-dot health-dot--green"></div>
-                            <span class="health-label">Healthy Stock</span>
+                            <span class="health-label">@L["InvDash:HealthyStock"]</span>
                             <span class="health-count health-count--green">@_data.HealthyStockCount</span>
                         </div>
                         <MudProgressLinear Color="Color.Success"
@@ -146,7 +146,7 @@
                     <div class="health-row mb-3">
                         <div class="health-row-top">
                             <div class="health-dot health-dot--orange"></div>
-                            <span class="health-label">Low Stock</span>
+                            <span class="health-label">@L["InvDash:LowStock"]</span>
                             <span class="health-count health-count--orange">@_data.LowStockCount</span>
                         </div>
                         <MudProgressLinear Color="Color.Warning"
@@ -159,7 +159,7 @@
                     <div class="health-row">
                         <div class="health-row-top">
                             <div class="health-dot health-dot--red"></div>
-                            <span class="health-label">Out of Stock</span>
+                            <span class="health-label">@L["InvDash:OutOfStock"]</span>
                             <span class="health-count health-count--red">@_data.OutOfStockCount</span>
                         </div>
                         <MudProgressLinear Color="Color.Error"
@@ -175,19 +175,19 @@
                             <ApexChart TItem="HealthSlice" @key="_data" Options="_healthChartOptions" Height="230">
                                 <ApexPointSeries TItem="HealthSlice"
                                                  Items="_healthSlices"
-                                                 Name="Items"
+                                                 Name="@L["InvDash:ItemsSeries"].Value"
                                                  SeriesType="SeriesType.Donut"
                                                  XValue="@(s => s.Label)"
                                                  YValue="@(s => s.Count)" />
                             </ApexChart>
                             <div class="health-donut-center">
                                 <div class="health-donut-pct">@($"{(double)_data.HealthyStockCount / total * 100:F0}")%</div>
-                                <div class="health-donut-text">healthy</div>
+                                <div class="health-donut-text">@L["InvDash:HealthyLower"]</div>
                             </div>
                         }
                         else
                         {
-                            <div class="health-donut-empty">No inventory items yet</div>
+                            <div class="health-donut-empty">@L["InvDash:NoInventoryItemsYet"]</div>
                         }
                     </div>
                 </div>
@@ -197,39 +197,39 @@
             <SoftCard Class="dash-panel dash-panel--movements">
                 <div class="panel-header">
                     <MudIcon Icon="@Icons.Material.Filled.SwapHoriz" Class="panel-header-icon" />
-                    <MudText Typo="Typo.h6">Stock Movements</MudText>
-                    <span class="panel-badge">Last 30 days</span>
+                    <MudText Typo="Typo.h6">@L["InvDash:StockMovements"]</MudText>
+                    <span class="panel-badge">@L["InvDash:Last30Days"]</span>
                 </div>
                 <div class="panel-body">
                     <div class="movement-total mb-3">
                         <span class="movement-total-num">@_data.MovementSummary.TotalCount</span>
-                        <span class="movement-total-label">total movements</span>
+                        <span class="movement-total-label">@L["InvDash:TotalMovements"]</span>
                     </div>
                     <div class="movement-cards">
                         <div class="mv-card mv-purchase">
                             <MudIcon Icon="@Icons.Material.Filled.ShoppingCart" Class="mv-icon" />
                             <div class="mv-num">@_data.MovementSummary.PurchaseCount</div>
-                            <div class="mv-name">Purchases</div>
+                            <div class="mv-name">@L["InvDash:Purchases"]</div>
                         </div>
                         <div class="mv-card mv-sale">
                             <MudIcon Icon="@Icons.Material.Filled.PointOfSale" Class="mv-icon" />
                             <div class="mv-num">@_data.MovementSummary.SaleCount</div>
-                            <div class="mv-name">Sales</div>
+                            <div class="mv-name">@L["InvDash:Sales"]</div>
                         </div>
                         <div class="mv-card mv-transfer-in">
                             <MudIcon Icon="@Icons.Material.Filled.CallReceived" Class="mv-icon" />
                             <div class="mv-num">@_data.MovementSummary.TransferInCount</div>
-                            <div class="mv-name">Transfer In</div>
+                            <div class="mv-name">@L["InvDash:TransferIn"]</div>
                         </div>
                         <div class="mv-card mv-transfer-out">
                             <MudIcon Icon="@Icons.Material.Filled.CallMade" Class="mv-icon" />
                             <div class="mv-num">@_data.MovementSummary.TransferOutCount</div>
-                            <div class="mv-name">Transfer Out</div>
+                            <div class="mv-name">@L["InvDash:TransferOut"]</div>
                         </div>
                         <div class="mv-card mv-adjust">
                             <MudIcon Icon="@Icons.Material.Filled.Tune" Class="mv-icon" />
                             <div class="mv-num">@_data.MovementSummary.ManualAdjustmentCount</div>
-                            <div class="mv-name">Adjustments</div>
+                            <div class="mv-name">@L["InvDash:Adjustments"]</div>
                         </div>
                     </div>
                 </div>
@@ -243,18 +243,18 @@
             <SoftCard Class="dash-panel dash-panel--full mb-5">
                 <div class="panel-header">
                     <MudIcon Icon="@Icons.Material.Filled.BusinessCenter" Class="panel-header-icon" />
-                    <MudText Typo="Typo.h6">Branch Performance</MudText>
+                    <MudText Typo="Typo.h6">@L["InvDash:BranchPerformance"]</MudText>
                 </div>
                 <div class="panel-body pa-0">
                     <table class="branch-table">
                         <thead>
                             <tr>
-                                <th>Branch</th>
-                                <th class="text-center">Total Items</th>
-                                <th class="text-center">Healthy</th>
-                                <th class="text-center">Low Stock</th>
-                                <th class="text-center">Out of Stock</th>
-                                <th style="min-width:180px">Health Score</th>
+                                <th>@L["InvDash:Branch"]</th>
+                                <th class="text-center">@L["InvDash:TotalItems"]</th>
+                                <th class="text-center">@L["InvDash:Healthy"]</th>
+                                <th class="text-center">@L["InvDash:LowStock"]</th>
+                                <th class="text-center">@L["InvDash:OutOfStock"]</th>
+                                <th style="min-width:180px">@L["InvDash:HealthScore"]</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -268,7 +268,7 @@
                                             <span class="branch-name">@branch.BranchName</span>
                                             @if (!branch.IsActive)
                                             {
-                                                <span class="branch-inactive-badge">Inactive</span>
+                                                <span class="branch-inactive-badge">@L["InvDash:Inactive"]</span>
                                             }
                                         </div>
                                     </td>
@@ -308,7 +308,7 @@
             <SoftCard Class="dash-panel dash-panel--critical">
                 <div class="panel-header">
                     <MudIcon Icon="@Icons.Material.Filled.Warning" Class="panel-header-icon panel-header-icon--warning" />
-                    <MudText Typo="Typo.h6">Critical Stock Items</MudText>
+                    <MudText Typo="Typo.h6">@L["InvDash:CriticalStockItems"]</MudText>
                     @if (_data.CriticalStockItems.Any())
                     {
                         <span class="panel-badge panel-badge--red">@_data.CriticalStockItems.Count</span>
@@ -319,7 +319,7 @@
                     {
                         <div class="empty-state">
                             <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Class="empty-icon empty-icon--green" />
-                            <MudText Typo="Typo.body1">All items are well-stocked!</MudText>
+                            <MudText Typo="Typo.body1">@L["InvDash:AllItemsWellStocked"]</MudText>
                         </div>
                     }
                     else
@@ -327,10 +327,10 @@
                         <table class="critical-table">
                             <thead>
                                 <tr>
-                                    <th>Product</th>
-                                    <th class="text-center">On Hand</th>
-                                    <th class="text-center">Min Stock</th>
-                                    <th class="text-center">Status</th>
+                                    <th>@L["InvDash:Product"]</th>
+                                    <th class="text-center">@L["InvDash:OnHand"]</th>
+                                    <th class="text-center">@L["InvDash:MinStock"]</th>
+                                    <th class="text-center">@L["InvDash:Status"]</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -352,11 +352,11 @@
                                         <td class="text-center">
                                             @if (item.IsOutOfStock)
                                             {
-                                                <span class="status-badge status-out">Out of Stock</span>
+                                                <span class="status-badge status-out">@L["InvDash:OutOfStock"]</span>
                                             }
                                             else
                                             {
-                                                <span class="status-badge status-low">Low Stock</span>
+                                                <span class="status-badge status-low">@L["InvDash:LowStock"]</span>
                                             }
                                         </td>
                                     </tr>
@@ -371,15 +371,15 @@
             <SoftCard Class="dash-panel dash-panel--recent">
                 <div class="panel-header">
                     <MudIcon Icon="@Icons.Material.Filled.History" Class="panel-header-icon" />
-                    <MudText Typo="Typo.h6">Recent Movements</MudText>
-                    <span class="panel-badge">Last 30 days</span>
+                    <MudText Typo="Typo.h6">@L["InvDash:RecentMovements"]</MudText>
+                    <span class="panel-badge">@L["InvDash:Last30Days"]</span>
                 </div>
                 <div class="panel-body pa-0">
                     @if (!_data.RecentMovements.Any())
                     {
                         <div class="empty-state">
                             <MudIcon Icon="@Icons.Material.Outlined.Inbox" Class="empty-icon" />
-                            <MudText Typo="Typo.body1">No recent movements</MudText>
+                            <MudText Typo="Typo.body1">@L["InvDash:NoRecentMovements"]</MudText>
                         </div>
                     }
                     else
@@ -858,9 +858,9 @@
             _data = await DashboardAppService.GetAsync();
             _healthSlices = new List<HealthSlice>
             {
-                new() { Label = "Healthy", Count = _data.HealthyStockCount },
-                new() { Label = "Low Stock", Count = _data.LowStockCount },
-                new() { Label = "Out of Stock", Count = _data.OutOfStockCount }
+                new() { Label = L["InvDash:Healthy"].Value, Count = _data.HealthyStockCount },
+                new() { Label = L["InvDash:LowStock"].Value, Count = _data.LowStockCount },
+                new() { Label = L["InvDash:OutOfStock"].Value, Count = _data.OutOfStockCount }
             };
             _lastRefreshed = DateTime.Now;
         }
@@ -883,13 +883,13 @@
         _     => Color.Error
     };
 
-    private static string FormatMovementType(string type) => type switch
+    private string FormatMovementType(string type) => type switch
     {
-        "Purchase"         => "Purchase",
-        "Sale"             => "Sale",
-        "TransferIn"       => "Transfer In",
-        "TransferOut"      => "Transfer Out",
-        "ManualAdjustment" => "Adjustment",
+        "Purchase"         => L["InvDash:Purchase"].Value,
+        "Sale"             => L["InvDash:Sale"].Value,
+        "TransferIn"       => L["InvDash:TransferIn"].Value,
+        "TransferOut"      => L["InvDash:TransferOut"].Value,
+        "ManualAdjustment" => L["InvDash:Adjustment"].Value,
         _                  => type
     };
 }

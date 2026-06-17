@@ -12,15 +12,15 @@
 <SoftCard Elevation="2" Class="pa-2 page-flat admin-dash">
     <div class="page-head">
         <div>
-            <h1 class="page-title">Admin Dashboard</h1>
+            <h1 class="page-title">@L["AdminDash:Title"]</h1>
             <div class="page-sub">
                 @if (_lastRefresh.HasValue)
                 {
-                    <span>Across all branches · Last updated @_lastRefresh.Value.ToLocalTime().ToString("MMM d, HH:mm")</span>
+                    <span>@L["AdminDash:LastUpdated", _lastRefresh.Value.ToLocalTime().ToString("MMM d, HH:mm")]</span>
                 }
                 else
                 {
-                    <span>Loading…</span>
+                    <span>@L["AdminDash:Loading"]</span>
                 }
             </div>
         </div>
@@ -28,7 +28,7 @@
             <SoftButton Variant="Variant.Text" Color="Color.Primary"
                         StartIcon="@Icons.Material.Filled.Refresh"
                         OnClick="LoadAsync" Disabled="_loading">
-                @(_loading ? "Refreshing…" : "Refresh")
+                @(_loading ? L["AdminDash:Refreshing"] : L["AdminDash:Refresh"])
             </SoftButton>
         </div>
     </div>
@@ -38,7 +38,7 @@
         @if (_error != null)
         {
             <SoftAlert Severity="Severity.Error" Variant="Variant.Filled" Class="ma-4">
-                <strong>Failed to load dashboard:</strong> @_error
+                <strong>@L["AdminDash:LoadFailed"]</strong> @_error
             </SoftAlert>
         }
         else if (_data == null)
@@ -64,8 +64,8 @@
                     </div>
                     <div class="ad-kpi-body">
                         <div class="ad-kpi-value">@_data.TotalProducts</div>
-                        <div class="ad-kpi-label">Total Products</div>
-                        <div class="ad-kpi-sub">across @_data.TotalBranches branch@(_data.TotalBranches == 1 ? "" : "es")</div>
+                        <div class="ad-kpi-label">@L["AdminDash:TotalProducts"]</div>
+                        <div class="ad-kpi-sub">@(_data.TotalBranches == 1 ? L["AdminDash:AcrossBranch", _data.TotalBranches] : L["AdminDash:AcrossBranches", _data.TotalBranches])</div>
                     </div>
                 </div>
 
@@ -76,10 +76,10 @@
                     </div>
                     <div class="ad-kpi-body">
                         <div class="ad-kpi-value">@_data.PendingDecisions</div>
-                        <div class="ad-kpi-label">Pending Decisions</div>
+                        <div class="ad-kpi-label">@L["AdminDash:PendingDecisions"]</div>
                         <div class="ad-kpi-sub">
-                            @if (_data.PendingDecisions == 0) { <span>all clear</span> }
-                            else { <span>need attention</span> }
+                            @if (_data.PendingDecisions == 0) { <span>@L["AdminDash:AllClearShort"]</span> }
+                            else { <span>@L["AdminDash:NeedAttention"]</span> }
                         </div>
                     </div>
                 </div>
@@ -90,8 +90,8 @@
                     </div>
                     <div class="ad-kpi-body">
                         <div class="ad-kpi-value">@_data.LowStockProductCount</div>
-                        <div class="ad-kpi-label">Low Stock Products</div>
-                        <div class="ad-kpi-sub">below threshold</div>
+                        <div class="ad-kpi-label">@L["AdminDash:LowStockProducts"]</div>
+                        <div class="ad-kpi-sub">@L["AdminDash:BelowThreshold"]</div>
                     </div>
                 </div>
 
@@ -112,14 +112,14 @@
                     </div>
                     <div class="ad-kpi-body">
                         <div class="ad-kpi-value">@FormatMoney(_data.TodaySalesTotal)</div>
-                        <div class="ad-kpi-label">Today's Sales</div>
+                        <div class="ad-kpi-label">@L["AdminDash:TodaysSales"]</div>
                         <div class="ad-kpi-sub">
-                            @_data.TodaySalesCount sale@(_data.TodaySalesCount == 1 ? "" : "s")
+                            @(_data.TodaySalesCount == 1 ? L["AdminDash:SaleCount", _data.TodaySalesCount] : L["AdminDash:SalesCount", _data.TodaySalesCount])
                             @if (_data.YesterdaySalesTotal > 0)
                             {
                                 <span> · </span>
                                 <span class="@(TodayDelta >= 0 ? "ad-delta-up" : "ad-delta-down")">
-                                    @(TodayDelta >= 0 ? "+" : "")@TodayDelta.ToString("0")% vs yesterday
+                                    @L["AdminDash:VsYesterday", (TodayDelta >= 0 ? "+" : "") + TodayDelta.ToString("0")]
                                 </span>
                             }
                         </div>
@@ -131,18 +131,18 @@
                         <SoftIcon Icon="@Icons.Material.Filled.LocalShipping" />
                     </div>
                     <div class="ad-kpi-body">
-                        <div class="ad-kpi-label">PO Pipeline</div>
+                        <div class="ad-kpi-label">@L["AdminDash:POPipeline"]</div>
                         <div class="ad-pipeline">
                             <span class="ad-pipe-dot ad-pipe-draft"></span>
-                            <span class="ad-pipe-num">@_data.PurchaseOrderPipeline.DraftCount</span><span class="ad-pipe-name">Draft</span>
+                            <span class="ad-pipe-num">@_data.PurchaseOrderPipeline.DraftCount</span><span class="ad-pipe-name">@L["AdminDash:Draft"]</span>
 
                             <span class="ad-pipe-dot ad-pipe-approved"></span>
-                            <span class="ad-pipe-num">@_data.PurchaseOrderPipeline.ApprovedCount</span><span class="ad-pipe-name">Approved</span>
+                            <span class="ad-pipe-num">@_data.PurchaseOrderPipeline.ApprovedCount</span><span class="ad-pipe-name">@L["AdminDash:Approved"]</span>
 
                             <span class="ad-pipe-dot ad-pipe-partial"></span>
-                            <span class="ad-pipe-num">@_data.PurchaseOrderPipeline.PartialReceivedCount</span><span class="ad-pipe-name">Receiving</span>
+                            <span class="ad-pipe-num">@_data.PurchaseOrderPipeline.PartialReceivedCount</span><span class="ad-pipe-name">@L["AdminDash:Receiving"]</span>
                         </div>
-                        <div class="ad-kpi-sub">@_data.PurchaseOrderPipeline.SubmittedCount submitted · @_data.PurchaseOrderPipeline.ReceivedCount received</div>
+                        <div class="ad-kpi-sub">@L["AdminDash:SubmittedReceived", _data.PurchaseOrderPipeline.SubmittedCount, _data.PurchaseOrderPipeline.ReceivedCount]</div>
                     </div>
                 </div>
             </div>
@@ -153,8 +153,8 @@
                     <section class="ad-section">
                         <header class="ad-section-head">
                             <div>
-                                <h2 class="ad-section-title">Sales — Last 7 Days</h2>
-                                <div class="ad-section-sub">@FormatMoney(_data.WeekSalesTotal) total this week</div>
+                                <h2 class="ad-section-title">@L["AdminDash:SalesLast7Days"]</h2>
+                                <div class="ad-section-sub">@L["AdminDash:TotalThisWeek", FormatMoney(_data.WeekSalesTotal)]</div>
                             </div>
                         </header>
 
@@ -162,7 +162,7 @@
                             <ApexChart TItem="DailySalesDto" @key="_data" Options="_salesChartOptions" Height="260">
                                 <ApexPointSeries TItem="DailySalesDto"
                                                  Items="_data.SalesLast7Days"
-                                                 Name="Sales"
+                                                 Name="@L["AdminDash:SeriesSales"]"
                                                  SeriesType="SeriesType.Area"
                                                  XValue='@(d => d.Date.ToString("ddd"))'
                                                  YValue="@(d => d.TotalAmount)" />
@@ -173,8 +173,8 @@
                     <section class="ad-section">
                         <header class="ad-section-head">
                             <div>
-                                <h2 class="ad-section-title">Top Selling Products</h2>
-                                <div class="ad-section-sub">Last 7 days</div>
+                                <h2 class="ad-section-title">@L["AdminDash:TopSellingProducts"]</h2>
+                                <div class="ad-section-sub">@L["AdminDash:Last7Days"]</div>
                             </div>
                         </header>
 
@@ -182,7 +182,7 @@
                         {
                             <div class="ad-empty">
                                 <SoftIcon Icon="@Icons.Material.Outlined.Inbox" />
-                                <span>No sales recorded in the last 7 days.</span>
+                                <span>@L["AdminDash:NoSales7Days"]</span>
                             </div>
                         }
                         else
@@ -191,7 +191,7 @@
                                 <ApexChart TItem="TopProductDto" @key="_data" Options="_topProductsOptions" Height="280">
                                     <ApexPointSeries TItem="TopProductDto"
                                                      Items="_data.TopSellingProducts.Take(5).ToList()"
-                                                     Name="Qty Sold"
+                                                     Name="@L["AdminDash:SeriesQtySold"]"
                                                      SeriesType="SeriesType.Bar"
                                                      XValue="@(p => p.ProductName)"
                                                      YValue="@(p => p.TotalQuantitySold)" />
@@ -205,17 +205,17 @@
                     <section class="ad-section">
                         <header class="ad-section-head">
                             <div>
-                                <h2 class="ad-section-title">Recent Decisions</h2>
-                                <div class="ad-section-sub">Pending items needing attention</div>
+                                <h2 class="ad-section-title">@L["AdminDash:RecentDecisions"]</h2>
+                                <div class="ad-section-sub">@L["AdminDash:PendingItemsAttention"]</div>
                             </div>
-                            <a class="ad-section-link" href="/intelligence/decision-log">View all →</a>
+                            <a class="ad-section-link" href="/intelligence/decision-log">@L["AdminDash:ViewAll"]</a>
                         </header>
 
                         @if (_data.RecentDecisions.Count == 0)
                         {
                             <div class="ad-empty ad-empty--success">
                                 <SoftIcon Icon="@Icons.Material.Filled.CheckCircle" />
-                                <span>All clear — no pending decisions.</span>
+                                <span>@L["AdminDash:AllClearNoPending"]</span>
                             </div>
                         }
                         else
@@ -252,8 +252,8 @@
                     <section class="ad-section">
                         <header class="ad-section-head">
                             <div>
-                                <h2 class="ad-section-title">Recent Activity</h2>
-                                <div class="ad-section-sub">Last @Math.Min(_data.RecentMovements.Count, 8) movements</div>
+                                <h2 class="ad-section-title">@L["AdminDash:RecentActivity"]</h2>
+                                <div class="ad-section-sub">@L["AdminDash:LastMovements", Math.Min(_data.RecentMovements.Count, 8)]</div>
                             </div>
                         </header>
 
@@ -261,7 +261,7 @@
                         {
                             <div class="ad-empty">
                                 <SoftIcon Icon="@Icons.Material.Outlined.Inbox" />
-                                <span>No recent stock activity.</span>
+                                <span>@L["AdminDash:NoRecentActivity"]</span>
                             </div>
                         }
                         else
@@ -297,8 +297,8 @@
             <section class="ad-section">
                 <header class="ad-section-head">
                     <div>
-                        <h2 class="ad-section-title">Branch Performance</h2>
-                        <div class="ad-section-sub">Sorted by urgency · click a card to drill in</div>
+                        <h2 class="ad-section-title">@L["AdminDash:BranchPerformance"]</h2>
+                        <div class="ad-section-sub">@L["AdminDash:SortedByUrgency"]</div>
                     </div>
                 </header>
 
@@ -306,7 +306,7 @@
                 {
                     <div class="ad-empty">
                         <SoftIcon Icon="@Icons.Material.Outlined.Store" />
-                        <span>No branches configured yet.</span>
+                        <span>@L["AdminDash:NoBranches"]</span>
                     </div>
                 }
                 else
@@ -336,22 +336,22 @@
                                     <div class="ad-bb-hi"  style="width:@(excessPct.ToString("0.##"))%"></div>
                                 </div>
                                 <div class="ad-branch-bar-legend">
-                                    <span><span class="ad-dot ad-dot-low"></span>@b.LowStockItems low</span>
-                                    <span><span class="ad-dot ad-dot-ok"></span>@b.HealthyItems healthy</span>
-                                    <span><span class="ad-dot ad-dot-hi"></span>@b.ExcessItems excess</span>
+                                    <span><span class="ad-dot ad-dot-low"></span>@L["AdminDash:LegendLow", b.LowStockItems]</span>
+                                    <span><span class="ad-dot ad-dot-ok"></span>@L["AdminDash:LegendHealthy", b.HealthyItems]</span>
+                                    <span><span class="ad-dot ad-dot-hi"></span>@L["AdminDash:LegendExcess", b.ExcessItems]</span>
                                 </div>
 
                                 <div class="ad-branch-stats">
                                     <div>
-                                        <div class="ad-stat-label">Today</div>
+                                        <div class="ad-stat-label">@L["AdminDash:StatToday"]</div>
                                         <div class="ad-stat-value">@FormatMoney(b.SalesToday)</div>
                                     </div>
                                     <div>
-                                        <div class="ad-stat-label">This Week</div>
+                                        <div class="ad-stat-label">@L["AdminDash:StatThisWeek"]</div>
                                         <div class="ad-stat-value">@FormatMoney(b.SalesThisWeek)</div>
                                     </div>
                                     <div>
-                                        <div class="ad-stat-label">Stock Value</div>
+                                        <div class="ad-stat-label">@L["AdminDash:StatStockValue"]</div>
                                         <div class="ad-stat-value">@FormatMoney(b.TotalStockValue)</div>
                                     </div>
                                 </div>
@@ -804,33 +804,33 @@
         _ => Color.Default
     };
 
-    private static string FormatDecisionType(string type) => type switch
+    private string FormatDecisionType(string type) => type switch
     {
-        DecisionTypes.LowStockAlert => "Low Stock",
-        DecisionTypes.ExcessStockAlert => "Excess Stock",
-        DecisionTypes.DeadStockFlag => "Dead Stock",
-        DecisionTypes.TransferSuggestion => "Transfer",
-        DecisionTypes.ReorderSuggestion => "Reorder",
+        DecisionTypes.LowStockAlert => L["AdminDash:DecTypeLowStock"].Value,
+        DecisionTypes.ExcessStockAlert => L["AdminDash:DecTypeExcessStock"].Value,
+        DecisionTypes.DeadStockFlag => L["AdminDash:DecTypeDeadStock"].Value,
+        DecisionTypes.TransferSuggestion => L["AdminDash:DecTypeTransfer"].Value,
+        DecisionTypes.ReorderSuggestion => L["AdminDash:DecTypeReorder"].Value,
         _ => type
     };
 
-    private static string FormatMovementType(string type) => type switch
+    private string FormatMovementType(string type) => type switch
     {
-        "Purchase" => "Purchase",
-        "Sale" => "Sale",
-        "TransferIn" => "Transfer In",
-        "TransferOut" => "Transfer Out",
-        "ManualAdjustment" => "Adjustment",
+        "Purchase" => L["AdminDash:MoveTypePurchase"].Value,
+        "Sale" => L["AdminDash:MoveTypeSale"].Value,
+        "TransferIn" => L["AdminDash:MoveTypeTransferIn"].Value,
+        "TransferOut" => L["AdminDash:MoveTypeTransferOut"].Value,
+        "ManualAdjustment" => L["AdminDash:MoveTypeAdjustment"].Value,
         _ => type
     };
 
-    private static string TimeAgo(DateTime utc)
+    private string TimeAgo(DateTime utc)
     {
         var diff = DateTime.UtcNow - utc;
-        if (diff.TotalSeconds < 60) return "just now";
-        if (diff.TotalMinutes < 60) return $"{(int)diff.TotalMinutes}m ago";
-        if (diff.TotalHours < 24) return $"{(int)diff.TotalHours}h ago";
-        if (diff.TotalDays < 2) return "yesterday";
-        return $"{(int)diff.TotalDays}d ago";
+        if (diff.TotalSeconds < 60) return L["AdminDash:JustNow"].Value;
+        if (diff.TotalMinutes < 60) return L["AdminDash:MinutesAgo", (int)diff.TotalMinutes].Value;
+        if (diff.TotalHours < 24) return L["AdminDash:HoursAgo", (int)diff.TotalHours].Value;
+        if (diff.TotalDays < 2) return L["AdminDash:Yesterday"].Value;
+        return L["AdminDash:DaysAgo", (int)diff.TotalDays].Value;
     }
 }
