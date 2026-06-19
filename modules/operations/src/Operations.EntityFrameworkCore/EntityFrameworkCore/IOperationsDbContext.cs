@@ -11,4 +11,5 @@ public interface IOperationsDbContext : IEfCoreDbContext
     DbSet<AppStockTransfer> StockTransfers { get; }
     DbSet<AppPurchaseOrder> PurchaseOrders { get; }
     DbSet<AppSale> Sales { get; }
+    DbSet<AppCashierShift> CashierShifts { get; }
 }

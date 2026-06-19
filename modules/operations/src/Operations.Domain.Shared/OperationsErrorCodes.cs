@@ -19,6 +19,16 @@ public static class OperationsErrorCodes
     public const string InsufficientStock = "Operations:Sales:InsufficientStock";
     public const string NoInventoryRow = "Operations:Sales:NoInventoryRow";
 
+    // Cashier / cash drawer
+    public const string NoOpenShift = "Operations:Cashier:NoOpenShift";
+    public const string ShiftAlreadyOpen = "Operations:Cashier:ShiftAlreadyOpen";
+    public const string ShiftAlreadyClosed = "Operations:Cashier:ShiftAlreadyClosed";
+    public const string InvalidOpeningFloat = "Operations:Cashier:InvalidOpeningFloat";
+    public const string VoidWindowExpired = "Operations:Cashier:VoidWindowExpired";
+    public const string SaleAlreadyVoided = "Operations:Cashier:SaleAlreadyVoided";
+    public const string BranchNotAssignedToCashier = "Operations:Cashier:BranchNotAssignedToCashier";
+    public const string BranchNotManagedByYou = "Operations:Cashier:BranchNotManagedByYou";
+
     // Stock transfers
     public const string TransferInvalidStatusTransition = "Operations:Transfers:InvalidStatusTransition";
     public const string CannotModifyTransferAfterDraft = "Operations:Transfers:CannotModifyAfterDraft";

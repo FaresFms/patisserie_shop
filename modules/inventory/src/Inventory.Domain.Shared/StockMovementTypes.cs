@@ -14,9 +14,15 @@ public static class StockMovementTypes
     /// </summary>
     public const string WriteOff = "WriteOff";
 
+    /// <summary>
+    /// Stock returned to a branch when a sale is voided. Always an increment; restores
+    /// the quantity removed by the original Sale movement.
+    /// </summary>
+    public const string SaleReturn = "SaleReturn";
+
     public static readonly string[] All =
     {
-        Purchase, Sale, TransferIn, TransferOut, ManualAdjustment, WriteOff
+        Purchase, Sale, TransferIn, TransferOut, ManualAdjustment, WriteOff, SaleReturn
     };
 
     public static bool IsValid(string? type) => type != null && System.Array.IndexOf(All, type) >= 0;

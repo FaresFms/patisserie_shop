@@ -17,6 +17,18 @@ public class AppSale : FullAuditedAggregateRoot<Guid>
     public string Currency { get; private set; } = "USD";
     public string? Notes { get; private set; }
 
+    /// <summary>
+    /// The cash-drawer session this sale was rung on, when sold through the cashier POS.
+    /// Null for sales recorded through the back-office <c>SaleAppService</c>.
+    /// </summary>
+    public Guid? ShiftId { get; private set; }
+
+    // ─── Void state (cash POS) ───
+    public bool IsVoided { get; private set; }
+    public DateTime? VoidedAt { get; private set; }
+    public Guid? VoidedByUserId { get; private set; }
+    public string? VoidReason { get; private set; }
+
     private readonly List<AppSaleItem> _items = new();
     public IReadOnlyCollection<AppSaleItem> Items => new ReadOnlyCollection<AppSaleItem>(_items);
 
@@ -84,6 +96,31 @@ public class AppSale : FullAuditedAggregateRoot<Guid>
             SaleId = Id,
             BranchId = BranchId
         });
+    }
+
+    /// <summary>Links this sale to the cash-drawer session it was rung on.</summary>
+    public void AssignShift(Guid shiftId)
+    {
+        ShiftId = shiftId;
+    }
+
+    /// <summary>
+    /// Marks the sale as voided. Stock restoration is orchestrated by the app service
+    /// (it reverses each line via the inventory manager); this method only flips the
+    /// void state on the aggregate. Throws if the sale is already voided.
+    /// </summary>
+    public void Void(Guid userId, string? reason, DateTime whenUtc)
+    {
+        if (IsVoided)
+        {
+            throw new BusinessException(OperationsErrorCodes.SaleAlreadyVoided)
+                .WithData("SaleId", Id);
+        }
+
+        IsVoided = true;
+        VoidedByUserId = userId;
+        VoidReason = reason;
+        VoidedAt = whenUtc;
     }
 
     private void RecalculateTotal() => TotalAmount = _items.Sum(i => i.Subtotal);

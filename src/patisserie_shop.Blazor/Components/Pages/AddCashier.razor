@@ -1,0 +1,293 @@
+@page "/operations/add-cashier"
+@attribute [Authorize(OperationsPermissions.Cashier.ManageCashiers)]
+@using System.Threading.Tasks
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components
+@using Volo.Abp
+@using Volo.Abp.AspNetCore.Components.Web.Theming.Layout
+@using Volo.Abp.Validation
+@using Operations.Permissions
+@using patisserie_shop.Cashier
+@using Color = MudBlazor.Color
+@using Variant = MudBlazor.Variant
+@using Size = MudBlazor.Size
+@using InputType = MudBlazor.InputType
+@inherits patisserie_shopComponentBase
+@inject ICashierAssignmentAppService CashierAssignmentAppService
+@inject ISnackbar Snackbar
+@inject NavigationManager Navigation
+@inject PageLayout PageLayout
+
+@{
+    PageLayout.Title = L["AddCashier:Title"];
+}
+
+<SoftCard Elevation="2" Class="pa-2 page-flat">
+    <div class="page-head">
+        <div>
+            <h1 class="page-title">@L["AddCashier:Title"]</h1>
+            <div class="page-sub">@L["AddCashier:Subtitle"]</div>
+        </div>
+        <div class="page-head-actions">
+            <SoftButton Variant="Variant.Text" Color="Color.Default"
+                        StartIcon="@Icons.Material.Filled.ArrowBack"
+                        OnClick="GoBack">
+                @L["AddCashier:Cancel"]
+            </SoftButton>
+        </div>
+    </div>
+
+    <SoftCardContent>
+        <SoftAlert Severity="Severity.Info" Variant="Variant.Text" Dense="true" Class="mb-3">
+            @L["AddCashier:ReloginHint"]
+        </SoftAlert>
+
+        @if (!string.IsNullOrEmpty(_serverError))
+        {
+            <SoftAlert Severity="Severity.Error" Variant="Variant.Filled" Dense="true" Class="mb-3">
+                @_serverError
+            </SoftAlert>
+        }
+
+        @if (_branches.Count == 0 && !_loading)
+        {
+            <SoftAlert Severity="Severity.Warning" Variant="Variant.Text" Dense="true" Class="mb-3">
+                @L["AddCashier:NoBranches"]
+            </SoftAlert>
+        }
+
+        <div class="add-cashier-form">
+            <SoftText Typo="Typo.subtitle2" Class="form-section">@L["AddCashier:AccountSection"]</SoftText>
+            <SoftStack Spacing="3">
+                <SoftTextField T="string" Label="@L["AddCashier:UserName"]" @bind-Value="_userName"
+                               Variant="Variant.Outlined" MaxLength="256" Required="true" Immediate="true"
+                               Error="@_userNameError" ErrorText="@L["AddCashier:Required"]" />
+                <SoftTextField T="string" Label="@L["AddCashier:Email"]" @bind-Value="_email"
+                               Variant="Variant.Outlined" InputType="InputType.Email" MaxLength="256"
+                               Required="true" Immediate="true"
+                               Error="@_emailError" ErrorText="@_emailErrorText" />
+                <SoftStack Row="true" Spacing="2">
+                    <SoftTextField T="string" Label="@L["AddCashier:Password"]" @bind-Value="_password"
+                                   Variant="Variant.Outlined" InputType="InputType.Password" MaxLength="128"
+                                   Required="true" Immediate="true"
+                                   Error="@_passwordError" ErrorText="@L["AddCashier:PasswordTooShort"]" />
+                    <SoftTextField T="string" Label="@L["AddCashier:ConfirmPassword"]" @bind-Value="_confirmPassword"
+                                   Variant="Variant.Outlined" InputType="InputType.Password" MaxLength="128"
+                                   Required="true" Immediate="true"
+                                   Error="@_confirmError" ErrorText="@L["AddCashier:PasswordMismatch"]" />
+                </SoftStack>
+            </SoftStack>
+
+            <SoftDivider Class="my-4" />
+
+            <SoftText Typo="Typo.subtitle2" Class="form-section">@L["AddCashier:IdentitySection"]</SoftText>
+            <SoftStack Spacing="3">
+                <SoftStack Row="true" Spacing="2">
+                    <SoftTextField T="string" Label="@L["AddCashier:Name"]" @bind-Value="_name"
+                                   Variant="Variant.Outlined" MaxLength="64" Required="true" Immediate="true"
+                                   Error="@_nameError" ErrorText="@L["AddCashier:Required"]" />
+                    <SoftTextField T="string" Label="@L["AddCashier:Surname"]" @bind-Value="_surname"
+                                   Variant="Variant.Outlined" MaxLength="64" />
+                </SoftStack>
+                <SoftStack Row="true" Spacing="2">
+                    <SoftTextField T="string" Label="@L["AddCashier:PhoneNumber"]" @bind-Value="_phoneNumber"
+                                   Variant="Variant.Outlined" MaxLength="32" />
+                    <div class="branch-select" style="flex: 1;">
+                        <SoftLookupSelect TItem="CashierBranchOptionDto" TValue="Guid?"
+                                          Items="_branches"
+                                          ToValue="@(b => (Guid?)b.Id)"
+                                          ToLabel="@(b => b.Name)"
+                                          Value="@_branchId"
+                                          ValueChanged="@(v => { _branchId = v; _branchError = false; })"
+                                          Label="@L["AddCashier:SelectBranch"]" />
+                        @if (_branchError)
+                        {
+                            <div class="branch-error">@L["AddCashier:BranchRequired"]</div>
+                        }
+                    </div>
+                </SoftStack>
+            </SoftStack>
+        </div>
+    </SoftCardContent>
+
+    <SoftDivider />
+    <div class="pa-3 d-flex justify-end" style="gap: 8px;">
+        <SoftButton Variant="Variant.Text" OnClick="GoBack">@L["AddCashier:Cancel"]</SoftButton>
+        <SoftButton Variant="Variant.Filled" Color="Color.Primary"
+                    StartIcon="@Icons.Material.Filled.PersonAdd"
+                    Disabled="@(_saving || _branches.Count == 0)"
+                    OnClick="CreateAsync">
+            @(_saving ? L["AddCashier:Creating"] : L["AddCashier:Create"])
+        </SoftButton>
+    </div>
+</SoftCard>
+
+@code {
+    private const int MinPasswordLength = 6;
+
+    private bool _loading;
+    private bool _saving;
+    private string? _serverError;
+
+    private string? _userName;
+    private string? _email;
+    private string? _password;
+    private string? _confirmPassword;
+    private string? _name;
+    private string? _surname;
+    private string? _phoneNumber;
+    private Guid? _branchId;
+
+    private List<CashierBranchOptionDto> _branches = new();
+
+    // Inline field error flags (client-side validation).
+    private bool _userNameError;
+    private bool _emailError;
+    private string? _emailErrorText;
+    private bool _passwordError;
+    private bool _confirmError;
+    private bool _nameError;
+    private bool _branchError;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadBranchesAsync();
+    }
+
+    private async Task LoadBranchesAsync()
+    {
+        _loading = true;
+        try
+        {
+            _branches = await CashierAssignmentAppService.GetBranchOptionsAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"{L["AddCashier:LoadFailed"]} {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private bool Validate()
+    {
+        _userNameError = string.IsNullOrWhiteSpace(_userName);
+
+        if (string.IsNullOrWhiteSpace(_email))
+        {
+            _emailError = true;
+            _emailErrorText = L["AddCashier:Required"];
+        }
+        else if (!IsValidEmail(_email))
+        {
+            _emailError = true;
+            _emailErrorText = L["AddCashier:InvalidEmail"];
+        }
+        else
+        {
+            _emailError = false;
+            _emailErrorText = null;
+        }
+
+        _passwordError = string.IsNullOrEmpty(_password) || _password!.Length < MinPasswordLength;
+        _confirmError = !_passwordError && _confirmPassword != _password;
+        _nameError = string.IsNullOrWhiteSpace(_name);
+        _branchError = _branchId is null;
+
+        return !(_userNameError || _emailError || _passwordError || _confirmError || _nameError || _branchError);
+    }
+
+    private static bool IsValidEmail(string email)
+    {
+        var attr = new System.ComponentModel.DataAnnotations.EmailAddressAttribute();
+        return attr.IsValid(email);
+    }
+
+    private async Task CreateAsync()
+    {
+        _serverError = null;
+        if (!Validate())
+        {
+            return;
+        }
+
+        _saving = true;
+        try
+        {
+            var input = new CreateCashierInput
+            {
+                UserName = _userName!.Trim(),
+                Email = _email!.Trim(),
+                Password = _password!,
+                Name = _name!.Trim(),
+                Surname = string.IsNullOrWhiteSpace(_surname) ? null : _surname!.Trim(),
+                PhoneNumber = string.IsNullOrWhiteSpace(_phoneNumber) ? null : _phoneNumber!.Trim(),
+                BranchId = _branchId!.Value
+            };
+
+            await CashierAssignmentAppService.CreateCashierAsync(input);
+
+            Snackbar.Add(string.Format(L["AddCashier:Created"], input.UserName), Severity.Success);
+            Navigation.NavigateTo("/operations/cashier-assignments");
+        }
+        catch (AbpValidationException ex)
+        {
+            _serverError = $"{L["AddCashier:CreateFailed"]} {ResolveValidationMessage(ex)}";
+            Snackbar.Add(_serverError, Severity.Error);
+        }
+        catch (BusinessException ex)
+        {
+            var message = ex.Message;
+            _serverError = $"{L["AddCashier:CreateFailed"]} {message}";
+            Snackbar.Add(_serverError, Severity.Error);
+        }
+        catch (Exception ex)
+        {
+            _serverError = $"{L["AddCashier:CreateFailed"]} {ex.Message}";
+            Snackbar.Add(_serverError, Severity.Error);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private static string ResolveValidationMessage(AbpValidationException ex)
+    {
+        if (ex.ValidationErrors is { Count: > 0 })
+        {
+            return string.Join(" ", ex.ValidationErrors
+                .Select(e => e.ErrorMessage)
+                .Where(m => !string.IsNullOrWhiteSpace(m)));
+        }
+        return ex.Message;
+    }
+
+    private void GoBack()
+    {
+        Navigation.NavigateTo("/operations/cashier-assignments");
+    }
+}
+
+<style>
+    .add-cashier-form {
+        max-width: 720px;
+    }
+
+    .add-cashier-form .form-section {
+        color: var(--fg-3);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        font-size: 11px;
+        margin-bottom: 8px;
+        display: block;
+    }
+
+    .branch-error {
+        color: var(--danger);
+        font-size: 12px;
+        margin-top: 4px;
+    }
+</style>

@@ -23,6 +23,9 @@
     "Permission:Transfers.Ship": "Mark in transit",
     "Permission:Transfers.Complete": "Complete",
     "Permission:Transfers.Cancel": "Cancel",
+    "Permission:Cashier": "Cashier (POS)",
+    "Permission:Cashier.ViewAllShifts": "View all cashier shifts (manager)",
+    "Permission:Cashier.ManageCashiers": "Create / assign cashiers (manager)",
 
     "Menu:Operations": "Operations",
     "Menu:PurchaseOrders": "Purchase orders",
@@ -117,6 +120,15 @@
     "Operations:Sales:InsufficientStock": "Not enough stock — requested {Requested}, only {Available} available.",
     "Operations:Sales:NoInventoryRow": "Product has no inventory at this branch.",
     "Operations:Sales:BranchAccessDenied": "You don't have access to record sales for this branch.",
+
+    "Operations:Cashier:NoOpenShift": "You don't have an open cash shift at this branch. Open a shift before selling.",
+    "Operations:Cashier:ShiftAlreadyOpen": "You already have an open cash shift. Close it before opening another.",
+    "Operations:Cashier:ShiftAlreadyClosed": "This shift is already closed.",
+    "Operations:Cashier:InvalidOpeningFloat": "The opening float cannot be negative.",
+    "Operations:Cashier:VoidWindowExpired": "This sale can no longer be voided — the {WindowMinutes}-minute void window has passed. Ask a manager to void it.",
+    "Operations:Cashier:SaleAlreadyVoided": "This sale has already been voided.",
+    "Operations:Cashier:BranchNotAssignedToCashier": "You can only operate the branch assigned to you. Contact your manager if this is wrong.",
+    "Operations:Cashier:BranchNotManagedByYou": "You can only create or assign cashiers for branches you manage.",
 
     "StockTransfers": "Stock transfers",
     "StockTransfer": "Stock transfer",

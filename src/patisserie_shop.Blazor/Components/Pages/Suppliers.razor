@@ -8,12 +8,14 @@
 @using Inventory.Suppliers
 @using Inventory.Permissions
 @using Inventory.Localization
+@using patisserie_shop.Suppliers
 @using Color = MudBlazor.Color
 @using Variant = MudBlazor.Variant
 @using Size = MudBlazor.Size
 @using Margin = MudBlazor.Margin
 @inherits patisserie_shopComponentBase
 @inject ISupplierAppService SupplierAppService
+@inject ISupplierScorecardAppService SupplierScorecardAppService
 @inject PageLayout PageLayout
 @inject ISnackbar Snackbar
 @inject IStringLocalizer<InventoryResource> InvL
@@ -54,6 +56,9 @@
                            Class="toolbar-search"
                            Style="max-width: 320px;" />
             <div class="toolbar-right">
+                <SoftText Typo="Typo.caption" Color="Color.Default" Style="opacity:.7;">
+                    @InvL["Scorecard:RangeNote"]
+                </SoftText>
                 <SoftButton Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Refresh" OnClick="ReloadAsync">
                     @L["Refresh"]
                 </SoftButton>
@@ -75,6 +80,50 @@
                 <PropertyColumn T="SupplierDto" TProperty="string" Property="x => x.Phone!" Title="@InvL["Phone"]" Sortable="false" />
                 <PropertyColumn T="SupplierDto" TProperty="string" Property="x => x.Email!" Title="@InvL["Email"]" Sortable="false" />
                 <PropertyColumn T="SupplierDto" TProperty="int" Property="x => x.LeadTimeDays" Title="@InvL["LeadTimeDays"]" />
+                <TemplateColumn T="SupplierDto" Title="@InvL["Scorecard:Delivery"]" Sortable="false">
+                    <CellTemplate>
+                        @{
+                            var sc = _scorecards.GetValueOrDefault(context.Item.Id);
+                        }
+                        @if (sc == null || sc.TotalOrders == 0)
+                        {
+                            <SoftText Typo="Typo.caption" Style="opacity:.6;">@InvL["Scorecard:NoHistory"]</SoftText>
+                        }
+                        else
+                        {
+                            <div class="stats" style="gap:14px;">
+                                <span>
+                                    <span class="stat-label">@InvL["Scorecard:OnTime"]</span>
+                                    <span class="stat-value">@(sc.OnTimeRate.HasValue ? $"{sc.OnTimeRate.Value:0.#}%" : InvL["Scorecard:Dash"])</span>
+                                </span>
+                                <span>
+                                    <span class="stat-label">@InvL["Scorecard:Fill"]</span>
+                                    <span class="stat-value">@(sc.FillRate.HasValue ? $"{sc.FillRate.Value:0.#}%" : InvL["Scorecard:Dash"])</span>
+                                </span>
+                                <span>
+                                    <span class="stat-label">@InvL["Scorecard:MeasuredLead"]</span>
+                                    <span class="stat-value">@(sc.MeasuredLeadTimeDays.HasValue ? $"{sc.MeasuredLeadTimeDays.Value}d" : InvL["Scorecard:Dash"])</span>
+                                </span>
+                            </div>
+                        }
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn T="SupplierDto" Title="@InvL["Scorecard:Grade"]" Sortable="false">
+                    <CellTemplate>
+                        @{
+                            var sc = _scorecards.GetValueOrDefault(context.Item.Id);
+                            var grade = sc?.Grade ?? SupplierGrading.NotAvailable;
+                        }
+                        <SoftTooltip Text="@GradeTooltip(sc)">
+                            <SoftChip T="string"
+                                      Color="@GradeColor(grade)"
+                                      Variant="@(grade == SupplierGrading.NotAvailable ? Variant.Outlined : Variant.Filled)"
+                                      Size="Size.Small">
+                                @GradeLabel(grade)
+                            </SoftChip>
+                        </SoftTooltip>
+                    </CellTemplate>
+                </TemplateColumn>
                 <TemplateColumn T="SupplierDto" Title="@InvL["IsActive"]" Sortable="true" SortBy="x => x.IsActive">
                     <CellTemplate>
                         @if (context.Item.IsActive)
@@ -247,9 +296,29 @@
     private bool _confirmVisible;
     private SupplierDto? _pendingDelete;
 
+    private const int ScorecardWindowDays = 90;
+    private Dictionary<Guid, SupplierScorecardDto> _scorecards = new();
+
     protected override async Task OnInitializedAsync()
     {
         _canManage = await AuthorizationService.IsGrantedAsync(InventoryPermissions.Suppliers.Manage);
+        await LoadScorecardsAsync();
+    }
+
+    private async Task LoadScorecardsAsync()
+    {
+        try
+        {
+            var rows = await SupplierScorecardAppService.GetListAsync(
+                new GetSupplierScorecardsInput { Days = ScorecardWindowDays });
+            _scorecards = rows.ToDictionary(r => r.SupplierId);
+        }
+        catch
+        {
+            // Scorecards are a non-critical overlay — if they fail to load the grid
+            // still renders the supplier list (cells fall back to "no history").
+            _scorecards = new();
+        }
     }
 
     private async Task<GridData<SupplierDto>> LoadServerData(GridState<SupplierDto> state, CancellationToken cancellationToken)
@@ -294,10 +363,42 @@
 
     private async Task ReloadAsync()
     {
+        await LoadScorecardsAsync();
         if (_grid != null)
         {
             await _grid.ReloadServerData();
         }
+    }
+
+    private Color GradeColor(string grade) => grade switch
+    {
+        "A" => Color.Success,
+        "B" => Color.Info,
+        "C" => Color.Warning,
+        "D" => Color.Error,
+        _ => Color.Default
+    };
+
+    private string GradeLabel(string grade)
+        => grade == SupplierGrading.NotAvailable ? InvL["Scorecard:Grade:NA"] : grade;
+
+    private string GradeTooltip(SupplierScorecardDto? sc)
+    {
+        if (sc == null || sc.TotalOrders == 0)
+        {
+            return InvL["Scorecard:NoHistory"];
+        }
+
+        var onTime = sc.OnTimeRate.HasValue ? $"{sc.OnTimeRate.Value:0.#}%" : InvL["Scorecard:Dash"];
+        var fill = sc.FillRate.HasValue ? $"{sc.FillRate.Value:0.#}%" : InvL["Scorecard:Dash"];
+        var delay = sc.AvgDelayDays.HasValue ? $"{sc.AvgDelayDays.Value:0.#}d" : InvL["Scorecard:Dash"];
+        var lead = sc.MeasuredLeadTimeDays.HasValue
+            ? $"{sc.MeasuredLeadTimeDays.Value}d ({sc.LeadTimeSampleSize})"
+            : InvL["Scorecard:Dash"];
+
+        return string.Format(
+            InvL["Scorecard:Tooltip"],
+            sc.TotalOrders, sc.ReceivedOrders, onTime, fill, delay, lead);
     }
 
     private void OpenCreateDialog()

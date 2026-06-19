@@ -36,6 +36,18 @@ public class OperationsPermissions
         public const string Cancel = Default + ".Cancel";
     }
 
+    public static class Cashier
+    {
+        /// <summary>Cashier POS: sell, manage own shift, void own sales within the window.</summary>
+        public const string Default = GroupName + ".Cashier";
+
+        /// <summary>Manager drawer view: see all cashier shifts/drawers across branches.</summary>
+        public const string ViewAllShifts = Default + ".ViewAllShifts";
+
+        /// <summary>Create cashier users and assign them to a branch (branch-scoped for managers).</summary>
+        public const string ManageCashiers = Default + ".ManageCashiers";
+    }
+
     public static string[] GetAll()
     {
         return ReflectionHelper.GetPublicConstantsRecursively(typeof(OperationsPermissions));

@@ -30,6 +30,10 @@ public class OperationsPermissionDefinitionProvider : PermissionDefinitionProvid
         transfers.AddChild(OperationsPermissions.Transfers.Ship, L("Permission:Transfers.Ship"));
         transfers.AddChild(OperationsPermissions.Transfers.Complete, L("Permission:Transfers.Complete"));
         transfers.AddChild(OperationsPermissions.Transfers.Cancel, L("Permission:Transfers.Cancel"));
+
+        var cashier = group.AddPermission(OperationsPermissions.Cashier.Default, L("Permission:Cashier"));
+        cashier.AddChild(OperationsPermissions.Cashier.ViewAllShifts, L("Permission:Cashier.ViewAllShifts"));
+        cashier.AddChild(OperationsPermissions.Cashier.ManageCashiers, L("Permission:Cashier.ManageCashiers"));
     }
 
     private static LocalizableString L(string name)

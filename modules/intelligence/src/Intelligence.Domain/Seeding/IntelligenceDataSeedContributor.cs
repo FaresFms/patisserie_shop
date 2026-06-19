@@ -32,7 +32,31 @@ public class IntelligenceDataSeedContributor : IDataSeedContributor, ITransientD
     [UnitOfWork]
     public async Task SeedAsync(DataSeedContext context)
     {
-        if (await _rulesRepository.AnyAsync())
+        // Sentinel rule for manual cashier stock reports. Seeded with a FIXED id and
+        // independently of the rule-bank guard below, so it lands even on databases that
+        // already have rules. INACTIVE on purpose — the engine never evaluates it; it only
+        // satisfies AppDecisionLog's non-null RuleId for manual reports (DecisionType
+        // StockReport) and gives the decision log a readable rule name. Idempotent: keyed
+        // on the fixed id. RuleType LowStock + a dummy threshold keeps the entity invariant
+        // happy (ThresholdValue is required for that type); IsActive=false guarantees no
+        // real evaluation regardless of the type chosen.
+        if (await _rulesRepository.FindAsync(IntelligenceConstants.CashierReportRuleId) == null)
+        {
+            await _rulesRepository.InsertAsync(new AppInventoryRule(
+                id: IntelligenceConstants.CashierReportRuleId,
+                ruleName: "Cashier Stock Report",
+                ruleType: InventoryRuleTypes.LowStock,
+                productId: null,
+                branchId: null,
+                thresholdValue: 0,
+                thresholdDays: null,
+                suggestedAction: "Restock",
+                priority: 0,
+                isActive: false
+            ), autoSave: true);
+        }
+
+        if (await _rulesRepository.AnyAsync(r => r.Id != IntelligenceConstants.CashierReportRuleId))
         {
             return;
         }

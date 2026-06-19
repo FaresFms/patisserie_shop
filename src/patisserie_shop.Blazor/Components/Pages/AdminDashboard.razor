@@ -7,6 +7,7 @@
 @using Size = MudBlazor.Size
 @inherits patisserie_shopComponentBase
 @inject IAdminDashboardAppService AdminDashboardService
+@inject IBranchHealthAppService BranchHealthService
 @inject NavigationManager Nav
 
 <SoftCard Elevation="2" Class="pa-2 page-flat admin-dash">
@@ -360,6 +361,94 @@
                     </div>
                 }
             </section>
+
+            @* ───────── ROW 4 — Branch Health League Table ───────── *@
+            <section class="ad-section bh-section">
+                <header class="ad-section-head">
+                    <div>
+                        <h2 class="ad-section-title">@L["BranchHealth:Title"]</h2>
+                        <div class="ad-section-sub">@L["BranchHealth:Subtitle"]</div>
+                    </div>
+                </header>
+
+                @if (_health == null)
+                {
+                    <div class="ad-empty">
+                        <SoftProgressCircular Indeterminate="true" Size="Size.Small" />
+                        <span>@L["AdminDash:Loading"]</span>
+                    </div>
+                }
+                else if (_health.Count == 0)
+                {
+                    <div class="ad-empty">
+                        <SoftIcon Icon="@Icons.Material.Outlined.Store" />
+                        <span>@L["BranchHealth:Empty"]</span>
+                    </div>
+                }
+                else
+                {
+                    <div class="bh-table">
+                        <div class="bh-row bh-head-row">
+                            <span class="bh-rank">@L["BranchHealth:Rank"]</span>
+                            <span class="bh-name">@L["BranchHealth:Branch"]</span>
+                            <span class="bh-score-col">@L["BranchHealth:Score"]</span>
+                            <span class="bh-comps-col">@L["BranchHealth:Breakdown"]</span>
+                        </div>
+
+                        @{ var rank = 0; }
+                        @foreach (var b in _health)
+                        {
+                            rank++;
+                            var expanded = _expandedBranch == b.BranchId;
+                            <div class="bh-row bh-data-row @(expanded ? "bh-expanded" : "")"
+                                 @onclick="() => ToggleBranch(b.BranchId)">
+                                <span class="bh-rank">@rank</span>
+                                <span class="bh-name">
+                                    <SoftIcon Icon="@Icons.Material.Outlined.Store" />
+                                    @b.BranchName
+                                </span>
+                                <span class="bh-score-col">
+                                    <span class="bh-grade bh-grade-@b.Grade.ToLowerInvariant()">@b.Grade</span>
+                                    <span class="bh-score-num">@b.Score</span>
+                                    <span class="bh-bar">
+                                        <span class="bh-bar-fill bh-fill-@b.Grade.ToLowerInvariant()"
+                                              style="width:@(b.Score)%"></span>
+                                    </span>
+                                </span>
+                                <span class="bh-comps-col">
+                                    @foreach (var c in b.Components)
+                                    {
+                                        <span class="bh-chip" title="@c.Detail">
+                                            <span class="bh-chip-name">@ComponentName(c.Name)</span>
+                                            <span class="bh-chip-pts">@c.Points/@c.MaxPoints</span>
+                                        </span>
+                                    }
+                                </span>
+                            </div>
+
+                            @if (expanded)
+                            {
+                                <div class="bh-detail-row">
+                                    @foreach (var c in b.Components)
+                                    {
+                                        var ratio = c.MaxPoints > 0 ? (double)c.Points / c.MaxPoints * 100.0 : 0;
+                                        <div class="bh-detail-item">
+                                            <div class="bh-detail-head">
+                                                <span class="bh-detail-name">@ComponentName(c.Name)</span>
+                                                <span class="bh-detail-pts">@c.Points / @c.MaxPoints</span>
+                                            </div>
+                                            <div class="bh-detail-bar">
+                                                <span class="bh-detail-fill" style="width:@(ratio.ToString("0.##"))%"></span>
+                                            </div>
+                                            <div class="bh-detail-text">@c.Detail</div>
+                                        </div>
+                                    }
+                                </div>
+                            }
+                        }
+                    </div>
+                }
+            </section>
         }
     </SoftCardContent>
 </SoftCard>
@@ -669,10 +758,140 @@
         font-variant-numeric: tabular-nums;
         margin-top: 2px;
     }
+
+    /* ── Branch Health league table ── */
+    .bh-section { margin-top: 18px; }
+    .bh-table { display: flex; flex-direction: column; }
+    .bh-row {
+        display: grid;
+        grid-template-columns: 36px minmax(120px, 1.1fr) minmax(150px, 0.9fr) minmax(0, 2.4fr);
+        align-items: center;
+        gap: 12px;
+        padding: 10px 6px;
+        border-bottom: 1px solid var(--bd-1);
+    }
+    .bh-head-row {
+        font-size: 10.5px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: .05em;
+        color: var(--fg-3);
+        border-bottom: 1px solid var(--bd-2);
+    }
+    .bh-data-row { cursor: pointer; transition: background .12s; }
+    .bh-data-row:hover { background: var(--hover); }
+    .bh-expanded { background: var(--accent-soft); }
+
+    .bh-rank {
+        font-variant-numeric: tabular-nums;
+        font-weight: 600;
+        color: var(--fg-3);
+        text-align: center;
+    }
+    .bh-name {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        font-family: var(--font-serif);
+        font-size: 15px;
+        font-weight: 600;
+        color: var(--fg-1);
+        min-width: 0;
+    }
+    .bh-name .mud-icon-root { color: var(--accent); font-size: 17px; flex-shrink: 0; }
+
+    .bh-score-col { display: inline-flex; align-items: center; gap: 8px; }
+    .bh-grade {
+        width: 22px; height: 22px;
+        flex-shrink: 0;
+        border-radius: var(--r-sm);
+        display: inline-flex; align-items: center; justify-content: center;
+        font-size: 12px; font-weight: 700; color: #fff;
+    }
+    .bh-grade-a { background: #6b8e4e; }
+    .bh-grade-b { background: #4a7da8; }
+    .bh-grade-c { background: #c89c4f; }
+    .bh-grade-d { background: #b3543a; }
+    .bh-score-num {
+        font-variant-numeric: tabular-nums;
+        font-weight: 700;
+        font-size: 15px;
+        color: var(--fg-1);
+        width: 26px;
+        text-align: right;
+    }
+    .bh-bar {
+        flex: 1;
+        min-width: 40px;
+        height: 6px;
+        border-radius: 3px;
+        background: var(--hover);
+        overflow: hidden;
+    }
+    .bh-bar-fill { display: block; height: 100%; }
+    .bh-fill-a { background: #6b8e4e; }
+    .bh-fill-b { background: #4a7da8; }
+    .bh-fill-c { background: #c89c4f; }
+    .bh-fill-d { background: #b3543a; }
+
+    .bh-comps-col { display: flex; flex-wrap: wrap; gap: 5px; }
+    .bh-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        font-size: 11px;
+        background: var(--bg-2);
+        border: 1px solid var(--bd-1);
+        border-radius: 999px;
+        padding: 2px 9px;
+        white-space: nowrap;
+    }
+    .bh-chip-name { color: var(--fg-3); }
+    .bh-chip-pts { color: var(--fg-1); font-weight: 600; font-variant-numeric: tabular-nums; }
+
+    .bh-detail-row {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+        gap: 12px;
+        padding: 12px 8px 16px;
+        background: var(--accent-soft);
+        border-bottom: 1px solid var(--bd-1);
+    }
+    .bh-detail-item {
+        background: var(--surface);
+        border: 1px solid var(--bd-1);
+        border-radius: var(--r-sm);
+        padding: 10px 12px;
+    }
+    .bh-detail-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+    .bh-detail-name {
+        font-size: 11.5px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: .04em;
+        color: var(--fg-2);
+    }
+    .bh-detail-pts {
+        font-variant-numeric: tabular-nums;
+        font-weight: 700;
+        font-size: 13px;
+        color: var(--fg-1);
+    }
+    .bh-detail-bar {
+        height: 5px;
+        border-radius: 3px;
+        background: var(--hover);
+        overflow: hidden;
+        margin: 7px 0;
+    }
+    .bh-detail-fill { display: block; height: 100%; background: var(--accent); }
+    .bh-detail-text { font-size: 12px; color: var(--fg-2); line-height: 1.4; }
 </style>
 
 @code {
     private AdminDashboardDto? _data;
+    private List<BranchHealthDto>? _health;
+    private Guid? _expandedBranch;
     private bool _loading;
     private DateTime? _lastRefresh;
     private string? _error;
@@ -775,6 +994,7 @@
         try
         {
             _data = await AdminDashboardService.GetAdminDashboardAsync();
+            _health = await BranchHealthService.GetBranchHealthAsync();
             _lastRefresh = DateTime.UtcNow;
         }
         catch (Exception ex)
@@ -790,6 +1010,11 @@
     }
 
     private static string FormatMoney(decimal v) => v.ToString("C0", System.Globalization.CultureInfo.GetCultureInfo("en-US"));
+
+    private void ToggleBranch(Guid branchId)
+        => _expandedBranch = _expandedBranch == branchId ? null : branchId;
+
+    private string ComponentName(string key) => L[$"BranchHealth:Comp:{key}"].Value;
 
     private static string Truncate(string s, int max)
         => string.IsNullOrEmpty(s) || s.Length <= max ? s : s[..max].TrimEnd() + "…";

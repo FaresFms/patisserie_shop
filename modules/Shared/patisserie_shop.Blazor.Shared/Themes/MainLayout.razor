@@ -45,6 +45,13 @@
             </SoftButton>
         </SoftTooltip>
 
+        @* ── Cashier last-hour recent-sales panel (host-app component, resolved at
+             runtime like the bell below; self-gates on the Cashier permission) ── *@
+        @if (CurrentUser.IsAuthenticated && _recentSalesPanelType is not null)
+        {
+            <DynamicComponent Type="_recentSalesPanelType" />
+        }
+
         @* ── Decision notification bell (host-app component, resolved at runtime
              because this shared layout cannot reference the Blazor host project) ── *@
         @if (CurrentUser.IsAuthenticated && _notificationBellType is not null)
@@ -182,6 +189,11 @@
     // does not provide the component.
     private static readonly Type? _notificationBellType =
         Type.GetType("patisserie_shop.Blazor.Components.Layout.NotificationBell, patisserie_shop.Blazor");
+
+    // Same name-resolution trick: the cashier recent-sales panel lives in the host
+    // app, so the shared theme project must not reference it directly.
+    private static readonly Type? _recentSalesPanelType =
+        Type.GetType("patisserie_shop.Blazor.Components.Layout.RecentSalesPanel, patisserie_shop.Blazor");
 
     private MudMenu _userMenu = default!;
     private MudBlazor.MudTheme _theme = MyTheme.Create();

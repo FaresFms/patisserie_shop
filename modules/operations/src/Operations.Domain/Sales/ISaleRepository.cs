@@ -38,6 +38,17 @@ public interface ISaleRepository : IRepository<AppSale, Guid>
         int maxResultCount,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Sales rung by a given cashier (CreatorId) at a branch with SaleDate on/after the
+    /// supplied cutoff, newest first, each with its line-item count. Backs the cashier
+    /// POS "recent sales" strip and the in-window void affordance.
+    /// </summary>
+    Task<List<SaleListRow>> GetRecentByCashierAsync(
+        Guid branchId,
+        Guid cashierUserId,
+        DateTime sinceUtc,
+        CancellationToken cancellationToken = default);
+
     /// <summary>Sum + count grouped by sale date (UTC date component) in the supplied window.</summary>
     Task<List<DailySaleAggregate>> GetDailySalesAsync(
         DateTime fromUtcInclusive,

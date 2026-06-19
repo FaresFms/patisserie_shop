@@ -1,13 +1,18 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Security.Claims;
 using System.Threading.Tasks;
 using Intelligence.Permissions;
+using Inventory.Entities;
 using Inventory.Permissions;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.Extensions.Logging;
+using Operations;
 using Operations.Permissions;
 using Volo.Abp.Data;
 using Volo.Abp.DependencyInjection;
+using Volo.Abp.Domain.Repositories;
 using Volo.Abp.Guids;
 using Volo.Abp.Identity;
 using Volo.Abp.MultiTenancy;
@@ -19,10 +24,10 @@ using AbpIdentityUser = Volo.Abp.Identity.IdentityUser;
 namespace patisserie_shop.DbMigrator;
 
 /// <summary>
-/// Seeds the two project-specific roles (Admin, BranchManager) with their
-/// permission sets and an optional BranchManager demo user. The ABP-default
-/// admin user (admin / 1q2w3E*) is created automatically by ABP's own
-/// identity seeder — we only add permissions to the existing admin role here.
+/// Seeds the three project-specific roles (Admin, BranchManager, Cashier) with their
+/// permission sets and the matching demo users. The ABP-default admin user
+/// (admin / 1q2w3E*) is created automatically by ABP's own identity seeder — we only
+/// add permissions to the existing admin role here.
 ///
 /// Idempotent: every section is guarded ("if role exists / if user exists")
 /// so it's safe to re-run with the DbMigrator.
@@ -31,10 +36,18 @@ public class IdentityDataSeedContributor : IDataSeedContributor, ITransientDepen
 {
     public const string AdminRoleName = "admin";
     public const string BranchManagerRoleName = "BranchManager";
+    public const string CashierRoleName = "Cashier";
 
     public const string BranchManagerUserName = "manager.demo";
     public const string BranchManagerEmail = "manager@patisserie.com";
     public const string BranchManagerPassword = "Manager@2026";
+
+    public const string CashierUserName = "cashier.demo";
+    public const string CashierEmail = "cashier@patisserie.com";
+    public const string CashierPassword = "Cashier@2026";
+
+    /// <summary>The branch cashier.demo is assigned to (matches a seeded branch name).</summary>
+    public const string CashierAssignedBranchName = "Main Street Boutique";
 
     // ABP's RolePermissionValueProvider.ProviderName ("R"). Hardcoded here so
     // the seeder doesn't need a transitive dep on the permission-management
@@ -47,6 +60,8 @@ public class IdentityDataSeedContributor : IDataSeedContributor, ITransientDepen
     private readonly IPermissionDataSeeder _permissionDataSeeder;
     private readonly IGuidGenerator _guidGenerator;
     private readonly ICurrentTenant _currentTenant;
+    private readonly IRepository<AppBranch, Guid> _branchRepository;
+    private readonly ILogger<IdentityDataSeedContributor> _logger;
 
     public IdentityDataSeedContributor(
         IIdentityRoleRepository roleRepository,
@@ -54,7 +69,9 @@ public class IdentityDataSeedContributor : IDataSeedContributor, ITransientDepen
         IdentityUserManager userManager,
         IPermissionDataSeeder permissionDataSeeder,
         IGuidGenerator guidGenerator,
-        ICurrentTenant currentTenant)
+        ICurrentTenant currentTenant,
+        IRepository<AppBranch, Guid> branchRepository,
+        ILogger<IdentityDataSeedContributor> logger)
     {
         _roleRepository = roleRepository;
         _roleManager = roleManager;
@@ -62,6 +79,8 @@ public class IdentityDataSeedContributor : IDataSeedContributor, ITransientDepen
         _permissionDataSeeder = permissionDataSeeder;
         _guidGenerator = guidGenerator;
         _currentTenant = currentTenant;
+        _branchRepository = branchRepository;
+        _logger = logger;
     }
 
     [UnitOfWork]
@@ -70,6 +89,7 @@ public class IdentityDataSeedContributor : IDataSeedContributor, ITransientDepen
         // 1) Roles
         await EnsureRoleExistsAsync(AdminRoleName, isStatic: true);
         await EnsureRoleExistsAsync(BranchManagerRoleName, isStatic: false);
+        await EnsureRoleExistsAsync(CashierRoleName, isStatic: false);
 
         // 2) Permissions on each role
         await _permissionDataSeeder.SeedAsync(
@@ -84,12 +104,84 @@ public class IdentityDataSeedContributor : IDataSeedContributor, ITransientDepen
             BranchManagerPermissions(),
             context.TenantId);
 
+        await _permissionDataSeeder.SeedAsync(
+            RoleProviderName,
+            CashierRoleName,
+            CashierPermissions(),
+            context.TenantId);
+
         // 3) Demo BranchManager user (only if missing)
         await EnsureUserExistsAsync(
             userName: BranchManagerUserName,
             email: BranchManagerEmail,
             password: BranchManagerPassword,
             roleName: BranchManagerRoleName);
+
+        // 4) Demo Cashier user (only if missing)
+        await EnsureUserExistsAsync(
+            userName: CashierUserName,
+            email: CashierEmail,
+            password: CashierPassword,
+            roleName: CashierRoleName);
+
+        // 5) Assign cashier.demo to the Main Street branch via a persistent claim.
+        await EnsureCashierBranchAssignmentAsync();
+    }
+
+    /// <summary>
+    /// Assigns cashier.demo to the "Main Street Boutique" branch by writing the persistent
+    /// <see cref="CashierClaimTypes.AssignedBranchId"/> claim. Idempotent — if the claim is
+    /// already set to that branch nothing changes; otherwise any stale value is replaced.
+    /// If the branch can't be resolved yet (e.g. the branch seeder hasn't run on this pass),
+    /// it logs and skips gracefully; a subsequent migrator run will complete the assignment.
+    /// The claim takes effect on the cashier's NEXT login.
+    /// </summary>
+    private async Task EnsureCashierBranchAssignmentAsync()
+    {
+        var cashier = await _userManager.FindByNameAsync(CashierUserName);
+        if (cashier == null)
+        {
+            _logger.LogWarning("[Seed] Cashier '{User}' not found — skipping branch assignment.", CashierUserName);
+            return;
+        }
+
+        var branches = await _branchRepository.GetListAsync(b => b.Name == CashierAssignedBranchName);
+        var branch = branches.FirstOrDefault();
+        if (branch == null)
+        {
+            _logger.LogWarning(
+                "[Seed] Branch '{Branch}' not found yet — skipping cashier branch assignment. " +
+                "Re-run the migrator after branches are seeded to complete it.",
+                CashierAssignedBranchName);
+            return;
+        }
+
+        var desiredValue = branch.Id.ToString();
+
+        // Read claims through the manager — FindByNameAsync does not populate the Claims
+        // navigation collection, so user.Claims would be null here.
+        var existing = (await _userManager.GetClaimsAsync(cashier))
+            .Where(c => c.Type == CashierClaimTypes.AssignedBranchId)
+            .ToList();
+
+        // Already assigned to the right branch? Idempotent no-op.
+        if (existing.Count == 1 && existing[0].Value == desiredValue)
+        {
+            return;
+        }
+
+        // Replace any stale/duplicate AssignedBranchId claims with the correct one.
+        if (existing.Count > 0)
+        {
+            await _userManager.RemoveClaimsAsync(cashier, existing);
+        }
+
+        await _userManager.AddClaimAsync(
+            cashier, new Claim(CashierClaimTypes.AssignedBranchId, desiredValue));
+
+        _logger.LogInformation(
+            "[Seed] Assigned cashier '{User}' to branch '{Branch}' ({BranchId}).",
+            CashierUserName, branch.Name, branch.Id);
     }
 
     private async Task EnsureRoleExistsAsync(string roleName, bool isStatic)
@@ -166,7 +258,9 @@ public class IdentityDataSeedContributor : IDataSeedContributor, ITransientDepen
     /// <summary>
     /// BranchManager: read-only across the catalogue; can adjust their branch's
     /// stock; can receive POs; can manage sales; can create + ship transfers;
-    /// can view + acknowledge decision logs. Cannot manage the catalogue,
+    /// can view + acknowledge decision logs; can view all cashier shifts and
+    /// create / assign cashiers for the branches they manage (branch-scoped in
+    /// the host CashierAssignmentAppService). Cannot manage the catalogue,
     /// cannot approve POs, cannot delete sales, cannot
     /// approve/complete/cancel transfers, cannot see the rules engine.
     ///
@@ -197,8 +291,24 @@ public class IdentityDataSeedContributor : IDataSeedContributor, ITransientDepen
         OperationsPermissions.Transfers.Create,
         OperationsPermissions.Transfers.Ship,
 
+        // Operations — cashier oversight: view all shifts + create/assign cashiers
+        // (host CashierAssignmentAppService scopes both to the branches they manage)
+        OperationsPermissions.Cashier.ViewAllShifts,
+        OperationsPermissions.Cashier.ManageCashiers,
+
         // Intelligence — decision logs only (no Rules read/manage)
         IntelligencePermissions.DecisionLogs.Default,
         IntelligencePermissions.DecisionLogs.Acknowledge
+    };
+
+    /// <summary>
+    /// Cashier: POS only. Granted EXCLUSIVELY <see cref="OperationsPermissions.Cashier.Default"/>
+    /// — sell, manage their own shift, void their own sales within the window, and raise
+    /// manual low-stock reports. No catalogue, no inventory, no rules, no manager drawer
+    /// view (Cashier.ViewAllShifts is intentionally withheld).
+    /// </summary>
+    private static IEnumerable<string> CashierPermissions() => new[]
+    {
+        OperationsPermissions.Cashier.Default
     };
 }

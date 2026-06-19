@@ -119,4 +119,44 @@ public class AppSaleTests
         eto.SaleId.ShouldBe(sale.Id);
         eto.BranchId.ShouldBe(sale.BranchId);
     }
+
+    // ─── Cashier POS additions: shift link + void state ───
+
+    [Fact]
+    public void AssignShift_Should_Link_The_Sale_To_A_Shift()
+    {
+        var sale = NewSale();
+        sale.ShiftId.ShouldBeNull();
+
+        var shiftId = Guid.NewGuid();
+        sale.AssignShift(shiftId);
+
+        sale.ShiftId.ShouldBe(shiftId);
+    }
+
+    [Fact]
+    public void Void_Should_Flip_State_And_Capture_Who_When_And_Why()
+    {
+        var sale = NewSale();
+        sale.IsVoided.ShouldBeFalse();
+
+        var userId = Guid.NewGuid();
+        var when = new DateTime(2026, 6, 18, 12, 30, 0, DateTimeKind.Utc);
+        sale.Void(userId, "Customer changed mind", when);
+
+        sale.IsVoided.ShouldBeTrue();
+        sale.VoidedByUserId.ShouldBe(userId);
+        sale.VoidReason.ShouldBe("Customer changed mind");
+        sale.VoidedAt.ShouldBe(when);
+    }
+
+    [Fact]
+    public void Void_Should_Throw_When_Already_Voided()
+    {
+        var sale = NewSale();
+        sale.Void(Guid.NewGuid(), reason: null, DateTime.UtcNow);
+
+        Should.Throw<BusinessException>(() => sale.Void(Guid.NewGuid(), reason: null, DateTime.UtcNow))
+            .Code.ShouldBe(OperationsErrorCodes.SaleAlreadyVoided);
+    }
 }

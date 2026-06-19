@@ -1,0 +1,466 @@
+@using System
+@using System.Collections.Generic
+@using System.Globalization
+@using System.Linq
+@using System.Threading.Tasks
+@using Microsoft.AspNetCore.Authorization
+@using Operations.Cashier
+@using Operations.Permissions
+@using Color = MudBlazor.Color
+@using Size = MudBlazor.Size
+@using Placement = MudBlazor.Placement
+@namespace patisserie_shop.Blazor.Components.Layout
+@inherits patisserie_shopComponentBase
+@inject ICashierAppService CashierAppService
+@inject ISnackbar Snackbar
+
+@* ── Last-hour recent-sales panel. Mirrors NotificationBell: resolved by name
+     from the shared MainLayout so the shared theme project needs no host
+     reference. Only visible to users with the Cashier permission. ── *@
+@if (_canView)
+{
+    <div class="recent-panel-root">
+        <SoftTooltip Text="@L["Recent"]" Placement="Placement.Bottom">
+            <SoftIconButton Icon="@Icons.Material.Filled.ReceiptLong"
+                            Color="Color.Inherit"
+                            Size="Size.Medium"
+                            OnClick="OpenAsync" />
+        </SoftTooltip>
+
+        @if (_open)
+        {
+            <div class="recent-backdrop" @onclick="Close"></div>
+            <div class="recent-drawer" @onclick:stopPropagation="true">
+                <div class="recent-head">
+                    <div>
+                        <div class="recent-head-title">@L["Recent:Title"]</div>
+                        <div class="recent-head-sub">@L["Recent:Subtitle"]</div>
+                    </div>
+                    <div class="recent-head-actions">
+                        <button type="button" class="recent-icon-btn" title="@L["Recent:Refresh"]"
+                                @onclick="RefreshAsync" disabled="@_loading">
+                            <SoftIcon Icon="@Icons.Material.Filled.Refresh" Size="Size.Small" />
+                        </button>
+                        <button type="button" class="recent-icon-btn" title="@L["Close"]" @onclick="Close">
+                            <SoftIcon Icon="@Icons.Material.Filled.Close" Size="Size.Small" />
+                        </button>
+                    </div>
+                </div>
+
+                <div class="recent-body">
+                    @if (_loading)
+                    {
+                        <div class="recent-state">
+                            <SoftProgressCircular Indeterminate="true" Color="Color.Primary" Size="Size.Small" />
+                        </div>
+                    }
+                    else if (_shift is null)
+                    {
+                        <div class="recent-state">
+                            <SoftIcon Icon="@Icons.Material.Outlined.PointOfSale" Style="font-size:40px;opacity:.4;" />
+                            <span>@L["Recent:NoShift"]</span>
+                        </div>
+                    }
+                    else if (_sales.Count == 0)
+                    {
+                        <div class="recent-state">
+                            <SoftIcon Icon="@Icons.Material.Outlined.ReceiptLong" Style="font-size:40px;opacity:.4;" />
+                            <span>@L["Recent:Empty"]</span>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="recent-list">
+                            @foreach (var s in _sales)
+                            {
+                                <div class="recent-item @(s.IsVoided ? "is-voided" : "")">
+                                    <div class="recent-item-main">
+                                        <div class="recent-item-inv">
+                                            @s.InvoiceNumber
+                                            @if (s.IsVoided)
+                                            {
+                                                <span class="recent-voided-tag">@L["Recent:Voided"]</span>
+                                            }
+                                        </div>
+                                        <div class="recent-item-meta">
+                                            @RelativeTime(s.SaleDate) · @L["Recent:Items", s.ItemCount]
+                                        </div>
+                                    </div>
+                                    <div class="recent-item-total">@FormatMoney(s.Total)</div>
+                                    <div class="recent-item-actions">
+                                        <button type="button" class="recent-act"
+                                                disabled="@(!s.CanVoid || _busy)"
+                                                @onclick="() => AskVoid(s, replace: false)">
+                                            @L["Recent:Void"]
+                                        </button>
+                                        <button type="button" class="recent-act recent-act-alt"
+                                                disabled="@(!s.CanVoid || _busy)"
+                                                @onclick="() => AskVoid(s, replace: true)">
+                                            @L["Recent:Replace"]
+                                        </button>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+    </div>
+
+    @* ── Void / Replace confirm ── *@
+    @if (_confirm is not null)
+    {
+        <div class="glass-modal-backdrop" @onclick="CancelVoid">
+            <div class="glass-modal-container glass-modal-container--sm" @onclick:stopPropagation="true">
+                <SoftCard Elevation="24" Class="glass-modal">
+                    <SoftCardHeader Class="pa-4">
+                        <CardHeaderContent>
+                            <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                <SoftIcon Icon="@Icons.Material.Filled.RemoveShoppingCart" Color="Color.Primary" Size="Size.Medium" />
+                                <SoftText Typo="Typo.h6">@L["Recent:VoidTitle", _confirm.InvoiceNumber]</SoftText>
+                            </SoftStack>
+                        </CardHeaderContent>
+                        <CardHeaderActions>
+                            <SoftIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="CancelVoid" />
+                        </CardHeaderActions>
+                    </SoftCardHeader>
+                    <SoftDivider />
+                    <SoftCardContent Class="pa-4">
+                        <div class="recent-confirm-sub">@L["Recent:VoidConfirm"]</div>
+                        <SoftTextField @bind-Value="_reason"
+                                       Label="@L["Recent:Reason"]"
+                                       Variant="MudBlazor.Variant.Outlined"
+                                       Margin="MudBlazor.Margin.Dense"
+                                       Lines="2"
+                                       Class="mt-3" />
+                    </SoftCardContent>
+                    <SoftDivider />
+                    <div class="pa-3 d-flex justify-end" style="gap:8px;">
+                        <SoftButton Variant="MudBlazor.Variant.Text" OnClick="CancelVoid">@L["Cashier:Cancel"]</SoftButton>
+                        <SoftButton Variant="MudBlazor.Variant.Filled" Color="Color.Error"
+                                    StartIcon="@Icons.Material.Filled.RemoveShoppingCart"
+                                    Disabled="@_busy" OnClick="ConfirmVoidAsync">
+                            @L["Recent:Void"]
+                        </SoftButton>
+                    </div>
+                </SoftCard>
+            </div>
+        </div>
+    }
+
+    <style>
+        .recent-panel-root {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+            margin-right: 2px;
+        }
+
+        .recent-backdrop {
+            position: fixed;
+            inset: 0;
+            z-index: 1399;
+            background: rgba(0, 0, 0, 0.18);
+        }
+
+        .recent-drawer {
+            position: fixed;
+            top: 0;
+            right: 0;
+            bottom: 0;
+            width: 380px;
+            max-width: 92vw;
+            z-index: 1400;
+            background: var(--surface);
+            border-left: 1px solid var(--bd-2);
+            box-shadow: var(--shadow-modal);
+            display: flex;
+            flex-direction: column;
+            animation: recent-slide-in 0.18s ease;
+        }
+
+        @@keyframes recent-slide-in {
+            from { transform: translateX(100%); }
+            to { transform: translateX(0); }
+        }
+
+        .recent-head {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 8px;
+            padding: 14px 16px;
+            border-bottom: 1px solid var(--bd-1);
+        }
+
+        .recent-head-title {
+            font-family: var(--font-serif);
+            font-size: 1.05rem;
+            font-weight: 600;
+            color: var(--fg-1);
+        }
+
+        .recent-head-sub {
+            font-size: 0.76rem;
+            color: var(--fg-3);
+            margin-top: 2px;
+        }
+
+        .recent-head-actions {
+            display: flex;
+            gap: 4px;
+            flex: 0 0 auto;
+        }
+
+        .recent-icon-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 40px;
+            height: 40px;
+            border: none;
+            border-radius: var(--r-sm);
+            background: transparent;
+            color: var(--fg-2);
+            cursor: pointer;
+        }
+
+        .recent-icon-btn:hover { background: var(--hover); }
+        .recent-icon-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        .recent-body {
+            flex: 1 1 auto;
+            overflow-y: auto;
+        }
+
+        .recent-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+            padding: 40px 18px;
+            color: var(--fg-3);
+            font-size: 0.85rem;
+            text-align: center;
+        }
+
+        .recent-item {
+            display: grid;
+            grid-template-columns: 1fr auto;
+            grid-template-areas: "main total" "actions actions";
+            gap: 6px 10px;
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--bd-1);
+        }
+
+        .recent-item.is-voided { opacity: 0.55; }
+
+        .recent-item-main { grid-area: main; min-width: 0; }
+
+        .recent-item-inv {
+            font-family: var(--font-mono);
+            font-size: 0.88rem;
+            font-weight: 600;
+            color: var(--fg-1);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .recent-voided-tag {
+            font-family: var(--font-sans);
+            font-size: 0.62rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            color: var(--danger);
+            border: 1px solid var(--danger);
+            border-radius: 999px;
+            padding: 1px 6px;
+        }
+
+        .recent-item-meta {
+            font-size: 0.74rem;
+            color: var(--fg-3);
+            margin-top: 2px;
+        }
+
+        .recent-item-total {
+            grid-area: total;
+            font-size: 1rem;
+            font-weight: 700;
+            color: var(--fg-1);
+            font-variant-numeric: tabular-nums;
+            text-align: right;
+        }
+
+        .recent-item-actions {
+            grid-area: actions;
+            display: flex;
+            gap: 8px;
+            margin-top: 2px;
+        }
+
+        .recent-act {
+            min-height: 36px;
+            padding: 0 14px;
+            border-radius: var(--r-sm);
+            border: 1px solid var(--bd-2);
+            background: var(--surface-2);
+            color: var(--danger);
+            font-size: 0.82rem;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .recent-act-alt { color: var(--accent); }
+
+        .recent-act:hover:not(:disabled) { background: var(--hover); }
+
+        .recent-act:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+            color: var(--fg-4);
+        }
+
+        .recent-confirm-sub {
+            color: var(--fg-2);
+            font-size: 0.9rem;
+        }
+    </style>
+}
+
+@code {
+    private bool _canView;
+    private bool _open;
+    private bool _loading;
+    private bool _busy;
+
+    private CashierBranchDto? _branch;
+    private CashierShiftDto? _shift;
+    private List<RecentSaleDto> _sales = new();
+
+    private RecentSaleDto? _confirm;
+    private bool _confirmReplace;
+    private string? _reason;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _canView = await AuthorizationService.IsGrantedAsync(OperationsPermissions.Cashier.Default);
+    }
+
+    private async Task OpenAsync()
+    {
+        _open = true;
+        await RefreshAsync();
+    }
+
+    private void Close() => _open = false;
+
+    private async Task RefreshAsync()
+    {
+        if (_loading)
+        {
+            return;
+        }
+
+        _loading = true;
+        try
+        {
+            // Branch context = the cashier's single assigned branch (authoritative).
+            _branch ??= await CashierAppService.GetMyBranchAsync();
+
+            if (_branch is null)
+            {
+                _shift = null;
+                _sales = new();
+                return;
+            }
+
+            // Recent sales are shown whenever a branch is assigned; the open-shift lookup
+            // doubles as the "open a shift to see sales" empty-state signal.
+            _shift = await CashierAppService.GetCurrentShiftAsync(_branch.Id);
+            if (_shift is null)
+            {
+                _sales = new();
+                return;
+            }
+
+            _sales = await CashierAppService.GetRecentSalesAsync(_branch.Id, 60);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"{L["CashierShifts:LoadFailed"]} {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void AskVoid(RecentSaleDto sale, bool replace)
+    {
+        if (!sale.CanVoid)
+        {
+            return;
+        }
+        _confirm = sale;
+        _confirmReplace = replace;
+        _reason = null;
+    }
+
+    private void CancelVoid()
+    {
+        _confirm = null;
+        _reason = null;
+    }
+
+    private async Task ConfirmVoidAsync()
+    {
+        if (_busy || _confirm is null)
+        {
+            return;
+        }
+        _busy = true;
+        try
+        {
+            await CashierAppService.VoidSaleAsync(new VoidSaleDto
+            {
+                SaleId = _confirm.SaleId,
+                Reason = _reason
+            });
+
+            Snackbar.Add(
+                _confirmReplace ? L["Recent:Replaced"] : L["Recent:Voided:Success"],
+                _confirmReplace ? Severity.Info : Severity.Success);
+
+            _confirm = null;
+            _reason = null;
+            await RefreshAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"{L["Recent:VoidFailed"]} {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private static string FormatMoney(decimal v) => v.ToString("C2", CultureInfo.CurrentCulture);
+
+    private string RelativeTime(DateTime saleDate)
+    {
+        var delta = DateTime.Now - saleDate.ToLocalTime();
+        if (delta < TimeSpan.Zero)
+        {
+            delta = TimeSpan.Zero;
+        }
+        if (delta.TotalMinutes < 1) return L["Recent:JustNow"];
+        if (delta.TotalHours < 1) return $"{(int)delta.TotalMinutes}m";
+        return saleDate.ToLocalTime().ToString("t", CultureInfo.CurrentCulture);
+    }
+}

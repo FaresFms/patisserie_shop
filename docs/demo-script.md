@@ -1,8 +1,10 @@
-# Defense Demo Script (~10 minutes)
+# Defense Demo Script (~9 min core, ~18 min full)
 
 A scripted walkthrough of the live demo for the thesis defense. Every route, button label,
-and expected behavior below is verified against the code. Steps 0–1 happen **before** the
-defense starts; steps 2–10 are the live demo.
+and expected behavior below is verified against the code (`@page` directives +
+`Menus/patisserie_shopMenuContributor.cs`). Steps 0–1 happen **before** the defense starts;
+steps 2–10 are the live demo. Steps 7b–7f are the Phase-5 standout features — include them
+when time allows (see the timing table at the end).
 
 **Demo users:** `admin` (full access) and `manager.demo` (BranchManager of *Main Street
 Boutique*). Passwords are defined in
@@ -14,22 +16,32 @@ identity seed for `admin`).
 ## Step 0 — Pre-demo setup (do this ~30 minutes before)
 
 1. **Lower the scanner intervals** in `src/patisserie_shop.Blazor/appsettings.json` so the
-   background intelligence is visibly alive during the demo. The repo defaults already use
-   5 minutes for three scanners; for the demo also lower the velocity scanner:
+   background intelligence is visibly alive during the demo. The repo already ships
+   demo-friendly **2-minute** values for all four periodic scanners (the outcome scanner
+   stays at 6 h — its 48 h window can't be rushed):
 
    ```json
    "BackgroundJobs": {
-     "DeadStockScanIntervalMinutes": 5,
-     "TransferSuggestionScanIntervalMinutes": 5,
-     "VelocityScanIntervalMinutes": 5,
+     "DeadStockScanIntervalMinutes": 2,
+     "TransferSuggestionScanIntervalMinutes": 2,
+     "VelocityScanIntervalMinutes": 2,
      "DecisionOutcomeScanIntervalMinutes": 360,
-     "ExpiryScanIntervalMinutes": 5
+     "ExpiryScanIntervalMinutes": 2
    }
    ```
 
+   The **velocity scanner** recomputes sales velocity, ABC class, the **weekday demand
+   indices** *and* runs the StockoutRisk forecast sweep; the **expiry scanner** raises both
+   `ExpiryAlert` (expiring-soon) and `WasteWriteOff` (already-expired) decisions. Several
+   standout features below are driven by these scans — Product Velocity "Next 7 days", the
+   reorder calendar's predicted stockouts, and the expiry→write-off→waste flow — so the
+   prerequisite is the same for all of them: **keep `BackgroundJobs:*IntervalMinutes` low
+   and wait for the first scan**.
+
    Note: ABP periodic workers fire their **first tick one full period after startup** —
-   with 5-minute intervals, the first scanner decisions and the Product Velocity data
-   appear ~5 minutes after the app starts. Start the app early.
+   with 2-minute intervals, the first scanner decisions and the Product Velocity / reorder
+   calendar data appear ~2 minutes after the app starts. Start the app early; set any
+   interval to `0` to fall back to the worker's built-in (1440 / 360) default.
 
 2. **Reset the database** for a clean, deterministic state:
 
@@ -68,10 +80,15 @@ Running `patisserie_shop.DbMigrator` applied all migrations and seeded:
   uplift, slight upward trend) at the two retail branches — this is what powers velocity,
   ABC, and the sales charts.
 - **Expiry-dated stock batches** for perishable products (the oldest seeded batch expires
-  in 1–2 days — deliberately inside the expiry rule's window).
-- **A 7-rule starter rule bank**: Global Low Stock (5), Critical Low Stock (2, priority 10),
-  Global Excess Stock (100), Global Dead Stock (30 days), Global Transfer Suggestion (10),
-  Days of Cover Risk (4 days), Expiring Soon (3 days).
+  in 1–2 days — deliberately inside the expiry rule's window). Each **retail** branch also
+  gets one batch slice that is **already 2 days past expiry** with quantity remaining, so
+  the `ExpiredStock` rule has waste to flag out of the box (for Step 8b below).
+- **An 8-rule starter rule bank covering all 7 rule types**: Global Low Stock (5),
+  Critical Low Stock (2, priority 10), Global Excess Stock (100), Global Dead Stock
+  (30 days), Global Transfer Suggestion (10), Days of Cover Risk (4 days), Expiring Soon
+  (3 days), and Expired Stock Write-Off (no threshold — "expired" is absolute). Five come
+  from `IntelligenceDataSeedContributor`; the last three (DaysOfCover / ExpiringSoon /
+  ExpiredStock) from `PatisserieDataSeedContributor.SeedDemoRulesAsync`.
 - Roles `admin` and `BranchManager`, users `admin` and `manager.demo`.
 
 ---
@@ -144,18 +161,25 @@ The seeded rule: **"Global Low Stock Alert"** — LowStock, threshold **5**, glo
 > edited — at quantity ≤ 2 the higher-priority **Critical Low Stock Alert** (still
 > SuggestOnly) wins instead; check the rule name on the decision card.
 
-## Step 6 — Product Velocity: ABC and days of cover (1 min)
+## Step 6 — Product Velocity: ABC, weekday forecast & days of cover (1.5 min)
 
 1. Go to `/intelligence/product-velocity` (Intelligence menu).
 2. Show per product × branch: **ABC class chip** (A = top 80% of 30-day revenue,
    B = next 15%, C = tail), **avg daily sales 7d / 30d**, units & revenue (30 d), current
-   stock, and **days of cover** = stock ÷ 30-day daily average.
-3. Talking point: this read model (`AppProductVelocity`) is recomputed by the velocity
-   scanner and is exactly what the ROP formula and the DaysOfCover rule consume —
-   the same numbers the manager sees are the numbers the engine uses.
+   stock, a **"Next 7 days" forecast** column, and **days of cover**.
+3. Hover the **"Next 7 days"** value to reveal the per-day tooltip (e.g. *"Fri 4.1 ·
+   Sat 5.8 · Sun 2.3 · …"*). This is the weekday-indexed forecast: the scanner computes a
+   demand multiplier per weekday (busy Saturday > quiet Monday) and the engine **walks the
+   next 7 days weekday-by-weekday** rather than assuming a flat average. Products with no
+   weekday pattern fall back to a flat 30-day average (and say so in their reasoning).
+4. The **days of cover** is the day the same forecast walk depletes current stock (flat
+   `stock ÷ avgDaily30` only when there's no weekday pattern).
+5. Talking point: this read model (`AppProductVelocity`) is recomputed by the velocity
+   scanner and is exactly what the ROP formula, the DaysOfCover rule, and the reorder
+   calendar consume — the numbers the manager sees are the numbers the engine uses.
 
 > If the page is empty: the velocity scanner hasn't ticked yet (first tick = one full
-> interval after startup) — confirm `BackgroundJobs:VelocityScanIntervalMinutes` is 5 and
+> interval after startup) — confirm `BackgroundJobs:VelocityScanIntervalMinutes` is 2 and
 > the app has been up that long.
 
 ## Step 7 — Stock batches and the ExpiryAlert (1 min)
@@ -163,7 +187,7 @@ The seeded rule: **"Global Low Stock Alert"** — LowStock, threshold **5**, glo
 1. Go to `/inventory/stock-batches`. Default sort is soonest-expiring first; show the
    **expiry countdown chips** (red "Expired Nd ago" / "expires today", amber "Nd left").
 2. The seeder planted a batch expiring in 1–2 days; the **"Expiring Soon (3 days)"** rule
-   plus the 5-minute expiry scanner means `/intelligence/decision-log` already shows
+   plus the 2-minute expiry scanner means `/intelligence/decision-log` already shows
    **ExpiryAlert** decisions referencing those batches.
 3. Talking point: FEFO — consumption drains the earliest-expiring batch first, receipts of
    perishables auto-create a batch from the product's shelf life; the batch ledger is
@@ -171,6 +195,94 @@ The seeded rule: **"Global Low Stock Alert"** — LowStock, threshold **5**, glo
 
 > If no ExpiryAlert exists yet: the expiry scanner also waits one full interval after
 > startup — show the batch grid and the rule instead, then return after a few minutes.
+
+## Step 7b — Waste: ExpiredStock → WasteWriteOff → write-off → Waste Analytics (1.5 min)
+
+1. The same expiry scanner runs a **second pass**: any live batch already **past** its
+   expiry date raises a **`WasteWriteOff`** decision (the seeder gave each retail branch a
+   2-days-expired slice, so one is waiting on `/intelligence/decision-log` after the first
+   scan). The card quantifies the expired units, the oldest batch, and the **estimated
+   waste cost** (`expired qty × cost price`).
+2. Show that `WasteWriteOff` has **no autopilot** — even if you set the "Expired Stock
+   Write-Off" rule to CreateDraft on `/intelligence/inventory-rules`, the decision stays
+   Pending. Destroying stock is always a human action.
+3. Click **Executed** on the WasteWriteOff card. The snackbar reports a `WriteOff −N`
+   adjustment (no draft document — `ExecutedActionType` is `StockAdjustment`). Behind it:
+   `BranchInventoryManager.AdjustStockAsync` records an immutable `WriteOff`
+   `AppStockMovement` and the FEFO hook drains the **expired batches first**.
+4. Go to `/inventory/waste-analytics`: the total waste cost, units written off,
+   waste-to-sales ratio, weekly trend, and per-branch / top-wasted-product breakdowns now
+   reflect that write-off — all derived from `WriteOff` movements.
+
+> If no WasteWriteOff appears: confirm the **"Expired Stock Write-Off"** rule is Active and
+> the expiry scanner has ticked once; on a freshly reset DB the expired slice exists, but
+> the scanner still needs its first interval. If Execute reports nothing written off, the
+> expired stock was already sold/transferred since the scan — pick another flagged product.
+
+## Step 7c — Reorder calendar (1 min)
+
+1. Go to `/intelligence/reorder-calendar` (Intelligence menu). It's a forward month grid
+   merging three deterministic forward signals:
+   - **predicted stockouts** (red) — from the *same* weekday-indexed forecast walk as
+     Product Velocity, placed on the day stock is forecast to hit zero;
+   - **expiring batches** (amber) — live batches on their expiry day;
+   - **expected deliveries** (green) — open POs on their `ExpectedDeliveryDate`.
+2. Talking point: it's a read-model, not a stored plan — every marker is recomputed from
+   velocity rows, the batch ledger, and open POs, so it always matches the live data the
+   rest of the system acts on. Use the month/branch controls to pan.
+
+> If the stockout layer is empty: it needs the velocity scan (Step 0 prerequisite — low
+> `VelocityScanIntervalMinutes`, app up at least one interval). Delivery markers only show
+> for POs that have an `ExpectedDeliveryDate` inside the visible month.
+
+## Step 7d — Supplier scorecards & measured lead time (1 min)
+
+1. Go to `/inventory/suppliers`. Each supplier row carries a **scorecard**: on-time rate,
+   fill rate, average delay, a **measured lead time** (computed from received-PO history),
+   and a **grade A–D** (graded by the *worse* of on-time / fill: A needs ≥95% on-time and
+   ≥98% fill; N/A when there's no delivery history yet).
+2. Talking point — the learning loop on procurement: once a supplier has **≥ 3 received
+   orders with delivery dates**, the *measured* lead time **overrides the configured
+   `LeadTimeDays` in the reorder-point formula**. Re-open an auto-created PO's notes
+   (Step 4) — when measured data exists the note reads *"… (measured 4.2d lead from
+   6 orders)"* instead of *"(configured 3d lead)"*. The system observes how long the
+   supplier actually takes and tightens its own reorder timing — no ML, just measured
+   history beating a static config.
+
+> If every grade is N/A: there are no `Received`/`PartialReceived` POs with delivery dates
+> in the window yet (a freshly reset DB seeds none) — receive a PO with an actual delivery
+> date first, or note that the column populates as real receiving history accumulates.
+
+## Step 7e — Branch health league table (45 s)
+
+1. Back on `/` (admin dashboard), scroll to the **Branch Health league table**. Each
+   branch carries a **0–100 score** and **grade A–D**, ranked best-first.
+2. Expand the breakdown bars: the score is a deterministic sum of six weighted components —
+   **StockHealth (30), StockoutSeverity (20), PendingLoad (15), WasteRatio (15),
+   ExpiryRisk (10), Responsiveness (10)** — each with a plain-English detail string
+   (e.g. *"2 item(s) out of stock (−8)"*, *"3% waste-to-sales over 30 days"*).
+3. Talking point: same explainability rule as everywhere else — the composite is pure
+   arithmetic over data the dashboards already show, so any branch's grade can be
+   re-derived by hand.
+
+## Step 7f — PO consolidation (1 min)
+
+1. On `/intelligence/decision-log`, with several **pending reorder decisions**
+   (LowStockAlert / ReorderSuggestion / StockoutRisk) present, click **Consolidate
+   reorders** in the toolbar; confirm in the dialog.
+2. The snackbar reports how many **draft POs** were created and how many decisions were
+   folded in. Open `/operations/purchase-orders`: instead of one PO per alert, there's
+   **one draft PO per (supplier × branch)**, with duplicate products merged to a single
+   line at the max computed quantity, and every contributing decision flipped to
+   **Executed** and linked to its PO.
+3. Talking point: real purchasing batches lines onto one order per supplier; line
+   quantities use the *same* reorder-point math as a one-off Execute, so the numbers match,
+   and the results are still **drafts a human approves**. Decisions whose product has no
+   default supplier are skipped and counted, never fatal to the run.
+
+> If "nothing to consolidate": there are no pending reorder-type decisions in the current
+> branch filter — trigger a couple of LowStock breaches first (Step 3), and make sure their
+> products have a default supplier.
 
 ## Step 8 — Rule effectiveness and tuning hints (1 min)
 
@@ -206,10 +318,18 @@ The seeded rule: **"Global Low Stock Alert"** — LowStock, threshold **5**, glo
 - **Self-evaluating** — the system grades its own past decisions 48 h later and turns the
   results into threshold-tuning evidence, closing the loop: *detect → decide → act →
   measure → tune*.
-- **Auditable** — immutable stock-movement and decision ledgers; nothing in the history
-  can be edited, only appended.
+- **Learns from its own history (still deterministically)** — a weekday-indexed demand
+  forecast walks each weekday rather than a flat average; supplier scorecards feed the
+  *measured* lead time back into the reorder-point math; a 0–100 branch-health score ranks
+  branches; and the reorder calendar projects stockouts, expiries, and deliveries forward.
+  All of it is plain arithmetic over the operational history — no model, no training.
+- **Auditable** — immutable stock-movement and decision ledgers (including `WriteOff`
+  waste adjustments); nothing in the history can be edited, only appended.
 
 ## Expected timing
+
+A full run touches every Phase-5 feature; for a tight slot, the **core** path is steps
+1–6 + 10 (~9 min), and steps 7b–7f are the standout add-ons to fit as time allows.
 
 | Step | Time |
 |---|---|
@@ -217,9 +337,14 @@ The seeded rule: **"Global Low Stock Alert"** — LowStock, threshold **5**, glo
 | 3. Live LowStock breach + bell | 2 min |
 | 4. Execute → draft PO with ROP notes | 1.5 min |
 | 5. Autopilot CreateDraft | 1.5 min |
-| 6. Product Velocity / ABC | 1 min |
+| 6. Product Velocity / ABC / weekday forecast | 1.5 min |
 | 7. Stock batches + ExpiryAlert | 1 min |
+| 7b. Expiry → WasteWriteOff → write-off → Waste Analytics | 1.5 min |
+| 7c. Reorder calendar | 1 min |
+| 7d. Supplier scorecards + measured lead time | 1 min |
+| 7e. Branch health league table | 0.75 min |
+| 7f. PO consolidation | 1 min |
 | 8. Effectiveness + tuning hints | 1 min |
 | 9. Sales Analytics | 0.75 min |
 | 10. Closing | 1 min |
-| **Total** | **~11 min** (cut step 9 if tight) |
+| **Total** | **~18 min full** · **~9 min core** (steps 1–6 + 10) |

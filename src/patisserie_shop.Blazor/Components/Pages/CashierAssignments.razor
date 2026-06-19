@@ -1,0 +1,220 @@
+@page "/operations/cashier-assignments"
+@attribute [Authorize(OperationsPermissions.Cashier.ViewAllShifts)]
+@using System.Threading.Tasks
+@using Microsoft.AspNetCore.Authorization
+@using Volo.Abp.AspNetCore.Components.Web.Theming.Layout
+@using Operations.Permissions
+@using patisserie_shop.Cashier
+@using Color = MudBlazor.Color
+@using Variant = MudBlazor.Variant
+@using Size = MudBlazor.Size
+@using Margin = MudBlazor.Margin
+@using Microsoft.AspNetCore.Components
+@inherits patisserie_shopComponentBase
+@inject ICashierAssignmentAppService CashierAssignmentAppService
+@inject ISnackbar Snackbar
+@inject NavigationManager Navigation
+@inject PageLayout PageLayout
+
+@{
+    PageLayout.Title = L["CashierAssign:Title"];
+}
+
+<SoftCard Elevation="2" Class="pa-2 page-flat">
+    <div class="page-head">
+        <div>
+            <h1 class="page-title">@L["CashierAssign:Title"]</h1>
+            <div class="page-sub">@L["CashierAssign:Subtitle"]</div>
+        </div>
+        <div class="page-head-actions">
+            @if (_canManageCashiers)
+            {
+                <SoftButton Variant="Variant.Filled" Color="Color.Primary"
+                            StartIcon="@Icons.Material.Filled.PersonAdd" OnClick="GoToAddCashier">
+                    @L["CashierAssign:AddCashier"]
+                </SoftButton>
+            }
+            <SoftButton Variant="Variant.Text" Color="Color.Primary"
+                        StartIcon="@Icons.Material.Filled.Refresh" OnClick="ReloadAsync">
+                @L["CashierAssign:Refresh"]
+            </SoftButton>
+        </div>
+    </div>
+
+    <SoftCardContent>
+        <SoftAlert Severity="Severity.Info" Variant="Variant.Text" Dense="true" Class="mb-3">
+            @L["CashierAssign:ReloginHint"]
+        </SoftAlert>
+
+        <SoftDataGrid T="CashierAssignmentDto"
+                      Items="_rows"
+                      Dense="true"
+                      Hover="true"
+                      Bordered="false"
+                      Striped="true"
+                      Loading="_loading"
+                      SortMode="SortMode.Single">
+            <Columns>
+                <PropertyColumn T="CashierAssignmentDto" TProperty="string"
+                                Property="x => x.UserName" Title="@L["CashierAssign:Cashier"]" />
+                <PropertyColumn T="CashierAssignmentDto" TProperty="string"
+                                Property="x => x.Email" Title="@L["CashierAssign:Email"]" />
+                <TemplateColumn T="CashierAssignmentDto" Title="@L["CashierAssign:AssignedBranch"]" Sortable="false">
+                    <CellTemplate>
+                        @if (context.Item.AssignedBranchId.HasValue && !string.IsNullOrWhiteSpace(context.Item.AssignedBranchName))
+                        {
+                            <SoftChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Filled">
+                                @context.Item.AssignedBranchName
+                            </SoftChip>
+                        }
+                        else
+                        {
+                            <SoftChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined">
+                                @L["CashierAssign:Unassigned"]
+                            </SoftChip>
+                        }
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn T="CashierAssignmentDto" Title="" Sortable="false">
+                    <CellTemplate>
+                        <div class="assign-row">
+                            <div class="filter-chip assign-select">
+                                <SoftLookupSelect TItem="CashierBranchOptionDto" TValue="Guid?"
+                                                  Items="_branches"
+                                                  ToValue="@(b => (Guid?)b.Id)"
+                                                  ToLabel="@(b => b.Name)"
+                                                  Value="@GetSelection(context.Item.UserId)"
+                                                  ValueChanged="@(v => OnBranchSelected(context.Item.UserId, v))"
+                                                  Label="@L["CashierAssign:SelectBranch"]"
+                                                  Margin="Margin.Dense"
+                                                  Dense="true" />
+                            </div>
+                            <SoftButton Variant="Variant.Filled" Color="Color.Primary"
+                                        Size="Size.Small"
+                                        StartIcon="@Icons.Material.Filled.Save"
+                                        Disabled="@(!CanSave(context.Item))"
+                                        OnClick="@(() => SaveAsync(context.Item))">
+                                @(_savingUserId == context.Item.UserId ? L["CashierAssign:Saving"] : L["CashierAssign:Save"])
+                            </SoftButton>
+                        </div>
+                    </CellTemplate>
+                </TemplateColumn>
+            </Columns>
+            <NoRecordsContent>
+                <SoftStack AlignItems="AlignItems.Center" Spacing="2" Class="pa-6">
+                    <SoftIcon Icon="@Icons.Material.Outlined.PointOfSale" Style="font-size: 56px; opacity: 0.4;" />
+                    <SoftText Typo="Typo.body1" Color="Color.Default">@L["CashierAssign:Empty"]</SoftText>
+                </SoftStack>
+            </NoRecordsContent>
+        </SoftDataGrid>
+    </SoftCardContent>
+</SoftCard>
+
+@code {
+    private bool _loading;
+    private bool _canManageCashiers;
+    private Guid? _savingUserId;
+
+    private List<CashierAssignmentDto> _rows = new();
+    private List<CashierBranchOptionDto> _branches = new();
+
+    // Per-row pending selection (defaults to the current assignment).
+    private readonly Dictionary<Guid, Guid?> _selections = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _canManageCashiers = await AuthorizationService.IsGrantedAsync(OperationsPermissions.Cashier.ManageCashiers);
+        await ReloadAsync();
+    }
+
+    private void GoToAddCashier()
+    {
+        Navigation.NavigateTo("/operations/add-cashier");
+    }
+
+    private async Task ReloadAsync()
+    {
+        _loading = true;
+        try
+        {
+            _branches = await CashierAssignmentAppService.GetBranchOptionsAsync();
+            _rows = await CashierAssignmentAppService.GetCashiersAsync();
+
+            _selections.Clear();
+            foreach (var row in _rows)
+            {
+                _selections[row.UserId] = row.AssignedBranchId;
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"{L["CashierAssign:LoadFailed"]} {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private Guid? GetSelection(Guid userId)
+        => _selections.TryGetValue(userId, out var v) ? v : null;
+
+    private void OnBranchSelected(Guid userId, Guid? branchId)
+    {
+        _selections[userId] = branchId;
+    }
+
+    // Save is enabled only when a branch is picked and it differs from the saved one,
+    // and no save is currently in flight.
+    private bool CanSave(CashierAssignmentDto row)
+    {
+        if (_savingUserId is not null)
+        {
+            return false;
+        }
+        var selected = GetSelection(row.UserId);
+        return selected.HasValue && selected != row.AssignedBranchId;
+    }
+
+    private async Task SaveAsync(CashierAssignmentDto row)
+    {
+        var selected = GetSelection(row.UserId);
+        if (!selected.HasValue || _savingUserId is not null)
+        {
+            return;
+        }
+
+        _savingUserId = row.UserId;
+        try
+        {
+            await CashierAssignmentAppService.AssignBranchAsync(new AssignCashierBranchInput
+            {
+                UserId = row.UserId,
+                BranchId = selected.Value
+            });
+            Snackbar.Add(L["CashierAssign:Saved"], Severity.Success);
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"{L["CashierAssign:SaveFailed"]} {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _savingUserId = null;
+        }
+    }
+}
+
+<style>
+    .assign-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        justify-content: flex-end;
+    }
+
+    .assign-select {
+        min-width: 220px;
+    }
+</style>

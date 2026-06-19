@@ -3,6 +3,7 @@
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.AspNetCore.Components.Authorization
 @using Inventory.Permissions
+@using Operations.Permissions
 @using Volo.Abp.AspNetCore.Components.Web.Theming.Layout
 @inherits patisserie_shopComponentBase
 @attribute [Authorize]
@@ -79,6 +80,11 @@ else
         else if (await AuthorizationService.IsGrantedAsync(InventoryPermissions.BranchInventory.Default))
         {
             _role = DashboardRole.BranchManager;
+        }
+        else if (await AuthorizationService.IsGrantedAsync(OperationsPermissions.Cashier.Default))
+        {
+            // Cashiers (no dashboard permission) land straight on the POS.
+            Nav.NavigateTo("/cashier", forceLoad: false, replace: true);
         }
         else
         {
