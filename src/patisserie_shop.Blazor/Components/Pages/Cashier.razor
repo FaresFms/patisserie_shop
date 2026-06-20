@@ -123,9 +123,15 @@
                     <div class="pos-tiles">
                         @foreach (var p in _tiles)
                         {
-                            <div class="pos-tile @(p.IsOutOfStock ? "is-oos" : "")"
+                            var remaining = RemainingFor(p);
+                            var cannotAdd = remaining <= 0;
+                            <div class="pos-tile @(cannotAdd ? "is-oos" : "")"
                                  @onclick="() => AddToCart(p)">
-                                @if (p.IsLowStock && !p.IsOutOfStock)
+                                @if (remaining == 1)
+                                {
+                                    <span class="pos-tile-badge">@L["Cashier:LastOne"]</span>
+                                }
+                                else if (p.IsLowStock && !p.IsOutOfStock)
                                 {
                                     <span class="pos-tile-badge">@L["Cashier:RunningLow"]</span>
                                 }
@@ -147,10 +153,12 @@
                                 }
                                 else if (p.IsLowStock)
                                 {
+                                    var reportPending = _pendingReportProductIds.Contains(p.ProductId);
                                     <button type="button" class="pos-tile-report"
+                                            disabled="@reportPending"
                                             @onclick:stopPropagation="true"
                                             @onclick="() => ReportLowStockAsync(p)">
-                                        @L["Cashier:Report"]
+                                        @(reportPending ? L["Cashier:ReportPending"] : L["Cashier:Report"])
                                     </button>
                                 }
                             </div>
@@ -182,11 +190,17 @@
                                 <div class="pos-line-info">
                                     <div class="pos-line-name">@line.Name</div>
                                     <div class="pos-line-price">@FormatMoney(line.UnitPrice)</div>
+                                    @if (line.AvailableQuantity > 0 && line.Quantity >= line.AvailableQuantity)
+                                    {
+                                        <div class="pos-line-stock">@L["Cashier:LastAvailableInCart"]</div>
+                                    }
                                 </div>
                                 <div class="pos-stepper">
                                     <button type="button" class="pos-step" @onclick="() => DecLine(line)">−</button>
                                     <span class="pos-step-qty">@line.Quantity</span>
-                                    <button type="button" class="pos-step" @onclick="() => IncLine(line)">+</button>
+                                    <button type="button" class="pos-step"
+                                            disabled="@(line.AvailableQuantity <= 0 || line.Quantity >= line.AvailableQuantity)"
+                                            @onclick="() => IncLine(line)">+</button>
                                 </div>
                                 <div class="pos-line-sub">@FormatMoney(line.Subtotal)</div>
                                 <button type="button" class="pos-line-remove" title="@L["Cashier:Remove"]"
@@ -240,7 +254,7 @@
                 <div class="pos-print-area">
                     <div class="pos-receipt">
                         <div class="pos-receipt-head">
-                            <div class="pos-receipt-shop">@(_shift?.BranchName ?? "Patisserie Shop")</div>
+                            <div class="pos-receipt-shop">@(_shift?.BranchName ?? L["AppName"])</div>
                             <div class="pos-receipt-inv">@L["Cashier:Invoice"] @_receipt.InvoiceNumber</div>
                             <div class="pos-receipt-date">@_receipt.SaleDate.ToLocalTime().ToString("g", CultureInfo.CurrentCulture)</div>
                         </div>
@@ -404,6 +418,7 @@
     private string? _scanEntry;
 
     private readonly List<CartLine> _cart = new();
+    private readonly HashSet<Guid> _pendingReportProductIds = new();
     private decimal _tendered;
 
     // numeric keypad buffers (string-built, two decimals)
@@ -489,6 +504,7 @@
         try
         {
             _tiles = await CashierAppService.GetProductTilesAsync(_shift.BranchId, _filter);
+            await LoadPendingReportsAsync();
         }
         catch (Exception ex)
         {
@@ -538,6 +554,12 @@
     private async Task ReportLowStockAsync(CashierProductDto p)
     {
         if (_shift is null) return;
+        if (_pendingReportProductIds.Contains(p.ProductId))
+        {
+            Snackbar.Add(L["Cashier:ReportAlreadyPending"], Severity.Info);
+            return;
+        }
+
         try
         {
             await CashierReportAppService.ReportLowStockAsync(new ReportLowStockInput
@@ -545,6 +567,7 @@
                 ProductId = p.ProductId,
                 BranchId = _shift.BranchId
             });
+            _pendingReportProductIds.Add(p.ProductId);
             Snackbar.Add(L["Cashier:Reported"], Severity.Info);
         }
         catch (Exception ex)
@@ -553,22 +576,78 @@
         }
     }
 
-    // ─── cart ───
-    private void AddToCart(CashierProductDto p)
+    private async Task LoadPendingReportsAsync()
     {
-        if (p.IsOutOfStock) return;
-        var line = _cart.FirstOrDefault(l => l.ProductId == p.ProductId);
-        if (line is null)
+        if (_shift is null)
         {
-            _cart.Add(new CartLine { ProductId = p.ProductId, Name = p.Name, UnitPrice = p.SalePrice, Quantity = 1 });
+            _pendingReportProductIds.Clear();
+            return;
         }
-        else
+
+        try
         {
-            line.Quantity++;
+            var productIds = await CashierReportAppService.GetPendingLowStockProductIdsAsync(_shift.BranchId);
+            _pendingReportProductIds.Clear();
+            foreach (var productId in productIds)
+            {
+                _pendingReportProductIds.Add(productId);
+            }
+        }
+        catch
+        {
+            _pendingReportProductIds.Clear();
         }
     }
 
-    private void IncLine(CartLine line) => line.Quantity++;
+
+    // ─── cart ───
+    private void AddToCart(CashierProductDto p)
+    {
+        if (p.IsOutOfStock || p.QuantityOnHand <= 0)
+        {
+            Snackbar.Add(L["Cashier:OutOfStock"], Severity.Warning);
+            return;
+        }
+
+        var line = _cart.FirstOrDefault(l => l.ProductId == p.ProductId);
+        if (line is null)
+        {
+            _cart.Add(new CartLine
+            {
+                ProductId = p.ProductId,
+                Name = p.Name,
+                UnitPrice = p.SalePrice,
+                Quantity = 1,
+                AvailableQuantity = p.QuantityOnHand
+            });
+
+            if (p.QuantityOnHand == 1)
+            {
+                Snackbar.Add(L["Cashier:LastOneNotice", p.Name], Severity.Info);
+            }
+        }
+        else
+        {
+            line.AvailableQuantity = p.QuantityOnHand;
+            IncLine(line);
+        }
+    }
+
+    private void IncLine(CartLine line)
+    {
+        if (line.AvailableQuantity <= 0 || line.Quantity >= line.AvailableQuantity)
+        {
+            Snackbar.Add(L["Cashier:OnlyXAvailable", line.AvailableQuantity, line.Name], Severity.Warning);
+            return;
+        }
+
+        line.Quantity++;
+
+        if (line.Quantity == line.AvailableQuantity)
+        {
+            Snackbar.Add(L["Cashier:LastOneNotice", line.Name], Severity.Info);
+        }
+    }
 
     private void DecLine(CartLine line)
     {
@@ -584,6 +663,46 @@
         _tendered = 0;
     }
 
+    private async Task<bool> RefreshCartAvailabilityAsync()
+    {
+        if (_shift is null || _cart.Count == 0)
+        {
+            return true;
+        }
+
+        var latest = await CashierAppService.GetProductTilesAsync(_shift.BranchId, null);
+        var byProduct = latest.ToDictionary(p => p.ProductId);
+        var changed = false;
+
+        foreach (var line in _cart.ToList())
+        {
+            if (!byProduct.TryGetValue(line.ProductId, out var product) || product.QuantityOnHand <= 0)
+            {
+                _cart.Remove(line);
+                changed = true;
+                Snackbar.Add(L["Cashier:OutOfStockRemoved", line.Name], Severity.Warning);
+                continue;
+            }
+
+            line.AvailableQuantity = product.QuantityOnHand;
+            if (line.Quantity > product.QuantityOnHand)
+            {
+                line.Quantity = product.QuantityOnHand;
+                changed = true;
+                Snackbar.Add(L["Cashier:OnlyXAvailable", product.QuantityOnHand, line.Name], Severity.Warning);
+            }
+        }
+
+        await LoadTilesAsync();
+
+        if (changed && _cart.Count == 0)
+        {
+            _tendered = 0;
+        }
+
+        return !changed;
+    }
+
     // ─── charge ───
     private async Task ChargeAsync()
     {
@@ -591,6 +710,11 @@
         _busy = true;
         try
         {
+            if (!await RefreshCartAvailabilityAsync())
+            {
+                return;
+            }
+
             var tendered = _tendered > 0 ? _tendered : (decimal?)null;
             var result = await CashierAppService.RecordSaleAsync(new RecordCashierSaleDto
             {
@@ -615,6 +739,7 @@
         catch (Exception ex)
         {
             Snackbar.Add($"{L["Cashier:SaleFailed"]} {ex.Message}", Severity.Error);
+            await RefreshCartAvailabilityAsync();
         }
         finally
         {
@@ -789,10 +914,16 @@
     };
 
     // ─── formatting ───
-    private static string FormatMoney(decimal v) => v.ToString("C2", CultureInfo.CurrentCulture);
+    private static string FormatMoney(decimal v) => $"{v.ToString("N2", CultureInfo.CurrentCulture)} SYP";
 
     private static string Initial(string name)
         => string.IsNullOrWhiteSpace(name) ? "?" : name.Trim()[0].ToString().ToUpperInvariant();
+
+    private int RemainingFor(CashierProductDto product)
+    {
+        var inCart = _cart.FirstOrDefault(l => l.ProductId == product.ProductId)?.Quantity ?? 0;
+        return Math.Max(product.QuantityOnHand - inCart, 0);
+    }
 
     private string VarianceLabel(decimal? variance)
     {
@@ -812,8 +943,16 @@
         public string Name { get; set; } = "";
         public decimal UnitPrice { get; set; }
         public int Quantity { get; set; }
+        public int AvailableQuantity { get; set; }
         public decimal Subtotal => UnitPrice * Quantity;
-        public CartLine Clone() => new() { ProductId = ProductId, Name = Name, UnitPrice = UnitPrice, Quantity = Quantity };
+        public CartLine Clone() => new()
+        {
+            ProductId = ProductId,
+            Name = Name,
+            UnitPrice = UnitPrice,
+            Quantity = Quantity,
+            AvailableQuantity = AvailableQuantity
+        };
     }
 
     private sealed class HeldCart
@@ -1251,6 +1390,13 @@
         color: var(--accent);
     }
 
+    .pos-tile-report:disabled {
+        cursor: default;
+        border-color: var(--bd-2);
+        background: var(--hover);
+        color: var(--fg-3);
+    }
+
     /* ── cart pane ── */
     .pos-right {
         display: flex;
@@ -1317,6 +1463,13 @@
         font-variant-numeric: tabular-nums;
     }
 
+    .pos-line-stock {
+        margin-top: 2px;
+        font-size: 0.72rem;
+        font-weight: 600;
+        color: var(--amber-text);
+    }
+
     .pos-stepper {
         display: flex;
         align-items: center;
@@ -1338,6 +1491,11 @@
     }
 
     .pos-step:active { background: var(--selected); }
+
+    .pos-step:disabled {
+        opacity: 0.35;
+        cursor: not-allowed;
+    }
 
     .pos-step-qty {
         min-width: 30px;
@@ -1514,6 +1672,65 @@
     .pos-receipt-total {
         font-size: 1.1rem;
         font-weight: 800;
+    }
+
+    html[dir="rtl"] .pos-root,
+    html[dir="rtl"] .pos-root .glass-modal {
+        direction: rtl;
+        text-align: right;
+    }
+
+    html[dir="rtl"] .pos-header,
+    html[dir="rtl"] .pos-header-stats,
+    html[dir="rtl"] .pos-header-actions,
+    html[dir="rtl"] .pos-search-row,
+    html[dir="rtl"] .pos-cart-head,
+    html[dir="rtl"] .pos-line,
+    html[dir="rtl"] .pos-total-row,
+    html[dir="rtl"] .pos-pay-row,
+    html[dir="rtl"] .pos-pay-actions,
+    html[dir="rtl"] .pos-held-row,
+    html[dir="rtl"] .pos-recon-row,
+    html[dir="rtl"] .pos-receipt-line,
+    html[dir="rtl"] .pos-receipt-trow {
+        direction: rtl;
+    }
+
+    html[dir="rtl"] .pos-scan,
+    html[dir="rtl"] .pos-search {
+        text-align: right;
+    }
+
+    html[dir="rtl"] .pos-tile-badge {
+        right: auto;
+        left: 6px;
+    }
+
+    html[dir="rtl"] .pos-line-sub {
+        text-align: left;
+    }
+
+    html[dir="rtl"] .pos-receipt {
+        direction: rtl;
+    }
+
+    html[dir="rtl"] .pos-receipt-head {
+        text-align: center;
+    }
+
+    html[dir="rtl"] .pos-receipt-name {
+        text-align: right;
+    }
+
+    html[dir="rtl"] .pos-receipt-amt {
+        text-align: left;
+    }
+
+    html[dir="rtl"] .pos-primary-btn .mr-2,
+    html[dir="rtl"] .pos-secondary-btn .mr-1,
+    html[dir="rtl"] .pos-chip-btn .mr-1 {
+        margin-right: 0 !important;
+        margin-left: .5rem !important;
     }
 
     /* ── tablet portrait fallback ── */

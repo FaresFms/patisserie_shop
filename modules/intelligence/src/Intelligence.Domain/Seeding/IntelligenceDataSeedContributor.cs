@@ -44,13 +44,13 @@ public class IntelligenceDataSeedContributor : IDataSeedContributor, ITransientD
         {
             await _rulesRepository.InsertAsync(new AppInventoryRule(
                 id: IntelligenceConstants.CashierReportRuleId,
-                ruleName: "Cashier Stock Report",
+                ruleName: "تقرير مخزون الكاشير",
                 ruleType: InventoryRuleTypes.LowStock,
                 productId: null,
                 branchId: null,
                 thresholdValue: 0,
                 thresholdDays: null,
-                suggestedAction: "Restock",
+                suggestedAction: "إعادة التخزين",
                 priority: 0,
                 isActive: false
             ), autoSave: true);
@@ -64,13 +64,13 @@ public class IntelligenceDataSeedContributor : IDataSeedContributor, ITransientD
         // Rule 1 — global LowStock at 5 units. Priority 0 (default).
         await _rulesRepository.InsertAsync(new AppInventoryRule(
             id: _guidGenerator.Create(),
-            ruleName: "Global Low Stock Alert",
+            ruleName: "تنبيه انخفاض المخزون العام",
             ruleType: InventoryRuleTypes.LowStock,
             productId: null,
             branchId: null,
             thresholdValue: 5,
             thresholdDays: null,
-            suggestedAction: "Reorder from default supplier or request transfer from warehouse",
+            suggestedAction: "أعِد الطلب من المورّد الافتراضي أو اطلب تحويلاً من المستودع",
             priority: 0,
             isActive: true
         ), autoSave: false);
@@ -78,13 +78,13 @@ public class IntelligenceDataSeedContributor : IDataSeedContributor, ITransientD
         // Rule 2 — global ExcessStock at 100 units.
         await _rulesRepository.InsertAsync(new AppInventoryRule(
             id: _guidGenerator.Create(),
-            ruleName: "Global Excess Stock Alert",
+            ruleName: "تنبيه فائض المخزون العام",
             ruleType: InventoryRuleTypes.ExcessStock,
             productId: null,
             branchId: null,
             thresholdValue: 100,
             thresholdDays: null,
-            suggestedAction: "Consider transferring excess stock to another branch",
+            suggestedAction: "فكّر في تحويل المخزون الفائض إلى فرع آخر",
             priority: 0,
             isActive: true
         ), autoSave: false);
@@ -92,13 +92,13 @@ public class IntelligenceDataSeedContributor : IDataSeedContributor, ITransientD
         // Rule 3 — global DeadStock at 30 days without sale.
         await _rulesRepository.InsertAsync(new AppInventoryRule(
             id: _guidGenerator.Create(),
-            ruleName: "Global Dead Stock (30 days)",
+            ruleName: "المخزون الراكد العام (30 يومًا)",
             ruleType: InventoryRuleTypes.DeadStock,
             productId: null,
             branchId: null,
             thresholdValue: null,
             thresholdDays: 30,
-            suggestedAction: "Apply 20% discount or redistribute to active branch",
+            suggestedAction: "طبّق خصم 20% أو أعِد التوزيع إلى فرع نشط",
             priority: 0,
             isActive: true
         ), autoSave: false);
@@ -108,13 +108,13 @@ public class IntelligenceDataSeedContributor : IDataSeedContributor, ITransientD
         // gets the URGENT messaging instead of the generic Low Stock note.
         await _rulesRepository.InsertAsync(new AppInventoryRule(
             id: _guidGenerator.Create(),
-            ruleName: "Critical Low Stock Alert",
+            ruleName: "تنبيه انخفاض حرج للمخزون",
             ruleType: InventoryRuleTypes.LowStock,
             productId: null,
             branchId: null,
             thresholdValue: 2,
             thresholdDays: null,
-            suggestedAction: "URGENT: Stock critically low — reorder immediately",
+            suggestedAction: "عاجل: المخزون منخفض بشكل حرج — أعِد الطلب فوراً",
             priority: 10,
             isActive: true
         ), autoSave: false);
@@ -124,13 +124,13 @@ public class IntelligenceDataSeedContributor : IDataSeedContributor, ITransientD
         // a transfer from a branch that has clear excess.
         await _rulesRepository.InsertAsync(new AppInventoryRule(
             id: _guidGenerator.Create(),
-            ruleName: "Global Transfer Suggestion",
+            ruleName: "اقتراح تحويل عام",
             ruleType: InventoryRuleTypes.TransferSuggestion,
             productId: null,
             branchId: null,
             thresholdValue: 10,
             thresholdDays: null,
-            suggestedAction: "Transfer stock from overstocked branch",
+            suggestedAction: "حوّل المخزون من فرع لديه فائض",
             priority: 5,
             isActive: true
         ), autoSave: true);

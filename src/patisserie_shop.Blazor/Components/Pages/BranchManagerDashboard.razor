@@ -223,7 +223,7 @@
                                             <div class="bm-stock-meta">
                                                 @if (s.LastSoldDate.HasValue)
                                                 {
-                                                    <span>@L["MgrDash:LastSold", s.LastSoldDate.Value.ToString("MMM d")]</span>
+                                                    <span>@L["MgrDash:LastSold", s.LastSoldDate.Value.ToString("MMM d", System.Globalization.CultureInfo.CurrentCulture)]</span>
                                                 }
                                                 else
                                                 {
@@ -265,7 +265,7 @@
                                                  Items="_data.SalesLast7Days"
                                                  Name="@L["MgrDash:SalesSeries"].Value"
                                                  SeriesType="SeriesType.Area"
-                                                 XValue='@(d => d.Date.ToString("ddd"))'
+                                                 XValue='@(d => d.Date.ToString("ddd", System.Globalization.CultureInfo.CurrentCulture))'
                                                  YValue="@(d => d.TotalAmount)" />
                             </ApexChart>
                         </div>
@@ -303,7 +303,7 @@
                                     {
                                         <tr>
                                             <td class="bm-mono">@s.InvoiceNumber</td>
-                                            <td>@s.SaleDate.ToLocalTime().ToString("MMM d, HH:mm")</td>
+                                            <td>@s.SaleDate.ToLocalTime().ToString("MMM d, HH:mm", System.Globalization.CultureInfo.CurrentCulture)</td>
                                             <td class="t-right bm-mono">@s.ItemCount</td>
                                             <td class="t-right bm-mono">@FormatMoney(s.TotalAmount)</td>
                                         </tr>
@@ -422,7 +422,7 @@
                                             </div>
                                             <div class="bm-transfer-sub">
                                                 <span>@(t.ItemCount == 1 ? L["MgrDash:ItemCountSingular", t.ItemCount] : L["MgrDash:ItemCountPlural", t.ItemCount])</span>
-                                                <span class="bm-transfer-date">@L["MgrDash:Requested", t.RequestedDate.ToLocalTime().ToString("MMM d")]</span>
+                                                <span class="bm-transfer-date">@L["MgrDash:Requested", t.RequestedDate.ToLocalTime().ToString("MMM d", System.Globalization.CultureInfo.CurrentCulture)]</span>
                                             </div>
                                         </div>
                                     </div>
@@ -803,6 +803,57 @@
     .bm-empty .mud-icon-root { font-size: 22px; }
     .bm-empty--success { color: #6b8e4e; }
     .bm-empty--success .mud-icon-root { color: #6b8e4e; }
+
+    html[dir="rtl"] .bm-dash {
+        direction: rtl;
+        text-align: right;
+    }
+
+    html[dir="rtl"] .bm-dash .page-head,
+    html[dir="rtl"] .bm-dash .bm-section-head,
+    html[dir="rtl"] .bm-dash .bm-stock-row,
+    html[dir="rtl"] .bm-dash .bm-dec-head,
+    html[dir="rtl"] .bm-dash .bm-dec-meta,
+    html[dir="rtl"] .bm-dash .bm-transfer,
+    html[dir="rtl"] .bm-dash .bm-transfer-line,
+    html[dir="rtl"] .bm-dash .bm-transfer-sub {
+        direction: rtl;
+    }
+
+    html[dir="rtl"] .bm-multi-badge {
+        margin-left: 0;
+        margin-right: 10px;
+    }
+
+    html[dir="rtl"] .bm-pulse-dot {
+        right: auto;
+        left: 4px;
+    }
+
+    html[dir="rtl"] .bm-stock-row,
+    html[dir="rtl"] .bm-decision-card,
+    html[dir="rtl"] .bm-transfer {
+        border-left: 1px solid var(--bd-1);
+        border-right: 3px solid var(--accent);
+    }
+
+    html[dir="rtl"] .bm-stock-low,
+    html[dir="rtl"] .bm-stock-dead,
+    html[dir="rtl"] .bm-dec-lowstockalert { border-right-color: #c89c4f; }
+    html[dir="rtl"] .bm-stock-excess,
+    html[dir="rtl"] .bm-dec-excessstockalert { border-right-color: #4a7da8; }
+    html[dir="rtl"] .bm-stock-healthy { border-right-color: #6b8e4e; }
+    html[dir="rtl"] .bm-dec-deadstockflag { border-right-color: #b3543a; }
+    html[dir="rtl"] .bm-dec-transfersuggestion { border-right-color: #4a8e8e; }
+    html[dir="rtl"] .bm-transfer-intransit { border-right-color: #4a7da8; }
+    html[dir="rtl"] .bm-transfer-approved { border-right-color: #6b8e4e; }
+    html[dir="rtl"] .bm-transfer-pending { border-right-color: #c89c4f; }
+
+    html[dir="rtl"] .bm-stock-min,
+    html[dir="rtl"] .bm-transfer-date {
+        margin-left: 0;
+        margin-right: auto;
+    }
 </style>
 
 @code {
@@ -954,7 +1005,7 @@
         return L["MgrDash:GoodEvening"];
     }
 
-    private static string FormatMoney(decimal v) => v.ToString("C0", System.Globalization.CultureInfo.GetCultureInfo("en-US"));
+    private static string FormatMoney(decimal v) => v.ToString("C0", System.Globalization.CultureInfo.CurrentCulture);
 
     private static string Truncate(string s, int max)
         => string.IsNullOrEmpty(s) || s.Length <= max ? s : s[..max].TrimEnd() + "…";
@@ -966,6 +1017,7 @@
         DecisionTypes.DeadStockFlag => Color.Error,
         DecisionTypes.TransferSuggestion => Color.Tertiary,
         DecisionTypes.ReorderSuggestion => Color.Primary,
+        DecisionTypes.CashierVariance => Color.Error,
         _ => Color.Default
     };
 
@@ -976,6 +1028,7 @@
         DecisionTypes.DeadStockFlag => L["MgrDash:DecDeadStock"],
         DecisionTypes.TransferSuggestion => L["MgrDash:DecTransfer"],
         DecisionTypes.ReorderSuggestion => L["MgrDash:DecReorder"],
+        DecisionTypes.CashierVariance => L["MgrDash:DecCashierVariance"],
         _ => type
     };
 

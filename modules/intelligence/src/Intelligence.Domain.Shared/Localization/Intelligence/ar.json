@@ -137,6 +137,8 @@
     "DecisionType:StockoutRisk": "خطر نفاد المخزون",
     "DecisionType:ExpiryAlert": "تنبيه انتهاء الصلاحية",
     "DecisionType:WasteWriteOff": "شطب هدر",
+    "DecisionType:StockReport": "بلاغ مخزون من الكاشير",
+    "DecisionType:CashierVariance": "فرق نقد الكاشير",
 
     "Menu:ProductVelocity": "سرعة دوران المنتج",
     "ProductVelocity": "سرعة دوران المنتج",

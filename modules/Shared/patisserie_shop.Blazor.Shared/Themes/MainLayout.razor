@@ -116,6 +116,7 @@
     <SoftDrawer @bind-Open="_drawerOpen"
                Elevation="2"
                Variant="DrawerVariant.Responsive"
+               Anchor="@(_isArabic ? MudBlazor.Anchor.Right : MudBlazor.Anchor.Left)"
                ClipMode="DrawerClipMode.Always">
 
         <SoftDrawerHeader Class="pa-3">

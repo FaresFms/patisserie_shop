@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using Volo.Abp.Application.Services;
 
@@ -13,4 +15,6 @@ namespace patisserie_shop.Cashier;
 public interface ICashierReportAppService : IApplicationService
 {
     Task ReportLowStockAsync(ReportLowStockInput input);
+
+    Task<List<Guid>> GetPendingLowStockProductIdsAsync(Guid branchId);
 }

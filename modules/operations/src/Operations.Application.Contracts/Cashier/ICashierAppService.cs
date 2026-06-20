@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using Operations.Sales;
 using Volo.Abp.Application.Services;
 
 namespace Operations.Cashier;
@@ -35,6 +36,9 @@ public interface ICashierAppService : IApplicationService
 
     /// <summary>This cashier's sales at the branch within the window (default 60 min), newest first.</summary>
     Task<List<RecentSaleDto>> GetRecentSalesAsync(Guid branchId, int withinMinutes = 60);
+
+    /// <summary>Invoice details for a sale owned by this cashier in their assigned branch.</summary>
+    Task<SaleDto> GetSaleDetailsAsync(Guid saleId);
 
     /// <summary>
     /// Voids a sale and restores its stock. Within 60 minutes for the cashier; anytime for a

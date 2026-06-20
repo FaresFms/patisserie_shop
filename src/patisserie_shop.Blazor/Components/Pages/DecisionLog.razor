@@ -2,6 +2,7 @@
 @attribute [Authorize(IntelligencePermissions.DecisionLogs.Default)]
 @using System.Threading.Tasks
 @using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.WebUtilities
 @using Volo.Abp.Application.Dtos
 @using Volo.Abp.AspNetCore.Components.Web.Theming.Layout
 @using Volo.Abp.Identity
@@ -22,6 +23,7 @@
 @inject IProductAppService ProductAppService
 @inject IIdentityUserAppService IdentityUserAppService
 @inject PageLayout PageLayout
+@inject NavigationManager NavigationManager
 @inject ISnackbar Snackbar
 @inject IStringLocalizer<IntelligenceResource> IntL
 
@@ -612,7 +614,8 @@
             new(DecisionTypes.StockoutRisk,       IntL["DecisionType:StockoutRisk"]),
             new(DecisionTypes.ExpiryAlert,        IntL["DecisionType:ExpiryAlert"]),
             new(DecisionTypes.WasteWriteOff,      IntL["DecisionType:WasteWriteOff"]),
-            new(DecisionTypes.StockReport,        IntL["DecisionType:StockReport"])
+            new(DecisionTypes.StockReport,        IntL["DecisionType:StockReport"]),
+            new(DecisionTypes.CashierVariance,    IntL["DecisionType:CashierVariance"])
         };
 
         _statusOptions = new List<LabeledOption>
@@ -787,6 +790,12 @@
 
     private async Task ExecuteAsync(DecisionLogDto item)
     {
+        if (item.DecisionType == DecisionTypes.StockReport)
+        {
+            OpenTransferRequest(item);
+            return;
+        }
+
         _busyId = item.Id;
         try
         {
@@ -825,6 +834,23 @@
         {
             _busyId = null;
         }
+    }
+
+    private void OpenTransferRequest(DecisionLogDto item)
+    {
+        var parameters = new Dictionary<string, string?>
+        {
+            ["new"] = "true"
+        };
+
+        if (item.BranchId.HasValue)
+        {
+            parameters["toBranchId"] = item.BranchId.Value.ToString();
+        }
+
+        parameters["notes"] = $"Created from cashier stock report {item.Id}. {item.Reasoning}";
+
+        NavigationManager.NavigateTo(QueryHelpers.AddQueryString("/operations/stock-transfers", parameters));
     }
 
     private void OpenConsolidateDialog() => _consolidateDialogVisible = true;
@@ -936,6 +962,7 @@
         DecisionTypes.ExpiryAlert => Icons.Material.Filled.EventBusy,
         DecisionTypes.WasteWriteOff => Icons.Material.Filled.DeleteSweep,
         DecisionTypes.StockReport => Icons.Material.Filled.ReportProblem, // manual cashier report
+        DecisionTypes.CashierVariance => Icons.Material.Filled.PointOfSale,
         _ => Icons.Material.Filled.Info
     };
 
@@ -950,6 +977,7 @@
         DecisionTypes.ExpiryAlert => Color.Secondary,  // plum family via CSS accents below
         DecisionTypes.WasteWriteOff => Color.Default,  // brown-grey family via CSS accents below
         DecisionTypes.StockReport => Color.Info,       // blue-grey info family via CSS accents below
+        DecisionTypes.CashierVariance => Color.Error,
         _ => Color.Default
     };
 

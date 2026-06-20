@@ -44,6 +44,9 @@ public class OperationsPermissions
         /// <summary>Manager drawer view: see all cashier shifts/drawers across branches.</summary>
         public const string ViewAllShifts = Default + ".ViewAllShifts";
 
+        /// <summary>Report low stock from the cashier POS to branch managers.</summary>
+        public const string ReportLowStock = Default + ".ReportLowStock";
+
         /// <summary>Create cashier users and assign them to a branch (branch-scoped for managers).</summary>
         public const string ManageCashiers = Default + ".ManageCashiers";
     }

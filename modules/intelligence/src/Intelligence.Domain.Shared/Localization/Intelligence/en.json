@@ -146,6 +146,7 @@
     "DecisionType:ExpiryAlert": "Expiry Alert",
     "DecisionType:WasteWriteOff": "Waste Write-Off",
     "DecisionType:StockReport": "Cashier Stock Report",
+    "DecisionType:CashierVariance": "Cashier Variance",
 
     "Menu:ReorderCalendar": "Reorder Calendar",
     "ReorderCalendar": "Reorder Calendar",

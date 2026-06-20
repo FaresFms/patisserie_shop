@@ -186,7 +186,7 @@ public class CashierAppService : OperationsAppService, ICashierAppService
             SKU = r.Product.SKU,
             SalePrice = r.Product.SalePrice,
             ImageUrl = r.Product.ImageUrl,
-            // Flags derive from the inventory row; the numeric quantity is intentionally dropped.
+            QuantityOnHand = r.Inventory.QuantityOnHand,
             IsLowStock = r.Inventory.IsLowStock,
             IsOutOfStock = r.Inventory.IsOutOfStock
         });
@@ -299,6 +299,21 @@ public class CashierAppService : OperationsAppService, ICashierAppService
         });
     }
 
+    public async Task<SaleDto> GetSaleDetailsAsync(Guid saleId)
+    {
+        var sale = await _saleRepository.GetWithItemsAsync(saleId);
+        EnsureBranchAllowed(sale.BranchId);
+
+        var canViewAnyCashierSale = await AuthorizationService.IsGrantedAsync(OperationsPermissions.Sales.ManageAll);
+        if (!canViewAnyCashierSale && sale.CreatorId != CurrentUser.GetId())
+        {
+            throw new BusinessException(OperationsErrorCodes.CashierSaleAccessDenied)
+                .WithData("SaleId", sale.Id);
+        }
+
+        return await ProjectSaleAsync(sale);
+    }
+
     public async Task VoidSaleAsync(VoidSaleDto input)
     {
         var sale = await _saleRepository.GetWithItemsAsync(input.SaleId);
@@ -391,6 +406,51 @@ public class CashierAppService : OperationsAppService, ICashierAppService
 
         return dto;
     }
+
+    private async Task<SaleDto> ProjectSaleAsync(AppSale sale)
+    {
+        var branch = await _branchRepository.GetAsync(sale.BranchId);
+
+        string? creatorUserName = null;
+        if (sale.CreatorId.HasValue)
+        {
+            var user = await _userRepository.FindAsync(sale.CreatorId.Value);
+            creatorUserName = user?.UserName;
+        }
+
+        var productIds = sale.Items.Select(i => i.ProductId).Distinct().ToList();
+        var products = await _productRepository.GetListAsync(p => productIds.Contains(p.Id));
+        var productMap = products.ToDictionary(p => p.Id);
+
+        return new SaleDto
+        {
+            Id = sale.Id,
+            InvoiceNumber = sale.InvoiceNumber,
+            BranchId = sale.BranchId,
+            BranchName = branch.Name,
+            SaleDate = sale.SaleDate,
+            TotalAmount = sale.TotalAmount,
+            Currency = sale.Currency,
+            Notes = sale.Notes,
+            CreationTime = sale.CreationTime,
+            CreatorId = sale.CreatorId,
+            CreatorUserName = creatorUserName,
+            ItemCount = sale.Items.Count,
+            Items = sale.Items.Select(i => ProjectSaleItem(i, productMap.GetValueOrDefault(i.ProductId))).ToList()
+        };
+    }
+
+    private static SaleItemDto ProjectSaleItem(AppSaleItem item, AppProduct? product) => new()
+    {
+        Id = item.Id,
+        ProductId = item.ProductId,
+        ProductName = product?.Name ?? "(deleted product)",
+        ProductSKU = product?.SKU ?? "-",
+        ProductUnit = product?.Unit ?? "-",
+        Quantity = item.Quantity,
+        UnitPrice = item.UnitPrice,
+        Subtotal = item.Subtotal
+    };
 
     private static CashierShiftDto MapShift(AppCashierShift shift, ShiftSalesTotals totals) => new()
     {

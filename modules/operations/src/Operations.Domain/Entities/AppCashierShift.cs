@@ -1,4 +1,5 @@
 using System;
+using Operations.Events;
 using Volo.Abp;
 using Volo.Abp.Domain.Entities.Auditing;
 
@@ -68,5 +69,19 @@ public class AppCashierShift : FullAuditedAggregateRoot<Guid>
         Variance = countedCash - expectedCash;
         ClosedAt = closedAt ?? DateTime.UtcNow;
         Status = CashierShiftStatuses.Closed;
+
+        if (Variance != 0)
+        {
+            AddDistributedEvent(new CashierShiftVarianceEto
+            {
+                ShiftId = Id,
+                BranchId = BranchId,
+                CashierUserId = CashierUserId,
+                ClosedAt = ClosedAt.Value,
+                ExpectedCash = expectedCash,
+                CountedCash = countedCash,
+                Variance = Variance.Value
+            });
+        }
     }
 }

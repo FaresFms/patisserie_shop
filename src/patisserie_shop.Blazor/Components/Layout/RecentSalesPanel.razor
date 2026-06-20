@@ -5,6 +5,7 @@
 @using System.Threading.Tasks
 @using Microsoft.AspNetCore.Authorization
 @using Operations.Cashier
+@using Operations.Sales
 @using Operations.Permissions
 @using Color = MudBlazor.Color
 @using Size = MudBlazor.Size
@@ -88,6 +89,11 @@
                                     </div>
                                     <div class="recent-item-total">@FormatMoney(s.Total)</div>
                                     <div class="recent-item-actions">
+                                        <button type="button" class="recent-act recent-act-view"
+                                                disabled="@_busy"
+                                                @onclick="() => OpenDetailAsync(s.SaleId)">
+                                            @L["Recent:View"]
+                                        </button>
                                         <button type="button" class="recent-act"
                                                 disabled="@(!s.CanVoid || _busy)"
                                                 @onclick="() => AskVoid(s, replace: false)">
@@ -143,6 +149,74 @@
                                     Disabled="@_busy" OnClick="ConfirmVoidAsync">
                             @L["Recent:Void"]
                         </SoftButton>
+                    </div>
+                </SoftCard>
+            </div>
+        </div>
+    }
+
+    @if (_detailSale is not null)
+    {
+        <div class="glass-modal-backdrop" @onclick="CloseDetail">
+            <div class="glass-modal-container glass-modal-container--lg" @onclick:stopPropagation="true">
+                <SoftCard Elevation="24" Class="glass-modal">
+                    <SoftCardHeader Class="pa-4">
+                        <CardHeaderContent>
+                            <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                <SoftIcon Icon="@Icons.Material.Filled.ReceiptLong" Color="Color.Primary" Size="Size.Medium" />
+                                <div>
+                                    <SoftText Typo="Typo.h6">@_detailSale.InvoiceNumber</SoftText>
+                                    <SoftText Typo="Typo.caption" Color="Color.Default">
+                                        @_detailSale.SaleDate.ToLocalTime().ToString("g", CultureInfo.CurrentCulture)
+                                    </SoftText>
+                                </div>
+                            </SoftStack>
+                        </CardHeaderContent>
+                        <CardHeaderActions>
+                            <SoftIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="CloseDetail" />
+                        </CardHeaderActions>
+                    </SoftCardHeader>
+                    <SoftDivider />
+                    <SoftCardContent Class="pa-4 recent-detail-body">
+                        <div class="recent-detail-summary">
+                            <div>
+                                <span>@L["Cashier:Branch"]</span>
+                                <strong>@_detailSale.BranchName</strong>
+                            </div>
+                            <div>
+                                <span>@L["Recent:ItemsLabel"]</span>
+                                <strong>@_detailSale.ItemCount</strong>
+                            </div>
+                            <div>
+                                <span>@L["Cashier:Total"]</span>
+                                <strong>@FormatMoney(_detailSale.TotalAmount)</strong>
+                            </div>
+                        </div>
+
+                        <div class="recent-detail-table">
+                            <div class="recent-detail-row recent-detail-row-head">
+                                <span>@L["Recent:Product"]</span>
+                                <span>@L["Cashier:Qty"]</span>
+                                <span>@L["Cashier:UnitPrice"]</span>
+                                <span>@L["Cashier:Subtotal"]</span>
+                            </div>
+                            @foreach (var item in _detailSale.Items)
+                            {
+                                <div class="recent-detail-row">
+                                    <span>
+                                        <strong>@item.ProductName</strong>
+                                        <small>@item.ProductSKU</small>
+                                    </span>
+                                    <span>@item.Quantity @item.ProductUnit</span>
+                                    <span>@FormatMoney(item.UnitPrice)</span>
+                                    <span>@FormatMoney(item.Subtotal)</span>
+                                </div>
+                            }
+                        </div>
+                    </SoftCardContent>
+                    <SoftDivider />
+                    <div class="pa-3 d-flex justify-end">
+                        <SoftButton Variant="MudBlazor.Variant.Filled" Color="Color.Default" OnClick="CloseDetail">@L["Close"]</SoftButton>
                     </div>
                 </SoftCard>
             </div>
@@ -315,6 +389,7 @@
         }
 
         .recent-act-alt { color: var(--accent); }
+        .recent-act-view { color: var(--fg-1); }
 
         .recent-act:hover:not(:disabled) { background: var(--hover); }
 
@@ -327,6 +402,120 @@
         .recent-confirm-sub {
             color: var(--fg-2);
             font-size: 0.9rem;
+        }
+
+        .recent-detail-body {
+            max-height: 72vh;
+            overflow-y: auto;
+        }
+
+        .recent-detail-summary {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 10px;
+            margin-bottom: 16px;
+        }
+
+        .recent-detail-summary > div {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+            padding: 10px 12px;
+            border: 1px solid var(--bd-1);
+            border-radius: var(--r-sm);
+            background: var(--surface-2);
+        }
+
+        .recent-detail-summary span {
+            font-size: 0.72rem;
+            color: var(--fg-3);
+        }
+
+        .recent-detail-summary strong {
+            font-size: 0.9rem;
+            color: var(--fg-1);
+        }
+
+        .recent-detail-table {
+            border-top: 1px solid var(--bd-1);
+        }
+
+        .recent-detail-row {
+            display: grid;
+            grid-template-columns: minmax(0, 1.8fr) .7fr .9fr .9fr;
+            gap: 12px;
+            align-items: center;
+            padding: 10px 0;
+            border-bottom: 1px solid var(--bd-1);
+            font-size: 0.85rem;
+        }
+
+        .recent-detail-row-head {
+            font-size: 0.72rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            color: var(--fg-3);
+        }
+
+        .recent-detail-row > span:not(:first-child) {
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .recent-detail-row small {
+            display: block;
+            margin-top: 2px;
+            color: var(--fg-3);
+            font-family: var(--font-mono);
+            font-size: 0.7rem;
+        }
+
+        html[dir="rtl"] .recent-panel-root,
+        html[dir="rtl"] .recent-drawer,
+        html[dir="rtl"] .recent-head,
+        html[dir="rtl"] .recent-item,
+        html[dir="rtl"] .recent-item-inv,
+        html[dir="rtl"] .recent-item-actions {
+            direction: rtl;
+            text-align: right;
+        }
+
+        html[dir="rtl"] .recent-panel-root {
+            margin-right: 0;
+            margin-left: 2px;
+        }
+
+        html[dir="rtl"] .recent-drawer {
+            right: auto;
+            left: 0;
+            border-left: none;
+            border-right: 1px solid var(--bd-2);
+        }
+
+        html[dir="rtl"] .recent-item-total {
+            text-align: left;
+        }
+
+        html[dir="rtl"] .recent-detail-body,
+        html[dir="rtl"] .recent-detail-row {
+            direction: rtl;
+            text-align: right;
+        }
+
+        html[dir="rtl"] .recent-detail-row > span:not(:first-child) {
+            text-align: left;
+        }
+
+        @@media (max-width: 560px) {
+            .recent-detail-summary {
+                grid-template-columns: 1fr;
+            }
+
+            .recent-detail-row {
+                grid-template-columns: minmax(0, 1.5fr) .5fr .8fr .8fr;
+                gap: 8px;
+                font-size: 0.78rem;
+            }
         }
     </style>
 }
@@ -344,6 +533,7 @@
     private RecentSaleDto? _confirm;
     private bool _confirmReplace;
     private string? _reason;
+    private SaleDto? _detailSale;
 
     protected override async Task OnInitializedAsync()
     {
@@ -411,6 +601,30 @@
         _reason = null;
     }
 
+    private async Task OpenDetailAsync(Guid saleId)
+    {
+        if (_busy)
+        {
+            return;
+        }
+
+        _busy = true;
+        try
+        {
+            _detailSale = await CashierAppService.GetSaleDetailsAsync(saleId);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"{L["Recent:ViewFailed"]} {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private void CloseDetail() => _detailSale = null;
+
     private void CancelVoid()
     {
         _confirm = null;
@@ -450,7 +664,7 @@
         }
     }
 
-    private static string FormatMoney(decimal v) => v.ToString("C2", CultureInfo.CurrentCulture);
+    private static string FormatMoney(decimal v) => $"{v.ToString("N2", CultureInfo.CurrentCulture)} SYP";
 
     private string RelativeTime(DateTime saleDate)
     {
@@ -460,7 +674,7 @@
             delta = TimeSpan.Zero;
         }
         if (delta.TotalMinutes < 1) return L["Recent:JustNow"];
-        if (delta.TotalHours < 1) return $"{(int)delta.TotalMinutes}m";
+        if (delta.TotalHours < 1) return L["Recent:MinutesAgo", (int)delta.TotalMinutes];
         return saleDate.ToLocalTime().ToString("t", CultureInfo.CurrentCulture);
     }
 }

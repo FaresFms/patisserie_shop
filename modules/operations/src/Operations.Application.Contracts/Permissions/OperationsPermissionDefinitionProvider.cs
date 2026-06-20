@@ -33,6 +33,7 @@ public class OperationsPermissionDefinitionProvider : PermissionDefinitionProvid
 
         var cashier = group.AddPermission(OperationsPermissions.Cashier.Default, L("Permission:Cashier"));
         cashier.AddChild(OperationsPermissions.Cashier.ViewAllShifts, L("Permission:Cashier.ViewAllShifts"));
+        cashier.AddChild(OperationsPermissions.Cashier.ReportLowStock, L("Permission:Cashier.ReportLowStock"));
         cashier.AddChild(OperationsPermissions.Cashier.ManageCashiers, L("Permission:Cashier.ManageCashiers"));
     }
 

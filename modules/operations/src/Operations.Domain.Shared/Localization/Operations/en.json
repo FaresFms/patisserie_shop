@@ -25,6 +25,7 @@
     "Permission:Transfers.Cancel": "Cancel",
     "Permission:Cashier": "Cashier (POS)",
     "Permission:Cashier.ViewAllShifts": "View all cashier shifts (manager)",
+    "Permission:Cashier.ReportLowStock": "Report low stock",
     "Permission:Cashier.ManageCashiers": "Create / assign cashiers (manager)",
 
     "Menu:Operations": "Operations",

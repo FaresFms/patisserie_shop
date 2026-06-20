@@ -31,7 +31,7 @@
                 <MudText Typo="Typo.body2" Class="dash-subtitle">
                     @if (_lastRefreshed.HasValue)
                     {
-                        <span>@L["InvDash:LastUpdated", _lastRefreshed.Value.ToString("HH:mm:ss")]</span>
+                        <span>@L["InvDash:LastUpdated", _lastRefreshed.Value.ToString("HH:mm:ss", System.Globalization.CultureInfo.CurrentCulture)]</span>
                     }
                     else
                     {
@@ -399,7 +399,7 @@
                                             <span class="mv-qty">
                                                 @(mv.Quantity > 0 ? $"+{mv.Quantity}" : mv.Quantity.ToString()) @mv.ProductUnit
                                             </span>
-                                            <span class="mv-time">@mv.CreationTime.ToString("MMM d, HH:mm")</span>
+                                            <span class="mv-time">@mv.CreationTime.ToString("MMM d, HH:mm", System.Globalization.CultureInfo.CurrentCulture)</span>
                                         </div>
                                     </div>
                                 </div>
@@ -807,6 +807,45 @@
 
     /* ─── Text alignment helpers ─────────────────────────── */
     .text-center { text-align: center; }
+
+    html[dir="rtl"] .dashboard-root {
+        direction: rtl;
+        text-align: right;
+    }
+
+    html[dir="rtl"] .dashboard-root .dash-header,
+    html[dir="rtl"] .dashboard-root .dash-header-left,
+    html[dir="rtl"] .dashboard-root .health-row-top,
+    html[dir="rtl"] .dashboard-root .panel-header,
+    html[dir="rtl"] .dashboard-root .mv-item,
+    html[dir="rtl"] .dashboard-root .mv-item-top,
+    html[dir="rtl"] .dashboard-root .mv-item-bottom {
+        direction: rtl;
+    }
+
+    html[dir="rtl"] .dashboard-root .kpi-card::after {
+        right: auto;
+        left: -20px;
+    }
+
+    html[dir="rtl"] .dashboard-root .kpi-card::before {
+        left: auto;
+        right: 0;
+    }
+
+    html[dir="rtl"] .dashboard-root .health-pct {
+        text-align: left;
+    }
+
+    html[dir="rtl"] .dashboard-root .movement-total-label {
+        margin-left: 0;
+        margin-right: 6px;
+    }
+
+    html[dir="rtl"] .dashboard-root .mv-time {
+        margin-left: 0;
+        margin-right: auto;
+    }
 </style>
 
 @code {

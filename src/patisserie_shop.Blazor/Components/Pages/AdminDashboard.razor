@@ -17,7 +17,7 @@
             <div class="page-sub">
                 @if (_lastRefresh.HasValue)
                 {
-                    <span>@L["AdminDash:LastUpdated", _lastRefresh.Value.ToLocalTime().ToString("MMM d, HH:mm")]</span>
+                    <span>@L["AdminDash:LastUpdated", _lastRefresh.Value.ToLocalTime().ToString("MMM d, HH:mm", System.Globalization.CultureInfo.CurrentCulture)]</span>
                 }
                 else
                 {
@@ -165,7 +165,7 @@
                                                  Items="_data.SalesLast7Days"
                                                  Name="@L["AdminDash:SeriesSales"]"
                                                  SeriesType="SeriesType.Area"
-                                                 XValue='@(d => d.Date.ToString("ddd"))'
+                                                 XValue='@(d => d.Date.ToString("ddd", System.Globalization.CultureInfo.CurrentCulture))'
                                                  YValue="@(d => d.TotalAmount)" />
                             </ApexChart>
                         </div>
@@ -886,6 +886,37 @@
     }
     .bh-detail-fill { display: block; height: 100%; background: var(--accent); }
     .bh-detail-text { font-size: 12px; color: var(--fg-2); line-height: 1.4; }
+
+    html[dir="rtl"] .admin-dash {
+        direction: rtl;
+        text-align: right;
+    }
+
+    html[dir="rtl"] .admin-dash .page-head,
+    html[dir="rtl"] .admin-dash .ad-section-head,
+    html[dir="rtl"] .admin-dash .ad-branch-head,
+    html[dir="rtl"] .admin-dash .ad-dec-head,
+    html[dir="rtl"] .admin-dash .ad-tl-item,
+    html[dir="rtl"] .admin-dash .ad-pipeline,
+    html[dir="rtl"] .admin-dash .ad-dec-meta,
+    html[dir="rtl"] .admin-dash .ad-branch-bar-legend {
+        direction: rtl;
+    }
+
+    html[dir="rtl"] .admin-dash .ad-decision-card {
+        border-left: 1px solid var(--bd-1);
+        border-right: 3px solid var(--accent);
+    }
+
+    html[dir="rtl"] .admin-dash .ad-dec-lowstockalert { border-right-color: #c89c4f; }
+    html[dir="rtl"] .admin-dash .ad-dec-excessstockalert { border-right-color: #4a7da8; }
+    html[dir="rtl"] .admin-dash .ad-dec-deadstockflag { border-right-color: #b3543a; }
+    html[dir="rtl"] .admin-dash .ad-dec-transfersuggestion { border-right-color: #4a8e8e; }
+
+    html[dir="rtl"] .admin-dash .ad-tl-time {
+        margin-left: 0;
+        margin-right: auto;
+    }
 </style>
 
 @code {
@@ -1009,7 +1040,7 @@
         }
     }
 
-    private static string FormatMoney(decimal v) => v.ToString("C0", System.Globalization.CultureInfo.GetCultureInfo("en-US"));
+    private static string FormatMoney(decimal v) => v.ToString("C0", System.Globalization.CultureInfo.CurrentCulture);
 
     private void ToggleBranch(Guid branchId)
         => _expandedBranch = _expandedBranch == branchId ? null : branchId;
@@ -1026,6 +1057,7 @@
         DecisionTypes.DeadStockFlag => Color.Error,
         DecisionTypes.TransferSuggestion => Color.Tertiary,
         DecisionTypes.ReorderSuggestion => Color.Primary,
+        DecisionTypes.CashierVariance => Color.Error,
         _ => Color.Default
     };
 
@@ -1036,6 +1068,7 @@
         DecisionTypes.DeadStockFlag => L["AdminDash:DecTypeDeadStock"].Value,
         DecisionTypes.TransferSuggestion => L["AdminDash:DecTypeTransfer"].Value,
         DecisionTypes.ReorderSuggestion => L["AdminDash:DecTypeReorder"].Value,
+        DecisionTypes.CashierVariance => L["AdminDash:DecTypeCashierVariance"].Value,
         _ => type
     };
 

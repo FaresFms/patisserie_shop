@@ -65,7 +65,7 @@
                                 <div class="notif-item-body">
                                     <div class="notif-item-type">@TypeLabel(item.DecisionType)</div>
                                     <div class="notif-item-text">
-                                        @item.ProductName
+                                        @NotificationText(item)
                                         @if (!string.IsNullOrWhiteSpace(item.BranchName))
                                         {
                                             <span class="notif-item-branch"> · @item.BranchName</span>
@@ -285,7 +285,7 @@
                 if (visible != null)
                 {
                     Snackbar.Add(
-                        L["Notifications:NewDecisionToast", TypeLabel(visible.DecisionType), visible.ProductName ?? string.Empty],
+                        L["Notifications:NewDecisionToast", TypeLabel(visible.DecisionType), NotificationText(visible)],
                         Severity.Info);
                 }
 
@@ -329,8 +329,25 @@
         DecisionTypes.DeadStockFlag => IntL["DecisionType:DeadStockFlag"],
         DecisionTypes.TransferSuggestion => IntL["DecisionType:TransferSuggestion"],
         DecisionTypes.ReorderSuggestion => IntL["DecisionType:ReorderSuggestion"],
+        DecisionTypes.StockReport => IntL["DecisionType:StockReport"],
+        DecisionTypes.CashierVariance => IntL["DecisionType:CashierVariance"],
         _ => decisionType
     };
+
+    private string NotificationText(DecisionLogDto item)
+    {
+        if (!string.IsNullOrWhiteSpace(item.ProductName))
+        {
+            return item.ProductName;
+        }
+
+        if (!string.IsNullOrWhiteSpace(item.SuggestedAction))
+        {
+            return item.SuggestedAction;
+        }
+
+        return item.Reasoning;
+    }
 
     // Matches the per-type accent colors used on the Decision Log page cards.
     private static string TypeColor(string decisionType) => decisionType switch
@@ -340,6 +357,8 @@
         DecisionTypes.DeadStockFlag => "#b3543a",
         DecisionTypes.TransferSuggestion => "#4a8e8e",
         DecisionTypes.ReorderSuggestion => "var(--accent)",
+        DecisionTypes.StockReport => "var(--accent)",
+        DecisionTypes.CashierVariance => "#b3543a",
         _ => "var(--fg-3)"
     };
 
@@ -356,9 +375,9 @@
         }
 
         if (delta.TotalMinutes < 1) return L["Notifications:JustNow"];
-        if (delta.TotalHours < 1) return $"{(int)delta.TotalMinutes}m";
-        if (delta.TotalDays < 1) return $"{(int)delta.TotalHours}h";
-        return $"{(int)delta.TotalDays}d";
+        if (delta.TotalHours < 1) return L["Notifications:MinutesAgo", (int)delta.TotalMinutes];
+        if (delta.TotalDays < 1) return L["Notifications:HoursAgo", (int)delta.TotalHours];
+        return L["Notifications:DaysAgo", (int)delta.TotalDays];
     }
 
     public void Dispose()

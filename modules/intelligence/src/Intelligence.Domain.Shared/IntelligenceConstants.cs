@@ -16,4 +16,11 @@ public static class IntelligenceConstants
     /// </summary>
     public static readonly Guid CashierReportRuleId =
         Guid.Parse("c45f1e00-0000-4000-a000-000000000001");
+
+    /// <summary>
+    /// Sentinel rule id for manual cashier cash-drawer variance notifications. It is not
+    /// evaluated by the rules engine; it lets the decision log carry operational alerts.
+    /// </summary>
+    public static readonly Guid CashierVarianceRuleId =
+        Guid.Parse("c45f1e00-0000-4000-a000-000000000002");
 }

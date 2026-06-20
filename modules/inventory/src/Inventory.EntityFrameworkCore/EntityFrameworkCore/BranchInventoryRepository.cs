@@ -77,6 +77,21 @@ public class BranchInventoryRepository
         return row;
     }
 
+    public async Task<BranchInventoryWithProduct?> FindByBranchAndProductAsync(
+        Guid branchId,
+        Guid productId,
+        CancellationToken cancellationToken = default)
+    {
+        var dbContext = await GetDbContextAsync();
+
+        return await (
+            from inv in dbContext.Set<AppBranchInventory>()
+            join p in dbContext.Set<AppProduct>() on inv.ProductId equals p.Id
+            where inv.BranchId == branchId && inv.ProductId == productId
+            select new BranchInventoryWithProduct { Inventory = inv, Product = p }
+        ).FirstOrDefaultAsync(GetCancellationToken(cancellationToken));
+    }
+
     public async Task<List<StockSnapshot>> GetActiveStockSnapshotsAsync(
         Guid branchId,
         CancellationToken cancellationToken = default)

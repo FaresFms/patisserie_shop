@@ -28,6 +28,7 @@ public static class OperationsErrorCodes
     public const string SaleAlreadyVoided = "Operations:Cashier:SaleAlreadyVoided";
     public const string BranchNotAssignedToCashier = "Operations:Cashier:BranchNotAssignedToCashier";
     public const string BranchNotManagedByYou = "Operations:Cashier:BranchNotManagedByYou";
+    public const string CashierSaleAccessDenied = "Operations:Cashier:SaleAccessDenied";
 
     // Stock transfers
     public const string TransferInvalidStatusTransition = "Operations:Transfers:InvalidStatusTransition";

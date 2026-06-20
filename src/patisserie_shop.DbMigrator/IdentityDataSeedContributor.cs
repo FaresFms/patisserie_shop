@@ -47,7 +47,7 @@ public class IdentityDataSeedContributor : IDataSeedContributor, ITransientDepen
     public const string CashierPassword = "Cashier@2026";
 
     /// <summary>The branch cashier.demo is assigned to (matches a seeded branch name).</summary>
-    public const string CashierAssignedBranchName = "Main Street Boutique";
+    public const string CashierAssignedBranchName = "بوتيك الشارع الرئيسي";
 
     // ABP's RolePermissionValueProvider.ProviderName ("R"). Hardcoded here so
     // the seeder doesn't need a transitive dep on the permission-management
@@ -302,13 +302,13 @@ public class IdentityDataSeedContributor : IDataSeedContributor, ITransientDepen
     };
 
     /// <summary>
-    /// Cashier: POS only. Granted EXCLUSIVELY <see cref="OperationsPermissions.Cashier.Default"/>
-    /// — sell, manage their own shift, void their own sales within the window, and raise
-    /// manual low-stock reports. No catalogue, no inventory, no rules, no manager drawer
-    /// view (Cashier.ViewAllShifts is intentionally withheld).
+    /// Cashier: POS only. Can sell, manage their own shift, void their own sales within
+    /// the window, and raise manual low-stock reports. No catalogue, no inventory, no
+    /// rules, no manager drawer view (Cashier.ViewAllShifts is intentionally withheld).
     /// </summary>
     private static IEnumerable<string> CashierPermissions() => new[]
     {
-        OperationsPermissions.Cashier.Default
+        OperationsPermissions.Cashier.Default,
+        OperationsPermissions.Cashier.ReportLowStock
     };
 }

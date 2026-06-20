@@ -142,6 +142,20 @@ body.abp-application-layout .mud-drawer {
     box-shadow: none;
     color: var(--fg-1);
 }
+html[dir="rtl"] body.abp-application-layout .mud-drawer {
+    border-right: 0;
+    border-left: 1px solid var(--bd-1);
+    direction: rtl;
+}
+html[dir="rtl"] body.abp-application-layout .mud-navmenu,
+html[dir="rtl"] body.abp-application-layout .mud-nav-link,
+html[dir="rtl"] body.abp-application-layout .mud-nav-group {
+    direction: rtl;
+    text-align: right;
+}
+html[dir="rtl"] body.abp-application-layout .mud-nav-link {
+    flex-direction: row-reverse;
+}
 body.abp-application-layout .mud-nav-link {
     color: var(--fg-2);
     border-radius: var(--r-sm);

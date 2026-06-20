@@ -36,6 +36,12 @@ public static class DecisionTypes
     /// </summary>
     public const string StockReport = "StockReport";
 
+    /// <summary>
+    /// Raised when a cashier closes a shift and counted cash does not match expected cash.
+    /// Informational: the branch manager/admin acknowledges or dismisses it.
+    /// </summary>
+    public const string CashierVariance = "CashierVariance";
+
     public static readonly string[] All =
     {
         LowStockAlert,
@@ -46,7 +52,8 @@ public static class DecisionTypes
         StockoutRisk,
         ExpiryAlert,
         WasteWriteOff,
-        StockReport
+        StockReport,
+        CashierVariance
     };
 
     public static bool IsValid(string? decisionType)
