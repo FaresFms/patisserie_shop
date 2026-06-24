@@ -11,6 +11,7 @@ public class OperationsDbContext : AbpDbContext<OperationsDbContext>, IOperation
     public DbSet<AppStockTransfer> StockTransfers { get; set; } = null!;
     public DbSet<AppPurchaseOrder> PurchaseOrders { get; set; } = null!;
     public DbSet<AppSale> Sales { get; set; } = null!;
+    public DbSet<AppCashierShift> CashierShifts { get; set; } = null!;
 
     public OperationsDbContext(DbContextOptions<OperationsDbContext> options)
         : base(options)

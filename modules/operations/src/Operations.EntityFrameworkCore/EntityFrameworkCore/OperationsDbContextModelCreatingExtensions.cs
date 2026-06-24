@@ -63,9 +63,11 @@ public static class OperationsDbContextModelCreatingExtensions
             b.Property(x => x.InvoiceNumber).IsRequired().HasMaxLength(64);
             b.Property(x => x.Currency).HasMaxLength(3).HasDefaultValue("USD");
             b.Property(x => x.Notes).HasMaxLength(512);
+            b.Property(x => x.VoidReason).HasMaxLength(256);
             b.HasIndex(x => x.InvoiceNumber).IsUnique();
             b.HasIndex(x => x.BranchId);
             b.HasIndex(x => x.SaleDate);
+            b.HasIndex(x => x.ShiftId);
 
             b.HasMany(x => x.Items)
                 .WithOne()
@@ -78,6 +80,19 @@ public static class OperationsDbContextModelCreatingExtensions
         {
             b.ToTable(OperationsDbProperties.DbTablePrefix + "SaleItems", OperationsDbProperties.DbSchema);
             b.ConfigureByConvention();
+        });
+
+        builder.Entity<AppCashierShift>(b =>
+        {
+            b.ToTable(OperationsDbProperties.DbTablePrefix + "CashierShifts", OperationsDbProperties.DbSchema);
+            b.ConfigureByConvention();
+            b.Property(x => x.Status).IsRequired().HasMaxLength(16);
+            b.Property(x => x.OpeningFloat).HasPrecision(18, 2);
+            b.Property(x => x.CountedCash).HasPrecision(18, 2);
+            b.Property(x => x.ExpectedCash).HasPrecision(18, 2);
+            b.Property(x => x.Variance).HasPrecision(18, 2);
+            b.HasIndex(x => new { x.BranchId, x.Status });
+            b.HasIndex(x => new { x.CashierUserId, x.Status });
         });
     }
 }

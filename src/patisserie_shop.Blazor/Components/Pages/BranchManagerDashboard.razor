@@ -20,23 +20,23 @@
             <div class="page-sub">
                 @if (_data?.HasBranchAssigned == true)
                 {
-                    <span>Branch: <strong>@_data.BranchName</strong></span>
+                    <span>@L["MgrDash:BranchLabel"] <strong>@_data.BranchName</strong></span>
                     @if (_data.HasMultipleBranches)
                     {
-                        <span class="bm-multi-badge">You manage multiple branches — showing primary</span>
+                        <span class="bm-multi-badge">@L["MgrDash:MultipleBranchesBadge"]</span>
                     }
                     @if (_lastRefresh.HasValue)
                     {
-                        <span> · Last updated @TimeAgo(_lastRefresh.Value)</span>
+                        <span> · @L["MgrDash:LastUpdated"] @TimeAgo(_lastRefresh.Value)</span>
                     }
                 }
                 else if (_data != null)
                 {
-                    <span>No branch assigned</span>
+                    <span>@L["MgrDash:NoBranchAssigned"]</span>
                 }
                 else
                 {
-                    <span>Loading…</span>
+                    <span>@L["MgrDash:Loading"]</span>
                 }
             </div>
         </div>
@@ -44,7 +44,7 @@
             <SoftButton Variant="Variant.Text" Color="Color.Primary"
                         StartIcon="@Icons.Material.Filled.Refresh"
                         OnClick="LoadAsync" Disabled="_loading">
-                @(_loading ? "Refreshing…" : "Refresh")
+                @(_loading ? L["MgrDash:Refreshing"] : L["MgrDash:Refresh"])
             </SoftButton>
         </div>
     </div>
@@ -53,7 +53,7 @@
         @if (_error != null)
         {
             <SoftAlert Severity="Severity.Error" Variant="Variant.Filled" Class="ma-4">
-                <strong>Failed to load dashboard:</strong> @_error
+                <strong>@L["MgrDash:FailedToLoad"]</strong> @_error
             </SoftAlert>
         }
         else if (_data == null)
@@ -73,8 +73,8 @@
         {
             <div class="bm-noassign">
                 <SoftIcon Icon="@Icons.Material.Outlined.Storefront" />
-                <div class="bm-noassign-title">No branch assigned to your account</div>
-                <div class="bm-noassign-sub">Contact your administrator to be assigned as a branch manager.</div>
+                <div class="bm-noassign-title">@L["MgrDash:NoBranchAssignedTitle"]</div>
+                <div class="bm-noassign-sub">@L["MgrDash:NoBranchAssignedSub"]</div>
             </div>
         }
         else
@@ -87,10 +87,10 @@
                     </div>
                     <div class="bm-kpi-body">
                         <div class="bm-kpi-value">@_data.TotalProducts</div>
-                        <div class="bm-kpi-label">My Stock</div>
+                        <div class="bm-kpi-label">@L["MgrDash:MyStock"]</div>
                         <div class="bm-kpi-sub">
-                            <span class="bm-pill bm-pill-low">@_data.LowStockCount low</span>
-                            <span class="bm-pill bm-pill-ok">@_data.HealthyCount healthy</span>
+                            <span class="bm-pill bm-pill-low">@L["MgrDash:CountLow", _data.LowStockCount]</span>
+                            <span class="bm-pill bm-pill-ok">@L["MgrDash:CountHealthy", _data.HealthyCount]</span>
                         </div>
                     </div>
                 </div>
@@ -106,9 +106,9 @@
                     </div>
                     <div class="bm-kpi-body">
                         <div class="bm-kpi-value">@_data.PendingDecisionsCount</div>
-                        <div class="bm-kpi-label">Pending Alerts</div>
+                        <div class="bm-kpi-label">@L["MgrDash:PendingAlerts"]</div>
                         <div class="bm-kpi-sub">
-                            @(_data.PendingDecisionsCount == 0 ? "all clear" : "need your attention")
+                            @(_data.PendingDecisionsCount == 0 ? L["MgrDash:AllClear"] : L["MgrDash:NeedAttention"])
                         </div>
                     </div>
                 </div>
@@ -130,14 +130,14 @@
                     </div>
                     <div class="bm-kpi-body">
                         <div class="bm-kpi-value">@FormatMoney(_data.TodaySalesTotal)</div>
-                        <div class="bm-kpi-label">Today's Sales</div>
+                        <div class="bm-kpi-label">@L["MgrDash:TodaysSales"]</div>
                         <div class="bm-kpi-sub">
-                            @_data.TodaySalesCount sale@(_data.TodaySalesCount == 1 ? "" : "s")
+                            @(_data.TodaySalesCount == 1 ? L["MgrDash:SaleCountSingular", _data.TodaySalesCount] : L["MgrDash:SaleCountPlural", _data.TodaySalesCount])
                             @if (_data.YesterdaySalesTotal > 0)
                             {
                                 <span> · </span>
                                 <span class="@(TodayDelta >= 0 ? "bm-delta-up" : "bm-delta-down")">
-                                    @(TodayDelta >= 0 ? "+" : "")@TodayDelta.ToString("0")% vs yesterday
+                                    @L["MgrDash:DeltaVsYesterday", (TodayDelta >= 0 ? "+" : "") + TodayDelta.ToString("0")]
                                 </span>
                             }
                         </div>
@@ -150,8 +150,8 @@
                     </div>
                     <div class="bm-kpi-body">
                         <div class="bm-kpi-value">@_data.IncomingTransfersCount</div>
-                        <div class="bm-kpi-label">Incoming Transfers</div>
-                        <div class="bm-kpi-sub">pending delivery</div>
+                        <div class="bm-kpi-label">@L["MgrDash:IncomingTransfers"]</div>
+                        <div class="bm-kpi-sub">@L["MgrDash:PendingDelivery"]</div>
                     </div>
                 </div>
             </div>
@@ -162,17 +162,17 @@
                     <section class="bm-section">
                         <header class="bm-section-head">
                             <div>
-                                <h2 class="bm-section-title">My Stock Health</h2>
-                                <div class="bm-section-sub">Sorted by urgency — low &amp; dead stock first</div>
+                                <h2 class="bm-section-title">@L["MgrDash:MyStockHealth"]</h2>
+                                <div class="bm-section-sub">@L["MgrDash:StockHealthSub"]</div>
                             </div>
-                            <a class="bm-section-link" href="@($"/inventory/branch-inventory?branchId={_data.BranchId}")">View all →</a>
+                            <a class="bm-section-link" href="@($"/inventory/branch-inventory?branchId={_data.BranchId}")">@L["MgrDash:ViewAll"]</a>
                         </header>
 
                         @if (_data.StockItems.Count == 0)
                         {
                             <div class="bm-empty">
                                 <SoftIcon Icon="@Icons.Material.Outlined.Inbox" />
-                                <span>No products in your branch yet.</span>
+                                <span>@L["MgrDash:NoProductsYet"]</span>
                             </div>
                         }
                         else
@@ -217,21 +217,21 @@
                                                 </div>
                                                 <div class="bm-stock-qty">
                                                     <strong>@s.QuantityOnHand</strong> @s.Unit
-                                                    <span class="bm-stock-min">/ min @s.MinimumStock</span>
+                                                    <span class="bm-stock-min">@L["MgrDash:MinQty", s.MinimumStock]</span>
                                                 </div>
                                             </div>
                                             <div class="bm-stock-meta">
                                                 @if (s.LastSoldDate.HasValue)
                                                 {
-                                                    <span>Last sold @s.LastSoldDate.Value.ToString("MMM d")</span>
+                                                    <span>@L["MgrDash:LastSold", s.LastSoldDate.Value.ToString("MMM d", System.Globalization.CultureInfo.CurrentCulture)]</span>
                                                 }
                                                 else
                                                 {
-                                                    <span>Never sold</span>
+                                                    <span>@L["MgrDash:NeverSold"]</span>
                                                 }
                                                 @if (s.StockStatus == "Dead" && s.DaysSinceLastSale.HasValue)
                                                 {
-                                                    <span class="bm-dead-days">@s.DaysSinceLastSale days idle</span>
+                                                    <span class="bm-dead-days">@L["MgrDash:DaysIdle", s.DaysSinceLastSale]</span>
                                                 }
                                             </div>
                                         </div>
@@ -241,7 +241,7 @@
                                                 <SoftButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary"
                                                             StartIcon="@Icons.Material.Filled.AddShoppingCart"
                                                             OnClick='() => Nav.NavigateTo("/operations/purchase-orders")'>
-                                                    Reorder?
+                                                    @L["MgrDash:Reorder"]
                                                 </SoftButton>
                                             }
                                         </div>
@@ -254,8 +254,8 @@
                     <section class="bm-section">
                         <header class="bm-section-head">
                             <div>
-                                <h2 class="bm-section-title">My Sales — Last 7 Days</h2>
-                                <div class="bm-section-sub">@FormatMoney(_data.WeekSalesTotal) total this week</div>
+                                <h2 class="bm-section-title">@L["MgrDash:MySalesLast7Days"]</h2>
+                                <div class="bm-section-sub">@L["MgrDash:TotalThisWeek", FormatMoney(_data.WeekSalesTotal)]</div>
                             </div>
                         </header>
 
@@ -263,9 +263,9 @@
                             <ApexChart TItem="DailySalesDto" @key="_data" Options="_salesChartOptions" Height="220">
                                 <ApexPointSeries TItem="DailySalesDto"
                                                  Items="_data.SalesLast7Days"
-                                                 Name="Sales"
+                                                 Name="@L["MgrDash:SalesSeries"].Value"
                                                  SeriesType="SeriesType.Area"
-                                                 XValue='@(d => d.Date.ToString("ddd"))'
+                                                 XValue='@(d => d.Date.ToString("ddd", System.Globalization.CultureInfo.CurrentCulture))'
                                                  YValue="@(d => d.TotalAmount)" />
                             </ApexChart>
                         </div>
@@ -274,17 +274,17 @@
                     <section class="bm-section">
                         <header class="bm-section-head">
                             <div>
-                                <h2 class="bm-section-title">My Recent Sales</h2>
-                                <div class="bm-section-sub">Last @_data.RecentSales.Count invoice@(_data.RecentSales.Count == 1 ? "" : "s")</div>
+                                <h2 class="bm-section-title">@L["MgrDash:MyRecentSales"]</h2>
+                                <div class="bm-section-sub">@(_data.RecentSales.Count == 1 ? L["MgrDash:LastInvoicesSingular", _data.RecentSales.Count] : L["MgrDash:LastInvoicesPlural", _data.RecentSales.Count])</div>
                             </div>
-                            <a class="bm-section-link" href="/operations/sales">View all →</a>
+                            <a class="bm-section-link" href="/operations/sales">@L["MgrDash:ViewAll"]</a>
                         </header>
 
                         @if (_data.RecentSales.Count == 0)
                         {
                             <div class="bm-empty">
                                 <SoftIcon Icon="@Icons.Material.Outlined.PointOfSale" />
-                                <span>No sales yet today.</span>
+                                <span>@L["MgrDash:NoSalesYet"]</span>
                             </div>
                         }
                         else
@@ -292,10 +292,10 @@
                             <table class="bm-table">
                                 <thead>
                                     <tr>
-                                        <th>Invoice</th>
-                                        <th>Date</th>
-                                        <th class="t-right">Items</th>
-                                        <th class="t-right">Amount</th>
+                                        <th>@L["MgrDash:ColInvoice"]</th>
+                                        <th>@L["MgrDash:ColDate"]</th>
+                                        <th class="t-right">@L["MgrDash:ColItems"]</th>
+                                        <th class="t-right">@L["MgrDash:ColAmount"]</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -303,7 +303,7 @@
                                     {
                                         <tr>
                                             <td class="bm-mono">@s.InvoiceNumber</td>
-                                            <td>@s.SaleDate.ToLocalTime().ToString("MMM d, HH:mm")</td>
+                                            <td>@s.SaleDate.ToLocalTime().ToString("MMM d, HH:mm", System.Globalization.CultureInfo.CurrentCulture)</td>
                                             <td class="t-right bm-mono">@s.ItemCount</td>
                                             <td class="t-right bm-mono">@FormatMoney(s.TotalAmount)</td>
                                         </tr>
@@ -318,17 +318,17 @@
                     <section class="bm-section">
                         <header class="bm-section-head">
                             <div>
-                                <h2 class="bm-section-title">My Alerts</h2>
-                                <div class="bm-section-sub">Pending decisions for your branch</div>
+                                <h2 class="bm-section-title">@L["MgrDash:MyAlerts"]</h2>
+                                <div class="bm-section-sub">@L["MgrDash:PendingDecisionsSub"]</div>
                             </div>
-                            <a class="bm-section-link" href="/intelligence/decision-log">View all →</a>
+                            <a class="bm-section-link" href="/intelligence/decision-log">@L["MgrDash:ViewAll"]</a>
                         </header>
 
                         @if (_data.PendingDecisions.Count == 0)
                         {
                             <div class="bm-empty bm-empty--success">
                                 <SoftIcon Icon="@Icons.Material.Filled.CheckCircle" />
-                                <span>All clear — no alerts for your branch.</span>
+                                <span>@L["MgrDash:AllClearNoAlerts"]</span>
                             </div>
                         }
                         else
@@ -360,13 +360,13 @@
                                                         StartIcon="@Icons.Material.Filled.Check"
                                                         OnClick="@(() => AcknowledgeAsync(d.Id))"
                                                         Disabled="@(_busyId == d.Id)">
-                                                Acknowledge
+                                                @L["MgrDash:Acknowledge"]
                                             </SoftButton>
                                             <SoftButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default"
                                                         StartIcon="@Icons.Material.Filled.Close"
                                                         OnClick="@(() => DismissAsync(d.Id))"
                                                         Disabled="@(_busyId == d.Id)">
-                                                Dismiss
+                                                @L["MgrDash:Dismiss"]
                                             </SoftButton>
                                         </div>
                                     </div>
@@ -378,8 +378,8 @@
                     <section class="bm-section">
                         <header class="bm-section-head">
                             <div>
-                                <h2 class="bm-section-title">Incoming Transfers</h2>
-                                <div class="bm-section-sub">Headed to your branch</div>
+                                <h2 class="bm-section-title">@L["MgrDash:IncomingTransfers"]</h2>
+                                <div class="bm-section-sub">@L["MgrDash:HeadedToYourBranch"]</div>
                             </div>
                         </header>
 
@@ -387,7 +387,7 @@
                         {
                             <div class="bm-empty">
                                 <SoftIcon Icon="@Icons.Material.Outlined.LocalShipping" />
-                                <span>No incoming transfers.</span>
+                                <span>@L["MgrDash:NoIncomingTransfers"]</span>
                             </div>
                         }
                         else
@@ -413,7 +413,7 @@
                                         </div>
                                         <div class="bm-transfer-body">
                                             <div class="bm-transfer-line">
-                                                <span>From <strong>@t.FromBranchName</strong></span>
+                                                <span>@L["MgrDash:From"] <strong>@t.FromBranchName</strong></span>
                                                 <SoftChip T="string" Size="Size.Small"
                                                           Color="@TransferStatusColor(t.Status)"
                                                           Variant="@(t.Status == "InTransit" ? Variant.Filled : Variant.Outlined)">
@@ -421,8 +421,8 @@
                                                 </SoftChip>
                                             </div>
                                             <div class="bm-transfer-sub">
-                                                <span>@t.ItemCount item@(t.ItemCount == 1 ? "" : "s")</span>
-                                                <span class="bm-transfer-date">requested @t.RequestedDate.ToLocalTime().ToString("MMM d")</span>
+                                                <span>@(t.ItemCount == 1 ? L["MgrDash:ItemCountSingular", t.ItemCount] : L["MgrDash:ItemCountPlural", t.ItemCount])</span>
+                                                <span class="bm-transfer-date">@L["MgrDash:Requested", t.RequestedDate.ToLocalTime().ToString("MMM d", System.Globalization.CultureInfo.CurrentCulture)]</span>
                                             </div>
                                         </div>
                                     </div>
@@ -803,13 +803,64 @@
     .bm-empty .mud-icon-root { font-size: 22px; }
     .bm-empty--success { color: #6b8e4e; }
     .bm-empty--success .mud-icon-root { color: #6b8e4e; }
+
+    html[dir="rtl"] .bm-dash {
+        direction: rtl;
+        text-align: right;
+    }
+
+    html[dir="rtl"] .bm-dash .page-head,
+    html[dir="rtl"] .bm-dash .bm-section-head,
+    html[dir="rtl"] .bm-dash .bm-stock-row,
+    html[dir="rtl"] .bm-dash .bm-dec-head,
+    html[dir="rtl"] .bm-dash .bm-dec-meta,
+    html[dir="rtl"] .bm-dash .bm-transfer,
+    html[dir="rtl"] .bm-dash .bm-transfer-line,
+    html[dir="rtl"] .bm-dash .bm-transfer-sub {
+        direction: rtl;
+    }
+
+    html[dir="rtl"] .bm-multi-badge {
+        margin-left: 0;
+        margin-right: 10px;
+    }
+
+    html[dir="rtl"] .bm-pulse-dot {
+        right: auto;
+        left: 4px;
+    }
+
+    html[dir="rtl"] .bm-stock-row,
+    html[dir="rtl"] .bm-decision-card,
+    html[dir="rtl"] .bm-transfer {
+        border-left: 1px solid var(--bd-1);
+        border-right: 3px solid var(--accent);
+    }
+
+    html[dir="rtl"] .bm-stock-low,
+    html[dir="rtl"] .bm-stock-dead,
+    html[dir="rtl"] .bm-dec-lowstockalert { border-right-color: #c89c4f; }
+    html[dir="rtl"] .bm-stock-excess,
+    html[dir="rtl"] .bm-dec-excessstockalert { border-right-color: #4a7da8; }
+    html[dir="rtl"] .bm-stock-healthy { border-right-color: #6b8e4e; }
+    html[dir="rtl"] .bm-dec-deadstockflag { border-right-color: #b3543a; }
+    html[dir="rtl"] .bm-dec-transfersuggestion { border-right-color: #4a8e8e; }
+    html[dir="rtl"] .bm-transfer-intransit { border-right-color: #4a7da8; }
+    html[dir="rtl"] .bm-transfer-approved { border-right-color: #6b8e4e; }
+    html[dir="rtl"] .bm-transfer-pending { border-right-color: #c89c4f; }
+
+    html[dir="rtl"] .bm-stock-min,
+    html[dir="rtl"] .bm-transfer-date {
+        margin-left: 0;
+        margin-right: auto;
+    }
 </style>
 
 @code {
     private BranchDashboardDto? _data;
     private bool _loading;
     private DateTime? _lastRefresh;
-    private string _greeting = "Welcome";
+    private string _greeting = "";
     private string? _userName;
     private string? _error;
     private Guid? _busyId;
@@ -946,15 +997,15 @@
         }
     }
 
-    private static string ComputeGreeting(DateTime now)
+    private string ComputeGreeting(DateTime now)
     {
         var h = now.Hour;
-        if (h < 12) return "Good morning";
-        if (h < 18) return "Good afternoon";
-        return "Good evening";
+        if (h < 12) return L["MgrDash:GoodMorning"];
+        if (h < 18) return L["MgrDash:GoodAfternoon"];
+        return L["MgrDash:GoodEvening"];
     }
 
-    private static string FormatMoney(decimal v) => v.ToString("C0", System.Globalization.CultureInfo.GetCultureInfo("en-US"));
+    private static string FormatMoney(decimal v) => v.ToString("C0", System.Globalization.CultureInfo.CurrentCulture);
 
     private static string Truncate(string s, int max)
         => string.IsNullOrEmpty(s) || s.Length <= max ? s : s[..max].TrimEnd() + "…";
@@ -966,16 +1017,18 @@
         DecisionTypes.DeadStockFlag => Color.Error,
         DecisionTypes.TransferSuggestion => Color.Tertiary,
         DecisionTypes.ReorderSuggestion => Color.Primary,
+        DecisionTypes.CashierVariance => Color.Error,
         _ => Color.Default
     };
 
-    private static string FormatDecisionType(string type) => type switch
+    private string FormatDecisionType(string type) => type switch
     {
-        DecisionTypes.LowStockAlert => "Low Stock",
-        DecisionTypes.ExcessStockAlert => "Excess Stock",
-        DecisionTypes.DeadStockFlag => "Dead Stock",
-        DecisionTypes.TransferSuggestion => "Transfer",
-        DecisionTypes.ReorderSuggestion => "Reorder",
+        DecisionTypes.LowStockAlert => L["MgrDash:DecLowStock"],
+        DecisionTypes.ExcessStockAlert => L["MgrDash:DecExcessStock"],
+        DecisionTypes.DeadStockFlag => L["MgrDash:DecDeadStock"],
+        DecisionTypes.TransferSuggestion => L["MgrDash:DecTransfer"],
+        DecisionTypes.ReorderSuggestion => L["MgrDash:DecReorder"],
+        DecisionTypes.CashierVariance => L["MgrDash:DecCashierVariance"],
         _ => type
     };
 
@@ -987,19 +1040,21 @@
         _ => Color.Default
     };
 
-    private static string FormatTransferStatus(string status) => status switch
+    private string FormatTransferStatus(string status) => status switch
     {
-        "InTransit" => "In Transit",
+        "InTransit" => L["MgrDash:StatusInTransit"],
+        "Approved" => L["MgrDash:StatusApproved"],
+        "Pending" => L["MgrDash:StatusPending"],
         _ => status
     };
 
-    private static string TimeAgo(DateTime utc)
+    private string TimeAgo(DateTime utc)
     {
         var diff = DateTime.UtcNow - utc;
-        if (diff.TotalSeconds < 60) return "just now";
-        if (diff.TotalMinutes < 60) return $"{(int)diff.TotalMinutes}m ago";
-        if (diff.TotalHours < 24) return $"{(int)diff.TotalHours}h ago";
-        if (diff.TotalDays < 2) return "yesterday";
-        return $"{(int)diff.TotalDays}d ago";
+        if (diff.TotalSeconds < 60) return L["MgrDash:JustNow"];
+        if (diff.TotalMinutes < 60) return L["MgrDash:MinutesAgo", (int)diff.TotalMinutes];
+        if (diff.TotalHours < 24) return L["MgrDash:HoursAgo", (int)diff.TotalHours];
+        if (diff.TotalDays < 2) return L["MgrDash:Yesterday"];
+        return L["MgrDash:DaysAgo", (int)diff.TotalDays];
     }
 }

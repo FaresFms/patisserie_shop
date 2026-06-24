@@ -6,6 +6,7 @@
 @using Volo.Abp.DependencyInjection
 @using System.Globalization
 @using Microsoft.Extensions.Localization
+@using Microsoft.JSInterop
 @using patisserie_shop.Localization
 @inherits Volo.Abp.AspNetCore.Components.Web.LeptonXLiteTheme.Themes.LeptonXLite.MainLayout
 @attribute [ExposeServices(typeof(Volo.Abp.AspNetCore.Components.Web.LeptonXLiteTheme.Themes.LeptonXLite.MainLayout))]
@@ -44,6 +45,13 @@
                 @(_isArabic ? "EN" : "AR")
             </SoftButton>
         </SoftTooltip>
+
+        @* ── Cashier last-hour recent-sales panel (host-app component, resolved at
+             runtime like the bell below; self-gates on the Cashier permission) ── *@
+        @if (CurrentUser.IsAuthenticated && _recentSalesPanelType is not null)
+        {
+            <DynamicComponent Type="_recentSalesPanelType" />
+        }
 
         @* ── Decision notification bell (host-app component, resolved at runtime
              because this shared layout cannot reference the Blazor host project) ── *@
@@ -109,6 +117,7 @@
     <SoftDrawer @bind-Open="_drawerOpen"
                Elevation="2"
                Variant="DrawerVariant.Responsive"
+               Anchor="@(_isArabic ? MudBlazor.Anchor.Right : MudBlazor.Anchor.Left)"
                ClipMode="DrawerClipMode.Always">
 
         <SoftDrawerHeader Class="pa-3">
@@ -183,6 +192,11 @@
     private static readonly Type? _notificationBellType =
         Type.GetType("patisserie_shop.Blazor.Components.Layout.NotificationBell, patisserie_shop.Blazor");
 
+    // Same name-resolution trick: the cashier recent-sales panel lives in the host
+    // app, so the shared theme project must not reference it directly.
+    private static readonly Type? _recentSalesPanelType =
+        Type.GetType("patisserie_shop.Blazor.Components.Layout.RecentSalesPanel, patisserie_shop.Blazor");
+
     private MudMenu _userMenu = default!;
     private MudBlazor.MudTheme _theme = MyTheme.Create();
     private bool _drawerOpen = true;
@@ -200,26 +214,35 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender)
+        if (!firstRender)
         {
-            // Restore dark mode preference from localStorage
-            var isDarkModeStr = await JS.InvokeAsync<string>("localStorage.getItem", "ewallet-darkMode");
-            if (bool.TryParse(isDarkModeStr, out var isDarkMode))
+            return;
+        }
+
+        try
+        {
+            // Restore dark mode preference from localStorage.
+            var isDarkModeStr = await JS.InvokeAsync<string?>("localStorage.getItem", "ewallet-darkMode");
+            if (bool.TryParse(isDarkModeStr, out var savedLegacyDarkMode))
             {
-                _isDarkMode = isDarkMode;
+                _isDarkMode = savedLegacyDarkMode;
                 if (_isDarkMode)
                 {
-                    await JS.InvokeVoidAsync("eval", "document.body.classList.add('dark-mode'); document.documentElement.classList.add('dark-mode');");
+                    await JS.InvokeVoidAsync("setLegacyDarkModeClass", true);
                 }
                 StateHasChanged();
             }
 
-            var saved = await JS.InvokeAsync<string>("localStorage.getItem", "warm-theme");
+            var saved = await JS.InvokeAsync<string?>("localStorage.getItem", "warm-theme");
             if (saved == "dark" && !_isDarkMode)
             {
                 _isDarkMode = true;
                 StateHasChanged();
             }
+        }
+        catch (JSDisconnectedException)
+        {
+            // The circuit can be disposed during navigation/auth redirects.
         }
     }
     private void SanitizeMenuUrls(List<ApplicationMenuItem> items)
@@ -254,12 +277,16 @@
     private async Task ToggleDarkMode()
     {
         _isDarkMode = !_isDarkMode;
-        await JS.InvokeVoidAsync("applyDataTheme", _isDarkMode);
-        await JS.InvokeVoidAsync("localStorage.setItem", "ewallet-darkMode", _isDarkMode.ToString().ToLower());
-        await JS.InvokeVoidAsync("eval",
-            _isDarkMode
-                ? "document.body.classList.add('dark-mode'); document.documentElement.classList.add('dark-mode');"
-                : "document.body.classList.remove('dark-mode'); document.documentElement.classList.remove('dark-mode');");
+        try
+        {
+            await JS.InvokeVoidAsync("applyDataTheme", _isDarkMode);
+            await JS.InvokeVoidAsync("localStorage.setItem", "ewallet-darkMode", _isDarkMode.ToString().ToLowerInvariant());
+            await JS.InvokeVoidAsync("setLegacyDarkModeClass", _isDarkMode);
+        }
+        catch (JSDisconnectedException)
+        {
+            // Ignore: the user navigated away while the click was being handled.
+        }
     }
 
     private void Logout() =>

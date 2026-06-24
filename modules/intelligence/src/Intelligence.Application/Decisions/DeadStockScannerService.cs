@@ -3,9 +3,11 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Intelligence.Entities;
+using Intelligence.Localization;
 using Intelligence.Rules;
 using Inventory.BranchInventory;
 using Inventory.Entities;
+using Microsoft.Extensions.Localization;
 using Microsoft.Extensions.Logging;
 using Volo.Abp.DependencyInjection;
 using Volo.Abp.Domain.Repositories;
@@ -31,6 +33,7 @@ public class DeadStockScannerService : ITransientDependency
     private readonly IRepository<AppBranch, Guid> _branchRepository;
     private readonly IGuidGenerator _guidGenerator;
     private readonly IAsyncQueryableExecuter _asyncExecuter;
+    private readonly IStringLocalizer<IntelligenceResource> _localizer;
     private readonly ILogger<DeadStockScannerService> _logger;
 
     public DeadStockScannerService(
@@ -40,6 +43,7 @@ public class DeadStockScannerService : ITransientDependency
         IRepository<AppBranch, Guid> branchRepository,
         IGuidGenerator guidGenerator,
         IAsyncQueryableExecuter asyncExecuter,
+        IStringLocalizer<IntelligenceResource> localizer,
         ILogger<DeadStockScannerService> logger)
     {
         _inventoryRepository = inventoryRepository;
@@ -48,6 +52,7 @@ public class DeadStockScannerService : ITransientDependency
         _branchRepository = branchRepository;
         _guidGenerator = guidGenerator;
         _asyncExecuter = asyncExecuter;
+        _localizer = localizer;
         _logger = logger;
     }
 
@@ -127,9 +132,13 @@ public class DeadStockScannerService : ITransientDependency
                 continue; // already Pending (in the store or earlier in this batch)
             }
 
-            var reasoning =
-                $"Product '{product.Name}' at '{branch.Name}' has not been sold for {daysSinceLastSale} days " +
-                $"(threshold: {thresholdDays} days). Rule '{rule.RuleName}' fired.";
+            var reasoning = _localizer[
+                "DecisionReasoning:DeadStock",
+                product.Name,
+                branch.Name,
+                daysSinceLastSale,
+                thresholdDays,
+                rule.RuleName];
 
             var log = new AppDecisionLog(
                 _guidGenerator.Create(),

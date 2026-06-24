@@ -7,20 +7,21 @@
 @using Size = MudBlazor.Size
 @inherits patisserie_shopComponentBase
 @inject IAdminDashboardAppService AdminDashboardService
+@inject IBranchHealthAppService BranchHealthService
 @inject NavigationManager Nav
 
 <SoftCard Elevation="2" Class="pa-2 page-flat admin-dash">
     <div class="page-head">
         <div>
-            <h1 class="page-title">Admin Dashboard</h1>
+            <h1 class="page-title">@L["AdminDash:Title"]</h1>
             <div class="page-sub">
                 @if (_lastRefresh.HasValue)
                 {
-                    <span>Across all branches · Last updated @_lastRefresh.Value.ToLocalTime().ToString("MMM d, HH:mm")</span>
+                    <span>@L["AdminDash:LastUpdated", _lastRefresh.Value.ToLocalTime().ToString("MMM d, HH:mm", System.Globalization.CultureInfo.CurrentCulture)]</span>
                 }
                 else
                 {
-                    <span>Loading…</span>
+                    <span>@L["AdminDash:Loading"]</span>
                 }
             </div>
         </div>
@@ -28,7 +29,7 @@
             <SoftButton Variant="Variant.Text" Color="Color.Primary"
                         StartIcon="@Icons.Material.Filled.Refresh"
                         OnClick="LoadAsync" Disabled="_loading">
-                @(_loading ? "Refreshing…" : "Refresh")
+                @(_loading ? L["AdminDash:Refreshing"] : L["AdminDash:Refresh"])
             </SoftButton>
         </div>
     </div>
@@ -38,7 +39,7 @@
         @if (_error != null)
         {
             <SoftAlert Severity="Severity.Error" Variant="Variant.Filled" Class="ma-4">
-                <strong>Failed to load dashboard:</strong> @_error
+                <strong>@L["AdminDash:LoadFailed"]</strong> @_error
             </SoftAlert>
         }
         else if (_data == null)
@@ -64,8 +65,8 @@
                     </div>
                     <div class="ad-kpi-body">
                         <div class="ad-kpi-value">@_data.TotalProducts</div>
-                        <div class="ad-kpi-label">Total Products</div>
-                        <div class="ad-kpi-sub">across @_data.TotalBranches branch@(_data.TotalBranches == 1 ? "" : "es")</div>
+                        <div class="ad-kpi-label">@L["AdminDash:TotalProducts"]</div>
+                        <div class="ad-kpi-sub">@(_data.TotalBranches == 1 ? L["AdminDash:AcrossBranch", _data.TotalBranches] : L["AdminDash:AcrossBranches", _data.TotalBranches])</div>
                     </div>
                 </div>
 
@@ -76,10 +77,10 @@
                     </div>
                     <div class="ad-kpi-body">
                         <div class="ad-kpi-value">@_data.PendingDecisions</div>
-                        <div class="ad-kpi-label">Pending Decisions</div>
+                        <div class="ad-kpi-label">@L["AdminDash:PendingDecisions"]</div>
                         <div class="ad-kpi-sub">
-                            @if (_data.PendingDecisions == 0) { <span>all clear</span> }
-                            else { <span>need attention</span> }
+                            @if (_data.PendingDecisions == 0) { <span>@L["AdminDash:AllClearShort"]</span> }
+                            else { <span>@L["AdminDash:NeedAttention"]</span> }
                         </div>
                     </div>
                 </div>
@@ -90,8 +91,8 @@
                     </div>
                     <div class="ad-kpi-body">
                         <div class="ad-kpi-value">@_data.LowStockProductCount</div>
-                        <div class="ad-kpi-label">Low Stock Products</div>
-                        <div class="ad-kpi-sub">below threshold</div>
+                        <div class="ad-kpi-label">@L["AdminDash:LowStockProducts"]</div>
+                        <div class="ad-kpi-sub">@L["AdminDash:BelowThreshold"]</div>
                     </div>
                 </div>
 
@@ -112,14 +113,14 @@
                     </div>
                     <div class="ad-kpi-body">
                         <div class="ad-kpi-value">@FormatMoney(_data.TodaySalesTotal)</div>
-                        <div class="ad-kpi-label">Today's Sales</div>
+                        <div class="ad-kpi-label">@L["AdminDash:TodaysSales"]</div>
                         <div class="ad-kpi-sub">
-                            @_data.TodaySalesCount sale@(_data.TodaySalesCount == 1 ? "" : "s")
+                            @(_data.TodaySalesCount == 1 ? L["AdminDash:SaleCount", _data.TodaySalesCount] : L["AdminDash:SalesCount", _data.TodaySalesCount])
                             @if (_data.YesterdaySalesTotal > 0)
                             {
                                 <span> · </span>
                                 <span class="@(TodayDelta >= 0 ? "ad-delta-up" : "ad-delta-down")">
-                                    @(TodayDelta >= 0 ? "+" : "")@TodayDelta.ToString("0")% vs yesterday
+                                    @L["AdminDash:VsYesterday", (TodayDelta >= 0 ? "+" : "") + TodayDelta.ToString("0")]
                                 </span>
                             }
                         </div>
@@ -131,18 +132,18 @@
                         <SoftIcon Icon="@Icons.Material.Filled.LocalShipping" />
                     </div>
                     <div class="ad-kpi-body">
-                        <div class="ad-kpi-label">PO Pipeline</div>
+                        <div class="ad-kpi-label">@L["AdminDash:POPipeline"]</div>
                         <div class="ad-pipeline">
                             <span class="ad-pipe-dot ad-pipe-draft"></span>
-                            <span class="ad-pipe-num">@_data.PurchaseOrderPipeline.DraftCount</span><span class="ad-pipe-name">Draft</span>
+                            <span class="ad-pipe-num">@_data.PurchaseOrderPipeline.DraftCount</span><span class="ad-pipe-name">@L["AdminDash:Draft"]</span>
 
                             <span class="ad-pipe-dot ad-pipe-approved"></span>
-                            <span class="ad-pipe-num">@_data.PurchaseOrderPipeline.ApprovedCount</span><span class="ad-pipe-name">Approved</span>
+                            <span class="ad-pipe-num">@_data.PurchaseOrderPipeline.ApprovedCount</span><span class="ad-pipe-name">@L["AdminDash:Approved"]</span>
 
                             <span class="ad-pipe-dot ad-pipe-partial"></span>
-                            <span class="ad-pipe-num">@_data.PurchaseOrderPipeline.PartialReceivedCount</span><span class="ad-pipe-name">Receiving</span>
+                            <span class="ad-pipe-num">@_data.PurchaseOrderPipeline.PartialReceivedCount</span><span class="ad-pipe-name">@L["AdminDash:Receiving"]</span>
                         </div>
-                        <div class="ad-kpi-sub">@_data.PurchaseOrderPipeline.SubmittedCount submitted · @_data.PurchaseOrderPipeline.ReceivedCount received</div>
+                        <div class="ad-kpi-sub">@L["AdminDash:SubmittedReceived", _data.PurchaseOrderPipeline.SubmittedCount, _data.PurchaseOrderPipeline.ReceivedCount]</div>
                     </div>
                 </div>
             </div>
@@ -153,8 +154,8 @@
                     <section class="ad-section">
                         <header class="ad-section-head">
                             <div>
-                                <h2 class="ad-section-title">Sales — Last 7 Days</h2>
-                                <div class="ad-section-sub">@FormatMoney(_data.WeekSalesTotal) total this week</div>
+                                <h2 class="ad-section-title">@L["AdminDash:SalesLast7Days"]</h2>
+                                <div class="ad-section-sub">@L["AdminDash:TotalThisWeek", FormatMoney(_data.WeekSalesTotal)]</div>
                             </div>
                         </header>
 
@@ -162,9 +163,9 @@
                             <ApexChart TItem="DailySalesDto" @key="_data" Options="_salesChartOptions" Height="260">
                                 <ApexPointSeries TItem="DailySalesDto"
                                                  Items="_data.SalesLast7Days"
-                                                 Name="Sales"
+                                                 Name="@L["AdminDash:SeriesSales"]"
                                                  SeriesType="SeriesType.Area"
-                                                 XValue='@(d => d.Date.ToString("ddd"))'
+                                                 XValue='@(d => d.Date.ToString("ddd", System.Globalization.CultureInfo.CurrentCulture))'
                                                  YValue="@(d => d.TotalAmount)" />
                             </ApexChart>
                         </div>
@@ -173,8 +174,8 @@
                     <section class="ad-section">
                         <header class="ad-section-head">
                             <div>
-                                <h2 class="ad-section-title">Top Selling Products</h2>
-                                <div class="ad-section-sub">Last 7 days</div>
+                                <h2 class="ad-section-title">@L["AdminDash:TopSellingProducts"]</h2>
+                                <div class="ad-section-sub">@L["AdminDash:Last7Days"]</div>
                             </div>
                         </header>
 
@@ -182,7 +183,7 @@
                         {
                             <div class="ad-empty">
                                 <SoftIcon Icon="@Icons.Material.Outlined.Inbox" />
-                                <span>No sales recorded in the last 7 days.</span>
+                                <span>@L["AdminDash:NoSales7Days"]</span>
                             </div>
                         }
                         else
@@ -191,7 +192,7 @@
                                 <ApexChart TItem="TopProductDto" @key="_data" Options="_topProductsOptions" Height="280">
                                     <ApexPointSeries TItem="TopProductDto"
                                                      Items="_data.TopSellingProducts.Take(5).ToList()"
-                                                     Name="Qty Sold"
+                                                     Name="@L["AdminDash:SeriesQtySold"]"
                                                      SeriesType="SeriesType.Bar"
                                                      XValue="@(p => p.ProductName)"
                                                      YValue="@(p => p.TotalQuantitySold)" />
@@ -205,17 +206,17 @@
                     <section class="ad-section">
                         <header class="ad-section-head">
                             <div>
-                                <h2 class="ad-section-title">Recent Decisions</h2>
-                                <div class="ad-section-sub">Pending items needing attention</div>
+                                <h2 class="ad-section-title">@L["AdminDash:RecentDecisions"]</h2>
+                                <div class="ad-section-sub">@L["AdminDash:PendingItemsAttention"]</div>
                             </div>
-                            <a class="ad-section-link" href="/intelligence/decision-log">View all →</a>
+                            <a class="ad-section-link" href="/intelligence/decision-log">@L["AdminDash:ViewAll"]</a>
                         </header>
 
                         @if (_data.RecentDecisions.Count == 0)
                         {
                             <div class="ad-empty ad-empty--success">
                                 <SoftIcon Icon="@Icons.Material.Filled.CheckCircle" />
-                                <span>All clear — no pending decisions.</span>
+                                <span>@L["AdminDash:AllClearNoPending"]</span>
                             </div>
                         }
                         else
@@ -252,8 +253,8 @@
                     <section class="ad-section">
                         <header class="ad-section-head">
                             <div>
-                                <h2 class="ad-section-title">Recent Activity</h2>
-                                <div class="ad-section-sub">Last @Math.Min(_data.RecentMovements.Count, 8) movements</div>
+                                <h2 class="ad-section-title">@L["AdminDash:RecentActivity"]</h2>
+                                <div class="ad-section-sub">@L["AdminDash:LastMovements", Math.Min(_data.RecentMovements.Count, 8)]</div>
                             </div>
                         </header>
 
@@ -261,7 +262,7 @@
                         {
                             <div class="ad-empty">
                                 <SoftIcon Icon="@Icons.Material.Outlined.Inbox" />
-                                <span>No recent stock activity.</span>
+                                <span>@L["AdminDash:NoRecentActivity"]</span>
                             </div>
                         }
                         else
@@ -297,8 +298,8 @@
             <section class="ad-section">
                 <header class="ad-section-head">
                     <div>
-                        <h2 class="ad-section-title">Branch Performance</h2>
-                        <div class="ad-section-sub">Sorted by urgency · click a card to drill in</div>
+                        <h2 class="ad-section-title">@L["AdminDash:BranchPerformance"]</h2>
+                        <div class="ad-section-sub">@L["AdminDash:SortedByUrgency"]</div>
                     </div>
                 </header>
 
@@ -306,7 +307,7 @@
                 {
                     <div class="ad-empty">
                         <SoftIcon Icon="@Icons.Material.Outlined.Store" />
-                        <span>No branches configured yet.</span>
+                        <span>@L["AdminDash:NoBranches"]</span>
                     </div>
                 }
                 else
@@ -336,26 +337,114 @@
                                     <div class="ad-bb-hi"  style="width:@(excessPct.ToString("0.##"))%"></div>
                                 </div>
                                 <div class="ad-branch-bar-legend">
-                                    <span><span class="ad-dot ad-dot-low"></span>@b.LowStockItems low</span>
-                                    <span><span class="ad-dot ad-dot-ok"></span>@b.HealthyItems healthy</span>
-                                    <span><span class="ad-dot ad-dot-hi"></span>@b.ExcessItems excess</span>
+                                    <span><span class="ad-dot ad-dot-low"></span>@L["AdminDash:LegendLow", b.LowStockItems]</span>
+                                    <span><span class="ad-dot ad-dot-ok"></span>@L["AdminDash:LegendHealthy", b.HealthyItems]</span>
+                                    <span><span class="ad-dot ad-dot-hi"></span>@L["AdminDash:LegendExcess", b.ExcessItems]</span>
                                 </div>
 
                                 <div class="ad-branch-stats">
                                     <div>
-                                        <div class="ad-stat-label">Today</div>
+                                        <div class="ad-stat-label">@L["AdminDash:StatToday"]</div>
                                         <div class="ad-stat-value">@FormatMoney(b.SalesToday)</div>
                                     </div>
                                     <div>
-                                        <div class="ad-stat-label">This Week</div>
+                                        <div class="ad-stat-label">@L["AdminDash:StatThisWeek"]</div>
                                         <div class="ad-stat-value">@FormatMoney(b.SalesThisWeek)</div>
                                     </div>
                                     <div>
-                                        <div class="ad-stat-label">Stock Value</div>
+                                        <div class="ad-stat-label">@L["AdminDash:StatStockValue"]</div>
                                         <div class="ad-stat-value">@FormatMoney(b.TotalStockValue)</div>
                                     </div>
                                 </div>
                             </div>
+                        }
+                    </div>
+                }
+            </section>
+
+            @* ───────── ROW 4 — Branch Health League Table ───────── *@
+            <section class="ad-section bh-section">
+                <header class="ad-section-head">
+                    <div>
+                        <h2 class="ad-section-title">@L["BranchHealth:Title"]</h2>
+                        <div class="ad-section-sub">@L["BranchHealth:Subtitle"]</div>
+                    </div>
+                </header>
+
+                @if (_health == null)
+                {
+                    <div class="ad-empty">
+                        <SoftProgressCircular Indeterminate="true" Size="Size.Small" />
+                        <span>@L["AdminDash:Loading"]</span>
+                    </div>
+                }
+                else if (_health.Count == 0)
+                {
+                    <div class="ad-empty">
+                        <SoftIcon Icon="@Icons.Material.Outlined.Store" />
+                        <span>@L["BranchHealth:Empty"]</span>
+                    </div>
+                }
+                else
+                {
+                    <div class="bh-table">
+                        <div class="bh-row bh-head-row">
+                            <span class="bh-rank">@L["BranchHealth:Rank"]</span>
+                            <span class="bh-name">@L["BranchHealth:Branch"]</span>
+                            <span class="bh-score-col">@L["BranchHealth:Score"]</span>
+                            <span class="bh-comps-col">@L["BranchHealth:Breakdown"]</span>
+                        </div>
+
+                        @{ var rank = 0; }
+                        @foreach (var b in _health)
+                        {
+                            rank++;
+                            var expanded = _expandedBranch == b.BranchId;
+                            <div class="bh-row bh-data-row @(expanded ? "bh-expanded" : "")"
+                                 @onclick="() => ToggleBranch(b.BranchId)">
+                                <span class="bh-rank">@rank</span>
+                                <span class="bh-name">
+                                    <SoftIcon Icon="@Icons.Material.Outlined.Store" />
+                                    @b.BranchName
+                                </span>
+                                <span class="bh-score-col">
+                                    <span class="bh-grade bh-grade-@b.Grade.ToLowerInvariant()">@b.Grade</span>
+                                    <span class="bh-score-num">@b.Score</span>
+                                    <span class="bh-bar">
+                                        <span class="bh-bar-fill bh-fill-@b.Grade.ToLowerInvariant()"
+                                              style="width:@(b.Score)%"></span>
+                                    </span>
+                                </span>
+                                <span class="bh-comps-col">
+                                    @foreach (var c in b.Components)
+                                    {
+                                        <span class="bh-chip" title="@c.Detail">
+                                            <span class="bh-chip-name">@ComponentName(c.Name)</span>
+                                            <span class="bh-chip-pts">@c.Points/@c.MaxPoints</span>
+                                        </span>
+                                    }
+                                </span>
+                            </div>
+
+                            @if (expanded)
+                            {
+                                <div class="bh-detail-row">
+                                    @foreach (var c in b.Components)
+                                    {
+                                        var ratio = c.MaxPoints > 0 ? (double)c.Points / c.MaxPoints * 100.0 : 0;
+                                        <div class="bh-detail-item">
+                                            <div class="bh-detail-head">
+                                                <span class="bh-detail-name">@ComponentName(c.Name)</span>
+                                                <span class="bh-detail-pts">@c.Points / @c.MaxPoints</span>
+                                            </div>
+                                            <div class="bh-detail-bar">
+                                                <span class="bh-detail-fill" style="width:@(ratio.ToString("0.##"))%"></span>
+                                            </div>
+                                            <div class="bh-detail-text">@c.Detail</div>
+                                        </div>
+                                    }
+                                </div>
+                            }
                         }
                     </div>
                 }
@@ -669,10 +758,171 @@
         font-variant-numeric: tabular-nums;
         margin-top: 2px;
     }
+
+    /* ── Branch Health league table ── */
+    .bh-section { margin-top: 18px; }
+    .bh-table { display: flex; flex-direction: column; }
+    .bh-row {
+        display: grid;
+        grid-template-columns: 36px minmax(120px, 1.1fr) minmax(150px, 0.9fr) minmax(0, 2.4fr);
+        align-items: center;
+        gap: 12px;
+        padding: 10px 6px;
+        border-bottom: 1px solid var(--bd-1);
+    }
+    .bh-head-row {
+        font-size: 10.5px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: .05em;
+        color: var(--fg-3);
+        border-bottom: 1px solid var(--bd-2);
+    }
+    .bh-data-row { cursor: pointer; transition: background .12s; }
+    .bh-data-row:hover { background: var(--hover); }
+    .bh-expanded { background: var(--accent-soft); }
+
+    .bh-rank {
+        font-variant-numeric: tabular-nums;
+        font-weight: 600;
+        color: var(--fg-3);
+        text-align: center;
+    }
+    .bh-name {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        font-family: var(--font-serif);
+        font-size: 15px;
+        font-weight: 600;
+        color: var(--fg-1);
+        min-width: 0;
+    }
+    .bh-name .mud-icon-root { color: var(--accent); font-size: 17px; flex-shrink: 0; }
+
+    .bh-score-col { display: inline-flex; align-items: center; gap: 8px; }
+    .bh-grade {
+        width: 22px; height: 22px;
+        flex-shrink: 0;
+        border-radius: var(--r-sm);
+        display: inline-flex; align-items: center; justify-content: center;
+        font-size: 12px; font-weight: 700; color: #fff;
+    }
+    .bh-grade-a { background: #6b8e4e; }
+    .bh-grade-b { background: #4a7da8; }
+    .bh-grade-c { background: #c89c4f; }
+    .bh-grade-d { background: #b3543a; }
+    .bh-score-num {
+        font-variant-numeric: tabular-nums;
+        font-weight: 700;
+        font-size: 15px;
+        color: var(--fg-1);
+        width: 26px;
+        text-align: right;
+    }
+    .bh-bar {
+        flex: 1;
+        min-width: 40px;
+        height: 6px;
+        border-radius: 3px;
+        background: var(--hover);
+        overflow: hidden;
+    }
+    .bh-bar-fill { display: block; height: 100%; }
+    .bh-fill-a { background: #6b8e4e; }
+    .bh-fill-b { background: #4a7da8; }
+    .bh-fill-c { background: #c89c4f; }
+    .bh-fill-d { background: #b3543a; }
+
+    .bh-comps-col { display: flex; flex-wrap: wrap; gap: 5px; }
+    .bh-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        font-size: 11px;
+        background: var(--bg-2);
+        border: 1px solid var(--bd-1);
+        border-radius: 999px;
+        padding: 2px 9px;
+        white-space: nowrap;
+    }
+    .bh-chip-name { color: var(--fg-3); }
+    .bh-chip-pts { color: var(--fg-1); font-weight: 600; font-variant-numeric: tabular-nums; }
+
+    .bh-detail-row {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+        gap: 12px;
+        padding: 12px 8px 16px;
+        background: var(--accent-soft);
+        border-bottom: 1px solid var(--bd-1);
+    }
+    .bh-detail-item {
+        background: var(--surface);
+        border: 1px solid var(--bd-1);
+        border-radius: var(--r-sm);
+        padding: 10px 12px;
+    }
+    .bh-detail-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+    .bh-detail-name {
+        font-size: 11.5px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: .04em;
+        color: var(--fg-2);
+    }
+    .bh-detail-pts {
+        font-variant-numeric: tabular-nums;
+        font-weight: 700;
+        font-size: 13px;
+        color: var(--fg-1);
+    }
+    .bh-detail-bar {
+        height: 5px;
+        border-radius: 3px;
+        background: var(--hover);
+        overflow: hidden;
+        margin: 7px 0;
+    }
+    .bh-detail-fill { display: block; height: 100%; background: var(--accent); }
+    .bh-detail-text { font-size: 12px; color: var(--fg-2); line-height: 1.4; }
+
+    html[dir="rtl"] .admin-dash {
+        direction: rtl;
+        text-align: right;
+    }
+
+    html[dir="rtl"] .admin-dash .page-head,
+    html[dir="rtl"] .admin-dash .ad-section-head,
+    html[dir="rtl"] .admin-dash .ad-branch-head,
+    html[dir="rtl"] .admin-dash .ad-dec-head,
+    html[dir="rtl"] .admin-dash .ad-tl-item,
+    html[dir="rtl"] .admin-dash .ad-pipeline,
+    html[dir="rtl"] .admin-dash .ad-dec-meta,
+    html[dir="rtl"] .admin-dash .ad-branch-bar-legend {
+        direction: rtl;
+    }
+
+    html[dir="rtl"] .admin-dash .ad-decision-card {
+        border-left: 1px solid var(--bd-1);
+        border-right: 3px solid var(--accent);
+    }
+
+    html[dir="rtl"] .admin-dash .ad-dec-lowstockalert { border-right-color: #c89c4f; }
+    html[dir="rtl"] .admin-dash .ad-dec-excessstockalert { border-right-color: #4a7da8; }
+    html[dir="rtl"] .admin-dash .ad-dec-deadstockflag { border-right-color: #b3543a; }
+    html[dir="rtl"] .admin-dash .ad-dec-transfersuggestion { border-right-color: #4a8e8e; }
+
+    html[dir="rtl"] .admin-dash .ad-tl-time {
+        margin-left: 0;
+        margin-right: auto;
+    }
 </style>
 
 @code {
     private AdminDashboardDto? _data;
+    private List<BranchHealthDto>? _health;
+    private Guid? _expandedBranch;
     private bool _loading;
     private DateTime? _lastRefresh;
     private string? _error;
@@ -775,6 +1025,7 @@
         try
         {
             _data = await AdminDashboardService.GetAdminDashboardAsync();
+            _health = await BranchHealthService.GetBranchHealthAsync();
             _lastRefresh = DateTime.UtcNow;
         }
         catch (Exception ex)
@@ -789,7 +1040,12 @@
         }
     }
 
-    private static string FormatMoney(decimal v) => v.ToString("C0", System.Globalization.CultureInfo.GetCultureInfo("en-US"));
+    private static string FormatMoney(decimal v) => v.ToString("C0", System.Globalization.CultureInfo.CurrentCulture);
+
+    private void ToggleBranch(Guid branchId)
+        => _expandedBranch = _expandedBranch == branchId ? null : branchId;
+
+    private string ComponentName(string key) => L[$"BranchHealth:Comp:{key}"].Value;
 
     private static string Truncate(string s, int max)
         => string.IsNullOrEmpty(s) || s.Length <= max ? s : s[..max].TrimEnd() + "…";
@@ -801,36 +1057,38 @@
         DecisionTypes.DeadStockFlag => Color.Error,
         DecisionTypes.TransferSuggestion => Color.Tertiary,
         DecisionTypes.ReorderSuggestion => Color.Primary,
+        DecisionTypes.CashierVariance => Color.Error,
         _ => Color.Default
     };
 
-    private static string FormatDecisionType(string type) => type switch
+    private string FormatDecisionType(string type) => type switch
     {
-        DecisionTypes.LowStockAlert => "Low Stock",
-        DecisionTypes.ExcessStockAlert => "Excess Stock",
-        DecisionTypes.DeadStockFlag => "Dead Stock",
-        DecisionTypes.TransferSuggestion => "Transfer",
-        DecisionTypes.ReorderSuggestion => "Reorder",
+        DecisionTypes.LowStockAlert => L["AdminDash:DecTypeLowStock"].Value,
+        DecisionTypes.ExcessStockAlert => L["AdminDash:DecTypeExcessStock"].Value,
+        DecisionTypes.DeadStockFlag => L["AdminDash:DecTypeDeadStock"].Value,
+        DecisionTypes.TransferSuggestion => L["AdminDash:DecTypeTransfer"].Value,
+        DecisionTypes.ReorderSuggestion => L["AdminDash:DecTypeReorder"].Value,
+        DecisionTypes.CashierVariance => L["AdminDash:DecTypeCashierVariance"].Value,
         _ => type
     };
 
-    private static string FormatMovementType(string type) => type switch
+    private string FormatMovementType(string type) => type switch
     {
-        "Purchase" => "Purchase",
-        "Sale" => "Sale",
-        "TransferIn" => "Transfer In",
-        "TransferOut" => "Transfer Out",
-        "ManualAdjustment" => "Adjustment",
+        "Purchase" => L["AdminDash:MoveTypePurchase"].Value,
+        "Sale" => L["AdminDash:MoveTypeSale"].Value,
+        "TransferIn" => L["AdminDash:MoveTypeTransferIn"].Value,
+        "TransferOut" => L["AdminDash:MoveTypeTransferOut"].Value,
+        "ManualAdjustment" => L["AdminDash:MoveTypeAdjustment"].Value,
         _ => type
     };
 
-    private static string TimeAgo(DateTime utc)
+    private string TimeAgo(DateTime utc)
     {
         var diff = DateTime.UtcNow - utc;
-        if (diff.TotalSeconds < 60) return "just now";
-        if (diff.TotalMinutes < 60) return $"{(int)diff.TotalMinutes}m ago";
-        if (diff.TotalHours < 24) return $"{(int)diff.TotalHours}h ago";
-        if (diff.TotalDays < 2) return "yesterday";
-        return $"{(int)diff.TotalDays}d ago";
+        if (diff.TotalSeconds < 60) return L["AdminDash:JustNow"].Value;
+        if (diff.TotalMinutes < 60) return L["AdminDash:MinutesAgo", (int)diff.TotalMinutes].Value;
+        if (diff.TotalHours < 24) return L["AdminDash:HoursAgo", (int)diff.TotalHours].Value;
+        if (diff.TotalDays < 2) return L["AdminDash:Yesterday"].Value;
+        return L["AdminDash:DaysAgo", (int)diff.TotalDays].Value;
     }
 }

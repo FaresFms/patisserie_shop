@@ -75,7 +75,7 @@ erDiagram
         guid Id PK
         guid BranchId FK "logical, indexed"
         guid ProductId FK "logical, indexed"
-        string MovementType "Purchase|Sale|TransferIn|TransferOut|ManualAdjustment"
+        string MovementType "Purchase|Sale|TransferIn|TransferOut|ManualAdjustment|WriteOff"
         int Quantity "signed delta"
         int QuantityBefore
         int QuantityAfter
@@ -158,7 +158,7 @@ erDiagram
     IntelligenceInventoryRules {
         guid Id PK
         string RuleName
-        string RuleType "LowStock|ExcessStock|DeadStock|TransferSuggestion|DaysOfCover|ExpiringSoon"
+        string RuleType "LowStock|ExcessStock|DeadStock|TransferSuggestion|DaysOfCover|ExpiringSoon|ExpiredStock"
         guid ProductId FK "logical, nullable = all products"
         guid BranchId FK "logical, nullable = all branches"
         int ThresholdValue "nullable"
@@ -175,7 +175,7 @@ erDiagram
         guid BranchId FK "logical, nullable, indexed"
         guid SourceBranchId "nullable, transfers"
         guid TargetBranchId "nullable, transfers"
-        string DecisionType "LowStockAlert|ExcessStockAlert|DeadStockFlag|TransferSuggestion|ReorderSuggestion|StockoutRisk|ExpiryAlert"
+        string DecisionType "LowStockAlert|ExcessStockAlert|DeadStockFlag|TransferSuggestion|ReorderSuggestion|StockoutRisk|ExpiryAlert|WasteWriteOff"
         string Reasoning "human-readable evidence"
         string SuggestedAction
         int StockAtEvaluation "nullable snapshot"
@@ -183,7 +183,7 @@ erDiagram
         string Status "Pending|Acknowledged|Dismissed|Executed"
         datetime AcknowledgedAt "nullable"
         guid AcknowledgedByUserId "nullable"
-        string ExecutedActionType "PurchaseOrder|StockTransfer, nullable"
+        string ExecutedActionType "PurchaseOrder|StockTransfer|StockAdjustment, nullable"
         guid ExecutedActionId "nullable, created document"
         string Outcome "Resolved|Unresolved|StockedOut, write-once"
         datetime OutcomeEvaluatedAt "nullable"
@@ -198,6 +198,13 @@ erDiagram
         int QuantitySold30
         decimal Revenue30
         string AbcClass "A|B|C"
+        decimal WeekdayIndexSun "numeric(5,2), default 1.0"
+        decimal WeekdayIndexMon "numeric(5,2), default 1.0"
+        decimal WeekdayIndexTue "numeric(5,2), default 1.0"
+        decimal WeekdayIndexWed "numeric(5,2), default 1.0"
+        decimal WeekdayIndexThu "numeric(5,2), default 1.0"
+        decimal WeekdayIndexFri "numeric(5,2), default 1.0"
+        decimal WeekdayIndexSat "numeric(5,2), default 1.0"
         datetime ComputedAtUtc "upserted by VelocityScanner"
     }
 
@@ -249,7 +256,11 @@ with it. Every other entity is its own aggregate root with its own repository.
   `StockAtEvaluation`, …) are fixed at construction.
 - **`IntelligenceProductVelocities`** (`AppProductVelocity`): not an audit ledger but
   derived data — no audit fields, no soft delete; rows are upserted wholesale by the
-  velocity scanner and unique per `(ProductId, BranchId)`.
+  velocity scanner and unique per `(ProductId, BranchId)`. The seven
+  `WeekdayIndex{Sun…Sat}` columns (`numeric(5,2)`, added by migration
+  `AddWeekdayDemandIndices`, backfilled to `1.0` = flat / no weekday pattern) store the
+  per-weekday demand multipliers the forecast walk consumes (see
+  [architecture.md §6](architecture.md) — weekday-indexed forecasting).
 - Everything else is soft-deleted (`FullAuditedAggregateRoot`) except
   `AppBranchInventory` and `AppStockBatch` (`AuditedAggregateRoot` — hard rows, no soft
   delete; the branch-inventory row additionally carries a `ConcurrencyStamp` used as an
@@ -267,3 +278,29 @@ with it. Every other entity is its own aggregate root with its own repository.
 | `OperationsSales` | unique `InvoiceNumber`; `BranchId`; `SaleDate` | sales history / velocity windows |
 | `IntelligenceDecisionLogs` | `Status`, `DecisionType`, `ProductId`, `RuleId`, `BranchId` | pending-dedup checks and decision-log filters |
 | `IntelligenceProductVelocities` | unique `(ProductId, BranchId)` | upsert target for the velocity scanner |
+
+## Migration History
+
+Migrations live in `src/patisserie_shop.EntityFrameworkCore/Migrations/`, applied by
+`patisserie_shop.DbMigrator`:
+
+| Migration | What it adds |
+|---|---|
+| `Initial` | ABP framework tables |
+| `InitialDomainSchema` | all three modules' business tables |
+| `AddDecisionLogScopeColumns` | `SourceBranchId` / `TargetBranchId` on decision logs |
+| `AddStockMovementQuantityColumns` | `QuantityBefore` / `QuantityAfter` on movements |
+| `AddDecisionLogExecutedAction` | `ExecutedActionType` / `ExecutedActionId` / outcome columns |
+| `AddPhase2DemandIntelligence` | `IntelligenceProductVelocities` table |
+| `AddPhase3BatchExpiryTracking` | `InventoryStockBatches` table |
+| `AddWeekdayDemandIndices` | the seven `WeekdayIndex{Sun…Sat}` columns on `IntelligenceProductVelocities` |
+
+**No new tables were added after `AddPhase3BatchExpiryTracking`.** The Phase-5 features
+introduce no schema other than the seven weekday-index columns above. In particular,
+**`WriteOff` (stock movement), `ExpiredStock` (rule type) and `WasteWriteOff` (decision
+type) are all new *string values* in existing columns** — `InventoryStockMovements.MovementType`,
+`IntelligenceInventoryRules.RuleType` and `IntelligenceDecisionLogs.DecisionType`
+respectively — **not new tables**. Likewise, supplier scorecards, branch health and the
+reorder calendar are computed read-models served by app services over the existing
+tables (PO history, decision logs, write-off movements, stock batches, velocity rows);
+none of them are persisted.

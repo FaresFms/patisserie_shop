@@ -28,6 +28,20 @@ public static class DecisionTypes
     /// </summary>
     public const string WasteWriteOff = "WasteWriteOff";
 
+    /// <summary>
+    /// A MANUAL low-stock report raised by a cashier from the POS — not a rule-engine
+    /// decision. It carries the sentinel rule id (<see cref="Intelligence.IntelligenceConstants.CashierReportRuleId"/>)
+    /// because AppDecisionLog.RuleId is non-null. Informational: the manager acknowledges
+    /// or dismisses it; there is no corrective document to execute.
+    /// </summary>
+    public const string StockReport = "StockReport";
+
+    /// <summary>
+    /// Raised when a cashier closes a shift and counted cash does not match expected cash.
+    /// Informational: the branch manager/admin acknowledges or dismisses it.
+    /// </summary>
+    public const string CashierVariance = "CashierVariance";
+
     public static readonly string[] All =
     {
         LowStockAlert,
@@ -37,7 +51,9 @@ public static class DecisionTypes
         ReorderSuggestion,
         StockoutRisk,
         ExpiryAlert,
-        WasteWriteOff
+        WasteWriteOff,
+        StockReport,
+        CashierVariance
     };
 
     public static bool IsValid(string? decisionType)

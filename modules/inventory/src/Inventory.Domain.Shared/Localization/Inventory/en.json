@@ -191,6 +191,20 @@
     "Inventory:StockBatches:InvalidQuantity": "A stock batch must be received with a positive quantity.",
     "Inventory:StockBatches:InvalidConsumeQuantity": "Cannot consume {Quantity} from this batch — {QuantityRemaining} remaining.",
     "Inventory:StockBatches:InvalidSourceType": "Invalid stock batch source type '{SourceType}'.",
-    "Inventory:Suppliers:InvalidLeadTime": "Lead time must be between 0 and 365 days (got {LeadTimeDays})."
+    "Inventory:Suppliers:InvalidLeadTime": "Lead time must be between 0 and 365 days (got {LeadTimeDays}).",
+    "Scorecard:RangeNote": "Delivery metrics: last 90 days",
+    "Scorecard:Delivery": "Delivery",
+    "Scorecard:Grade": "Grade",
+    "Scorecard:OnTime": "On-time",
+    "Scorecard:Fill": "Fill",
+    "Scorecard:MeasuredLead": "Meas. lead",
+    "Scorecard:NoHistory": "No received orders",
+    "Scorecard:Dash": "—",
+    "Scorecard:Grade:NA": "N/A",
+    "Scorecard:Grade:A": "A — Excellent",
+    "Scorecard:Grade:B": "B — Good",
+    "Scorecard:Grade:C": "C — Fair",
+    "Scorecard:Grade:D": "D — Poor",
+    "Scorecard:Tooltip": "Orders: {0} ({1} fully received) · On-time {2} · Fill {3} · Avg delay {4} · Measured lead {5}"
   }
 }

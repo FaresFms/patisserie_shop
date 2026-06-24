@@ -17,7 +17,7 @@
 @inject IStringLocalizer<InventoryResource> InvL
 
 @{
-    PageLayout.Title = "Inventory Dashboard";
+    PageLayout.Title = L["InvDash:Title"].Value;
 }
 
 <div class="dashboard-root">
@@ -27,15 +27,15 @@
         <div class="dash-header-left">
             <MudIcon Icon="@Icons.Material.Filled.Dashboard" Class="dash-header-icon" />
             <div>
-                <MudText Typo="Typo.h5" Class="dash-title">Inventory Dashboard</MudText>
+                <MudText Typo="Typo.h5" Class="dash-title">@L["InvDash:Title"]</MudText>
                 <MudText Typo="Typo.body2" Class="dash-subtitle">
                     @if (_lastRefreshed.HasValue)
                     {
-                        <span>Last updated @_lastRefreshed.Value.ToString("HH:mm:ss")</span>
+                        <span>@L["InvDash:LastUpdated", _lastRefreshed.Value.ToString("HH:mm:ss", System.Globalization.CultureInfo.CurrentCulture)]</span>
                     }
                     else
                     {
-                        <span>Loading data…</span>
+                        <span>@L["InvDash:LoadingData"]</span>
                     }
                 </MudText>
             </div>
@@ -46,7 +46,7 @@
                    OnClick="RefreshAsync"
                    Disabled="_loading"
                    Class="dash-refresh-btn">
-            @(_loading ? "Refreshing…" : "Refresh")
+            @(_loading ? L["InvDash:Refreshing"] : L["InvDash:Refresh"])
         </MudButton>
     </div>
 
@@ -54,7 +54,7 @@
     {
         <div class="dash-loading-wrap">
             <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Large" />
-            <MudText Typo="Typo.body1" Class="mt-4" Style="opacity:.6">Loading dashboard…</MudText>
+            <MudText Typo="Typo.body1" Class="mt-4" Style="opacity:.6">@L["InvDash:LoadingDashboard"]</MudText>
         </div>
     }
     else if (_data != null)
@@ -65,8 +65,8 @@
                 <div class="kpi-icon-wrap"><MudIcon Icon="@Icons.Material.Filled.Inventory2" /></div>
                 <div class="kpi-body">
                     <div class="kpi-value">@_data.TotalProducts</div>
-                    <div class="kpi-label">Total Products</div>
-                    <div class="kpi-sub">@_data.ActiveProducts active</div>
+                    <div class="kpi-label">@L["InvDash:TotalProducts"]</div>
+                    <div class="kpi-sub">@L["InvDash:CountActive", _data.ActiveProducts]</div>
                 </div>
             </SoftCard>
 
@@ -74,8 +74,8 @@
                 <div class="kpi-icon-wrap"><MudIcon Icon="@Icons.Material.Filled.Store" /></div>
                 <div class="kpi-body">
                     <div class="kpi-value">@_data.TotalBranches</div>
-                    <div class="kpi-label">Branches</div>
-                    <div class="kpi-sub">@_data.ActiveBranches active</div>
+                    <div class="kpi-label">@L["InvDash:Branches"]</div>
+                    <div class="kpi-sub">@L["InvDash:CountActive", _data.ActiveBranches]</div>
                 </div>
             </SoftCard>
 
@@ -83,8 +83,8 @@
                 <div class="kpi-icon-wrap"><MudIcon Icon="@Icons.Material.Filled.Warehouse" /></div>
                 <div class="kpi-body">
                     <div class="kpi-value">@_data.TotalInventoryItems</div>
-                    <div class="kpi-label">Inventory Items</div>
-                    <div class="kpi-sub">@_data.HealthyStockCount healthy</div>
+                    <div class="kpi-label">@L["InvDash:InventoryItems"]</div>
+                    <div class="kpi-sub">@L["InvDash:CountHealthy", _data.HealthyStockCount]</div>
                 </div>
             </SoftCard>
 
@@ -92,8 +92,8 @@
                 <div class="kpi-icon-wrap"><MudIcon Icon="@Icons.Material.Filled.TrendingDown" /></div>
                 <div class="kpi-body">
                     <div class="kpi-value">@_data.LowStockCount</div>
-                    <div class="kpi-label">Low Stock</div>
-                    <div class="kpi-sub">needs attention</div>
+                    <div class="kpi-label">@L["InvDash:LowStock"]</div>
+                    <div class="kpi-sub">@L["InvDash:NeedsAttention"]</div>
                 </div>
             </SoftCard>
 
@@ -101,8 +101,8 @@
                 <div class="kpi-icon-wrap"><MudIcon Icon="@Icons.Material.Filled.RemoveShoppingCart" /></div>
                 <div class="kpi-body">
                     <div class="kpi-value">@_data.OutOfStockCount</div>
-                    <div class="kpi-label">Out of Stock</div>
-                    <div class="kpi-sub">@(_data.OutOfStockCount == 0 ? "all clear" : "critical")</div>
+                    <div class="kpi-label">@L["InvDash:OutOfStock"]</div>
+                    <div class="kpi-sub">@(_data.OutOfStockCount == 0 ? L["InvDash:AllClear"] : L["InvDash:Critical"])</div>
                 </div>
             </SoftCard>
 
@@ -110,8 +110,8 @@
                 <div class="kpi-icon-wrap"><MudIcon Icon="@Icons.Material.Filled.Category" /></div>
                 <div class="kpi-body">
                     <div class="kpi-value">@_data.TotalCategories</div>
-                    <div class="kpi-label">Categories</div>
-                    <div class="kpi-sub">@_data.TotalSuppliers suppliers</div>
+                    <div class="kpi-label">@L["InvDash:Categories"]</div>
+                    <div class="kpi-sub">@L["InvDash:CountSuppliers", _data.TotalSuppliers]</div>
                 </div>
             </SoftCard>
         </div>
@@ -123,7 +123,7 @@
             <SoftCard Class="dash-panel dash-panel--health">
                 <div class="panel-header">
                     <MudIcon Icon="@Icons.Material.Filled.MonitorHeart" Class="panel-header-icon" />
-                    <MudText Typo="Typo.h6">Stock Health Overview</MudText>
+                    <MudText Typo="Typo.h6">@L["InvDash:StockHealthOverview"]</MudText>
                 </div>
                 <div class="panel-body">
 
@@ -133,7 +133,7 @@
                     <div class="health-row mb-3">
                         <div class="health-row-top">
                             <div class="health-dot health-dot--green"></div>
-                            <span class="health-label">Healthy Stock</span>
+                            <span class="health-label">@L["InvDash:HealthyStock"]</span>
                             <span class="health-count health-count--green">@_data.HealthyStockCount</span>
                         </div>
                         <MudProgressLinear Color="Color.Success"
@@ -146,7 +146,7 @@
                     <div class="health-row mb-3">
                         <div class="health-row-top">
                             <div class="health-dot health-dot--orange"></div>
-                            <span class="health-label">Low Stock</span>
+                            <span class="health-label">@L["InvDash:LowStock"]</span>
                             <span class="health-count health-count--orange">@_data.LowStockCount</span>
                         </div>
                         <MudProgressLinear Color="Color.Warning"
@@ -159,7 +159,7 @@
                     <div class="health-row">
                         <div class="health-row-top">
                             <div class="health-dot health-dot--red"></div>
-                            <span class="health-label">Out of Stock</span>
+                            <span class="health-label">@L["InvDash:OutOfStock"]</span>
                             <span class="health-count health-count--red">@_data.OutOfStockCount</span>
                         </div>
                         <MudProgressLinear Color="Color.Error"
@@ -175,19 +175,19 @@
                             <ApexChart TItem="HealthSlice" @key="_data" Options="_healthChartOptions" Height="230">
                                 <ApexPointSeries TItem="HealthSlice"
                                                  Items="_healthSlices"
-                                                 Name="Items"
+                                                 Name="@L["InvDash:ItemsSeries"].Value"
                                                  SeriesType="SeriesType.Donut"
                                                  XValue="@(s => s.Label)"
                                                  YValue="@(s => s.Count)" />
                             </ApexChart>
                             <div class="health-donut-center">
                                 <div class="health-donut-pct">@($"{(double)_data.HealthyStockCount / total * 100:F0}")%</div>
-                                <div class="health-donut-text">healthy</div>
+                                <div class="health-donut-text">@L["InvDash:HealthyLower"]</div>
                             </div>
                         }
                         else
                         {
-                            <div class="health-donut-empty">No inventory items yet</div>
+                            <div class="health-donut-empty">@L["InvDash:NoInventoryItemsYet"]</div>
                         }
                     </div>
                 </div>
@@ -197,39 +197,39 @@
             <SoftCard Class="dash-panel dash-panel--movements">
                 <div class="panel-header">
                     <MudIcon Icon="@Icons.Material.Filled.SwapHoriz" Class="panel-header-icon" />
-                    <MudText Typo="Typo.h6">Stock Movements</MudText>
-                    <span class="panel-badge">Last 30 days</span>
+                    <MudText Typo="Typo.h6">@L["InvDash:StockMovements"]</MudText>
+                    <span class="panel-badge">@L["InvDash:Last30Days"]</span>
                 </div>
                 <div class="panel-body">
                     <div class="movement-total mb-3">
                         <span class="movement-total-num">@_data.MovementSummary.TotalCount</span>
-                        <span class="movement-total-label">total movements</span>
+                        <span class="movement-total-label">@L["InvDash:TotalMovements"]</span>
                     </div>
                     <div class="movement-cards">
                         <div class="mv-card mv-purchase">
                             <MudIcon Icon="@Icons.Material.Filled.ShoppingCart" Class="mv-icon" />
                             <div class="mv-num">@_data.MovementSummary.PurchaseCount</div>
-                            <div class="mv-name">Purchases</div>
+                            <div class="mv-name">@L["InvDash:Purchases"]</div>
                         </div>
                         <div class="mv-card mv-sale">
                             <MudIcon Icon="@Icons.Material.Filled.PointOfSale" Class="mv-icon" />
                             <div class="mv-num">@_data.MovementSummary.SaleCount</div>
-                            <div class="mv-name">Sales</div>
+                            <div class="mv-name">@L["InvDash:Sales"]</div>
                         </div>
                         <div class="mv-card mv-transfer-in">
                             <MudIcon Icon="@Icons.Material.Filled.CallReceived" Class="mv-icon" />
                             <div class="mv-num">@_data.MovementSummary.TransferInCount</div>
-                            <div class="mv-name">Transfer In</div>
+                            <div class="mv-name">@L["InvDash:TransferIn"]</div>
                         </div>
                         <div class="mv-card mv-transfer-out">
                             <MudIcon Icon="@Icons.Material.Filled.CallMade" Class="mv-icon" />
                             <div class="mv-num">@_data.MovementSummary.TransferOutCount</div>
-                            <div class="mv-name">Transfer Out</div>
+                            <div class="mv-name">@L["InvDash:TransferOut"]</div>
                         </div>
                         <div class="mv-card mv-adjust">
                             <MudIcon Icon="@Icons.Material.Filled.Tune" Class="mv-icon" />
                             <div class="mv-num">@_data.MovementSummary.ManualAdjustmentCount</div>
-                            <div class="mv-name">Adjustments</div>
+                            <div class="mv-name">@L["InvDash:Adjustments"]</div>
                         </div>
                     </div>
                 </div>
@@ -243,18 +243,18 @@
             <SoftCard Class="dash-panel dash-panel--full mb-5">
                 <div class="panel-header">
                     <MudIcon Icon="@Icons.Material.Filled.BusinessCenter" Class="panel-header-icon" />
-                    <MudText Typo="Typo.h6">Branch Performance</MudText>
+                    <MudText Typo="Typo.h6">@L["InvDash:BranchPerformance"]</MudText>
                 </div>
                 <div class="panel-body pa-0">
                     <table class="branch-table">
                         <thead>
                             <tr>
-                                <th>Branch</th>
-                                <th class="text-center">Total Items</th>
-                                <th class="text-center">Healthy</th>
-                                <th class="text-center">Low Stock</th>
-                                <th class="text-center">Out of Stock</th>
-                                <th style="min-width:180px">Health Score</th>
+                                <th>@L["InvDash:Branch"]</th>
+                                <th class="text-center">@L["InvDash:TotalItems"]</th>
+                                <th class="text-center">@L["InvDash:Healthy"]</th>
+                                <th class="text-center">@L["InvDash:LowStock"]</th>
+                                <th class="text-center">@L["InvDash:OutOfStock"]</th>
+                                <th style="min-width:180px">@L["InvDash:HealthScore"]</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -268,7 +268,7 @@
                                             <span class="branch-name">@branch.BranchName</span>
                                             @if (!branch.IsActive)
                                             {
-                                                <span class="branch-inactive-badge">Inactive</span>
+                                                <span class="branch-inactive-badge">@L["InvDash:Inactive"]</span>
                                             }
                                         </div>
                                     </td>
@@ -308,7 +308,7 @@
             <SoftCard Class="dash-panel dash-panel--critical">
                 <div class="panel-header">
                     <MudIcon Icon="@Icons.Material.Filled.Warning" Class="panel-header-icon panel-header-icon--warning" />
-                    <MudText Typo="Typo.h6">Critical Stock Items</MudText>
+                    <MudText Typo="Typo.h6">@L["InvDash:CriticalStockItems"]</MudText>
                     @if (_data.CriticalStockItems.Any())
                     {
                         <span class="panel-badge panel-badge--red">@_data.CriticalStockItems.Count</span>
@@ -319,7 +319,7 @@
                     {
                         <div class="empty-state">
                             <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Class="empty-icon empty-icon--green" />
-                            <MudText Typo="Typo.body1">All items are well-stocked!</MudText>
+                            <MudText Typo="Typo.body1">@L["InvDash:AllItemsWellStocked"]</MudText>
                         </div>
                     }
                     else
@@ -327,10 +327,10 @@
                         <table class="critical-table">
                             <thead>
                                 <tr>
-                                    <th>Product</th>
-                                    <th class="text-center">On Hand</th>
-                                    <th class="text-center">Min Stock</th>
-                                    <th class="text-center">Status</th>
+                                    <th>@L["InvDash:Product"]</th>
+                                    <th class="text-center">@L["InvDash:OnHand"]</th>
+                                    <th class="text-center">@L["InvDash:MinStock"]</th>
+                                    <th class="text-center">@L["InvDash:Status"]</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -352,11 +352,11 @@
                                         <td class="text-center">
                                             @if (item.IsOutOfStock)
                                             {
-                                                <span class="status-badge status-out">Out of Stock</span>
+                                                <span class="status-badge status-out">@L["InvDash:OutOfStock"]</span>
                                             }
                                             else
                                             {
-                                                <span class="status-badge status-low">Low Stock</span>
+                                                <span class="status-badge status-low">@L["InvDash:LowStock"]</span>
                                             }
                                         </td>
                                     </tr>
@@ -371,15 +371,15 @@
             <SoftCard Class="dash-panel dash-panel--recent">
                 <div class="panel-header">
                     <MudIcon Icon="@Icons.Material.Filled.History" Class="panel-header-icon" />
-                    <MudText Typo="Typo.h6">Recent Movements</MudText>
-                    <span class="panel-badge">Last 30 days</span>
+                    <MudText Typo="Typo.h6">@L["InvDash:RecentMovements"]</MudText>
+                    <span class="panel-badge">@L["InvDash:Last30Days"]</span>
                 </div>
                 <div class="panel-body pa-0">
                     @if (!_data.RecentMovements.Any())
                     {
                         <div class="empty-state">
                             <MudIcon Icon="@Icons.Material.Outlined.Inbox" Class="empty-icon" />
-                            <MudText Typo="Typo.body1">No recent movements</MudText>
+                            <MudText Typo="Typo.body1">@L["InvDash:NoRecentMovements"]</MudText>
                         </div>
                     }
                     else
@@ -399,7 +399,7 @@
                                             <span class="mv-qty">
                                                 @(mv.Quantity > 0 ? $"+{mv.Quantity}" : mv.Quantity.ToString()) @mv.ProductUnit
                                             </span>
-                                            <span class="mv-time">@mv.CreationTime.ToString("MMM d, HH:mm")</span>
+                                            <span class="mv-time">@mv.CreationTime.ToString("MMM d, HH:mm", System.Globalization.CultureInfo.CurrentCulture)</span>
                                         </div>
                                     </div>
                                 </div>
@@ -435,7 +435,7 @@
     }
     .dash-header-icon {
         font-size: 40px;
-        color: var(--mud-palette-primary);
+        color: var(--accent);
         opacity: .85;
     }
     .dash-title {
@@ -478,7 +478,7 @@
         top: -20px; right: -20px;
         width: 80px; height: 80px;
         border-radius: 50%;
-        background: rgba(255,255,255,.10);
+        background: var(--accent-soft);
         pointer-events: none;
     }
     .kpi-card:hover { transform: translateY(-2px); }
@@ -489,33 +489,33 @@
         position: absolute;
         left: 0; top: 0; bottom: 0;
         width: 4px;
-        background: var(--kpi-accent, rgba(255,255,255,.4));
-        box-shadow: 0 0 24px var(--kpi-accent, rgba(255,255,255,.4));
+        background: var(--kpi-accent, var(--accent));
+        box-shadow: 0 0 24px var(--kpi-accent, var(--accent-line));
     }
 
     .kpi-icon-wrap {
-        background: var(--kpi-accent, rgba(255,255,255,.18));
+        background: var(--kpi-accent-soft, var(--accent-soft));
         border-radius: 10px;
         padding: 10px;
         display: flex;
         align-items: center;
         justify-content: center;
         flex-shrink: 0;
-        box-shadow: 0 4px 12px rgba(0,0,0,.18);
+        box-shadow: var(--shadow-sm);
     }
-    .kpi-icon-wrap .mud-icon-root { font-size: 24px; color: white; }
+    .kpi-icon-wrap .mud-icon-root { font-size: 24px; color: var(--kpi-accent, var(--accent)); }
     .kpi-body { flex: 1; z-index: 1; }
-    .kpi-value { font-size: 2rem; font-weight: 700; line-height: 1; color: #fff; }
-    .kpi-label { font-size: .78rem; font-weight: 600; opacity: .85; margin-top: 4px; text-transform: uppercase; letter-spacing: .04em; color: rgba(255,255,255,.85); }
-    .kpi-sub   { font-size: .75rem; opacity: .7;  margin-top: 2px; color: rgba(255,255,255,.7); }
+    .kpi-value { font-size: 2rem; font-weight: 700; line-height: 1; color: var(--fg-1); }
+    .kpi-label { font-size: .78rem; font-weight: 600; margin-top: 4px; text-transform: uppercase; letter-spacing: .04em; color: var(--fg-2); }
+    .kpi-sub   { font-size: .75rem; margin-top: 2px; color: var(--fg-3); }
 
-    .accent-blue   { --kpi-accent: rgba( 66,165,245, .9); }
-    .accent-purple { --kpi-accent: rgba(186,104,200, .9); }
-    .accent-teal   { --kpi-accent: rgba( 77,182,172, .9); }
-    .accent-orange { --kpi-accent: rgba(255,167, 38, .9); }
-    .accent-red    { --kpi-accent: rgba(239, 83, 80, .9); }
-    .accent-green  { --kpi-accent: rgba(102,187,106, .9); }
-    .accent-indigo { --kpi-accent: rgba(121,134,203, .9); }
+    .accent-blue   { --kpi-accent: #3f7fbf; --kpi-accent-soft: rgba(63, 127, 191, .13); }
+    .accent-purple { --kpi-accent: #8b65a8; --kpi-accent-soft: rgba(139, 101, 168, .13); }
+    .accent-teal   { --kpi-accent: #3f8f87; --kpi-accent-soft: rgba(63, 143, 135, .13); }
+    .accent-orange { --kpi-accent: var(--warn); --kpi-accent-soft: rgba(200, 156, 79, .15); }
+    .accent-red    { --kpi-accent: var(--danger); --kpi-accent-soft: rgba(179, 84, 58, .13); }
+    .accent-green  { --kpi-accent: var(--success); --kpi-accent-soft: rgba(107, 142, 78, .13); }
+    .accent-indigo { --kpi-accent: #6f78b8; --kpi-accent-soft: rgba(111, 120, 184, .13); }
 
     /* ─── Panels ────────────────────────────────────────── */
     .dash-row {
@@ -537,12 +537,12 @@
         align-items: center;
         gap: 10px;
         padding: 16px 20px 12px;
-        border-bottom: 1px solid rgba(255,255,255,.14);
+        border-bottom: 1px solid var(--bd-1);
         flex-wrap: wrap;
     }
     .panel-header-icon {
         font-size: 22px;
-        color: var(--mud-palette-primary);
+        color: var(--accent);
         opacity: .8;
     }
     .panel-header-icon--warning { color: #ff9800 !important; }
@@ -550,8 +550,8 @@
     .panel-badge {
         font-size: .7rem;
         font-weight: 600;
-        background: var(--mud-palette-action-disabled-background);
-        color: var(--mud-palette-text-secondary);
+        background: var(--hover);
+        color: var(--fg-2);
         padding: 2px 8px;
         border-radius: 20px;
         letter-spacing: .03em;
@@ -590,7 +590,7 @@
     .health-count--orange { background: rgba(255,152,0,.12);  color: #e65100; }
     .health-count--red    { background: rgba(244,67,54,.12);  color: #c62828; }
     .health-bar { margin-bottom: 2px; }
-    .health-pct { font-size: .75rem; color: var(--mud-palette-text-secondary); display: block; text-align: right; }
+    .health-pct { font-size: .75rem; color: var(--fg-3); display: block; text-align: right; }
 
     .health-donut-wrap {
         position: relative;
@@ -620,8 +620,8 @@
 
     /* ─── Movement Summary Panel ────────────────────────── */
     .movement-total { text-align: center; padding-top: 4px; }
-    .movement-total-num { font-size: 2.4rem; font-weight: 700; color: var(--mud-palette-primary); }
-    .movement-total-label { font-size: .78rem; color: var(--mud-palette-text-secondary); margin-left: 6px; }
+    .movement-total-num { font-size: 2.4rem; font-weight: 700; color: var(--accent); }
+    .movement-total-label { font-size: .78rem; color: var(--fg-3); margin-left: 6px; }
 
     .movement-cards {
         display: grid;
@@ -660,17 +660,17 @@
         font-weight: 700;
         text-transform: uppercase;
         letter-spacing: .05em;
-        color: var(--mud-palette-text-secondary);
-        border-bottom: 2px solid rgba(255,255,255,.18);
+        color: var(--fg-3);
+        border-bottom: 2px solid var(--bd-2);
         white-space: nowrap;
     }
     .branch-table td {
         padding: 12px 16px;
-        border-bottom: 1px solid rgba(255,255,255,.08);
+        border-bottom: 1px solid var(--bd-1);
         vertical-align: middle;
     }
     .branch-table tr:last-child td { border-bottom: none; }
-    .branch-table tr:hover td { background: rgba(255,255,255,.06); }
+    .branch-table tr:hover td { background: var(--hover); }
     .branch-row--inactive td { opacity: .55; }
 
     .branch-name-cell { display: flex; align-items: center; }
@@ -681,7 +681,7 @@
         background: rgba(0,0,0,.08);
         padding: 1px 6px;
         border-radius: 10px;
-        color: var(--mud-palette-text-secondary);
+        color: var(--fg-3);
     }
     .branch-stat-chip {
         display: inline-block;
@@ -691,8 +691,8 @@
         border-radius: 20px;
         font-weight: 700;
         font-size: .82rem;
-        background: var(--mud-palette-action-disabled-background);
-        color: var(--mud-palette-text-primary);
+        background: var(--hover);
+        color: var(--fg-1);
     }
     .chip-green  { background: rgba(76,175,80,.14);  color: #2e7d32; }
     .chip-orange { background: rgba(255,152,0,.14);  color: #e65100; }
@@ -715,24 +715,24 @@
         font-weight: 700;
         text-transform: uppercase;
         letter-spacing: .05em;
-        color: var(--mud-palette-text-secondary);
-        border-bottom: 2px solid rgba(255,255,255,.18);
+        color: var(--fg-3);
+        border-bottom: 2px solid var(--bd-2);
     }
     .critical-table td {
         padding: 11px 16px;
-        border-bottom: 1px solid rgba(255,255,255,.08);
+        border-bottom: 1px solid var(--bd-1);
         vertical-align: middle;
     }
     .critical-table tr:last-child td { border-bottom: none; }
-    .critical-table tr:hover td { background: rgba(255,255,255,.06); }
+    .critical-table tr:hover td { background: var(--hover); }
 
     .product-name-cell { display: flex; flex-direction: column; gap: 2px; }
     .product-name { font-weight: 600; font-size: .875rem; }
-    .product-sku  { font-size: .72rem; color: var(--mud-palette-text-secondary); }
+    .product-sku  { font-size: .72rem; color: var(--fg-3); }
 
     .qty-out { color: #c62828; font-weight: 700; font-size: 1rem; }
     .qty-low { color: #e65100; font-weight: 700; font-size: 1rem; }
-    .qty-min { color: var(--mud-palette-text-secondary); font-size: .875rem; }
+    .qty-min { color: var(--fg-3); font-size: .875rem; }
 
     .status-badge {
         display: inline-block;
@@ -756,7 +756,7 @@
         padding: 10px 16px;
         transition: background .1s;
     }
-    .movement-item:hover { background: rgba(255,255,255,.06); }
+    .movement-item:hover { background: var(--hover); }
     .mv-type-dot {
         width: 10px; height: 10px;
         border-radius: 50%;
@@ -787,9 +787,9 @@
     .mv-badge-transferout  { background: rgba(123,31,162,.12);  color: #4a148c; }
     .mv-badge-manualadjustment { background: rgba(230,81,0,.12); color: #bf360c; }
 
-    .mv-item-bottom { display: flex; align-items: center; gap: 10px; font-size: .75rem; color: var(--mud-palette-text-secondary); flex-wrap: wrap; }
+    .mv-item-bottom { display: flex; align-items: center; gap: 10px; font-size: .75rem; color: var(--fg-3); flex-wrap: wrap; }
     .mv-branch { opacity: .75; }
-    .mv-qty { font-weight: 700; color: var(--mud-palette-text-primary); }
+    .mv-qty { font-weight: 700; color: var(--fg-1); }
     .mv-time { margin-left: auto; white-space: nowrap; }
 
     /* ─── Empty State ────────────────────────────────────── */
@@ -807,6 +807,45 @@
 
     /* ─── Text alignment helpers ─────────────────────────── */
     .text-center { text-align: center; }
+
+    html[dir="rtl"] .dashboard-root {
+        direction: rtl;
+        text-align: right;
+    }
+
+    html[dir="rtl"] .dashboard-root .dash-header,
+    html[dir="rtl"] .dashboard-root .dash-header-left,
+    html[dir="rtl"] .dashboard-root .health-row-top,
+    html[dir="rtl"] .dashboard-root .panel-header,
+    html[dir="rtl"] .dashboard-root .mv-item,
+    html[dir="rtl"] .dashboard-root .mv-item-top,
+    html[dir="rtl"] .dashboard-root .mv-item-bottom {
+        direction: rtl;
+    }
+
+    html[dir="rtl"] .dashboard-root .kpi-card::after {
+        right: auto;
+        left: -20px;
+    }
+
+    html[dir="rtl"] .dashboard-root .kpi-card::before {
+        left: auto;
+        right: 0;
+    }
+
+    html[dir="rtl"] .dashboard-root .health-pct {
+        text-align: left;
+    }
+
+    html[dir="rtl"] .dashboard-root .movement-total-label {
+        margin-left: 0;
+        margin-right: 6px;
+    }
+
+    html[dir="rtl"] .dashboard-root .mv-time {
+        margin-left: 0;
+        margin-right: auto;
+    }
 </style>
 
 @code {
@@ -858,9 +897,9 @@
             _data = await DashboardAppService.GetAsync();
             _healthSlices = new List<HealthSlice>
             {
-                new() { Label = "Healthy", Count = _data.HealthyStockCount },
-                new() { Label = "Low Stock", Count = _data.LowStockCount },
-                new() { Label = "Out of Stock", Count = _data.OutOfStockCount }
+                new() { Label = L["InvDash:Healthy"].Value, Count = _data.HealthyStockCount },
+                new() { Label = L["InvDash:LowStock"].Value, Count = _data.LowStockCount },
+                new() { Label = L["InvDash:OutOfStock"].Value, Count = _data.OutOfStockCount }
             };
             _lastRefreshed = DateTime.Now;
         }
@@ -883,13 +922,13 @@
         _     => Color.Error
     };
 
-    private static string FormatMovementType(string type) => type switch
+    private string FormatMovementType(string type) => type switch
     {
-        "Purchase"         => "Purchase",
-        "Sale"             => "Sale",
-        "TransferIn"       => "Transfer In",
-        "TransferOut"      => "Transfer Out",
-        "ManualAdjustment" => "Adjustment",
+        "Purchase"         => L["InvDash:Purchase"].Value,
+        "Sale"             => L["InvDash:Sale"].Value,
+        "TransferIn"       => L["InvDash:TransferIn"].Value,
+        "TransferOut"      => L["InvDash:TransferOut"].Value,
+        "ManualAdjustment" => L["InvDash:Adjustment"].Value,
         _                  => type
     };
 }

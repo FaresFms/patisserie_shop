@@ -4,6 +4,7 @@
 @using System.Threading.Tasks
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.AspNetCore.Components
+@using Microsoft.AspNetCore.Components.Routing
 @using Volo.Abp.Application.Dtos
 @using Volo.Abp.AspNetCore.Components.Web.Theming.Layout
 @using Operations
@@ -37,7 +38,7 @@
                         Color="Color.Primary"
                         StartIcon="@Icons.Material.Filled.Add"
                         OnClick="OpenCreateDialog"
-                        Disabled="!_canCreate">
+                        Disabled="@(!_canCreate || !_canChooseTransferBranches)">
                 @OpsL["NewTransfer"]
             </SoftButton>
         </div>
@@ -221,7 +222,7 @@
                     <SoftButton Variant="Variant.Filled" Color="Color.Primary"
                                 EndIcon="@Icons.Material.Filled.ArrowForward"
                                 OnClick="ConfirmCreateAsync"
-                                Disabled="_saving">
+                                Disabled="@(_saving || !_canChooseTransferBranches)">
                         @OpsL["SaveAndAddItems"]
                     </SoftButton>
                 </div>
@@ -258,11 +259,21 @@
     private bool _loading;
     private bool _saving;
     private bool _canCreate;
+    private bool _canChooseTransferBranches;
 
     private string? _filter;
     private string? _statusFilter;
     private Guid? _fromFilter;
     private Guid? _toFilter;
+
+    [Parameter, SupplyParameterFromQuery(Name = "new")]
+    public bool OpenNewTransfer { get; set; }
+
+    [Parameter, SupplyParameterFromQuery(Name = "toBranchId")]
+    public Guid? NewTransferToBranchId { get; set; }
+
+    [Parameter, SupplyParameterFromQuery(Name = "notes")]
+    public string? NewTransferNotes { get; set; }
 
     private List<BranchLookupDto> _branches = new();
     private List<StatusOption> _statusOptions = new();
@@ -280,6 +291,7 @@
     protected override async Task OnInitializedAsync()
     {
         _canCreate = await AuthorizationService.IsGrantedAsync(OperationsPermissions.Transfers.Create);
+        _canChooseTransferBranches = await AuthorizationService.IsGrantedAsync(OperationsPermissions.Transfers.ChooseBranches);
 
         _statusOptions = StockTransferStatuses.All
             .Select(s => new StatusOption(s, OpsL[$"Status:{s}"]))
@@ -292,6 +304,11 @@
         catch (Exception ex)
         {
             await HandleErrorAsync(ex);
+        }
+
+        if (OpenNewTransfer)
+        {
+            OpenCreateDialog(NewTransferToBranchId, NewTransferNotes);
         }
     }
 
@@ -356,12 +373,20 @@
 
     private async Task OnDetailChangedAsync() => await ReloadAsync();
 
-    private void OpenCreateDialog()
+    private void OpenCreateDialog() => OpenCreateDialog(null, null);
+
+    private void OpenCreateDialog(Guid? toBranchId, string? notes)
     {
+        if (!_canChooseTransferBranches)
+        {
+            Snackbar.Add("Only administrators can choose transfer source and destination branches.", Severity.Warning);
+            return;
+        }
+
         _newFromId = null;
-        _newToId = null;
+        _newToId = toBranchId;
         _newRequestedDate = DateTime.Today;
-        _newNotes = null;
+        _newNotes = notes;
         _createVisible = true;
     }
 

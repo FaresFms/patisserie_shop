@@ -49,6 +49,40 @@ public class StockBatchRepository
         ).ToListAsync(GetCancellationToken(cancellationToken));
     }
 
+    public async Task<List<StockBatchWithDetails>> GetExpiringInWindowAsync(
+        DateTime fromDate,
+        DateTime toDate,
+        IReadOnlyCollection<Guid>? branchIdScope,
+        int maxResultCount,
+        CancellationToken cancellationToken = default)
+    {
+        var dbContext = await GetDbContextAsync();
+
+        var fromDay = fromDate.Date;
+        var toDay = toDate.Date;
+
+        var query =
+            from batch in dbContext.Set<AppStockBatch>()
+            join p in dbContext.Set<AppProduct>() on batch.ProductId equals p.Id
+            join br in dbContext.Set<AppBranch>() on batch.BranchId equals br.Id
+            where batch.QuantityRemaining > 0
+                  && p.IsActive
+                  && batch.ExpiryDate >= fromDay
+                  && batch.ExpiryDate <= toDay
+            select new StockBatchWithDetails { Batch = batch, Product = p, Branch = br };
+
+        if (branchIdScope != null)
+        {
+            query = query.Where(x => branchIdScope.Contains(x.Batch.BranchId));
+        }
+
+        return await query
+            .OrderBy(x => x.Batch.ExpiryDate)
+            .ThenBy(x => x.Branch.Name)
+            .Take(maxResultCount)
+            .ToListAsync(GetCancellationToken(cancellationToken));
+    }
+
     public async Task<int> GetExpiredQuantityAsync(
         Guid branchId,
         Guid productId,

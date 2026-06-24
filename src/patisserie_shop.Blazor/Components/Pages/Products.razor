@@ -2,7 +2,10 @@
 @attribute [Authorize(InventoryPermissions.Products.Default)]
 @using System.Threading
 @using System.Threading.Tasks
+@using System.IO
 @using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.AspNetCore.Hosting
 @using Volo.Abp.Application.Dtos
 @using Volo.Abp.AspNetCore.Components.Web.Theming.Layout
 @using Inventory.Categories
@@ -21,6 +24,7 @@
 @inject PageLayout PageLayout
 @inject ISnackbar Snackbar
 @inject IStringLocalizer<InventoryResource> InvL
+@inject IWebHostEnvironment WebHostEnvironment
 
 @{
     PageLayout.Title = InvL["Products"];
@@ -190,13 +194,48 @@
                     </CardHeaderActions>
                 </SoftCardHeader>
                 <SoftDivider />
-                <SoftCardContent Class="pa-4 glass-modal-body">
-                    <SoftStack Spacing="4">
-                        <div>
-                            <SoftText Typo="Typo.overline" Color="Color.Primary">@InvL["BasicInfo"]</SoftText>
-                            <SoftDivider Class="mb-3" />
-                            <SoftStack Spacing="3">
-                                <SoftStack Row="true" Spacing="2">
+                <SoftCardContent Class="pa-4 glass-modal-body product-modal-body">
+                    <div class="product-editor">
+                        <aside class="product-photo-panel">
+                            <div class="product-photo-frame">
+                                @if (!string.IsNullOrWhiteSpace(ProductImagePreview))
+                                {
+                                    <img src="@ProductImagePreview" alt="@_editName" />
+                                }
+                                else
+                                {
+                                    <div class="product-photo-empty">
+                                        <SoftIcon Icon="@Icons.Material.Filled.AddPhotoAlternate"
+                                                  Color="Color.Primary"
+                                                  Size="Size.Large" />
+                                        <SoftText Typo="Typo.body2">Product photo</SoftText>
+                                    </div>
+                                }
+                            </div>
+                            <InputFile id="product-image-input"
+                                       class="product-image-input"
+                                       accept="image/png,image/jpeg,image/webp,image/gif"
+                                       OnChange="OnProductImageChangedAsync" />
+                            <label class="product-upload-button" for="product-image-input">
+                                <SoftIcon Icon="@Icons.Material.Filled.Upload" Size="Size.Small" />
+                                <span>@(string.IsNullOrWhiteSpace(ProductImagePreview) ? "Choose image" : "Change image")</span>
+                            </label>
+                            @if (!string.IsNullOrWhiteSpace(ProductImagePreview))
+                            {
+                                <SoftButton Variant="Variant.Text"
+                                            Color="Color.Error"
+                                            StartIcon="@Icons.Material.Filled.DeleteOutline"
+                                            OnClick="ClearProductImage">
+                                    Remove photo
+                                </SoftButton>
+                            }
+                        </aside>
+
+                        <div class="product-fields">
+                            <section class="product-form-section">
+                                <SoftText Typo="Typo.overline" Color="Color.Primary">@InvL["BasicInfo"]</SoftText>
+                                <SoftDivider Class="mb-3" />
+                                <div class="product-form-grid product-form-grid--two">
                                     <SoftTextField T="string"
                                                    Label="@InvL["Name"]"
                                                    @bind-Value="_editName"
@@ -211,104 +250,100 @@
                                                    MaxLength="64"
                                                    Required="true"
                                                    Immediate="true" />
-                                </SoftStack>
-                                <SoftStack Row="true" Spacing="2">
-                                    <SoftLookupSelect TItem="CategoryDto" TValue="Guid?"
-                                                      Items="_categories"
-                                                      ToValue="@(c => (Guid?)c.Id)"
-                                                      ToLabel="@(c => c.Name)"
-                                                      Value="_editCategoryId"
-                                                      ValueChanged="@(v => _editCategoryId = v)"
-                                                      Label="@InvL["Category"]"
-                                                      Placeholder="@InvL["SelectCategory"]"
-                                                      Required="true" />
-                                    <SoftLookupSelect TItem="SupplierDto" TValue="Guid?"
-                                                      Items="_suppliers"
-                                                      ToValue="@(s => (Guid?)s.Id)"
-                                                      ToLabel="@(s => s.Name)"
-                                                      Value="_editSupplierId"
-                                                      ValueChanged="@(v => _editSupplierId = v)"
-                                                      Label="@InvL["DefaultSupplier"]"
-                                                      Placeholder="@InvL["SelectSupplier"]"
-                                                      Clearable="true" />
-                                </SoftStack>
-                                <SoftTextField T="string"
-                                               Label="@InvL["Description"]"
-                                               @bind-Value="_editDescription"
-                                               Variant="Variant.Outlined"
-                                               Lines="2"
-                                               MaxLength="1024" />
-                            </SoftStack>
-                        </div>
+                                    <div>
+                                        <SoftLookupSelect TItem="CategoryDto" TValue="Guid?"
+                                                          Items="_categories"
+                                                          ToValue="@(c => (Guid?)c.Id)"
+                                                          ToLabel="@(c => c.Name)"
+                                                          Value="_editCategoryId"
+                                                          ValueChanged="@(v => _editCategoryId = v)"
+                                                          Label="@InvL["Category"]"
+                                                          Placeholder="@InvL["SelectCategory"]"
+                                                          Required="true" />
+                                    </div>
+                                    <div>
+                                        <SoftLookupSelect TItem="SupplierDto" TValue="Guid?"
+                                                          Items="_suppliers"
+                                                          ToValue="@(s => (Guid?)s.Id)"
+                                                          ToLabel="@(s => s.Name)"
+                                                          Value="_editSupplierId"
+                                                          ValueChanged="@(v => _editSupplierId = v)"
+                                                          Label="@InvL["DefaultSupplier"]"
+                                                          Placeholder="@InvL["SelectSupplier"]"
+                                                          Clearable="true" />
+                                    </div>
+                                    <div class="product-form-grid-span">
+                                        <SoftTextField T="string"
+                                                       Label="@InvL["Description"]"
+                                                       @bind-Value="_editDescription"
+                                                       Variant="Variant.Outlined"
+                                                       Lines="2"
+                                                       MaxLength="1024" />
+                                    </div>
+                                </div>
+                            </section>
 
-                        <div>
-                            <SoftText Typo="Typo.overline" Color="Color.Primary">@InvL["Pricing"]</SoftText>
-                            <SoftDivider Class="mb-3" />
-                            <SoftStack Row="true" Spacing="2">
-                                <SoftTextField T="string"
-                                               Label="@InvL["Unit"]"
-                                               @bind-Value="_editUnit"
-                                               Variant="Variant.Outlined"
-                                               MaxLength="32"
-                                               Required="true" />
-                                <SoftNumericField T="decimal"
-                                                  Label="@InvL["CostPrice"]"
-                                                  @bind-Value="_editCostPrice"
-                                                  Variant="Variant.Outlined"
-                                                  Min="0"
-                                                  HideSpinButtons="true"
-                                                  Adornment="Adornment.Start"
-                                                  AdornmentText="$" />
-                                <SoftNumericField T="decimal"
-                                                  Label="@InvL["SalePrice"]"
-                                                  @bind-Value="_editSalePrice"
-                                                  Variant="Variant.Outlined"
-                                                  Min="0"
-                                                  HideSpinButtons="true"
-                                                  Adornment="Adornment.Start"
-                                                  AdornmentText="$" />
-                                <SoftSelect T="string"
-                                            Label="@InvL["Currency"]"
-                                            @bind-Value="_editCurrency"
-                                            Variant="Variant.Outlined"
-                                            Required="true"
-                                            Style="max-width: 160px;">
-                                    <MudSelectItem T="string" Value="@("USD")">USD — $</MudSelectItem>
-                                    <MudSelectItem T="string" Value="@("EUR")">EUR — €</MudSelectItem>
-                                    <MudSelectItem T="string" Value="@("GBP")">GBP — £</MudSelectItem>
-                                </SoftSelect>
-                            </SoftStack>
-                        </div>
+                            <section class="product-form-section">
+                                <SoftText Typo="Typo.overline" Color="Color.Primary">@InvL["Pricing"]</SoftText>
+                                <SoftDivider Class="mb-3" />
+                                <div class="product-form-grid product-form-grid--pricing">
+                                    <SoftTextField T="string"
+                                                   Label="@InvL["Unit"]"
+                                                   @bind-Value="_editUnit"
+                                                   Variant="Variant.Outlined"
+                                                   MaxLength="32"
+                                                   Required="true" />
+                                    <SoftNumericField T="decimal"
+                                                      Label="@InvL["CostPrice"]"
+                                                      @bind-Value="_editCostPrice"
+                                                      Variant="Variant.Outlined"
+                                                      Min="0"
+                                                      HideSpinButtons="true"
+                                                      Adornment="Adornment.Start"
+                                                      AdornmentText="$" />
+                                    <SoftNumericField T="decimal"
+                                                      Label="@InvL["SalePrice"]"
+                                                      @bind-Value="_editSalePrice"
+                                                      Variant="Variant.Outlined"
+                                                      Min="0"
+                                                      HideSpinButtons="true"
+                                                      Adornment="Adornment.Start"
+                                                      AdornmentText="$" />
+                                    <SoftSelect T="string"
+                                                Label="@InvL["Currency"]"
+                                                @bind-Value="_editCurrency"
+                                                Variant="Variant.Outlined"
+                                                Required="true">
+                                        <MudSelectItem T="string" Value="@("USD")">USD - $</MudSelectItem>
+                                        <MudSelectItem T="string" Value="@("EUR")">EUR - €</MudSelectItem>
+                                        <MudSelectItem T="string" Value="@("GBP")">GBP - £</MudSelectItem>
+                                    </SoftSelect>
+                                </div>
+                            </section>
 
-                        <div>
-                            <SoftText Typo="Typo.overline" Color="Color.Primary">@InvL["Stock"]</SoftText>
-                            <SoftDivider Class="mb-3" />
-                            <SoftStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
-                                <SoftNumericField T="int"
-                                                  Label="@InvL["ReorderLevel"]"
-                                                  @bind-Value="_editReorderLevel"
-                                                  Variant="Variant.Outlined"
-                                                  Min="0"
-                                                  HideSpinButtons="true"
-                                                  Style="max-width: 200px;" />
-                                <SoftNumericField T="int?"
-                                                  Label="@InvL["ShelfLifeDays"]"
-                                                  @bind-Value="_editShelfLifeDays"
-                                                  Variant="Variant.Outlined"
-                                                  Min="1"
-                                                  Max="3650"
-                                                  Clearable="true"
-                                                  HideSpinButtons="true"
-                                                  HelperText="@InvL["ShelfLifeHint"]"
-                                                  Style="max-width: 220px;" />
-                                <SoftTextField T="string"
-                                               Label="@InvL["ImageUrl"]"
-                                               @bind-Value="_editImageUrl"
-                                               Variant="Variant.Outlined"
-                                               MaxLength="512" />
-                            </SoftStack>
+                            <section class="product-form-section">
+                                <SoftText Typo="Typo.overline" Color="Color.Primary">@InvL["Stock"]</SoftText>
+                                <SoftDivider Class="mb-3" />
+                                <div class="product-form-grid product-form-grid--stock">
+                                    <SoftNumericField T="int"
+                                                      Label="@InvL["ReorderLevel"]"
+                                                      @bind-Value="_editReorderLevel"
+                                                      Variant="Variant.Outlined"
+                                                      Min="0"
+                                                      HideSpinButtons="true" />
+                                    <SoftNumericField T="int?"
+                                                      Label="@InvL["ShelfLifeDays"]"
+                                                      @bind-Value="_editShelfLifeDays"
+                                                      Variant="Variant.Outlined"
+                                                      Min="1"
+                                                      Max="3650"
+                                                      Clearable="true"
+                                                      HideSpinButtons="true"
+                                                      HelperText="@InvL["ShelfLifeHint"]" />
+                                </div>
+                            </section>
                         </div>
-                    </SoftStack>
+                    </div>
                 </SoftCardContent>
                 <SoftDivider />
                 <div class="pa-3 d-flex justify-end" style="gap: 8px;">
@@ -384,6 +419,8 @@
     private string _editCurrency = "USD";
     private int _editReorderLevel = 5;
     private string? _editImageUrl;
+    private string? _editImagePreviewUrl;
+    private IBrowserFile? _selectedImageFile;
     private bool _editIsActive = true;
     private int? _editShelfLifeDays;
 
@@ -506,6 +543,8 @@
         _editCurrency = "USD";
         _editReorderLevel = 5;
         _editImageUrl = null;
+        _editImagePreviewUrl = null;
+        _selectedImageFile = null;
         _editIsActive = true;
         _editShelfLifeDays = null;
         _dialogVisible = true;
@@ -525,6 +564,8 @@
         _editCurrency = p.Currency;
         _editReorderLevel = p.ReorderLevel;
         _editImageUrl = p.ImageUrl;
+        _editImagePreviewUrl = p.ImageUrl;
+        _selectedImageFile = null;
         _editIsActive = p.IsActive;
         _editShelfLifeDays = p.ShelfLifeDays;
         _dialogVisible = true;
@@ -533,6 +574,76 @@
     private void CloseDialog()
     {
         _dialogVisible = false;
+    }
+
+    private string? ProductImagePreview => _editImagePreviewUrl ?? _editImageUrl;
+
+    private async Task OnProductImageChangedAsync(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (file == null)
+        {
+            return;
+        }
+
+        if (!file.ContentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
+        {
+            Snackbar.Add("Please choose an image file.", Severity.Warning);
+            return;
+        }
+
+        const long maxImageBytes = 3 * 1024 * 1024;
+        if (file.Size > maxImageBytes)
+        {
+            Snackbar.Add("Product images must be 3 MB or smaller.", Severity.Warning);
+            return;
+        }
+
+        _selectedImageFile = file;
+        await using var stream = file.OpenReadStream(maxImageBytes);
+        using var buffer = new MemoryStream();
+        await stream.CopyToAsync(buffer);
+        _editImagePreviewUrl = $"data:{file.ContentType};base64,{Convert.ToBase64String(buffer.ToArray())}";
+    }
+
+    private void ClearProductImage()
+    {
+        _selectedImageFile = null;
+        _editImageUrl = null;
+        _editImagePreviewUrl = null;
+    }
+
+    private async Task<string?> SaveProductImageAsync()
+    {
+        if (_selectedImageFile == null)
+        {
+            return _editImageUrl;
+        }
+
+        var extension = Path.GetExtension(_selectedImageFile.Name).ToLowerInvariant();
+        var allowedExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ".jpg", ".jpeg", ".png", ".webp", ".gif"
+        };
+
+        if (!allowedExtensions.Contains(extension))
+        {
+            Snackbar.Add("Supported image formats are JPG, PNG, WEBP and GIF.", Severity.Warning);
+            return _editImageUrl;
+        }
+
+        var uploadRoot = Path.Combine(WebHostEnvironment.WebRootPath, "uploads", "products");
+        Directory.CreateDirectory(uploadRoot);
+
+        var fileName = $"{Guid.NewGuid():N}{extension}";
+        var targetPath = Path.Combine(uploadRoot, fileName);
+
+        const long maxImageBytes = 3 * 1024 * 1024;
+        await using var readStream = _selectedImageFile.OpenReadStream(maxImageBytes);
+        await using var writeStream = File.Create(targetPath);
+        await readStream.CopyToAsync(writeStream);
+
+        return $"/uploads/products/{fileName}";
     }
 
     private async Task SaveAsync()
@@ -566,6 +677,7 @@
         _saving = true;
         try
         {
+            var imageUrl = await SaveProductImageAsync();
             if (_editingId.HasValue)
             {
                 await ProductAppService.UpdateAsync(_editingId.Value, new UpdateProductDto
@@ -580,7 +692,7 @@
                     SalePrice = _editSalePrice,
                     Currency = _editCurrency.ToUpper(),
                     ReorderLevel = _editReorderLevel,
-                    ImageUrl = _editImageUrl,
+                    ImageUrl = imageUrl,
                     IsActive = _editIsActive,
                     ShelfLifeDays = _editShelfLifeDays
                 });
@@ -599,7 +711,7 @@
                     SalePrice = _editSalePrice,
                     Currency = _editCurrency.ToUpper(),
                     ReorderLevel = _editReorderLevel,
-                    ImageUrl = _editImageUrl,
+                    ImageUrl = imageUrl,
                     IsActive = _editIsActive,
                     ShelfLifeDays = _editShelfLifeDays
                 });

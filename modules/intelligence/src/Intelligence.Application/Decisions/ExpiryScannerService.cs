@@ -1,11 +1,14 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Threading.Tasks;
 using Intelligence.Entities;
+using Intelligence.Localization;
 using Intelligence.Rules;
 using Inventory.Entities;
 using Inventory.StockBatches;
+using Microsoft.Extensions.Localization;
 using Microsoft.Extensions.Logging;
 using Volo.Abp.DependencyInjection;
 using Volo.Abp.Domain.Repositories;
@@ -41,6 +44,7 @@ public class ExpiryScannerService : ITransientDependency
     private readonly IRepository<AppBranch, Guid> _branchRepository;
     private readonly IGuidGenerator _guidGenerator;
     private readonly IAsyncQueryableExecuter _asyncExecuter;
+    private readonly IStringLocalizer<IntelligenceResource> _localizer;
     private readonly ILogger<ExpiryScannerService> _logger;
 
     public ExpiryScannerService(
@@ -50,6 +54,7 @@ public class ExpiryScannerService : ITransientDependency
         IRepository<AppBranch, Guid> branchRepository,
         IGuidGenerator guidGenerator,
         IAsyncQueryableExecuter asyncExecuter,
+        IStringLocalizer<IntelligenceResource> localizer,
         ILogger<ExpiryScannerService> logger)
     {
         _batchRepository = batchRepository;
@@ -58,6 +63,7 @@ public class ExpiryScannerService : ITransientDependency
         _branchRepository = branchRepository;
         _guidGenerator = guidGenerator;
         _asyncExecuter = asyncExecuter;
+        _localizer = localizer;
         _logger = logger;
     }
 
@@ -151,15 +157,25 @@ public class ExpiryScannerService : ITransientDependency
             var earliest = atRisk[0].Batch;
             var totalExpiringQty = atRisk.Sum(b => b.Batch.QuantityRemaining);
 
-            var reasoning =
-                $"Product '{product.Name}' at '{branch.Name}': {earliest.QuantityRemaining} units in batch " +
-                $"{earliest.BatchNumber} {DescribeExpiry(earliest.ExpiryDate, today)}, within the " +
-                $"{thresholdDays}-day threshold of rule '{rule.RuleName}'.";
+            string reasoning = _localizer[
+                "DecisionReasoning:ExpiryAlert",
+                product.Name,
+                branch.Name,
+                earliest.QuantityRemaining,
+                earliest.BatchNumber,
+                DescribeExpiry(earliest.ExpiryDate, today),
+                thresholdDays,
+                rule.RuleName];
+
             if (atRisk.Count > 1)
             {
-                reasoning += $" In total {totalExpiringQty} units across {atRisk.Count} batches expire within the window.";
+                reasoning += " " + _localizer[
+                    "DecisionReasoning:ExpiryAlert:Total",
+                    totalExpiringQty,
+                    atRisk.Count];
             }
-            reasoning += " Suggest discount or transfer.";
+
+            reasoning += " " + _localizer["DecisionReasoning:ExpiryAlert:ActionHint"];
 
             var log = new AppDecisionLog(
                 _guidGenerator.Create(),
@@ -246,11 +262,18 @@ public class ExpiryScannerService : ITransientDependency
             var expiredQty = ordered.Sum(b => b.Batch.QuantityRemaining);
             var wasteCost = expiredQty * product.CostPrice;
 
-            var reasoning =
-                $"Product '{product.Name}' at '{branch.Name}': {expiredQty} unit(s) across {ordered.Count} batch(es) " +
-                $"are past their expiry date — the oldest (batch {oldest.BatchNumber}) {DescribeExpiry(oldest.ExpiryDate, today)}. " +
-                $"Estimated waste cost {wasteCost:0.00} {product.Currency} ({expiredQty} × {product.CostPrice:0.00} cost). " +
-                $"Rule '{rule.RuleName}' flags expired stock for write-off.";
+            var reasoning = _localizer[
+                "DecisionReasoning:WasteWriteOff",
+                product.Name,
+                branch.Name,
+                expiredQty,
+                ordered.Count,
+                oldest.BatchNumber,
+                DescribeExpiry(oldest.ExpiryDate, today),
+                FormatMoney(wasteCost, product.Currency),
+                expiredQty,
+                FormatMoney(product.CostPrice, product.Currency),
+                rule.RuleName];
 
             var log = new AppDecisionLog(
                 _guidGenerator.Create(),
@@ -288,15 +311,18 @@ public class ExpiryScannerService : ITransientDependency
     }
 
     /// <summary>"expire in 2 days (2026-06-13)" / "expire today (…)" / "expired 3 days ago (…)".</summary>
-    private static string DescribeExpiry(DateTime expiryDate, DateTime today)
+    private string DescribeExpiry(DateTime expiryDate, DateTime today)
     {
         var days = (expiryDate.Date - today).Days;
         var dateText = expiryDate.ToString("yyyy-MM-dd");
         return days switch
         {
-            < 0 => $"expired {-days} day(s) ago ({dateText})",
-            0 => $"expire today ({dateText})",
-            _ => $"expire in {days} day(s) ({dateText})"
+            < 0 => _localizer["DecisionReasoning:ExpiryDate:ExpiredAgo", -days, dateText],
+            0 => _localizer["DecisionReasoning:ExpiryDate:Today", dateText],
+            _ => _localizer["DecisionReasoning:ExpiryDate:InDays", days, dateText]
         };
     }
+
+    private static string FormatMoney(decimal value, string currency)
+        => $"{value.ToString("N2", CultureInfo.CurrentCulture)} {currency}";
 }

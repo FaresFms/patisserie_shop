@@ -130,7 +130,22 @@ body.abp-application-layout .mud-appbar {
     -webkit-backdrop-filter: none !important;
     border-bottom: 1px solid var(--bd-1);
     box-shadow: none;
-    color: var(--fg-1);
+    color: var(--fg-1) !important;
+}
+
+body.abp-application-layout .mud-appbar .mud-button-root,
+body.abp-application-layout .mud-appbar .mud-icon-button,
+body.abp-application-layout .mud-appbar .mud-icon-root,
+body.abp-application-layout .mud-appbar .mud-typography,
+body.abp-application-layout .mud-appbar .mud-chip,
+body.abp-application-layout .mud-appbar .mud-chip .mud-chip-content {
+    color: var(--fg-1) !important;
+}
+
+body.abp-application-layout .mud-appbar .mud-button-root:hover,
+body.abp-application-layout .mud-appbar .mud-icon-button:hover,
+body.abp-application-layout .mud-appbar .mud-chip:hover {
+    background: var(--hover) !important;
 }
 
 /* --- Drawer / sidebar -------------------------------------------------- */
@@ -141,6 +156,20 @@ body.abp-application-layout .mud-drawer {
     border-right: 1px solid var(--bd-1);
     box-shadow: none;
     color: var(--fg-1);
+}
+html[dir="rtl"] body.abp-application-layout .mud-drawer {
+    border-right: 0;
+    border-left: 1px solid var(--bd-1);
+    direction: rtl;
+}
+html[dir="rtl"] body.abp-application-layout .mud-navmenu,
+html[dir="rtl"] body.abp-application-layout .mud-nav-link,
+html[dir="rtl"] body.abp-application-layout .mud-nav-group {
+    direction: rtl;
+    text-align: right;
+}
+html[dir="rtl"] body.abp-application-layout .mud-nav-link {
+    flex-direction: row-reverse;
 }
 body.abp-application-layout .mud-nav-link {
     color: var(--fg-2);
@@ -435,6 +464,123 @@ body.abp-application-layout .glass-modal {
     background: var(--surface);
 }
 
+.product-modal-body {
+    background: var(--surface);
+}
+.product-editor {
+    display: grid;
+    grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+    gap: 24px;
+    align-items: start;
+}
+.product-photo-panel {
+    position: sticky;
+    top: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+.product-photo-frame {
+    aspect-ratio: 4 / 5;
+    overflow: hidden;
+    border: 1px solid var(--bd-2);
+    border-radius: var(--r-md);
+    background: var(--bg-2);
+}
+.product-photo-frame img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+.product-photo-empty {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    color: var(--fg-3);
+    text-align: center;
+    padding: 20px;
+}
+.product-image-input {
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    position: absolute;
+    pointer-events: none;
+}
+.product-upload-button {
+    min-height: 40px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    border-radius: var(--r-sm);
+    border: 1px solid var(--accent-line);
+    background: var(--accent);
+    color: var(--accent-fg);
+    font-weight: 600;
+    cursor: pointer;
+    transition: background .12s, border-color .12s, transform .12s;
+}
+.product-upload-button:hover {
+    background: var(--accent-hover);
+    border-color: var(--accent-hover);
+}
+.product-upload-button:active {
+    transform: translateY(1px);
+}
+.product-fields {
+    display: flex;
+    flex-direction: column;
+    gap: 22px;
+    min-width: 0;
+}
+.product-form-section {
+    min-width: 0;
+}
+.product-form-grid {
+    display: grid;
+    gap: 14px;
+    align-items: start;
+}
+.product-form-grid--two {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.product-form-grid--pricing {
+    grid-template-columns: minmax(110px, .8fr) repeat(2, minmax(140px, 1fr)) minmax(120px, .8fr);
+}
+.product-form-grid--stock {
+    grid-template-columns: repeat(2, minmax(160px, 220px));
+}
+.product-form-grid-span {
+    grid-column: 1 / -1;
+}
+@media (max-width: 900px) {
+    .product-editor {
+        grid-template-columns: 1fr;
+    }
+    .product-photo-panel {
+        position: static;
+    }
+    .product-photo-frame {
+        max-height: 300px;
+    }
+    .product-form-grid--pricing,
+    .product-form-grid--stock {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+@media (max-width: 640px) {
+    .product-form-grid--two,
+    .product-form-grid--pricing,
+    .product-form-grid--stock {
+        grid-template-columns: 1fr;
+    }
+}
+
 .glass, .glass-card, .glass-btn, .glass-input {
     background: var(--surface) !important;
     backdrop-filter: none !important;
@@ -554,6 +700,36 @@ body.abp-application-layout .mud-autocomplete .mud-input-slot {
 body.abp-application-layout .mud-select .mud-select-input,
 body.abp-application-layout .mud-autocomplete input {
     color: var(--fg-1) !important;
+}
+
+/* ApexCharts injects tooltip markup outside Blazor components, so keep its
+   hover colors tied to the active theme tokens here. */
+body.abp-application-layout .apexcharts-tooltip,
+body.abp-application-layout .apexcharts-xaxistooltip,
+body.abp-application-layout .apexcharts-yaxistooltip {
+    background: var(--surface) !important;
+    border: 1px solid var(--bd-2) !important;
+    box-shadow: var(--shadow-md) !important;
+    color: var(--fg-1) !important;
+}
+
+body.abp-application-layout .apexcharts-tooltip-title {
+    background: var(--bg-2) !important;
+    border-bottom: 1px solid var(--bd-1) !important;
+    color: var(--fg-1) !important;
+}
+
+body.abp-application-layout .apexcharts-tooltip-text,
+body.abp-application-layout .apexcharts-tooltip-text-y-label,
+body.abp-application-layout .apexcharts-tooltip-text-y-value,
+body.abp-application-layout .apexcharts-tooltip-text-z-label,
+body.abp-application-layout .apexcharts-tooltip-text-z-value {
+    color: var(--fg-1) !important;
+}
+
+body.abp-application-layout .apexcharts-xaxistooltip::before,
+body.abp-application-layout .apexcharts-xaxistooltip::after {
+    border-bottom-color: var(--surface) !important;
 }
 
 /* Dark-mode tokens triggered explicitly by <html data-theme="dark">.

@@ -95,13 +95,13 @@
                         }
                         else
                         {
-                            <MudTable T="ItemRow" Items="_rows" Dense="true" Hover="true" Bordered="false">
+                            <MudTable T="ItemRow" Items="_rows" Dense="true" Hover="true" Bordered="false" Class="sale-items-table">
                                 <HeaderContent>
-                                    <MudTh Style="width: 38%;">@OpsL["ProductPicker"]</MudTh>
-                                    <MudTh Style="width: 18%; text-align:right;">@OpsL["Quantity"]</MudTh>
-                                    <MudTh Style="width: 18%; text-align:right;">@OpsL["UnitPrice"]</MudTh>
-                                    <MudTh Style="width: 18%; text-align:right;">@OpsL["Subtotal"]</MudTh>
-                                    <MudTh Style="width: 8%;"></MudTh>
+                                    <MudTh Class="sale-product-col">@OpsL["ProductPicker"]</MudTh>
+                                    <MudTh Class="sale-number-col">@OpsL["Quantity"]</MudTh>
+                                    <MudTh Class="sale-number-col">@OpsL["UnitPrice"]</MudTh>
+                                    <MudTh Class="sale-subtotal-col">@OpsL["Subtotal"]</MudTh>
+                                    <MudTh Class="sale-action-col"></MudTh>
                                 </HeaderContent>
                                 <RowTemplate Context="row">
                                     <MudTd>
@@ -115,9 +115,10 @@
                                                           Dense="true" />
                                     </MudTd>
                                     <MudTd Style="text-align:right;">
-                                        <SoftNumericField T="int" @bind-Value="row.Quantity"
+                                        <SoftNumericField T="int" Value="row.Quantity"
+                                                          ValueChanged="@(value => OnRowQuantityChanged(row, value))"
                                                           Variant="Variant.Outlined" Margin="Margin.Dense"
-                                                          Min="1" />
+                                                          Min="1" Max="row.AvailableStock" />
                                         @{ var stock = row.AvailableStock; }
                                         @if (row.ProductId != Guid.Empty && row.Quantity > stock)
                                         {
@@ -181,9 +182,14 @@
         animation: soft-modal-fade-in 0.15s ease-out;
     }
     .soft-modal-container { width: 100%; max-width: 560px; animation: soft-modal-scale-in 0.18s ease-out; }
-    .soft-modal-container--xl { max-width: 980px; }
+    .soft-modal-container--xl { max-width: min(1240px, calc(100vw - 32px)); }
     .soft-modal-card { border-radius: 12px; overflow: hidden; }
     .sale-modal-body { max-height: 72vh; overflow-y: auto; }
+    .sale-items-table .mud-table-root { table-layout: fixed; }
+    .sale-product-col { width: 50%; }
+    .sale-number-col { width: 16%; text-align: right; }
+    .sale-subtotal-col { width: 12%; text-align: right; }
+    .sale-action-col { width: 6%; }
     .sale-total {
         display: flex; align-items: baseline; justify-content: flex-end;
         gap: 10px; margin-top: 12px; padding: 8px 12px;
@@ -276,6 +282,13 @@
         row.Unit = p.Unit;
         row.UnitPrice = p.SalePrice;
         if (row.Quantity < 1) row.Quantity = 1;
+        if (row.Quantity > row.AvailableStock) row.Quantity = row.AvailableStock;
+    }
+
+    private void OnRowQuantityChanged(ItemRow row, int value)
+    {
+        var max = row.ProductId == Guid.Empty ? int.MaxValue : row.AvailableStock;
+        row.Quantity = max < 1 ? 1 : Math.Clamp(value, 1, max);
     }
 
     private async Task CloseAsync()

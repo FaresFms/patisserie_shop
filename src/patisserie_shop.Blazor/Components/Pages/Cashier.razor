@@ -1,0 +1,2021 @@
+@page "/cashier"
+@attribute [Authorize(OperationsPermissions.Cashier.Default)]
+@using System.Globalization
+@using System.Threading.Tasks
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.JSInterop
+@using Volo.Abp.AspNetCore.Components.Web.Theming.Layout
+@using Operations.Cashier
+@using Operations.Permissions
+@using patisserie_shop.Cashier
+@using Color = MudBlazor.Color
+@using Variant = MudBlazor.Variant
+@using Size = MudBlazor.Size
+@inherits patisserie_shopComponentBase
+@inject ICashierAppService CashierAppService
+@inject ICashierReportAppService CashierReportAppService
+@inject ISnackbar Snackbar
+@inject IJSRuntime JS
+@inject PageLayout PageLayout
+
+@{
+    PageLayout.Title = L["Cashier:Title"];
+}
+
+<div class="pos-root">
+    @if (_loading)
+    {
+        <div class="pos-center">
+            <SoftProgressCircular Indeterminate="true" Color="Color.Primary" />
+        </div>
+    }
+    else if (_myBranch is null)
+    {
+        @* ─────────── NO BRANCH ASSIGNED ─────────── *@
+        <div class="pos-center">
+            <SoftIcon Icon="@Icons.Material.Outlined.Storefront" Style="font-size:56px;opacity:.4;" />
+            <h1 class="pos-gate-title">@L["Cashier:NoBranchTitle"]</h1>
+            <div class="pos-gate-sub">@L["Cashier:NoBranchSub"]</div>
+        </div>
+    }
+    else if (_shift is null)
+    {
+        @* ─────────── SHIFT GATE ─────────── *@
+        <div class="pos-gate">
+            <div class="pos-gate-card">
+                <div class="pos-gate-head">
+                    <SoftIcon Icon="@Icons.Material.Filled.PointOfSale" Color="Color.Primary" Style="font-size:40px;" />
+                    <h1 class="pos-gate-title">@L["Cashier:OpenShiftTitle"]</h1>
+                    <div class="pos-gate-sub">@L["Cashier:OpenShiftSub"]</div>
+                </div>
+
+                <div class="pos-field-label">@L["Cashier:Branch"]</div>
+                <div class="pos-branch-fixed">@_myBranch.Name</div>
+
+                <div class="pos-field-label">@L["Cashier:OpeningFloat"]</div>
+                <div class="pos-amount-display">@FormatMoney(_floatEntry)</div>
+
+                @KeypadFor(EditFloatDigit, EditFloatBackspace, EditFloatClear)
+
+                <button type="button" class="pos-primary-btn pos-gate-btn"
+                        disabled="@_busy" @onclick="OpenShiftAsync">
+                    <SoftIcon Icon="@Icons.Material.Filled.LockOpen" Class="mr-2" />
+                    @L["Cashier:OpenShift"]
+                </button>
+            </div>
+        </div>
+    }
+    else
+    {
+        @* ─────────── HEADER STRIP ─────────── *@
+        <div class="pos-header">
+            <div class="pos-header-left">
+                <div class="pos-header-branch">@(_shift.BranchName ?? "")</div>
+                <div class="pos-header-meta">
+                    @L["Cashier:Opened"] @_shift.OpenedAt.ToLocalTime().ToString("t", CultureInfo.CurrentCulture)
+                </div>
+            </div>
+            <div class="pos-header-stats">
+                <div class="pos-hstat">
+                    <span class="pos-hstat-label">@L["Cashier:ExpectedCash"]</span>
+                    <span class="pos-hstat-value">@FormatMoney(_shift.ExpectedCash)</span>
+                </div>
+                <div class="pos-hstat">
+                    <span class="pos-hstat-label">@L["Cashier:TodayTotal"]</span>
+                    <span class="pos-hstat-value">@FormatMoney(_shift.SalesTotal) · @_shift.SalesCount</span>
+                </div>
+            </div>
+            <div class="pos-header-actions">
+                <button type="button" class="pos-chip-btn" @onclick="OpenHeldAsync">
+                    <SoftIcon Icon="@Icons.Material.Filled.Inventory2" Size="Size.Small" Class="mr-1" />
+                    @L["Cashier:Held", _heldCarts.Count]
+                </button>
+                <button type="button" class="pos-chip-btn pos-chip-danger" @onclick="OpenCloseShiftDialog">
+                    <SoftIcon Icon="@Icons.Material.Filled.Logout" Size="Size.Small" Class="mr-1" />
+                    @L["Cashier:CloseShift"]
+                </button>
+            </div>
+        </div>
+
+        @* ─────────── TWO-PANE BODY ─────────── *@
+        <div class="pos-body">
+            @* LEFT — product tiles *@
+            <div class="pos-left">
+                <div class="pos-search-row">
+                    <input class="pos-scan" placeholder="@L["Cashier:ScanOrSku"]"
+                           @bind="_scanEntry" @bind:event="oninput"
+                           @onkeydown="OnScanKeyDownAsync" />
+                    <input class="pos-search" placeholder="@L["Cashier:SearchProducts"]"
+                           @bind="_filter" @bind:event="oninput"
+                           @onkeydown="OnFilterKeyDownAsync" />
+                </div>
+
+                @if (_tilesLoading)
+                {
+                    <div class="pos-center"><SoftProgressCircular Indeterminate="true" Color="Color.Primary" /></div>
+                }
+                else if (_tiles.Count == 0)
+                {
+                    <div class="pos-empty">@L["Cashier:NoProducts"]</div>
+                }
+                else
+                {
+                    <div class="pos-tiles">
+                        @foreach (var p in _tiles)
+                        {
+                            var remaining = RemainingFor(p);
+                            var cannotAdd = remaining <= 0;
+                            <div class="pos-tile @(cannotAdd ? "is-oos" : "")"
+                                 @onclick="() => AddToCart(p)">
+                                <button type="button" class="pos-tile-info"
+                                        title="Product details"
+                                        @onclick:stopPropagation="true"
+                                        @onclick="() => OpenProductInfo(p)">
+                                    <SoftIcon Icon="@Icons.Material.Filled.Info" Size="Size.Small" />
+                                </button>
+                                @if (remaining == 1)
+                                {
+                                    <span class="pos-tile-badge">@L["Cashier:LastOne"]</span>
+                                }
+                                else if (p.IsLowStock && !p.IsOutOfStock)
+                                {
+                                    <span class="pos-tile-badge">@L["Cashier:RunningLow"]</span>
+                                }
+                                <div class="pos-tile-img">
+                                    @if (!string.IsNullOrWhiteSpace(p.ImageUrl))
+                                    {
+                                        <img src="@p.ImageUrl" alt="@p.Name" />
+                                    }
+                                    else
+                                    {
+                                        <span class="pos-tile-initial">@Initial(p.Name)</span>
+                                    }
+                                </div>
+                                <div class="pos-tile-name">@p.Name</div>
+                                <div class="pos-tile-price">@FormatMoney(p.SalePrice)</div>
+                                @if (p.IsOutOfStock)
+                                {
+                                    <div class="pos-tile-oos">@L["Cashier:OutOfStock"]</div>
+                                }
+                                else if (p.IsLowStock)
+                                {
+                                    var reportPending = _pendingReportProductIds.Contains(p.ProductId);
+                                    <button type="button" class="pos-tile-report"
+                                            disabled="@reportPending"
+                                            @onclick:stopPropagation="true"
+                                            @onclick="() => ReportLowStockAsync(p)">
+                                        @(reportPending ? L["Cashier:ReportPending"] : L["Cashier:Report"])
+                                    </button>
+                                }
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+
+            @* RIGHT — cart *@
+            <div class="pos-right">
+                <div class="pos-cart-head">
+                    <span class="pos-cart-title">@L["Cashier:Cart"]</span>
+                    @if (_cart.Count > 0)
+                    {
+                        <button type="button" class="pos-link-btn" @onclick="ClearCart">@L["Cashier:ClearCart"]</button>
+                    }
+                </div>
+
+                <div class="pos-cart-lines">
+                    @if (_cart.Count == 0)
+                    {
+                        <div class="pos-empty">@L["Cashier:CartEmpty"]</div>
+                    }
+                    else
+                    {
+                        @foreach (var line in _cart)
+                        {
+                            <div class="pos-line">
+                                <div class="pos-line-info">
+                                    <div class="pos-line-name">@line.Name</div>
+                                    <div class="pos-line-price">@FormatMoney(line.UnitPrice)</div>
+                                    @if (line.AvailableQuantity > 0 && line.Quantity >= line.AvailableQuantity)
+                                    {
+                                        <div class="pos-line-stock">@L["Cashier:LastAvailableInCart"]</div>
+                                    }
+                                </div>
+                                <div class="pos-stepper">
+                                    <button type="button" class="pos-step" @onclick="() => DecLine(line)">−</button>
+                                    <span class="pos-step-qty">@line.Quantity</span>
+                                    <button type="button" class="pos-step"
+                                            disabled="@(line.AvailableQuantity <= 0 || line.Quantity >= line.AvailableQuantity)"
+                                            @onclick="() => IncLine(line)">+</button>
+                                </div>
+                                <div class="pos-line-sub">@FormatMoney(line.Subtotal)</div>
+                                <button type="button" class="pos-line-remove" title="@L["Cashier:Remove"]"
+                                        @onclick="() => RemoveLine(line)">×</button>
+                            </div>
+                        }
+                    }
+                </div>
+
+                <div class="pos-total-row">
+                    <span class="pos-total-label">@L["Cashier:Total"]</span>
+                    <span class="pos-total-value">@FormatMoney(CartTotal)</span>
+                </div>
+
+                <div class="pos-pay">
+                    <div class="pos-pay-row">
+                        <span class="pos-pay-label">@L["Cashier:CashTendered"]</span>
+                        <span class="pos-pay-value">@FormatMoney(_tendered)</span>
+                    </div>
+                    <div class="pos-pay-row">
+                        <span class="pos-pay-label">@L["Cashier:ChangeDue"]</span>
+                        <span class="pos-pay-value @(ChangeDue < 0 ? "is-neg" : "")">@FormatMoney(ChangeDue)</span>
+                    </div>
+
+                    @KeypadFor(EditTenderedDigit, EditTenderedBackspace, EditTenderedClear, exact: true)
+
+                    <div class="pos-pay-actions">
+                        <button type="button" class="pos-secondary-btn"
+                                disabled="@(_cart.Count == 0 || _busy)" @onclick="HoldCartAsync">
+                            <SoftIcon Icon="@Icons.Material.Filled.PauseCircle" Class="mr-1" />
+                            @L["Cashier:Hold"]
+                        </button>
+                        <button type="button" class="pos-primary-btn pos-charge-btn"
+                                disabled="@(_cart.Count == 0 || _busy)" @onclick="ChargeAsync">
+                            <SoftIcon Icon="@Icons.Material.Filled.PointOfSale" Class="mr-2" />
+                            @(_busy ? L["Cashier:Charging"] : $"{L["Cashier:Charge"]} · {FormatMoney(CartTotal)}")
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@* ─────────── PRODUCT INFO MODAL ─────────── *@
+@if (_infoProduct is not null)
+{
+    var infoRemaining = RemainingFor(_infoProduct);
+    <div class="glass-modal-backdrop" @onclick="CloseProductInfo">
+        <div class="glass-modal-container glass-modal-container--md" @onclick:stopPropagation="true">
+            <SoftCard Elevation="24" Class="glass-modal pos-info-modal">
+                <SoftCardHeader Class="pa-4">
+                    <CardHeaderContent>
+                        <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <SoftIcon Icon="@Icons.Material.Filled.Info" Color="Color.Primary" Size="Size.Medium" />
+                            <SoftText Typo="Typo.h6">@_infoProduct.Name</SoftText>
+                        </SoftStack>
+                    </CardHeaderContent>
+                    <CardHeaderActions>
+                        <SoftIconButton Icon="@Icons.Material.Filled.Close"
+                                        Size="Size.Small"
+                                        OnClick="CloseProductInfo" />
+                    </CardHeaderActions>
+                </SoftCardHeader>
+                <SoftDivider />
+                <SoftCardContent Class="pa-4">
+                    <div class="pos-info-layout">
+                        <div class="pos-info-photo">
+                            @if (!string.IsNullOrWhiteSpace(_infoProduct.ImageUrl))
+                            {
+                                <img src="@_infoProduct.ImageUrl" alt="@_infoProduct.Name" />
+                            }
+                            else
+                            {
+                                <span class="pos-info-initial">@Initial(_infoProduct.Name)</span>
+                            }
+                        </div>
+                        <div class="pos-info-copy">
+                            <div class="pos-info-sku">@_infoProduct.SKU</div>
+                            <div class="pos-info-price">@FormatMoney(_infoProduct.SalePrice)</div>
+                            <p class="pos-info-desc">@ProductDescription(_infoProduct)</p>
+                            <div class="pos-info-stock @StockInfoClass(_infoProduct, infoRemaining)">
+                                <SoftIcon Icon="@StockInfoIcon(_infoProduct, infoRemaining)" Size="Size.Small" />
+                                <span>@StockInfoText(_infoProduct, infoRemaining)</span>
+                            </div>
+                        </div>
+                    </div>
+                </SoftCardContent>
+                <SoftDivider />
+                <div class="pa-3 d-flex justify-end" style="gap:8px;">
+                    <SoftButton Variant="Variant.Text" OnClick="CloseProductInfo">@L["Cancel"]</SoftButton>
+                    <SoftButton Variant="Variant.Filled"
+                                Color="Color.Primary"
+                                StartIcon="@Icons.Material.Filled.AddShoppingCart"
+                                Disabled="@(infoRemaining <= 0)"
+                                OnClick="AddInfoProductToCart">
+                        Add to cart
+                    </SoftButton>
+                </div>
+            </SoftCard>
+        </div>
+    </div>
+}
+
+@* ─────────── RECEIPT MODAL ─────────── *@
+@if (_receipt is not null)
+{
+    <div class="glass-modal-backdrop">
+        <div class="glass-modal-container glass-modal-container--sm" @onclick:stopPropagation="true">
+            <SoftCard Elevation="24" Class="glass-modal">
+                <div class="pos-print-area">
+                    <div class="pos-receipt">
+                        <div class="pos-receipt-head">
+                            <div class="pos-receipt-shop">@(_shift?.BranchName ?? L["AppName"])</div>
+                            <div class="pos-receipt-inv">@L["Cashier:Invoice"] @_receipt.InvoiceNumber</div>
+                            <div class="pos-receipt-date">@_receipt.SaleDate.ToLocalTime().ToString("g", CultureInfo.CurrentCulture)</div>
+                        </div>
+                        <div class="pos-receipt-lines">
+                            @foreach (var l in _receipt.Lines)
+                            {
+                                <div class="pos-receipt-line">
+                                    <span class="pos-receipt-qty">@l.Quantity×</span>
+                                    <span class="pos-receipt-name">@l.ProductName</span>
+                                    <span class="pos-receipt-amt">@FormatMoney(l.Subtotal)</span>
+                                </div>
+                            }
+                        </div>
+                        <div class="pos-receipt-foot">
+                            <div class="pos-receipt-trow pos-receipt-total">
+                                <span>@L["Cashier:Total"]</span><span>@FormatMoney(_receipt.Total)</span>
+                            </div>
+                            @if (_receiptTendered.HasValue)
+                            {
+                                <div class="pos-receipt-trow">
+                                    <span>@L["Cashier:CashTendered"]</span><span>@FormatMoney(_receiptTendered.Value)</span>
+                                </div>
+                            }
+                            @if (_receipt.ChangeDue.HasValue)
+                            {
+                                <div class="pos-receipt-trow">
+                                    <span>@L["Cashier:ChangeDue"]</span><span>@FormatMoney(_receipt.ChangeDue.Value)</span>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+                <SoftDivider />
+                <div class="pa-3 d-flex justify-end pos-noprint" style="gap:8px;">
+                    <SoftButton Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Print" OnClick="PrintReceiptAsync">
+                        @L["Cashier:Print"]
+                    </SoftButton>
+                    <SoftButton Variant="Variant.Filled" Color="Color.Primary"
+                                StartIcon="@Icons.Material.Filled.AddShoppingCart" OnClick="NewSale">
+                        @L["Cashier:NewSale"]
+                    </SoftButton>
+                </div>
+            </SoftCard>
+        </div>
+    </div>
+}
+
+@* ─────────── HELD CARTS MODAL ─────────── *@
+@if (_heldVisible)
+{
+    <div class="glass-modal-backdrop" @onclick="() => _heldVisible = false">
+        <div class="glass-modal-container glass-modal-container--sm" @onclick:stopPropagation="true">
+            <SoftCard Elevation="24" Class="glass-modal">
+                <SoftCardHeader Class="pa-4">
+                    <CardHeaderContent>
+                        <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <SoftIcon Icon="@Icons.Material.Filled.Inventory2" Color="Color.Primary" Size="Size.Medium" />
+                            <SoftText Typo="Typo.h6">@L["Cashier:HeldCarts"]</SoftText>
+                        </SoftStack>
+                    </CardHeaderContent>
+                    <CardHeaderActions>
+                        <SoftIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small"
+                                        OnClick="() => _heldVisible = false" />
+                    </CardHeaderActions>
+                </SoftCardHeader>
+                <SoftDivider />
+                <SoftCardContent Class="pa-3">
+                    @if (_heldCarts.Count == 0)
+                    {
+                        <div class="pos-empty">@L["Cashier:NoHeldCarts"]</div>
+                    }
+                    else
+                    {
+                        @foreach (var h in _heldCarts)
+                        {
+                            <div class="pos-held-row">
+                                <div class="pos-held-info">
+                                    <div class="pos-held-label">@h.Label</div>
+                                    <div class="pos-held-meta">
+                                        @L["Cashier:Items", h.Lines.Sum(x => x.Quantity)] · @FormatMoney(h.Lines.Sum(x => x.Subtotal))
+                                    </div>
+                                </div>
+                                <button type="button" class="pos-chip-btn" @onclick="() => ResumeHeld(h)">@L["Cashier:Resume"]</button>
+                                <button type="button" class="pos-chip-btn pos-chip-danger" @onclick="() => DiscardHeld(h)">@L["Cashier:Discard"]</button>
+                            </div>
+                        }
+                    }
+                </SoftCardContent>
+            </SoftCard>
+        </div>
+    </div>
+}
+
+@* ─────────── CLOSE SHIFT MODAL ─────────── *@
+@if (_closeVisible)
+{
+    <div class="glass-modal-backdrop">
+        <div class="glass-modal-container glass-modal-container--sm" @onclick:stopPropagation="true">
+            <SoftCard Elevation="24" Class="glass-modal">
+                <SoftCardHeader Class="pa-4">
+                    <CardHeaderContent>
+                        <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <SoftIcon Icon="@Icons.Material.Filled.Logout" Color="Color.Primary" Size="Size.Medium" />
+                            <SoftText Typo="Typo.h6">@L["Cashier:CloseShiftTitle"]</SoftText>
+                        </SoftStack>
+                    </CardHeaderContent>
+                    <CardHeaderActions>
+                        <SoftIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small"
+                                        OnClick="() => _closeVisible = false" />
+                    </CardHeaderActions>
+                </SoftCardHeader>
+                <SoftDivider />
+                <SoftCardContent Class="pa-4">
+                    @if (_closedShift is null)
+                    {
+                        <div class="pos-gate-sub mb-2">@L["Cashier:CloseShiftSub"]</div>
+                        <div class="pos-field-label">@L["Cashier:CountedCash"]</div>
+                        <div class="pos-amount-display">@FormatMoney(_countedEntry)</div>
+                        @KeypadFor(EditCountedDigit, EditCountedBackspace, EditCountedClear)
+                        <button type="button" class="pos-primary-btn pos-gate-btn mt-3"
+                                disabled="@_busy" @onclick="CloseShiftAsync">
+                            <SoftIcon Icon="@Icons.Material.Filled.Check" Class="mr-2" />
+                            @L["Cashier:CloseShift"]
+                        </button>
+                    }
+                    else
+                    {
+                        <div class="pos-recon">
+                            <div class="pos-recon-row">
+                                <span>@L["Cashier:Expected"]</span><span>@FormatMoney(_closedShift.ExpectedCash)</span>
+                            </div>
+                            <div class="pos-recon-row">
+                                <span>@L["Cashier:Counted"]</span><span>@FormatMoney(_closedShift.CountedCash ?? 0)</span>
+                            </div>
+                            <div class="pos-recon-row pos-recon-variance @VarianceClass(_closedShift.Variance)">
+                                <span>@L["Cashier:Variance"]</span>
+                                <span>@FormatMoney(_closedShift.Variance ?? 0) · @VarianceLabel(_closedShift.Variance)</span>
+                            </div>
+                        </div>
+                        <button type="button" class="pos-primary-btn pos-gate-btn mt-3" @onclick="FinishClose">
+                            @L["Cashier:Done"]
+                        </button>
+                    }
+                </SoftCardContent>
+            </SoftCard>
+        </div>
+    </div>
+}
+
+@code {
+    // ─── state ───
+    private bool _loading = true;
+    private bool _tilesLoading;
+    private bool _busy;
+
+    private CashierBranchDto? _myBranch;
+    private CashierShiftDto? _shift;
+
+    private List<CashierProductDto> _tiles = new();
+    private string? _filter;
+    private string? _scanEntry;
+
+    private readonly List<CartLine> _cart = new();
+    private readonly HashSet<Guid> _pendingReportProductIds = new();
+    private decimal _tendered;
+
+    // numeric keypad buffers (string-built, two decimals)
+    private decimal _floatEntry;
+    private decimal _countedEntry;
+
+    private readonly List<HeldCart> _heldCarts = new();
+    private bool _heldVisible;
+
+    private bool _closeVisible;
+    private CashierShiftDto? _closedShift;
+
+    private CashierSaleResultDto? _receipt;
+    private decimal? _receiptTendered;
+    private CashierProductDto? _infoProduct;
+
+    private Guid BranchId => _shift?.BranchId ?? _myBranch?.Id ?? Guid.Empty;
+    private decimal CartTotal => _cart.Sum(l => l.Subtotal);
+    private decimal ChangeDue => _tendered - CartTotal;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            // The cashier operates their single assigned branch — no picker.
+            _myBranch = await CashierAppService.GetMyBranchAsync();
+            if (_myBranch is not null)
+            {
+                await TryLoadShiftAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"{L["Cashier:LoadFailed"]} {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task TryLoadShiftAsync()
+    {
+        if (_myBranch is null) return;
+
+        var s = await CashierAppService.GetCurrentShiftAsync(_myBranch.Id);
+        if (s is not null)
+        {
+            _shift = s;
+            await LoadTilesAsync();
+        }
+    }
+
+    // ─── shift gate ───
+    private async Task OpenShiftAsync()
+    {
+        if (_busy || _myBranch is null) return;
+        _busy = true;
+        try
+        {
+            _shift = await CashierAppService.OpenShiftAsync(new OpenShiftDto
+            {
+                BranchId = _myBranch.Id,
+                OpeningFloat = _floatEntry
+            });
+            Snackbar.Add(L["Cashier:ShiftOpened"], Severity.Success);
+            await LoadTilesAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"{L["Cashier:OpenShiftFailed"]} {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    // ─── tiles ───
+    private async Task LoadTilesAsync()
+    {
+        if (_shift is null) return;
+        _tilesLoading = true;
+        try
+        {
+            _tiles = await CashierAppService.GetProductTilesAsync(_shift.BranchId, _filter);
+            await LoadPendingReportsAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"{L["Cashier:LoadFailed"]} {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _tilesLoading = false;
+        }
+    }
+
+    private async Task OnFilterKeyDownAsync(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await LoadTilesAsync();
+        }
+    }
+
+    private async Task OnScanKeyDownAsync(KeyboardEventArgs e)
+    {
+        if (e.Key != "Enter" || string.IsNullOrWhiteSpace(_scanEntry)) return;
+
+        var code = _scanEntry.Trim();
+        var match = _tiles.FirstOrDefault(t =>
+            string.Equals(t.SKU, code, StringComparison.OrdinalIgnoreCase));
+
+        // If it's not in the current (filtered) tile set, query the server by the code.
+        if (match is null && _shift is not null)
+        {
+            var hits = await CashierAppService.GetProductTilesAsync(_shift.BranchId, code);
+            match = hits.FirstOrDefault(t => string.Equals(t.SKU, code, StringComparison.OrdinalIgnoreCase))
+                    ?? hits.FirstOrDefault();
+        }
+
+        if (match is not null && !match.IsOutOfStock)
+        {
+            AddToCart(match);
+            _scanEntry = string.Empty;
+        }
+        else
+        {
+            Snackbar.Add(L["Cashier:SkuNotFound", code], Severity.Warning);
+        }
+    }
+
+    private async Task ReportLowStockAsync(CashierProductDto p)
+    {
+        if (_shift is null) return;
+        if (_pendingReportProductIds.Contains(p.ProductId))
+        {
+            Snackbar.Add(L["Cashier:ReportAlreadyPending"], Severity.Info);
+            return;
+        }
+
+        try
+        {
+            await CashierReportAppService.ReportLowStockAsync(new ReportLowStockInput
+            {
+                ProductId = p.ProductId,
+                BranchId = _shift.BranchId
+            });
+            _pendingReportProductIds.Add(p.ProductId);
+            Snackbar.Add(L["Cashier:Reported"], Severity.Info);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"{L["Cashier:ReportFailed"]} {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task LoadPendingReportsAsync()
+    {
+        if (_shift is null)
+        {
+            _pendingReportProductIds.Clear();
+            return;
+        }
+
+        try
+        {
+            var productIds = await CashierReportAppService.GetPendingLowStockProductIdsAsync(_shift.BranchId);
+            _pendingReportProductIds.Clear();
+            foreach (var productId in productIds)
+            {
+                _pendingReportProductIds.Add(productId);
+            }
+        }
+        catch
+        {
+            _pendingReportProductIds.Clear();
+        }
+    }
+
+
+    // ─── cart ───
+    private void AddToCart(CashierProductDto p)
+    {
+        if (p.IsOutOfStock || p.QuantityOnHand <= 0)
+        {
+            Snackbar.Add(L["Cashier:OutOfStock"], Severity.Warning);
+            return;
+        }
+
+        var line = _cart.FirstOrDefault(l => l.ProductId == p.ProductId);
+        if (line is null)
+        {
+            _cart.Add(new CartLine
+            {
+                ProductId = p.ProductId,
+                Name = p.Name,
+                UnitPrice = p.SalePrice,
+                Quantity = 1,
+                AvailableQuantity = p.QuantityOnHand
+            });
+
+            if (p.QuantityOnHand == 1)
+            {
+                Snackbar.Add(L["Cashier:LastOneNotice", p.Name], Severity.Info);
+            }
+        }
+        else
+        {
+            line.AvailableQuantity = p.QuantityOnHand;
+            IncLine(line);
+        }
+    }
+
+    private void OpenProductInfo(CashierProductDto product)
+    {
+        _infoProduct = product;
+    }
+
+    private void CloseProductInfo()
+    {
+        _infoProduct = null;
+    }
+
+    private void AddInfoProductToCart()
+    {
+        if (_infoProduct is null)
+        {
+            return;
+        }
+
+        AddToCart(_infoProduct);
+        if (RemainingFor(_infoProduct) <= 0)
+        {
+            _infoProduct = null;
+        }
+    }
+
+    private void IncLine(CartLine line)
+    {
+        if (line.AvailableQuantity <= 0 || line.Quantity >= line.AvailableQuantity)
+        {
+            Snackbar.Add(L["Cashier:OnlyXAvailable", line.AvailableQuantity, line.Name], Severity.Warning);
+            return;
+        }
+
+        line.Quantity++;
+
+        if (line.Quantity == line.AvailableQuantity)
+        {
+            Snackbar.Add(L["Cashier:LastOneNotice", line.Name], Severity.Info);
+        }
+    }
+
+    private void DecLine(CartLine line)
+    {
+        line.Quantity--;
+        if (line.Quantity <= 0) _cart.Remove(line);
+    }
+
+    private void RemoveLine(CartLine line) => _cart.Remove(line);
+
+    private void ClearCart()
+    {
+        _cart.Clear();
+        _tendered = 0;
+    }
+
+    private async Task<bool> RefreshCartAvailabilityAsync()
+    {
+        if (_shift is null || _cart.Count == 0)
+        {
+            return true;
+        }
+
+        var latest = await CashierAppService.GetProductTilesAsync(_shift.BranchId, null);
+        var byProduct = latest.ToDictionary(p => p.ProductId);
+        var changed = false;
+
+        foreach (var line in _cart.ToList())
+        {
+            if (!byProduct.TryGetValue(line.ProductId, out var product) || product.QuantityOnHand <= 0)
+            {
+                _cart.Remove(line);
+                changed = true;
+                Snackbar.Add(L["Cashier:OutOfStockRemoved", line.Name], Severity.Warning);
+                continue;
+            }
+
+            line.AvailableQuantity = product.QuantityOnHand;
+            if (line.Quantity > product.QuantityOnHand)
+            {
+                line.Quantity = product.QuantityOnHand;
+                changed = true;
+                Snackbar.Add(L["Cashier:OnlyXAvailable", product.QuantityOnHand, line.Name], Severity.Warning);
+            }
+        }
+
+        await LoadTilesAsync();
+
+        if (changed && _cart.Count == 0)
+        {
+            _tendered = 0;
+        }
+
+        return !changed;
+    }
+
+    // ─── charge ───
+    private async Task ChargeAsync()
+    {
+        if (_busy || _cart.Count == 0 || _shift is null) return;
+        _busy = true;
+        try
+        {
+            if (!await RefreshCartAvailabilityAsync())
+            {
+                return;
+            }
+
+            var tendered = _tendered > 0 ? _tendered : (decimal?)null;
+            var result = await CashierAppService.RecordSaleAsync(new RecordCashierSaleDto
+            {
+                BranchId = _shift.BranchId,
+                CashTendered = tendered,
+                Lines = _cart.Select(l => new RecordCashierSaleLineDto
+                {
+                    ProductId = l.ProductId,
+                    Quantity = l.Quantity
+                }).ToList()
+            });
+
+            _receipt = result;
+            _receiptTendered = tendered;
+            _cart.Clear();
+            _tendered = 0;
+
+            // Refresh the live drawer figures + tiles (stock flags may have changed).
+            _shift = await CashierAppService.GetCurrentShiftAsync(_shift.BranchId) ?? _shift;
+            await LoadTilesAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"{L["Cashier:SaleFailed"]} {ex.Message}", Severity.Error);
+            await RefreshCartAvailabilityAsync();
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private void NewSale()
+    {
+        _receipt = null;
+        _receiptTendered = null;
+    }
+
+    private async Task PrintReceiptAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("posPrintReceipt");
+        }
+        catch
+        {
+            // Printing is best-effort; ignore interop failures.
+        }
+    }
+
+    // ─── hold / park ───
+    private async Task HoldCartAsync()
+    {
+        if (_cart.Count == 0) return;
+        _heldCarts.Add(new HeldCart
+        {
+            Label = DateTime.Now.ToString("t", CultureInfo.CurrentCulture),
+            Lines = _cart.Select(l => l.Clone()).ToList()
+        });
+        ClearCart();
+        Snackbar.Add(L["Cashier:CartHeld"], Severity.Info);
+        await Task.CompletedTask;
+    }
+
+    private async Task OpenHeldAsync()
+    {
+        _heldVisible = true;
+        await Task.CompletedTask;
+    }
+
+    private void ResumeHeld(HeldCart h)
+    {
+        // Park whatever's currently in the cart first so nothing is lost.
+        if (_cart.Count > 0)
+        {
+            _heldCarts.Add(new HeldCart
+            {
+                Label = DateTime.Now.ToString("t", CultureInfo.CurrentCulture),
+                Lines = _cart.Select(l => l.Clone()).ToList()
+            });
+        }
+        _cart.Clear();
+        _cart.AddRange(h.Lines.Select(l => l.Clone()));
+        _heldCarts.Remove(h);
+        _heldVisible = false;
+    }
+
+    private void DiscardHeld(HeldCart h) => _heldCarts.Remove(h);
+
+    // ─── close shift ───
+    private void OpenCloseShiftDialog()
+    {
+        _countedEntry = 0;
+        _closedShift = null;
+        _closeVisible = true;
+    }
+
+    private async Task CloseShiftAsync()
+    {
+        if (_busy || _shift is null) return;
+        _busy = true;
+        try
+        {
+            _closedShift = await CashierAppService.CloseShiftAsync(new CloseShiftDto
+            {
+                ShiftId = _shift.Id,
+                CountedCash = _countedEntry
+            });
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"{L["Cashier:CloseShiftFailed"]} {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private void FinishClose()
+    {
+        _closeVisible = false;
+        _closedShift = null;
+        _shift = null;       // back to the shift gate
+        _cart.Clear();
+        _tiles.Clear();
+        _tendered = 0;
+        _floatEntry = 0;
+    }
+
+    // ─── keypad helpers ───
+    private static decimal AppendDigit(decimal current, int digit)
+    {
+        // Treat the value as cents and shift left, capping to a sane maximum.
+        var cents = (long)Math.Round(current * 100m);
+        cents = cents * 10 + digit;
+        if (cents > 9_999_999_99) cents = 9_999_999_99;
+        return cents / 100m;
+    }
+
+    private static decimal Backspace(decimal current)
+    {
+        var cents = (long)Math.Round(current * 100m);
+        cents /= 10;
+        return cents / 100m;
+    }
+
+    private void EditFloatDigit(int d) => _floatEntry = AppendDigit(_floatEntry, d);
+    private void EditFloatBackspace() => _floatEntry = Backspace(_floatEntry);
+    private void EditFloatClear() => _floatEntry = 0;
+
+    private void EditCountedDigit(int d) => _countedEntry = AppendDigit(_countedEntry, d);
+    private void EditCountedBackspace() => _countedEntry = Backspace(_countedEntry);
+    private void EditCountedClear() => _countedEntry = 0;
+
+    private void EditTenderedDigit(int d) => _tendered = AppendDigit(_tendered, d);
+    private void EditTenderedBackspace() => _tendered = Backspace(_tendered);
+    private void EditTenderedClear() => _tendered = 0;
+
+    // Renders a reusable 0-9 keypad. `exact` adds an "exact cash" shortcut that
+    // sets the tendered amount to the cart total.
+    private RenderFragment KeypadFor(Action<int> onDigit, Action onBack, Action onClear, bool exact = false) => builder =>
+    {
+        var seq = 0;
+        builder.OpenElement(seq++, "div");
+        builder.AddAttribute(seq++, "class", "pos-keypad");
+
+        void Key(string label, Action onClick, string extraClass = "")
+        {
+            builder.OpenElement(seq++, "button");
+            builder.AddAttribute(seq++, "type", "button");
+            builder.AddAttribute(seq++, "class", $"pos-key {extraClass}");
+            builder.AddAttribute(seq++, "onclick", EventCallback.Factory.Create(this, onClick));
+            builder.AddContent(seq++, label);
+            builder.CloseElement();
+        }
+
+        for (var n = 1; n <= 9; n++)
+        {
+            var digit = n;
+            Key(digit.ToString(), () => onDigit(digit));
+        }
+
+        if (exact)
+        {
+            Key(L["Cashier:ExactCash"], () => _tendered = CartTotal, "pos-key-fn");
+        }
+        else
+        {
+            Key(L["Cashier:Keypad:Clear"], onClear, "pos-key-fn");
+        }
+
+        Key("0", () => onDigit(0));
+        Key(L["Cashier:Keypad:Backspace"], onBack, "pos-key-fn");
+
+        builder.CloseElement();
+    };
+
+    // ─── formatting ───
+    private static string FormatMoney(decimal v) => $"{v.ToString("N2", CultureInfo.CurrentCulture)} SYP";
+
+    private static string Initial(string name)
+        => string.IsNullOrWhiteSpace(name) ? "?" : name.Trim()[0].ToString().ToUpperInvariant();
+
+    private int RemainingFor(CashierProductDto product)
+    {
+        var inCart = _cart.FirstOrDefault(l => l.ProductId == product.ProductId)?.Quantity ?? 0;
+        return Math.Max(product.QuantityOnHand - inCart, 0);
+    }
+
+    private string ProductDescription(CashierProductDto product)
+        => string.IsNullOrWhiteSpace(product.Description)
+            ? "No description was added for this item yet."
+            : product.Description.Trim();
+
+    private string StockInfoText(CashierProductDto product, int remaining)
+    {
+        if (product.IsOutOfStock || remaining <= 0)
+        {
+            return "Out of stock right now.";
+        }
+
+        if (remaining <= 2)
+        {
+            return $"Only {remaining} exist. Check with the customer before promising more.";
+        }
+
+        if (product.IsLowStock)
+        {
+            return $"{remaining} available. Running low.";
+        }
+
+        return $"{remaining} available for this shift.";
+    }
+
+    private static string StockInfoClass(CashierProductDto product, int remaining)
+    {
+        if (product.IsOutOfStock || remaining <= 0) return "is-out";
+        if (remaining <= 2) return "is-tight";
+        if (product.IsLowStock) return "is-low";
+        return "is-ok";
+    }
+
+    private static string StockInfoIcon(CashierProductDto product, int remaining)
+    {
+        if (product.IsOutOfStock || remaining <= 0) return Icons.Material.Filled.Block;
+        if (remaining <= 2 || product.IsLowStock) return Icons.Material.Filled.PriorityHigh;
+        return Icons.Material.Filled.CheckCircle;
+    }
+
+    private string VarianceLabel(decimal? variance)
+    {
+        var v = variance ?? 0;
+        if (v > 0) return L["Cashier:VarianceOver"];
+        if (v < 0) return L["Cashier:VarianceShort"];
+        return L["Cashier:VarianceBalanced"];
+    }
+
+    private static string VarianceClass(decimal? variance)
+        => (variance ?? 0) == 0 ? "is-balanced" : "is-off";
+
+    // ─── client-side models ───
+    private sealed class CartLine
+    {
+        public Guid ProductId { get; set; }
+        public string Name { get; set; } = "";
+        public decimal UnitPrice { get; set; }
+        public int Quantity { get; set; }
+        public int AvailableQuantity { get; set; }
+        public decimal Subtotal => UnitPrice * Quantity;
+        public CartLine Clone() => new()
+        {
+            ProductId = ProductId,
+            Name = Name,
+            UnitPrice = UnitPrice,
+            Quantity = Quantity,
+            AvailableQuantity = AvailableQuantity
+        };
+    }
+
+    private sealed class HeldCart
+    {
+        public string Label { get; set; } = "";
+        public List<CartLine> Lines { get; set; } = new();
+    }
+}
+
+<style>
+    .pos-root {
+        --pos-tap: 48px;
+        display: flex;
+        flex-direction: column;
+        height: calc(100vh - 96px);
+        min-height: 560px;
+        color: var(--fg-1);
+    }
+
+    .pos-center {
+        flex: 1 1 auto;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 14px;
+    }
+
+    .pos-empty {
+        padding: 28px 16px;
+        text-align: center;
+        color: var(--fg-3);
+        font-size: 0.95rem;
+    }
+
+    /* ── shift gate ── */
+    .pos-gate {
+        flex: 1 1 auto;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 16px;
+    }
+
+    .pos-gate-card {
+        width: 100%;
+        max-width: 440px;
+        background: var(--surface);
+        border: 1px solid var(--bd-2);
+        border-radius: var(--r-lg);
+        box-shadow: var(--shadow-md);
+        padding: 28px 24px;
+    }
+
+    .pos-gate-head {
+        text-align: center;
+        margin-bottom: 18px;
+    }
+
+    .pos-gate-title {
+        font-family: var(--font-serif);
+        font-size: 1.5rem;
+        font-weight: 600;
+        margin: 8px 0 4px;
+        color: var(--fg-1);
+    }
+
+    .pos-gate-sub {
+        color: var(--fg-3);
+        font-size: 0.9rem;
+    }
+
+    .pos-field-label {
+        font-size: 0.72rem;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--fg-3);
+        margin: 14px 0 6px;
+    }
+
+    .pos-branch-picker {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-bottom: 6px;
+    }
+
+    .pos-branch-btn {
+        min-height: var(--pos-tap);
+        padding: 0 18px;
+        border-radius: var(--r-md);
+        border: 1px solid var(--bd-2);
+        background: var(--surface-2);
+        color: var(--fg-1);
+        font-size: 1rem;
+        font-weight: 600;
+        cursor: pointer;
+    }
+
+    .pos-branch-btn.is-active {
+        border-color: var(--accent);
+        background: var(--accent-soft);
+        color: var(--accent-fg);
+    }
+
+    .pos-branch-fixed {
+        min-height: var(--pos-tap);
+        display: flex;
+        align-items: center;
+        padding: 0 18px;
+        border-radius: var(--r-md);
+        border: 1px solid var(--bd-2);
+        background: var(--surface-2);
+        color: var(--fg-1);
+        font-size: 1.05rem;
+        font-weight: 600;
+    }
+
+    .pos-amount-display {
+        font-family: var(--font-mono);
+        font-size: 2.2rem;
+        font-weight: 700;
+        text-align: right;
+        padding: 10px 16px;
+        background: var(--surface-2);
+        border: 1px solid var(--bd-2);
+        border-radius: var(--r-md);
+        font-variant-numeric: tabular-nums;
+    }
+
+    /* ── keypad ── */
+    .pos-keypad {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px;
+        margin-top: 12px;
+    }
+
+    .pos-key {
+        min-height: 58px;
+        border-radius: var(--r-md);
+        border: 1px solid var(--bd-2);
+        background: var(--surface);
+        color: var(--fg-1);
+        font-size: 1.5rem;
+        font-weight: 600;
+        cursor: pointer;
+        user-select: none;
+        transition: background 0.1s ease;
+    }
+
+    .pos-key:active {
+        background: var(--selected);
+    }
+
+    .pos-key-fn {
+        background: var(--surface-2);
+        color: var(--accent);
+        font-size: 1.2rem;
+    }
+
+    /* ── primary / secondary buttons ── */
+    .pos-primary-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 56px;
+        width: 100%;
+        border: none;
+        border-radius: var(--r-md);
+        background: var(--accent);
+        color: var(--accent-fg);
+        font-size: 1.1rem;
+        font-weight: 700;
+        cursor: pointer;
+    }
+
+    .pos-primary-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+    .pos-gate-btn {
+        margin-top: 16px;
+    }
+
+    .pos-secondary-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 56px;
+        border: 1px solid var(--bd-2);
+        border-radius: var(--r-md);
+        background: var(--surface-2);
+        color: var(--fg-1);
+        font-size: 1rem;
+        font-weight: 600;
+        cursor: pointer;
+        padding: 0 16px;
+    }
+
+    .pos-secondary-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+    /* ── header strip ── */
+    .pos-header {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        padding: 10px 14px;
+        background: var(--surface);
+        border: 1px solid var(--bd-1);
+        border-radius: var(--r-md);
+        margin-bottom: 12px;
+        flex-wrap: wrap;
+    }
+
+    .pos-header-left { flex: 0 0 auto; }
+
+    .pos-header-branch {
+        font-family: var(--font-serif);
+        font-size: 1.1rem;
+        font-weight: 600;
+    }
+
+    .pos-header-meta {
+        font-size: 0.78rem;
+        color: var(--fg-3);
+    }
+
+    .pos-header-stats {
+        flex: 1 1 auto;
+        display: flex;
+        gap: 24px;
+    }
+
+    .pos-hstat {
+        display: flex;
+        flex-direction: column;
+    }
+
+    .pos-hstat-label {
+        font-size: 0.68rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--fg-3);
+    }
+
+    .pos-hstat-value {
+        font-size: 1.05rem;
+        font-weight: 700;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .pos-header-actions {
+        display: flex;
+        gap: 8px;
+    }
+
+    .pos-chip-btn {
+        display: inline-flex;
+        align-items: center;
+        min-height: var(--pos-tap);
+        padding: 0 14px;
+        border-radius: var(--r-md);
+        border: 1px solid var(--bd-2);
+        background: var(--surface-2);
+        color: var(--fg-1);
+        font-size: 0.92rem;
+        font-weight: 600;
+        cursor: pointer;
+    }
+
+    .pos-chip-danger {
+        color: var(--danger);
+        border-color: var(--danger);
+    }
+
+    /* ── two-pane body ── */
+    .pos-body {
+        flex: 1 1 auto;
+        display: grid;
+        grid-template-columns: 1fr 380px;
+        gap: 12px;
+        min-height: 0;
+    }
+
+    .pos-left {
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        background: var(--surface);
+        border: 1px solid var(--bd-1);
+        border-radius: var(--r-md);
+        padding: 12px;
+    }
+
+    .pos-search-row {
+        display: flex;
+        gap: 8px;
+        margin-bottom: 12px;
+    }
+
+    .pos-scan, .pos-search {
+        min-height: var(--pos-tap);
+        border-radius: var(--r-md);
+        border: 1px solid var(--bd-2);
+        background: var(--surface-2);
+        color: var(--fg-1);
+        font-size: 1rem;
+        padding: 0 14px;
+    }
+
+    .pos-scan { flex: 0 0 240px; }
+    .pos-search { flex: 1 1 auto; }
+
+    .pos-scan:focus, .pos-search:focus {
+        outline: none;
+        border-color: var(--accent);
+        box-shadow: 0 0 0 2px var(--accent-soft);
+    }
+
+    .pos-tiles {
+        flex: 1 1 auto;
+        overflow-y: auto;
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+        gap: 10px;
+        align-content: start;
+    }
+
+    .pos-tile {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+        padding: 10px 8px 12px;
+        border-radius: var(--r-md);
+        border: 1px solid var(--bd-2);
+        background: var(--surface-2);
+        cursor: pointer;
+        min-height: 140px;
+        transition: transform 0.08s ease, box-shadow 0.08s ease;
+    }
+
+    .pos-tile:active {
+        transform: scale(0.97);
+        box-shadow: var(--shadow-sm);
+    }
+
+    .pos-tile.is-oos {
+        opacity: 0.45;
+        cursor: not-allowed;
+    }
+
+    .pos-tile-info {
+        position: absolute;
+        top: 6px;
+        left: 6px;
+        z-index: 2;
+        width: 30px;
+        height: 30px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 999px;
+        border: 1px solid var(--bd-2);
+        background: color-mix(in srgb, var(--surface) 88%, transparent);
+        color: var(--fg-2);
+        cursor: pointer;
+        box-shadow: var(--shadow-sm);
+    }
+
+    .pos-tile-info:hover {
+        color: var(--accent);
+        border-color: var(--accent-line);
+        background: var(--surface);
+    }
+
+    .pos-tile-img {
+        width: 84px;
+        height: 84px;
+        border-radius: var(--r-md);
+        overflow: hidden;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--hover);
+        margin-bottom: 8px;
+    }
+
+    .pos-tile-img img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+
+    .pos-tile-initial {
+        font-family: var(--font-serif);
+        font-size: 2rem;
+        font-weight: 700;
+        color: var(--accent);
+    }
+
+    .pos-tile-name {
+        font-size: 0.9rem;
+        font-weight: 600;
+        line-height: 1.2;
+        color: var(--fg-1);
+    }
+
+    .pos-tile-price {
+        margin-top: 4px;
+        font-size: 1.1rem;
+        font-weight: 700;
+        color: var(--accent);
+        font-variant-numeric: tabular-nums;
+    }
+
+    .pos-tile-badge {
+        position: absolute;
+        top: 6px;
+        right: 6px;
+        background: var(--amber-text, var(--warn));
+        color: #fff;
+        font-size: 0.62rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        padding: 2px 6px;
+        border-radius: 999px;
+    }
+
+    .pos-tile-oos {
+        margin-top: 6px;
+        font-size: 0.72rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        color: var(--danger);
+    }
+
+    .pos-tile-report {
+        margin-top: 6px;
+        padding: 3px 10px;
+        border-radius: 999px;
+        border: 1px solid var(--bd-3);
+        background: var(--surface);
+        color: var(--fg-2);
+        font-size: 0.72rem;
+        font-weight: 600;
+        cursor: pointer;
+    }
+
+    .pos-tile-report:hover {
+        border-color: var(--accent);
+        color: var(--accent);
+    }
+
+    .pos-tile-report:disabled {
+        cursor: default;
+        border-color: var(--bd-2);
+        background: var(--hover);
+        color: var(--fg-3);
+    }
+
+    /* ── product info ── */
+    .pos-info-modal {
+        overflow: hidden;
+    }
+
+    .pos-info-layout {
+        display: grid;
+        grid-template-columns: minmax(190px, 240px) minmax(0, 1fr);
+        gap: 20px;
+        align-items: stretch;
+    }
+
+    .pos-info-photo {
+        min-height: 260px;
+        border-radius: var(--r-md);
+        overflow: hidden;
+        border: 1px solid var(--bd-2);
+        background: var(--surface-2);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .pos-info-photo img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+    }
+
+    .pos-info-initial {
+        font-family: var(--font-serif);
+        font-size: 4rem;
+        font-weight: 700;
+        color: var(--accent);
+    }
+
+    .pos-info-copy {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+    }
+
+    .pos-info-sku {
+        width: fit-content;
+        border: 1px dashed var(--bd-3);
+        border-radius: 999px;
+        padding: 4px 10px;
+        color: var(--fg-3);
+        font-size: .72rem;
+        font-weight: 700;
+        letter-spacing: .05em;
+        text-transform: uppercase;
+    }
+
+    .pos-info-price {
+        margin-top: 12px;
+        color: var(--accent);
+        font-size: 2rem;
+        font-weight: 800;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .pos-info-desc {
+        margin: 12px 0 16px;
+        color: var(--fg-2);
+        font-size: .98rem;
+        line-height: 1.55;
+    }
+
+    .pos-info-stock {
+        margin-top: auto;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        border-radius: var(--r-md);
+        border: 1px solid var(--bd-2);
+        padding: 12px 14px;
+        font-weight: 700;
+    }
+
+    .pos-info-stock.is-ok {
+        color: var(--green-text);
+        background: rgba(107, 142, 78, .10);
+        border-color: rgba(107, 142, 78, .24);
+    }
+
+    .pos-info-stock.is-low,
+    .pos-info-stock.is-tight {
+        color: var(--amber-text);
+        background: rgba(200, 156, 79, .14);
+        border-color: rgba(200, 156, 79, .30);
+    }
+
+    .pos-info-stock.is-tight {
+        font-size: 1.04rem;
+    }
+
+    .pos-info-stock.is-out {
+        color: var(--danger);
+        background: rgba(179, 84, 58, .12);
+        border-color: rgba(179, 84, 58, .30);
+    }
+
+    /* ── cart pane ── */
+    .pos-right {
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        background: var(--surface);
+        border: 1px solid var(--bd-1);
+        border-radius: var(--r-md);
+        padding: 12px;
+    }
+
+    .pos-cart-head {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        margin-bottom: 8px;
+    }
+
+    .pos-cart-title {
+        font-family: var(--font-serif);
+        font-size: 1.15rem;
+        font-weight: 600;
+    }
+
+    .pos-link-btn {
+        background: none;
+        border: none;
+        color: var(--accent);
+        font-size: 0.85rem;
+        font-weight: 600;
+        cursor: pointer;
+    }
+
+    .pos-cart-lines {
+        flex: 1 1 auto;
+        overflow-y: auto;
+        min-height: 80px;
+    }
+
+    .pos-line {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 0;
+        border-bottom: 1px solid var(--bd-1);
+    }
+
+    .pos-line-info {
+        flex: 1 1 auto;
+        min-width: 0;
+    }
+
+    .pos-line-name {
+        font-size: 0.92rem;
+        font-weight: 600;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .pos-line-price {
+        font-size: 0.76rem;
+        color: var(--fg-3);
+        font-variant-numeric: tabular-nums;
+    }
+
+    .pos-line-stock {
+        margin-top: 2px;
+        font-size: 0.72rem;
+        font-weight: 600;
+        color: var(--amber-text);
+    }
+
+    .pos-stepper {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        flex: 0 0 auto;
+    }
+
+    .pos-step {
+        width: var(--pos-tap);
+        height: var(--pos-tap);
+        border-radius: var(--r-sm);
+        border: 1px solid var(--bd-2);
+        background: var(--surface-2);
+        color: var(--fg-1);
+        font-size: 1.4rem;
+        font-weight: 700;
+        cursor: pointer;
+        line-height: 1;
+    }
+
+    .pos-step:active { background: var(--selected); }
+
+    .pos-step:disabled {
+        opacity: 0.35;
+        cursor: not-allowed;
+    }
+
+    .pos-step-qty {
+        min-width: 30px;
+        text-align: center;
+        font-size: 1.1rem;
+        font-weight: 700;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .pos-line-sub {
+        flex: 0 0 auto;
+        min-width: 64px;
+        text-align: right;
+        font-weight: 700;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .pos-line-remove {
+        flex: 0 0 auto;
+        width: 32px;
+        height: 32px;
+        border: none;
+        background: none;
+        color: var(--fg-3);
+        font-size: 1.5rem;
+        line-height: 1;
+        cursor: pointer;
+    }
+
+    .pos-line-remove:hover { color: var(--danger); }
+
+    .pos-total-row {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        padding: 10px 0;
+        border-top: 2px solid var(--bd-3);
+        margin-top: 4px;
+    }
+
+    .pos-total-label {
+        font-size: 1.05rem;
+        font-weight: 600;
+        color: var(--fg-2);
+    }
+
+    .pos-total-value {
+        font-size: 1.9rem;
+        font-weight: 800;
+        color: var(--fg-1);
+        font-variant-numeric: tabular-nums;
+    }
+
+    .pos-pay {
+        flex: 0 0 auto;
+        margin-top: 6px;
+    }
+
+    .pos-pay-row {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        padding: 2px 0;
+    }
+
+    .pos-pay-label {
+        font-size: 0.85rem;
+        color: var(--fg-3);
+    }
+
+    .pos-pay-value {
+        font-size: 1.1rem;
+        font-weight: 700;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .pos-pay-value.is-neg { color: var(--fg-4); }
+
+    .pos-pay-actions {
+        display: grid;
+        grid-template-columns: 1fr 1.6fr;
+        gap: 8px;
+        margin-top: 10px;
+    }
+
+    .pos-charge-btn {
+        width: auto;
+    }
+
+    /* ── held + reconciliation ── */
+    .pos-held-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 4px;
+        border-bottom: 1px solid var(--bd-1);
+    }
+
+    .pos-held-info { flex: 1 1 auto; }
+    .pos-held-label { font-weight: 600; }
+    .pos-held-meta { font-size: 0.78rem; color: var(--fg-3); }
+
+    .pos-recon {
+        border: 1px solid var(--bd-2);
+        border-radius: var(--r-md);
+        overflow: hidden;
+    }
+
+    .pos-recon-row {
+        display: flex;
+        justify-content: space-between;
+        padding: 10px 14px;
+        font-size: 1rem;
+        border-bottom: 1px solid var(--bd-1);
+        font-variant-numeric: tabular-nums;
+    }
+
+    .pos-recon-row:last-child { border-bottom: none; }
+
+    .pos-recon-variance { font-weight: 700; font-size: 1.05rem; }
+    .pos-recon-variance.is-balanced { color: var(--success); background: var(--accent-soft); }
+    .pos-recon-variance.is-off { color: var(--danger); }
+
+    /* ── receipt ── */
+    .pos-print-area { padding: 18px 20px; }
+
+    .pos-receipt {
+        font-family: var(--font-mono);
+        color: var(--fg-1);
+    }
+
+    .pos-receipt-head {
+        text-align: center;
+        margin-bottom: 12px;
+    }
+
+    .pos-receipt-shop {
+        font-family: var(--font-serif);
+        font-size: 1.2rem;
+        font-weight: 700;
+    }
+
+    .pos-receipt-inv, .pos-receipt-date {
+        font-size: 0.78rem;
+        color: var(--fg-3);
+    }
+
+    .pos-receipt-lines {
+        border-top: 1px dashed var(--bd-3);
+        border-bottom: 1px dashed var(--bd-3);
+        padding: 8px 0;
+        margin: 8px 0;
+    }
+
+    .pos-receipt-line {
+        display: flex;
+        gap: 8px;
+        padding: 2px 0;
+        font-size: 0.85rem;
+    }
+
+    .pos-receipt-qty { flex: 0 0 auto; color: var(--fg-3); }
+    .pos-receipt-name { flex: 1 1 auto; }
+    .pos-receipt-amt { flex: 0 0 auto; font-variant-numeric: tabular-nums; }
+
+    .pos-receipt-trow {
+        display: flex;
+        justify-content: space-between;
+        font-size: 0.9rem;
+        padding: 2px 0;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .pos-receipt-total {
+        font-size: 1.1rem;
+        font-weight: 800;
+    }
+
+    html[dir="rtl"] .pos-root,
+    html[dir="rtl"] .pos-root .glass-modal {
+        direction: rtl;
+        text-align: right;
+    }
+
+    html[dir="rtl"] .pos-header,
+    html[dir="rtl"] .pos-header-stats,
+    html[dir="rtl"] .pos-header-actions,
+    html[dir="rtl"] .pos-search-row,
+    html[dir="rtl"] .pos-cart-head,
+    html[dir="rtl"] .pos-line,
+    html[dir="rtl"] .pos-total-row,
+    html[dir="rtl"] .pos-pay-row,
+    html[dir="rtl"] .pos-pay-actions,
+    html[dir="rtl"] .pos-held-row,
+    html[dir="rtl"] .pos-recon-row,
+    html[dir="rtl"] .pos-receipt-line,
+    html[dir="rtl"] .pos-receipt-trow {
+        direction: rtl;
+    }
+
+    html[dir="rtl"] .pos-scan,
+    html[dir="rtl"] .pos-search {
+        text-align: right;
+    }
+
+    html[dir="rtl"] .pos-tile-badge {
+        right: auto;
+        left: 6px;
+    }
+
+    html[dir="rtl"] .pos-tile-info {
+        left: auto;
+        right: 6px;
+    }
+
+    html[dir="rtl"] .pos-line-sub {
+        text-align: left;
+    }
+
+    html[dir="rtl"] .pos-receipt {
+        direction: rtl;
+    }
+
+    html[dir="rtl"] .pos-receipt-head {
+        text-align: center;
+    }
+
+    html[dir="rtl"] .pos-receipt-name {
+        text-align: right;
+    }
+
+    html[dir="rtl"] .pos-receipt-amt {
+        text-align: left;
+    }
+
+    html[dir="rtl"] .pos-primary-btn .mr-2,
+    html[dir="rtl"] .pos-secondary-btn .mr-1,
+    html[dir="rtl"] .pos-chip-btn .mr-1 {
+        margin-right: 0 !important;
+        margin-left: .5rem !important;
+    }
+
+    /* ── tablet portrait fallback ── */
+    @@media (max-width: 900px) {
+        .pos-body { grid-template-columns: 1fr; }
+        .pos-right { max-height: 50vh; }
+        .pos-info-layout { grid-template-columns: 1fr; }
+        .pos-info-photo { min-height: 220px; }
+    }
+
+    /* ── print: show only the receipt ── */
+    @@media print {
+        body.pos-printing * { visibility: hidden !important; }
+        body.pos-printing .pos-print-area,
+        body.pos-printing .pos-print-area * { visibility: visible !important; }
+        body.pos-printing .pos-print-area {
+            position: fixed;
+            inset: 0;
+            margin: 0;
+            padding: 12px;
+        }
+        body.pos-printing .pos-noprint { display: none !important; }
+    }
+</style>

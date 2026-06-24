@@ -26,10 +26,16 @@ public class OperationsPermissionDefinitionProvider : PermissionDefinitionProvid
 
         var transfers = group.AddPermission(OperationsPermissions.Transfers.Default, L("Permission:Transfers"));
         transfers.AddChild(OperationsPermissions.Transfers.Create, L("Permission:Transfers.Create"));
+        transfers.AddChild(OperationsPermissions.Transfers.ChooseBranches, L("Permission:Transfers.ChooseBranches"));
         transfers.AddChild(OperationsPermissions.Transfers.Approve, L("Permission:Transfers.Approve"));
         transfers.AddChild(OperationsPermissions.Transfers.Ship, L("Permission:Transfers.Ship"));
         transfers.AddChild(OperationsPermissions.Transfers.Complete, L("Permission:Transfers.Complete"));
         transfers.AddChild(OperationsPermissions.Transfers.Cancel, L("Permission:Transfers.Cancel"));
+
+        var cashier = group.AddPermission(OperationsPermissions.Cashier.Default, L("Permission:Cashier"));
+        cashier.AddChild(OperationsPermissions.Cashier.ViewAllShifts, L("Permission:Cashier.ViewAllShifts"));
+        cashier.AddChild(OperationsPermissions.Cashier.ReportLowStock, L("Permission:Cashier.ReportLowStock"));
+        cashier.AddChild(OperationsPermissions.Cashier.ManageCashiers, L("Permission:Cashier.ManageCashiers"));
     }
 
     private static LocalizableString L(string name)

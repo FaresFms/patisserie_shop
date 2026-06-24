@@ -72,6 +72,24 @@ public class SaleRepository
         return await rows.ToListAsync(GetCancellationToken(cancellationToken));
     }
 
+    public async Task<List<SaleListRow>> GetRecentByCashierAsync(
+        Guid branchId,
+        Guid cashierUserId,
+        DateTime sinceUtc,
+        CancellationToken cancellationToken = default)
+    {
+        var query = await GetQueryableAsync();
+
+        var rows = query
+            .Where(s => s.BranchId == branchId
+                        && s.CreatorId == cashierUserId
+                        && s.SaleDate >= sinceUtc)
+            .OrderByDescending(s => s.SaleDate)
+            .Select(s => new SaleListRow { Sale = s, ItemCount = s.Items.Count });
+
+        return await rows.ToListAsync(GetCancellationToken(cancellationToken));
+    }
+
     private async Task<IQueryable<AppSale>> BuildFilteredQueryAsync(
         IReadOnlyCollection<Guid>? branchIdScope,
         Guid? branchId,

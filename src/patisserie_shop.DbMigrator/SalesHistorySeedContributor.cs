@@ -34,8 +34,8 @@ public class SalesHistorySeedContributor : IDataSeedContributor, ITransientDepen
     public const string HistoricalInvoicePrefix = "HIST-";
 
     private const int HistoryDays = 90;
-    private const string MainStreetBranchName = "Main Street Boutique";
-    private const string RiversideBranchName = "Riverside Café";
+    private const string MainStreetBranchName = "بوتيك الشارع الرئيسي";
+    private const string RiversideBranchName = "مقهى ضفة النهر";
 
     private readonly IRepository<AppSale, Guid> _saleRepo;
     private readonly IRepository<AppProduct, Guid> _productRepo;
@@ -201,7 +201,7 @@ public class SalesHistorySeedContributor : IDataSeedContributor, ITransientDepen
             invoiceNumber,
             saleDate,
             currency: "USD",
-            notes: "Seeded historical demo sale");
+            notes: "بيع تجريبي تاريخي مُدخَل");
 
         // 1–5 distinct products per sale, popularity-weighted without replacement.
         var lineCount = rng.Next(1, 6);

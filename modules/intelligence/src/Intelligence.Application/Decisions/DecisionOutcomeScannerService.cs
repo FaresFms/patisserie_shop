@@ -246,6 +246,14 @@ public class DecisionOutcomeScannerService : ITransientDependency
                 return stillExpired ? DecisionOutcomes.Unresolved : DecisionOutcomes.Resolved;
             }
 
+            case DecisionTypes.StockReport:
+                // A manual cashier low-stock report. The sentinel rule carries no real
+                // threshold, so judge against the branch's OWN MinimumStock: completely
+                // out → worst case; stock back above the branch reorder level (no longer
+                // low) → resolved; still at/under it → unresolved.
+                if (qty == 0) return DecisionOutcomes.StockedOut;
+                return inventory.IsLowStock ? DecisionOutcomes.Unresolved : DecisionOutcomes.Resolved;
+
             default:
                 // Unknown/future decision type: record Unresolved rather than re-scanning forever.
                 return DecisionOutcomes.Unresolved;

@@ -18,6 +18,8 @@ public class OperationsEntityFrameworkCoreModule : AbpModule
             options.AddDefaultRepositories<IOperationsDbContext>();
             options.AddRepository<AppSale, SaleRepository>();
             options.AddRepository<AppStockTransfer, StockTransferRepository>();
+            options.AddRepository<AppPurchaseOrder, PurchaseOrderRepository>();
+            options.AddRepository<AppCashierShift, CashierShiftRepository>();
         });
     }
 }

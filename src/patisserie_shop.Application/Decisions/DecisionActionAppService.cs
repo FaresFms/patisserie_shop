@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using Intelligence;
 using Intelligence.Decisions;
@@ -35,6 +37,33 @@ public class DecisionActionAppService : patisserie_shopAppService, IDecisionActi
     /// <summary>Notes column limit on AppPurchaseOrder (HasMaxLength(512) in the Operations EF config).</summary>
     private const int PurchaseOrderNotesMaxLength = 512;
 
+    /// <summary>
+    /// Decision types that reorder by raising a draft purchase order to the product's
+    /// default supplier — the only types eligible for consolidation.
+    /// </summary>
+    private static readonly string[] ReorderDecisionTypes =
+    {
+        DecisionTypes.LowStockAlert,
+        DecisionTypes.ReorderSuggestion,
+        DecisionTypes.StockoutRisk
+    };
+
+    /// <summary>
+    /// Minimum received-with-date sample size before the MEASURED lead time is trusted
+    /// enough to override the supplier's configured LeadTimeDays in the ROP formula.
+    /// Below this the configured value wins (a couple of deliveries is too noisy).
+    /// </summary>
+    private const int MinLeadTimeSampleSize = 3;
+
+    /// <summary>Trailing window for the measured-lead-time lookup (last ~6 months of PO history).</summary>
+    private const int LeadTimeWindowDays = 180;
+
+    /// <summary>
+    /// Page cap when gathering pending reorder decisions to consolidate. Matches ABP's
+    /// default MaxMaxResultCount so the decision-log list endpoint accepts it.
+    /// </summary>
+    private const int MaxConsolidationFetch = 1000;
+
     private readonly IDecisionLogAppService _decisionLogAppService;
     private readonly IPurchaseOrderAppService _purchaseOrderAppService;
     private readonly IStockTransferAppService _stockTransferAppService;
@@ -43,6 +72,7 @@ public class DecisionActionAppService : patisserie_shopAppService, IDecisionActi
     private readonly ISupplierAppService _supplierAppService;
     private readonly IRepository<AppProductVelocity, Guid> _velocityRepository;
     private readonly IStockBatchRepository _stockBatchRepository;
+    private readonly IPurchaseOrderRepository _purchaseOrderRepository;
 
     public DecisionActionAppService(
         IDecisionLogAppService decisionLogAppService,
@@ -52,7 +82,8 @@ public class DecisionActionAppService : patisserie_shopAppService, IDecisionActi
         IBranchInventoryAppService branchInventoryAppService,
         ISupplierAppService supplierAppService,
         IRepository<AppProductVelocity, Guid> velocityRepository,
-        IStockBatchRepository stockBatchRepository)
+        IStockBatchRepository stockBatchRepository,
+        IPurchaseOrderRepository purchaseOrderRepository)
     {
         _decisionLogAppService = decisionLogAppService;
         _purchaseOrderAppService = purchaseOrderAppService;
@@ -62,6 +93,7 @@ public class DecisionActionAppService : patisserie_shopAppService, IDecisionActi
         _supplierAppService = supplierAppService;
         _velocityRepository = velocityRepository;
         _stockBatchRepository = stockBatchRepository;
+        _purchaseOrderRepository = purchaseOrderRepository;
     }
 
     public async Task<DecisionActionResultDto> ExecuteDecisionAsync(Guid decisionLogId)
@@ -97,6 +129,162 @@ public class DecisionActionAppService : patisserie_shopAppService, IDecisionActi
     }
 
     /// <summary>
+    /// Consolidates pending reorder decisions into draft POs, one per
+    /// (supplier × destination branch) group. Real purchasing batches lines onto a
+    /// single order rather than cutting a PO per SKU. Within a group, decisions for the
+    /// SAME product collapse to ONE line at the MAX computed quantity (no double-ordering),
+    /// and all those decisions are linked to the PO. Decisions whose product has no default
+    /// supplier are skipped and counted — never fatal to the batch. The result is DRAFT POs
+    /// a human still approves.
+    /// </summary>
+    public async Task<ConsolidationResultDto> ConsolidateReordersAsync(ConsolidateReordersInput input)
+    {
+        var result = new ConsolidationResultDto();
+
+        var idFilter = input.DecisionLogIds is { Length: > 0 }
+            ? new HashSet<Guid>(input.DecisionLogIds)
+            : null;
+
+        // Gather pending reorder decisions across all three reorder types. The list
+        // endpoint filters by a SINGLE DecisionType, so query once per type (each call
+        // is already branch-scoped server-side) and merge.
+        var candidates = new List<DecisionLogDto>();
+        foreach (var decisionType in ReorderDecisionTypes)
+        {
+            var page = await _decisionLogAppService.GetListAsync(new GetDecisionLogsInput
+            {
+                Status = DecisionLogStatuses.Pending,
+                DecisionType = decisionType,
+                BranchId = input.BranchId,
+                SkipCount = 0,
+                MaxResultCount = MaxConsolidationFetch,
+                Sorting = "CreationTime"
+            });
+            candidates.AddRange(page.Items);
+        }
+
+        // Group by (supplier × branch). A decision without a branch, or whose product has
+        // no default supplier, can't reorder — the latter is skipped+counted, the former
+        // can't occur for reorder types created by the engine but is defended against.
+        var groups = new Dictionary<(Guid SupplierId, Guid BranchId), List<(DecisionLogDto Decision, ProductDto Product)>>();
+
+        foreach (var decision in candidates)
+        {
+            if (idFilter != null && !idFilter.Contains(decision.Id))
+            {
+                continue;
+            }
+
+            if (!decision.BranchId.HasValue)
+            {
+                continue;
+            }
+
+            var product = await _productAppService.GetAsync(decision.ProductId);
+            if (!product.DefaultSupplierId.HasValue)
+            {
+                result.SkippedNoSupplier++;
+                continue;
+            }
+
+            var key = (product.DefaultSupplierId.Value, decision.BranchId.Value);
+            if (!groups.TryGetValue(key, out var members))
+            {
+                members = new List<(DecisionLogDto, ProductDto)>();
+                groups[key] = members;
+            }
+
+            members.Add((decision, product));
+        }
+
+        foreach (var (key, members) in groups)
+        {
+            var consolidated = await CreateConsolidatedPurchaseOrderAsync(key.BranchId, members);
+            result.PurchaseOrders.Add(consolidated);
+            result.PurchaseOrdersCreated++;
+            result.DecisionsConsolidated += consolidated.DecisionCount;
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Builds ONE draft PO for a single (supplier × branch) group: merges decisions that
+    /// reference the same product into one line at the MAX computed quantity, adds a line
+    /// per distinct product, then marks every member decision Executed and linked to the PO.
+    /// </summary>
+    private async Task<ConsolidatedPoDto> CreateConsolidatedPurchaseOrderAsync(
+        Guid branchId,
+        List<(DecisionLogDto Decision, ProductDto Product)> members)
+    {
+        // First member's product currency seeds the PO (all lines share a supplier, so
+        // currency is effectively per-supplier). Compute each decision's quantity with the
+        // shared helper so consolidated numbers match the single-execute path exactly.
+        var supplierId = members[0].Product.DefaultSupplierId!.Value;
+
+        // ProductId → (max quantity, unit price, all decisions referencing it).
+        var lines = new Dictionary<Guid, (int Quantity, decimal UnitPrice, List<Guid> DecisionIds, ProductDto Product)>();
+
+        foreach (var (decision, product) in members)
+        {
+            var (quantity, _) = await ComputeReorderLineAsync(decision, product);
+
+            if (lines.TryGetValue(product.Id, out var existing))
+            {
+                existing.Quantity = Math.Max(existing.Quantity, quantity);
+                existing.DecisionIds.Add(decision.Id);
+                lines[product.Id] = existing;
+            }
+            else
+            {
+                lines[product.Id] = (quantity, product.CostPrice, new List<Guid> { decision.Id }, product);
+            }
+        }
+
+        var po = await _purchaseOrderAppService.CreateAsync(new CreatePurchaseOrderDto
+        {
+            SupplierId = supplierId,
+            DestBranchId = branchId,
+            OrderDate = DateTime.Today,
+            Currency = members[0].Product.Currency,
+            Notes = TruncateNotes(
+                $"أُنشئ تلقائيًا من {members.Count} قرار مخزون بتاريخ {DateTime.Today:yyyy-MM-dd}.\n" +
+                "تم دمج الأصناف المتشابهة في أمر شراء واحد لتسهيل المتابعة.")
+        });
+
+        foreach (var line in lines.Values)
+        {
+            await _purchaseOrderAppService.AddItemAsync(po.Id, new AddPurchaseOrderItemDto
+            {
+                ProductId = line.Product.Id,
+                OrderedQuantity = line.Quantity,
+                UnitPrice = line.UnitPrice
+            });
+        }
+
+        var decisionCount = 0;
+        foreach (var (decision, _) in members)
+        {
+            await _decisionLogAppService.ExecuteAsync(decision.Id, new ExecuteDecisionLogInput
+            {
+                ActionType = DecisionActionTypes.PurchaseOrder,
+                ActionId = po.Id
+            });
+            decisionCount++;
+        }
+
+        return new ConsolidatedPoDto
+        {
+            PurchaseOrderId = po.Id,
+            PONumber = po.PONumber,
+            SupplierName = po.SupplierName,
+            BranchName = po.DestBranchName,
+            LineCount = lines.Count,
+            DecisionCount = decisionCount
+        };
+    }
+
+    /// <summary>
     /// Draft PO to the product's default supplier, one line for the affected product.
     /// Quantity comes from a reorder-point formula when demand-velocity data exists:
     /// target = ceil(avgDaily30 × (supplier lead time + 7 cover days)) + ceil(avgDaily30 × 2)
@@ -120,23 +308,9 @@ public class DecisionActionAppService : patisserie_shopAppService, IDecisionActi
                 .WithData("ProductName", product.Name);
         }
 
-        var supplier = await _supplierAppService.GetAsync(product.DefaultSupplierId.Value);
-
         var branchId = decision.BranchId.Value;
-        var productId = decision.ProductId;
-        var velocity = await _velocityRepository.FindAsync(
-            v => v.ProductId == productId && v.BranchId == branchId);
 
-        var inventory = await FindBranchInventoryAsync(branchId, productId, product.SKU);
-        var currentQty = inventory?.QuantityOnHand ?? decision.StockAtEvaluation ?? 0;
-        var reorderLevel = inventory?.MinimumStock ?? product.ReorderLevel;
-
-        var (quantity, explanation) = ComputeReorderQuantity(
-            velocity?.AvgDailySales30,
-            supplier.LeadTimeDays,
-            currentQty,
-            inventory?.MaximumStock,
-            reorderLevel);
+        var (quantity, explanation) = await ComputeReorderLineAsync(decision, product);
 
         var po = await _purchaseOrderAppService.CreateAsync(new CreatePurchaseOrderDto
         {
@@ -144,7 +318,7 @@ public class DecisionActionAppService : patisserie_shopAppService, IDecisionActi
             DestBranchId = branchId,
             OrderDate = DateTime.Today,
             Currency = product.Currency,
-            Notes = TruncateNotes($"Auto-created from decision {decision.Id}. {explanation}")
+            Notes = TruncateNotes($"أُنشئ تلقائيًا من قرار المخزون:\n{decision.Id}\n{explanation}")
         });
 
         await _purchaseOrderAppService.AddItemAsync(po.Id, new AddPurchaseOrderItemDto
@@ -161,6 +335,43 @@ public class DecisionActionAppService : patisserie_shopAppService, IDecisionActi
             ActionId = po.Id,
             ActionNumber = po.PONumber
         };
+    }
+
+    /// <summary>
+    /// Computes the order quantity (and its human-readable explanation) for a single
+    /// reorder decision against a product whose default supplier is already resolved.
+    /// This is the ROP/fallback math shared by single-execute and consolidation, so a
+    /// consolidated line carries the EXACT same quantity it would as a one-off PO.
+    /// </summary>
+    private async Task<(int Quantity, string Explanation)> ComputeReorderLineAsync(
+        DecisionLogDto decision,
+        ProductDto product)
+    {
+        var branchId = decision.BranchId!.Value;
+        var productId = decision.ProductId;
+
+        var supplier = await _supplierAppService.GetAsync(product.DefaultSupplierId!.Value);
+
+        var velocity = await _velocityRepository.FindAsync(
+            v => v.ProductId == productId && v.BranchId == branchId);
+
+        var inventory = await FindBranchInventoryAsync(branchId, productId, product.SKU);
+        var currentQty = inventory?.QuantityOnHand ?? decision.StockAtEvaluation ?? 0;
+        var reorderLevel = inventory?.MinimumStock ?? product.ReorderLevel;
+
+        // Prefer the supplier's MEASURED lead time when there's enough received-with-date
+        // history; otherwise the configured LeadTimeDays. The descriptor goes into the PO
+        // notes so the reader knows which value drove the cover-days math.
+        var (leadTimeDays, leadTimeDescriptor) = await ResolveEffectiveLeadTimeAsync(
+            product.DefaultSupplierId.Value, supplier.LeadTimeDays);
+
+        return ComputeReorderQuantity(
+            velocity?.AvgDailySales30,
+            leadTimeDays,
+            leadTimeDescriptor,
+            currentQty,
+            inventory?.MaximumStock,
+            reorderLevel);
     }
 
     /// <summary>
@@ -308,16 +519,51 @@ public class DecisionActionAppService : patisserie_shopAppService, IDecisionActi
     }
 
     /// <summary>
+    /// Resolves the lead time that drives the ROP cover-days math for a supplier.
+    /// Pulls the supplier's delivery history over the last <see cref="LeadTimeWindowDays"/>
+    /// days; when at least <see cref="MinLeadTimeSampleSize"/> received orders carry a
+    /// delivery date, the measured average lead time (rounded) overrides the configured
+    /// value. Otherwise the configured LeadTimeDays is kept. Returns the effective whole
+    /// days plus a descriptor for the PO notes ("measured 4.2d lead from 6 orders" vs
+    /// "configured 3d lead").
+    /// </summary>
+    private async Task<(int LeadTimeDays, string Descriptor)> ResolveEffectiveLeadTimeAsync(
+        Guid supplierId,
+        int configuredLeadTimeDays)
+    {
+        var toUtc = DateTime.UtcNow.Date.AddDays(1);
+        var fromUtc = toUtc.AddDays(-LeadTimeWindowDays);
+
+        var rows = await _purchaseOrderRepository.GetSupplierScorecardsAsync(
+            fromUtc, toUtc, new[] { supplierId });
+
+        var row = rows.Count > 0 ? rows[0] : null;
+
+        if (row?.AvgActualLeadTimeDays is double measured
+            && row.LeadTimeSampleSize >= MinLeadTimeSampleSize)
+        {
+            var measuredDays = Math.Max((int)Math.Round(measured, MidpointRounding.AwayFromZero), 0);
+            return (measuredDays,
+                $"مدة التوريد المحسوبة من آخر {row.LeadTimeSampleSize} أوامر: {measured:0.#} يوم");
+        }
+
+        return (configuredLeadTimeDays, $"مدة التوريد المعتمدة من إعدادات المورد: {configuredLeadTimeDays} يوم");
+    }
+
+    /// <summary>
     /// Reorder-point math (pure arithmetic, no I/O). With demand velocity:
     /// coverDays = leadTimeDays + 7; safety = ceil(avgDaily30 × 2);
     /// target = ceil(avgDaily30 × coverDays) + safety; order = max(target − onHand, 1),
     /// capped at MaximumStock − onHand (still floored at 1) when a ceiling is set.
     /// Without velocity (no row or zero avg) it keeps the Phase 1 refill formula.
-    /// Returns the quantity plus a human-readable explanation for the PO notes.
+    /// <paramref name="leadTimeDescriptor"/> labels which lead time (measured vs
+    /// configured) drove the cover days, for the human-readable PO notes.
+    /// Returns the quantity plus that explanation.
     /// </summary>
     private static (int Quantity, string Explanation) ComputeReorderQuantity(
         decimal? avgDailySales30,
         int leadTimeDays,
+        string leadTimeDescriptor,
         int currentQty,
         int? maximumStock,
         int reorderLevel)
@@ -338,9 +584,14 @@ public class DecisionActionAppService : patisserie_shopAppService, IDecisionActi
             }
 
             var explanation =
-                $"ROP: {avg:0.##}/day × ({leadTimeDays}d lead + 7d cover) + {safety} safety " +
-                $"= {targetQty} target − {currentQty} on hand → order {quantity}" +
-                (capped ? $" (capped by max stock {maximumStock!.Value})." : ".");
+                $"سبب الطلب:\n" +
+                $"- متوسط البيع اليومي خلال 30 يومًا: {avg:0.##}\n" +
+                $"- التغطية المطلوبة: {leadTimeDays} يوم توريد + 7 أيام تشغيل\n" +
+                $"- مخزون الأمان: {safety}\n" +
+                $"- الكمية المستهدفة: {targetQty}، والمتوفر حاليًا: {currentQty}\n" +
+                $"- الكمية المقترحة للطلب: {quantity}\n" +
+                $"- {leadTimeDescriptor}" +
+                (capped ? $"\n- تم تخفيض الكمية بسبب حد المخزون الأعلى: {maximumStock!.Value}." : ".");
 
             return (quantity, explanation);
         }
@@ -352,10 +603,13 @@ public class DecisionActionAppService : patisserie_shopAppService, IDecisionActi
         fallbackQty = Math.Max(fallbackQty, 1);
 
         var fallbackExplanation =
-            $"Refill qty {fallbackQty} (on hand {currentQty}, " +
+            $"سبب الطلب:\n" +
+            "- لا يوجد متوسط بيع كافٍ لحساب الطلب حسب سرعة البيع.\n" +
+            $"- المتوفر حاليًا: {currentQty}\n" +
+            $"- الكمية المقترحة للطلب: {fallbackQty}\n" +
             (maximumStock != null
-                ? $"target max {maximumStock.Value}; no sales velocity)."
-                : $"reorder level {reorderLevel}; no sales velocity).");
+                ? $"- الهدف هو الوصول إلى حد المخزون الأعلى: {maximumStock.Value}."
+                : $"- تم استخدام حد إعادة الطلب: {reorderLevel}.");
 
         return (fallbackQty, fallbackExplanation);
     }

@@ -28,6 +28,21 @@ public interface IStockBatchRepository : IRepository<AppStockBatch, Guid>
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Live batches (QuantityRemaining &gt; 0) of ACTIVE products whose ExpiryDate
+    /// falls inside the inclusive <paramref name="fromDate"/>..<paramref name="toDate"/>
+    /// window, joined with their product and branch, branch-scoped and capped.
+    /// Ordered by ExpiryDate then branch. Backs the reorder calendar's expiry layer
+    /// (unlike <see cref="GetExpiringWithProductAsync"/> it carries the branch, takes
+    /// a lower bound and respects a branch scope).
+    /// </summary>
+    Task<List<StockBatchWithDetails>> GetExpiringInWindowAsync(
+        DateTime fromDate,
+        DateTime toDate,
+        IReadOnlyCollection<Guid>? branchIdScope,
+        int maxResultCount,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Total QuantityRemaining across a product+branch's live batches that are
     /// already expired (ExpiryDate strictly before <paramref name="todayUtc"/> —
     /// the expiry day itself still counts as sellable). Backs the waste write-off

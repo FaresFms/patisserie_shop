@@ -125,12 +125,12 @@ public class PatisserieDataSeedContributor : IDataSeedContributor, ITransientDep
 
         var defs = new[]
         {
-            ("Viennoiseries",       "Laminated pastries like croissants and pain au chocolat"),
-            ("Cakes & Tarts",       "Full-size and individual cakes, fruit tarts"),
-            ("Breads",              "Daily artisan breads and baguettes"),
-            ("Petit Fours",         "Bite-sized pastries, macarons, mini éclairs"),
-            ("Cookies & Biscuits",  "Butter cookies, sablés, biscotti"),
-            ("Seasonal Specials",   "Rotating seasonal and holiday items"),
+            ("المعجنات المورّقة",   "معجنات مورّقة مثل الكرواسون وبان أو شوكولا"),
+            ("الكيك والتارت",       "كيك بالحجم الكامل وأفراد، وفطائر الفاكهة (تارت)"),
+            ("الخبز",               "خبز حرفي يومي وأرغفة الباغيت"),
+            ("الحلويات الصغيرة",    "حلويات بحجم اللقمة، ماكارون، وإكلير صغير"),
+            ("الكوكيز والبسكويت",   "كوكيز بالزبدة، سابليه، وبسكوتي"),
+            ("الأصناف الموسمية",    "أصناف موسمية واحتفالية متجدّدة"),
         };
 
         var result = new Dictionary<string, AppCategory>();
@@ -158,10 +158,10 @@ public class PatisserieDataSeedContributor : IDataSeedContributor, ITransientDep
 
         var defs = new[]
         {
-            ("MoulinsFlour Co.",      "Jean Dupont",   "+33-1-4567-8901", "orders@moulinsflour.com",  "12 Rue des Moulins, Paris"),
-            ("BeurreGold Dairy",      "Marie Laurent", "+33-1-5678-9012", "supply@beurregold.com",    "45 Avenue du Lait, Lyon"),
-            ("ChocoPremium Imports",  "Luca Rossi",    "+33-1-6789-0123", "orders@chocopremium.eu",   "8 Boulevard du Cacao, Marseille"),
-            ("PackRight Solutions",   "Sarah Martin",  "+33-1-7890-1234", "info@packright.com",       "22 Rue de l'Emballage, Toulouse"),
+            ("شركة مطاحن الدقيق",        "أحمد الخباز",  "+963-11-456-7890", "orders@moulinsflour.com",  "12 شارع المطاحن، دمشق"),
+            ("ألبان الزبدة الذهبية",      "مريم الحلبي",  "+963-11-567-8901", "supply@beurregold.com",    "45 شارع الحليب، حلب"),
+            ("شوكولا بريميوم للاستيراد",  "لؤي رستم",     "+963-11-678-9012", "orders@chocopremium.eu",   "8 جادة الكاكاو، اللاذقية"),
+            ("حلول التغليف المثالية",     "سارة مارديني", "+963-11-789-0123", "info@packright.com",       "22 شارع التغليف، حمص"),
         };
 
         var result = new Dictionary<string, AppSupplier>();
@@ -189,50 +189,50 @@ public class PatisserieDataSeedContributor : IDataSeedContributor, ITransientDep
             return existing.ToDictionary(p => p.SKU);
         }
 
-        var viennoiseries = cats["Viennoiseries"].Id;
-        var cakesTarts    = cats["Cakes & Tarts"].Id;
-        var breads        = cats["Breads"].Id;
-        var petitFours    = cats["Petit Fours"].Id;
-        var cookies       = cats["Cookies & Biscuits"].Id;
-        var seasonal      = cats["Seasonal Specials"].Id;
+        var viennoiseries = cats["المعجنات المورّقة"].Id;
+        var cakesTarts    = cats["الكيك والتارت"].Id;
+        var breads        = cats["الخبز"].Id;
+        var petitFours    = cats["الحلويات الصغيرة"].Id;
+        var cookies       = cats["الكوكيز والبسكويت"].Id;
+        var seasonal      = cats["الأصناف الموسمية"].Id;
 
-        var moulins  = sups["MoulinsFlour Co."].Id;
-        var beurre   = sups["BeurreGold Dairy"].Id;
-        var choco    = sups["ChocoPremium Imports"].Id;
+        var moulins  = sups["شركة مطاحن الدقيق"].Id;
+        var beurre   = sups["ألبان الزبدة الذهبية"].Id;
+        var choco    = sups["شوكولا بريميوم للاستيراد"].Id;
 
         // (sku, name, unit, categoryId, supplierId, cost, sale, reorderLevel)
         var defs = new (string Sku, string Name, string Unit, Guid CatId, Guid SupId, decimal Cost, decimal Sale, int Reorder)[]
         {
             // Viennoiseries
-            ("VN-001", "Classic Butter Croissant",       "Piece", viennoiseries, moulins, 0.85m,  2.50m, 20),
-            ("VN-002", "Pain au Chocolat",               "Piece", viennoiseries, moulins, 0.95m,  2.75m, 20),
-            ("VN-003", "Almond Croissant",               "Piece", viennoiseries, moulins, 1.20m,  3.50m, 15),
-            ("VN-004", "Brioche Loaf",                   "Piece", viennoiseries, moulins, 1.50m,  4.00m, 10),
+            ("VN-001", "كرواسون بالزبدة الكلاسيكي",       "قطعة", viennoiseries, moulins, 0.85m,  2.50m, 20),
+            ("VN-002", "بان أو شوكولا",                   "قطعة", viennoiseries, moulins, 0.95m,  2.75m, 20),
+            ("VN-003", "كرواسون باللوز",                  "قطعة", viennoiseries, moulins, 1.20m,  3.50m, 15),
+            ("VN-004", "رغيف بريوش",                      "قطعة", viennoiseries, moulins, 1.50m,  4.00m, 10),
             // Cakes & Tarts
-            ("CT-001", "Classic Strawberry Tart",        "Piece", cakesTarts, beurre, 3.50m,  8.50m,  5),
-            ("CT-002", "Opera Cake Slice",               "Piece", cakesTarts, beurre, 2.80m,  6.50m,  8),
-            ("CT-003", "Lemon Meringue Tart",            "Piece", cakesTarts, beurre, 3.00m,  7.50m,  5),
-            ("CT-004", "Chocolate Fondant",              "Piece", cakesTarts, beurre, 2.50m,  6.00m,  8),
-            ("CT-005", "Whole Celebration Cake",         "Piece", cakesTarts, beurre, 12.00m, 35.00m, 2),
+            ("CT-001", "تارت الفراولة الكلاسيكي",         "قطعة", cakesTarts, beurre, 3.50m,  8.50m,  5),
+            ("CT-002", "شريحة كيك أوبرا",                 "قطعة", cakesTarts, beurre, 2.80m,  6.50m,  8),
+            ("CT-003", "تارت المرنغ بالليمون",            "قطعة", cakesTarts, beurre, 3.00m,  7.50m,  5),
+            ("CT-004", "فوندان الشوكولا",                 "قطعة", cakesTarts, beurre, 2.50m,  6.00m,  8),
+            ("CT-005", "كيك احتفال كامل",                 "قطعة", cakesTarts, beurre, 12.00m, 35.00m, 2),
             // Breads
-            ("BR-001", "Traditional Baguette",           "Piece", breads, moulins, 0.60m,  1.80m, 30),
-            ("BR-002", "Sourdough Boule",                "Piece", breads, moulins, 1.20m,  3.50m, 10),
-            ("BR-003", "Multigrain Loaf",                "Piece", breads, moulins, 1.40m,  4.00m,  8),
-            ("BR-004", "Olive Focaccia",                 "Piece", breads, moulins, 1.60m,  4.50m,  6),
+            ("BR-001", "باغيت تقليدي",                    "قطعة", breads, moulins, 0.60m,  1.80m, 30),
+            ("BR-002", "خبز العجين المخمّر",              "قطعة", breads, moulins, 1.20m,  3.50m, 10),
+            ("BR-003", "رغيف متعدد الحبوب",               "قطعة", breads, moulins, 1.40m,  4.00m,  8),
+            ("BR-004", "فوكاتشيا بالزيتون",               "قطعة", breads, moulins, 1.60m,  4.50m,  6),
             // Petit Fours
-            ("PF-001", "Assorted Macarons Box (12pc)",   "Box",   petitFours, choco, 6.00m, 18.00m, 10),
-            ("PF-002", "Mini Éclair Set (6pc)",          "Set",   petitFours, choco, 4.50m, 12.00m,  8),
-            ("PF-003", "Cannelés (4pc)",                 "Box",   petitFours, choco, 3.00m,  8.00m,  8),
-            ("PF-004", "Madeleines (6pc)",               "Box",   petitFours, choco, 2.50m,  6.50m, 10),
-            ("PF-005", "Profiterole Tower",              "Piece", petitFours, choco, 5.00m, 14.00m,  4),
+            ("PF-001", "علبة ماكارون متنوّع (12 قطعة)",    "علبة", petitFours, choco, 6.00m, 18.00m, 10),
+            ("PF-002", "طقم إكلير صغير (6 قطع)",          "طقم",  petitFours, choco, 4.50m, 12.00m,  8),
+            ("PF-003", "كانليه (4 قطع)",                  "علبة", petitFours, choco, 3.00m,  8.00m,  8),
+            ("PF-004", "مادلين (6 قطع)",                  "علبة", petitFours, choco, 2.50m,  6.50m, 10),
+            ("PF-005", "برج البروفيترول",                 "قطعة", petitFours, choco, 5.00m, 14.00m,  4),
             // Cookies & Biscuits
-            ("CB-001", "Butter Sablé Tin",              "Box",   cookies, beurre, 3.50m,  9.00m, 10),
-            ("CB-002", "Double Chocolate Cookies (6pc)", "Box",   cookies, beurre, 2.80m,  7.00m, 12),
-            ("CB-003", "Almond Biscotti Bag",            "Piece", cookies, beurre, 2.00m,  5.50m, 10),
+            ("CB-001", "علبة سابليه بالزبدة",             "علبة", cookies, beurre, 3.50m,  9.00m, 10),
+            ("CB-002", "كوكيز دبل شوكولا (6 قطع)",        "علبة", cookies, beurre, 2.80m,  7.00m, 12),
+            ("CB-003", "كيس بسكوتي باللوز",               "قطعة", cookies, beurre, 2.00m,  5.50m, 10),
             // Seasonal Specials
-            ("SS-001", "Galette des Rois",               "Piece", seasonal, choco, 5.00m, 15.00m, 3),
-            ("SS-002", "Bûche de Noël (serves 8)",      "Piece", seasonal, choco, 8.00m, 25.00m, 2),
-            ("SS-003", "Easter Chocolate Egg",           "Piece", seasonal, choco, 4.50m, 12.00m, 5),
+            ("SS-001", "غاليت دي روا (كعكة الملوك)",       "قطعة", seasonal, choco, 5.00m, 15.00m, 3),
+            ("SS-002", "بوش دو نويل (تكفي 8 أشخاص)",      "قطعة", seasonal, choco, 8.00m, 25.00m, 2),
+            ("SS-003", "بيضة شوكولا الفصح",               "قطعة", seasonal, choco, 4.50m, 12.00m, 5),
         };
 
         var result = new Dictionary<string, AppProduct>();
@@ -295,14 +295,14 @@ public class PatisserieDataSeedContributor : IDataSeedContributor, ITransientDep
 
         var defs = new[]
         {
-            ("Central Kitchen & Warehouse",
-             "1 Rue de la Pâtisserie, Paris 75001", "+33-1-0000-0001", "warehouse@patisserie.com", (Guid?)null),
+            ("المطبخ المركزي والمستودع",
+             "1 شارع الحلويات، دمشق", "+963-11-000-0001", "warehouse@patisserie.com", (Guid?)null),
 
-            ("Main Street Boutique",
-             "88 Boulevard Haussmann, Paris 75008", "+33-1-0000-0002", "mainstreet@patisserie.com", managerUserId),
+            ("بوتيك الشارع الرئيسي",
+             "88 جادة الحمراء، دمشق", "+963-11-000-0002", "mainstreet@patisserie.com", managerUserId),
 
-            ("Riverside Café",
-             "15 Quai de la Tournelle, Paris 75005", "+33-1-0000-0003", "riverside@patisserie.com", (Guid?)null),
+            ("مقهى ضفة النهر",
+             "15 رصيف النهر، دمشق", "+963-11-000-0003", "riverside@patisserie.com", (Guid?)null),
         };
 
         var result = new Dictionary<string, AppBranch>();
@@ -332,9 +332,9 @@ public class PatisserieDataSeedContributor : IDataSeedContributor, ITransientDep
 
         // Guard: if the expected branch names don't exist (user created custom branches
         // via the UI before the seeder ran), skip inventory seeding with a clear message.
-        if (!branches.ContainsKey("Central Kitchen & Warehouse") ||
-            !branches.ContainsKey("Main Street Boutique") ||
-            !branches.ContainsKey("Riverside Café"))
+        if (!branches.ContainsKey("المطبخ المركزي والمستودع") ||
+            !branches.ContainsKey("بوتيك الشارع الرئيسي") ||
+            !branches.ContainsKey("مقهى ضفة النهر"))
         {
             _logger.LogWarning(
                 "[Seed] Inventory seeding skipped — expected branch names not found. " +
@@ -344,9 +344,9 @@ public class PatisserieDataSeedContributor : IDataSeedContributor, ITransientDep
             return;
         }
 
-        var warehouse  = branches["Central Kitchen & Warehouse"];
-        var mainStreet = branches["Main Street Boutique"];
-        var riverside  = branches["Riverside Café"];
+        var warehouse  = branches["المطبخ المركزي والمستودع"];
+        var mainStreet = branches["بوتيك الشارع الرئيسي"];
+        var riverside  = branches["مقهى ضفة النهر"];
 
         var rows = new List<AppBranchInventory>();
 
@@ -536,7 +536,7 @@ public class PatisserieDataSeedContributor : IDataSeedContributor, ITransientDep
         // Retail = every branch except the central warehouse; these are the branches
         // guaranteed an already-expired batch for the waste write-off demo.
         var retailBranchIds = branches.Values
-            .Where(b => b.Name != "Central Kitchen & Warehouse")
+            .Where(b => b.Name != "المطبخ المركزي والمستودع")
             .Select(b => b.Id)
             .ToHashSet();
         var expiredEnsured = new HashSet<Guid>();
@@ -629,13 +629,13 @@ public class PatisserieDataSeedContributor : IDataSeedContributor, ITransientDep
         if (!await _ruleRepo.AnyAsync(r => r.RuleType == InventoryRuleTypes.DaysOfCover))
         {
             var rule = await _ruleManager.CreateAsync(
-                ruleName: "Days of Cover Risk (4 days)",
+                ruleName: "خطر تغطية المخزون (4 أيام)",
                 ruleType: InventoryRuleTypes.DaysOfCover,
                 productId: null,
                 branchId: null,
                 thresholdValue: 4,
                 thresholdDays: null,
-                suggestedAction: "Reorder before stock runs out — fewer than 4 days of demand left",
+                suggestedAction: "أعِد الطلب قبل نفاد المخزون — تبقّى أقل من 4 أيام من الطلب",
                 priority: 3,
                 isActive: true,
                 actionMode: RuleActionModes.SuggestOnly);
@@ -646,13 +646,13 @@ public class PatisserieDataSeedContributor : IDataSeedContributor, ITransientDep
         if (!await _ruleRepo.AnyAsync(r => r.RuleType == InventoryRuleTypes.ExpiringSoon))
         {
             var rule = await _ruleManager.CreateAsync(
-                ruleName: "Expiring Soon (3 days)",
+                ruleName: "قريب الانتهاء (3 أيام)",
                 ruleType: InventoryRuleTypes.ExpiringSoon,
                 productId: null,
                 branchId: null,
                 thresholdValue: null,
                 thresholdDays: 3,
-                suggestedAction: "Apply a discount or transfer the stock to a faster-moving branch before it expires",
+                suggestedAction: "طبّق خصمًا أو انقل المخزون إلى فرع أسرع حركة قبل انتهاء صلاحيته",
                 priority: 5,
                 isActive: true,
                 actionMode: RuleActionModes.SuggestOnly);
@@ -665,13 +665,13 @@ public class PatisserieDataSeedContributor : IDataSeedContributor, ITransientDep
             // SuggestOnly ON PURPOSE: the write-off is destructive, so the decision is
             // never auto-executed — a human triggers it from the decision log.
             var rule = await _ruleManager.CreateAsync(
-                ruleName: "Expired Stock Write-Off",
+                ruleName: "شطب المخزون منتهي الصلاحية",
                 ruleType: InventoryRuleTypes.ExpiredStock,
                 productId: null,
                 branchId: null,
                 thresholdValue: null,
                 thresholdDays: null,
-                suggestedAction: "Write off the expired stock so inventory stays truthful — execute from the decision log",
+                suggestedAction: "اشطب المخزون منتهي الصلاحية ليبقى الجرد دقيقًا — نفّذ ذلك من سجل القرارات",
                 priority: 6,
                 isActive: true,
                 actionMode: RuleActionModes.SuggestOnly);

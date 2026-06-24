@@ -3,6 +3,7 @@
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.AspNetCore.Components.Authorization
 @using Inventory.Permissions
+@using Operations.Permissions
 @using Volo.Abp.AspNetCore.Components.Web.Theming.Layout
 @inherits patisserie_shopComponentBase
 @attribute [Authorize]
@@ -11,7 +12,7 @@
 @inject PageLayout PageLayout
 
 @{
-    PageLayout.Title = "Dashboard";
+    PageLayout.Title = L["Dashboard"].Value;
 }
 
 @if (_role == DashboardRole.Loading)
@@ -19,8 +20,8 @@
     <SoftCard Elevation="0" Class="pa-2 page-flat">
         <div class="page-head">
             <div>
-                <h1 class="page-title">Dashboard</h1>
-                <div class="page-sub">Loading…</div>
+                <h1 class="page-title">@L["Dashboard"]</h1>
+                <div class="page-sub">@L["Dashboard:Loading"]</div>
             </div>
         </div>
         <SoftCardContent>
@@ -43,14 +44,14 @@ else
     <SoftCard Elevation="2" Class="pa-2 page-flat">
         <div class="page-head">
             <div>
-                <h1 class="page-title">Access denied</h1>
-                <div class="page-sub">Your account doesn't have a role that can view this dashboard.</div>
+                <h1 class="page-title">@L["Dashboard:AccessDenied"]</h1>
+                <div class="page-sub">@L["Dashboard:AccessDeniedSub"]</div>
             </div>
         </div>
         <SoftCardContent>
             <SoftStack AlignItems="AlignItems.Center" Spacing="2" Class="pa-6">
                 <SoftIcon Icon="@Icons.Material.Outlined.Block" Style="font-size:48px; opacity:.45;" />
-                <SoftText Typo="Typo.body1">Contact your administrator to be assigned an Admin or BranchManager role.</SoftText>
+                <SoftText Typo="Typo.body1">@L["Dashboard:ContactAdmin"]</SoftText>
             </SoftStack>
         </SoftCardContent>
     </SoftCard>
@@ -79,6 +80,12 @@ else
         else if (await AuthorizationService.IsGrantedAsync(InventoryPermissions.BranchInventory.Default))
         {
             _role = DashboardRole.BranchManager;
+        }
+        else if (await AuthorizationService.IsGrantedAsync(OperationsPermissions.Cashier.Default))
+        {
+            // Cashiers (no dashboard permission) land straight on the POS.
+            
+            Nav.NavigateTo("/cashier", forceLoad: false, replace: true);
         }
         else
         {

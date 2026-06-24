@@ -1,0 +1,239 @@
+@page "/operations/cashier-shifts"
+@attribute [Authorize(OperationsPermissions.Cashier.ViewAllShifts)]
+@using System.Globalization
+@using System.Threading
+@using System.Threading.Tasks
+@using Microsoft.AspNetCore.Authorization
+@using Volo.Abp.Application.Dtos
+@using Volo.Abp.AspNetCore.Components.Web.Theming.Layout
+@using Operations
+@using Operations.Cashier
+@using Operations.Permissions
+@using Color = MudBlazor.Color
+@using Variant = MudBlazor.Variant
+@using Size = MudBlazor.Size
+@using Margin = MudBlazor.Margin
+@inherits patisserie_shopComponentBase
+@inject ICashierAppService CashierAppService
+@inject PageLayout PageLayout
+
+@{
+    PageLayout.Title = L["CashierShifts:Title"];
+}
+
+<SoftCard Elevation="2" Class="pa-2 page-flat">
+    <div class="page-head">
+        <div>
+            <h1 class="page-title">@L["CashierShifts:Title"]</h1>
+            <div class="page-sub">@L["CashierShifts:Subtitle"]</div>
+        </div>
+        <div class="page-head-actions">
+        </div>
+    </div>
+
+    <SoftCardContent>
+        <div class="toolbar">
+            <div class="filter-chip">
+                <SoftLookupSelect TItem="CashierBranchDto" TValue="Guid?"
+                                  Items="_branches"
+                                  ToValue="@(b => (Guid?)b.Id)"
+                                  ToLabel="@(b => b.Name)"
+                                  Value="_branchFilter"
+                                  ValueChanged="OnBranchChangedAsync"
+                                  Label="@L["CashierShifts:AllBranches"]"
+                                  Margin="Margin.Dense"
+                                  Clearable="true"
+                                  Dense="true" />
+            </div>
+
+            <div class="toolbar-right">
+                <MudSwitch T="bool"
+                           Value="_openOnly"
+                           ValueChanged="OnOpenOnlyChangedAsync"
+                           Color="Color.Primary"
+                           Label="@L["CashierShifts:OpenOnly"]" />
+                <SoftButton Variant="Variant.Text" Color="Color.Primary"
+                            OnClick="ReloadAsync" StartIcon="@Icons.Material.Filled.Refresh">
+                    @L["CashierShifts:Refresh"]
+                </SoftButton>
+            </div>
+        </div>
+
+        <SoftDataGrid T="CashierShiftDto"
+                      @ref="_grid"
+                      ServerData="LoadServerData"
+                      Dense="true"
+                      Hover="true"
+                      Bordered="false"
+                      Striped="true"
+                      Loading="_loading"
+                      SortMode="SortMode.Single">
+            <Columns>
+                <PropertyColumn T="CashierShiftDto" TProperty="string" Property="x => x.CashierUserName" Title="@L["CashierShifts:Cashier"]" />
+                <PropertyColumn T="CashierShiftDto" TProperty="string" Property="x => x.BranchName" Title="@L["CashierShifts:Branch"]" />
+                <TemplateColumn T="CashierShiftDto" Title="@L["CashierShifts:Opened"]" SortBy="x => x.OpenedAt">
+                    <CellTemplate>
+                        <SoftText Typo="Typo.body2">@context.Item.OpenedAt.ToLocalTime().ToString("g", CultureInfo.CurrentCulture)</SoftText>
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn T="CashierShiftDto" Title="@L["CashierShifts:Closed"]" SortBy="x => x.ClosedAt">
+                    <CellTemplate>
+                        <SoftText Typo="Typo.body2">
+                            @(context.Item.ClosedAt.HasValue
+                                ? context.Item.ClosedAt.Value.ToLocalTime().ToString("g", CultureInfo.CurrentCulture)
+                                : L["CashierShifts:Dash"])
+                        </SoftText>
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn T="CashierShiftDto" Title="@L["CashierShifts:OpeningFloat"]" SortBy="x => x.OpeningFloat">
+                    <CellTemplate>
+                        <SoftText Typo="Typo.body2" Style="font-variant-numeric: tabular-nums;">@FormatMoney(context.Item.OpeningFloat)</SoftText>
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn T="CashierShiftDto" Title="@L["CashierShifts:Sales"]" SortBy="x => x.SalesTotal">
+                    <CellTemplate>
+                        <SoftText Typo="Typo.body2" Style="font-variant-numeric: tabular-nums;">
+                            <strong>@FormatMoney(context.Item.SalesTotal)</strong> · @context.Item.SalesCount
+                        </SoftText>
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn T="CashierShiftDto" Title="@L["CashierShifts:VoidedTotal"]" SortBy="x => x.VoidedTotal">
+                    <CellTemplate>
+                        <SoftText Typo="Typo.body2"
+                                  Style="@($"font-variant-numeric: tabular-nums; {(context.Item.VoidedTotal > 0 ? "color: var(--danger);" : "color: var(--fg-3);")}")">
+                            @FormatMoney(context.Item.VoidedTotal)
+                        </SoftText>
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn T="CashierShiftDto" Title="@L["CashierShifts:Expected"]" SortBy="x => x.ExpectedCash">
+                    <CellTemplate>
+                        <SoftText Typo="Typo.body2" Style="font-variant-numeric: tabular-nums; font-weight:600;">@FormatMoney(context.Item.ExpectedCash)</SoftText>
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn T="CashierShiftDto" Title="@L["CashierShifts:Counted"]" SortBy="x => x.CountedCash">
+                    <CellTemplate>
+                        <SoftText Typo="Typo.body2" Style="font-variant-numeric: tabular-nums;">
+                            @(context.Item.CountedCash.HasValue ? FormatMoney(context.Item.CountedCash.Value) : L["CashierShifts:Dash"])
+                        </SoftText>
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn T="CashierShiftDto" Title="@L["CashierShifts:Variance"]" SortBy="x => x.Variance">
+                    <CellTemplate>
+                        @if (context.Item.Variance.HasValue)
+                        {
+                            <SoftText Typo="Typo.body2"
+                                      Style="@($"font-variant-numeric: tabular-nums; font-weight:600; {VarianceColor(context.Item.Variance.Value)}")">
+                                @FormatMoney(context.Item.Variance.Value)
+                            </SoftText>
+                        }
+                        else
+                        {
+                            <SoftText Typo="Typo.body2" Style="color: var(--fg-3);">@L["CashierShifts:Dash"]</SoftText>
+                        }
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn T="CashierShiftDto" Title="@L["CashierShifts:Status"]" Sortable="false">
+                    <CellTemplate>
+                        @if (context.Item.Status == CashierShiftStatuses.Open)
+                        {
+                            <SoftChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Filled">@L["CashierShifts:StatusOpen"]</SoftChip>
+                        }
+                        else
+                        {
+                            <SoftChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined">@L["CashierShifts:StatusClosed"]</SoftChip>
+                        }
+                    </CellTemplate>
+                </TemplateColumn>
+            </Columns>
+            <NoRecordsContent>
+                <SoftStack AlignItems="AlignItems.Center" Spacing="2" Class="pa-6">
+                    <SoftIcon Icon="@Icons.Material.Outlined.PointOfSale" Style="font-size: 56px; opacity: 0.4;" />
+                    <SoftText Typo="Typo.body1" Color="Color.Default">@L["CashierShifts:Empty"]</SoftText>
+                </SoftStack>
+            </NoRecordsContent>
+            <PagerContent>
+                <MudDataGridPager T="CashierShiftDto" />
+            </PagerContent>
+        </SoftDataGrid>
+    </SoftCardContent>
+</SoftCard>
+
+@code {
+    private SoftDataGrid<CashierShiftDto> _grid = null!;
+    private bool _loading;
+    private Guid? _branchFilter;
+    private bool _openOnly;
+
+    private List<CashierBranchDto> _branches = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _branches = await CashierAppService.GetSellableBranchesAsync();
+        }
+        catch (Exception ex)
+        {
+            await HandleErrorAsync(ex);
+        }
+    }
+
+    private async Task<GridData<CashierShiftDto>> LoadServerData(GridState<CashierShiftDto> state, CancellationToken cancellationToken)
+    {
+        _loading = true;
+        try
+        {
+            string? sorting = null;
+            var sort = state.SortDefinitions.FirstOrDefault();
+            if (sort != null)
+            {
+                sorting = $"{sort.SortBy} {(sort.Descending ? "desc" : "asc")}";
+            }
+
+            var result = await CashierAppService.GetShiftsAsync(new GetShiftsInput
+            {
+                BranchId = _branchFilter,
+                OpenOnly = _openOnly,
+                SkipCount = state.Page * state.PageSize,
+                MaxResultCount = state.PageSize,
+                Sorting = sorting
+            });
+
+            return new GridData<CashierShiftDto>
+            {
+                Items = result,
+                TotalItems = result.Count
+            };
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task OnBranchChangedAsync(Guid? value)
+    {
+        _branchFilter = value;
+        await ReloadAsync();
+    }
+
+    private async Task OnOpenOnlyChangedAsync(bool value)
+    {
+        _openOnly = value;
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        if (_grid != null)
+        {
+            await _grid.ReloadServerData();
+        }
+    }
+
+    private static string FormatMoney(decimal v) => v.ToString("C2", CultureInfo.CurrentCulture);
+
+    // Green when balanced or over (>= 0), red when the drawer is short (< 0).
+    private static string VarianceColor(decimal variance)
+        => variance < 0 ? "color: var(--danger);" : "color: var(--success);";
+}

@@ -1,0 +1,602 @@
+@page "/intelligence/reorder-calendar"
+@attribute [Authorize(IntelligencePermissions.DecisionLogs.Default)]
+@using System.Globalization
+@using System.Threading.Tasks
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.Extensions.Localization
+@using Volo.Abp.AspNetCore.Components.Web.Theming.Layout
+@using patisserie_shop.Planning
+@using Inventory.BranchInventory
+@using Inventory.Branches
+@using Intelligence.Localization
+@using Intelligence.Permissions
+@using Color = MudBlazor.Color
+@using Variant = MudBlazor.Variant
+@using Size = MudBlazor.Size
+@using Margin = MudBlazor.Margin
+@inherits patisserie_shopComponentBase
+@inject IReorderCalendarAppService CalendarAppService
+@inject IBranchInventoryAppService BranchInventoryAppService
+@inject IBranchAppService BranchAppService
+@inject PageLayout PageLayout
+@inject IStringLocalizer<IntelligenceResource> IntL
+
+@{
+    PageLayout.Title = IntL["ReorderCalendar"];
+}
+
+<SoftCard Elevation="2" Class="pa-2 page-flat reorder-cal">
+    <div class="page-head">
+        <div>
+            <h1 class="page-title">@IntL["ReorderCalendar"]</h1>
+            <div class="page-sub">@IntL["ReorderCalendar:Subtitle"]</div>
+        </div>
+        <div class="page-head-actions">
+            <SoftButton Variant="Variant.Text" Color="Color.Primary"
+                        StartIcon="@Icons.Material.Filled.Refresh"
+                        OnClick="LoadAsync" Disabled="_loading">
+                @L["Refresh"]
+            </SoftButton>
+        </div>
+    </div>
+
+    <SoftCardContent>
+        <div class="toolbar">
+            <div class="rc-monthnav">
+                <SoftIconButton Icon="@Icons.Material.Filled.ChevronLeft"
+                                Size="Size.Small" OnClick="PrevMonthAsync" Disabled="_loading" />
+                <span class="rc-month-label">@_anchor.ToString("MMMM yyyy", CultureInfo.InvariantCulture)</span>
+                <SoftIconButton Icon="@Icons.Material.Filled.ChevronRight"
+                                Size="Size.Small" OnClick="NextMonthAsync" Disabled="_loading" />
+                <SoftButton Variant="Variant.Text" Color="Color.Primary" Size="Size.Small"
+                            OnClick="TodayAsync" Disabled="_loading">@IntL["ReorderCalendar:Today"]</SoftButton>
+            </div>
+
+            @if (_accessibleBranches.Count > 1)
+            {
+                <div class="filter-chip">
+                    <SoftLookupSelect TItem="BranchLookupDto" TValue="Guid?"
+                                      Items="_accessibleBranches"
+                                      ToValue="@(b => (Guid?)b.Id)"
+                                      ToLabel="@(b => b.Name)"
+                                      Value="_branchFilter"
+                                      ValueChanged="OnBranchChangedAsync"
+                                      Label="@IntL["ReorderCalendar:AllBranches"]"
+                                      Margin="Margin.Dense"
+                                      Clearable="true"
+                                      Dense="true" />
+                </div>
+            }
+
+            <div class="toolbar-right">
+                <span class="rc-legend">
+                    <span class="rc-legend-item"><span class="rc-dot rc-dot--danger"></span>@IntL["ReorderCalendar:Legend:Stockout"]</span>
+                    <span class="rc-legend-item"><span class="rc-dot rc-dot--warn"></span>@IntL["ReorderCalendar:Legend:Expiry"]</span>
+                    <span class="rc-legend-item"><span class="rc-dot rc-dot--success"></span>@IntL["ReorderCalendar:Legend:Delivery"]</span>
+                </span>
+            </div>
+        </div>
+
+        @if (_error != null)
+        {
+            <SoftAlert Severity="Severity.Error" Variant="Variant.Filled" Class="ma-4">
+                <strong>@IntL["ReorderCalendar:LoadFailed"]</strong> @_error
+            </SoftAlert>
+        }
+        else if (_data == null)
+        {
+            <div class="rc-skeleton">
+                <SoftSkeleton SkeletonType="SkeletonType.Rectangle" Height="60px" Width="100%" />
+                <SoftSkeleton SkeletonType="SkeletonType.Rectangle" Height="420px" Width="100%" />
+            </div>
+        }
+        else
+        {
+            @* ── Summary counts ── *@
+            <div class="stats">
+                <div>
+                    <span class="stat-label">@IntL["ReorderCalendar:Summary:Stockouts"]</span>
+                    <span class="stat-value">@_data.StockoutCount</span>
+                </div>
+                <div>
+                    <span class="stat-label">@IntL["ReorderCalendar:Summary:Expiries"]</span>
+                    <span class="stat-value">@_data.ExpiryCount</span>
+                </div>
+                <div>
+                    <span class="stat-label">@IntL["ReorderCalendar:Summary:Deliveries"]</span>
+                    <span class="stat-value">@_data.DeliveryCount</span>
+                </div>
+            </div>
+
+            @* ── Month grid ── *@
+            <div class="rc-grid-wrap">
+                <div class="rc-weekdays">
+                    @foreach (var wd in WeekdayHeaders)
+                    {
+                        <div class="rc-weekday">@wd</div>
+                    }
+                </div>
+                <div class="rc-grid">
+                    @foreach (var day in _gridDays)
+                    {
+                        var dayEvents = EventsOn(day);
+                        var isOtherMonth = day.Month != _data.MonthStart.Month;
+                        var isToday = day == _data.TodayUtc.Date;
+                        var isSelected = _selectedDay == day;
+                        var cls = "rc-cell"
+                            + (isOtherMonth ? " rc-cell--muted" : "")
+                            + (isToday ? " rc-cell--today" : "")
+                            + (isSelected ? " rc-cell--selected" : "")
+                            + (dayEvents.Count > 0 ? " rc-cell--has" : "");
+                        <button type="button" class="@cls" @onclick="@(() => SelectDay(day))">
+                            <span class="rc-cell-date">@day.Day</span>
+                            @if (dayEvents.Count > 0)
+                            {
+                                <span class="rc-pills">
+                                    @foreach (var grp in GroupByType(dayEvents))
+                                    {
+                                        <span class="rc-pill @PillClass(grp.Key)" title="@PillTitle(grp.Key, grp.Count())">
+                                            <span class="rc-pill-dot"></span>
+                                            @if (grp.Count() > 1)
+                                            {
+                                                <span class="rc-pill-count">@grp.Count()</span>
+                                            }
+                                        </span>
+                                    }
+                                </span>
+                            }
+                        </button>
+                    }
+                </div>
+            </div>
+
+            @* ── Selected-day detail panel ── *@
+            @if (_selectedDay.HasValue)
+            {
+                var selectedEvents = EventsOn(_selectedDay.Value);
+                <section class="rc-detail">
+                    <header class="rc-detail-head">
+                        <h2 class="rc-detail-title">@_selectedDay.Value.ToString("dddd, MMMM d", CultureInfo.InvariantCulture)</h2>
+                        <SoftIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="ClearSelection" />
+                    </header>
+                    @if (selectedEvents.Count == 0)
+                    {
+                        <div class="rc-detail-empty">@IntL["ReorderCalendar:NoEventsThisDay"]</div>
+                    }
+                    else
+                    {
+                        <ul class="rc-event-list">
+                            @foreach (var ev in selectedEvents)
+                            {
+                                <li class="rc-event @EventClass(ev.EventType)">
+                                    <span class="rc-event-dot"></span>
+                                    <div class="rc-event-body">
+                                        <div class="rc-event-title">
+                                            <span class="rc-event-type">@EventTypeLabel(ev.EventType)</span>
+                                            @ev.Title
+                                        </div>
+                                        @if (!string.IsNullOrWhiteSpace(ev.Detail))
+                                        {
+                                            <div class="rc-event-detail">@ev.Detail</div>
+                                        }
+                                    </div>
+                                </li>
+                            }
+                        </ul>
+                    }
+                </section>
+            }
+
+            @* ── Upcoming list (next 14 days) — narrow-screen + demo fallback ── *@
+            <section class="rc-upcoming">
+                <header class="rc-section-head">
+                    <h2 class="rc-section-title">@IntL["ReorderCalendar:Upcoming"]</h2>
+                    <div class="rc-section-sub">@IntL["ReorderCalendar:UpcomingSub"]</div>
+                </header>
+                @{
+                    var upcoming = UpcomingEvents();
+                }
+                @if (upcoming.Count == 0)
+                {
+                    <div class="rc-empty">
+                        <SoftIcon Icon="@Icons.Material.Outlined.EventAvailable" />
+                        <span>@IntL["ReorderCalendar:Empty"]</span>
+                    </div>
+                }
+                else
+                {
+                    <ul class="rc-event-list rc-event-list--upcoming">
+                        @foreach (var ev in upcoming)
+                        {
+                            <li class="rc-event @EventClass(ev.EventType)">
+                                <span class="rc-event-date">@ev.Date.ToString("MMM d", CultureInfo.InvariantCulture)</span>
+                                <span class="rc-event-dot"></span>
+                                <div class="rc-event-body">
+                                    <div class="rc-event-title">
+                                        <span class="rc-event-type">@EventTypeLabel(ev.EventType)</span>
+                                        @ev.Title
+                                    </div>
+                                    @if (!string.IsNullOrWhiteSpace(ev.Detail))
+                                    {
+                                        <div class="rc-event-detail">@ev.Detail</div>
+                                    }
+                                </div>
+                            </li>
+                        }
+                    </ul>
+                }
+            </section>
+
+            @if (_data.Truncated)
+            {
+                <div class="rc-truncated">@IntL["ReorderCalendar:Truncated"]</div>
+            }
+        }
+    </SoftCardContent>
+</SoftCard>
+
+<style>
+    .reorder-cal { animation: rc-fade .25s ease-out; }
+    @@keyframes rc-fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+    .rc-monthnav { display: inline-flex; align-items: center; gap: 6px; }
+    .rc-month-label {
+        font-family: var(--font-serif);
+        font-size: 16px;
+        font-weight: 600;
+        color: var(--fg-1);
+        min-width: 150px;
+        text-align: center;
+    }
+
+    .rc-legend { display: inline-flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+    .rc-legend-item { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--fg-3); }
+    .rc-dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+    .rc-dot--danger { background: var(--danger); }
+    .rc-dot--warn { background: var(--warn); }
+    .rc-dot--success { background: var(--success); }
+
+    .rc-skeleton { display: flex; flex-direction: column; gap: 16px; padding: 16px 32px; }
+
+    .rc-grid-wrap { padding: 8px 32px 0; }
+
+    .rc-weekdays {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        gap: 6px;
+        margin-bottom: 6px;
+    }
+    .rc-weekday {
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: .05em;
+        color: var(--fg-3);
+        text-align: center;
+        padding: 4px 0;
+    }
+
+    .rc-grid {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        gap: 6px;
+    }
+    .rc-cell {
+        position: relative;
+        min-height: 86px;
+        background: var(--surface);
+        border: 1px solid var(--bd-1);
+        border-radius: var(--r-sm);
+        padding: 6px 6px 4px;
+        cursor: pointer;
+        text-align: left;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        transition: background .12s ease, border-color .12s ease, box-shadow .12s ease;
+        font-family: var(--font-sans);
+    }
+    .rc-cell:hover { background: var(--hover); border-color: var(--bd-2); }
+    .rc-cell--muted { background: var(--bg-2); }
+    .rc-cell--muted .rc-cell-date { color: var(--fg-4); }
+    .rc-cell--has { border-color: var(--bd-2); }
+    .rc-cell--today {
+        border-color: var(--accent);
+        box-shadow: inset 0 0 0 1px var(--accent);
+    }
+    .rc-cell--today .rc-cell-date { color: var(--accent); font-weight: 700; }
+    .rc-cell--selected {
+        border-color: var(--accent);
+        box-shadow: var(--shadow-md);
+    }
+    .rc-cell-date {
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--fg-2);
+        font-variant-numeric: tabular-nums;
+    }
+
+    .rc-pills { display: flex; flex-wrap: wrap; gap: 4px; align-content: flex-start; }
+    .rc-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 3px;
+        padding: 1px 5px;
+        border-radius: 999px;
+        font-size: 10.5px;
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
+        line-height: 1.5;
+    }
+    .rc-pill-dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+    .rc-pill--danger { background: rgba(179, 84, 58, 0.14); color: var(--danger); }
+    .rc-pill--danger .rc-pill-dot { background: var(--danger); }
+    .rc-pill--warn { background: rgba(193, 138, 47, 0.16); color: var(--amber-text); }
+    .rc-pill--warn .rc-pill-dot { background: var(--warn); }
+    .rc-pill--success { background: rgba(60, 138, 75, 0.14); color: var(--green-text); }
+    .rc-pill--success .rc-pill-dot { background: var(--success); }
+
+    /* Detail panel + upcoming list share the event-row look */
+    .rc-detail, .rc-upcoming {
+        background: var(--surface);
+        border: 1px solid var(--bd-1);
+        border-radius: var(--r-md);
+        box-shadow: var(--shadow-sm);
+        padding: 14px 18px;
+        margin: 16px 32px 0;
+    }
+    .rc-detail-head, .rc-section-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        margin-bottom: 10px;
+    }
+    .rc-detail-title, .rc-section-title {
+        font-family: var(--font-serif);
+        font-size: 17px;
+        font-weight: 600;
+        color: var(--fg-1);
+        margin: 0;
+    }
+    .rc-section-sub { font-size: 12.5px; color: var(--fg-3); margin-top: 2px; }
+    .rc-section-head > div { display: flex; flex-direction: column; }
+    .rc-detail-empty { font-size: 13px; color: var(--fg-3); padding: 6px 0; }
+
+    .rc-event-list { list-style: none; margin: 0; padding: 0; }
+    .rc-event {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        padding: 9px 6px;
+        border-bottom: 1px solid var(--bd-1);
+    }
+    .rc-event:last-child { border-bottom: none; }
+    .rc-event-dot { width: 9px; height: 9px; border-radius: 50%; margin-top: 5px; flex: none; }
+    .rc-event--danger .rc-event-dot { background: var(--danger); }
+    .rc-event--warn .rc-event-dot { background: var(--warn); }
+    .rc-event--success .rc-event-dot { background: var(--success); }
+    .rc-event-date {
+        font-size: 11.5px;
+        font-weight: 600;
+        color: var(--fg-3);
+        font-variant-numeric: tabular-nums;
+        min-width: 48px;
+        margin-top: 2px;
+        flex: none;
+    }
+    .rc-event-body { min-width: 0; }
+    .rc-event-title { font-size: 13.5px; font-weight: 600; color: var(--fg-1); }
+    .rc-event-type {
+        display: inline-block;
+        font-size: 10px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: .04em;
+        color: var(--fg-3);
+        margin-right: 6px;
+    }
+    .rc-event-detail { font-size: 12px; color: var(--fg-3); margin-top: 1px; }
+
+    .rc-empty {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        padding: 28px 12px;
+        color: var(--fg-3);
+        font-size: 13px;
+    }
+    .rc-empty .mud-icon-root { font-size: 22px; }
+
+    .rc-truncated {
+        font-size: 12px;
+        color: var(--fg-3);
+        text-align: center;
+        padding: 10px 32px 0;
+    }
+
+    @@media (max-width: 720px) {
+        .rc-grid-wrap, .rc-detail, .rc-upcoming, .rc-truncated { padding-left: 12px; padding-right: 12px; }
+        .rc-detail, .rc-upcoming { margin-left: 12px; margin-right: 12px; }
+        .rc-cell { min-height: 64px; }
+        .rc-cell-date { font-size: 12px; }
+    }
+</style>
+
+@code {
+    private static readonly string[] WeekdayHeaders = { "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat" };
+    private const int UpcomingDays = 14;
+    private const int UpcomingLimit = 30;
+
+    private ReorderCalendarDto? _data;
+    private bool _loading;
+    private string? _error;
+
+    private DateTime _anchor = DateTime.UtcNow.Date;   // first-of-month anchor for the rendered month
+    private Guid? _branchFilter;
+    private DateTime? _selectedDay;
+
+    private List<BranchLookupDto> _accessibleBranches = new();
+    private List<DateTime> _gridDays = new();
+    private Dictionary<DateTime, List<CalendarEventDto>> _eventsByDay = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _anchor = new DateTime(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        try
+        {
+            var allBranches = await BranchAppService.GetLookupAsync();
+            var accessibleIds = await BranchInventoryAppService.GetAccessibleBranchIdsAsync();
+            var set = accessibleIds.ToHashSet();
+            _accessibleBranches = allBranches.Where(b => set.Contains(b.Id)).ToList();
+        }
+        catch (Exception ex)
+        {
+            await HandleErrorAsync(ex);
+        }
+
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error = null;
+        try
+        {
+            _data = await CalendarAppService.GetAsync(new GetReorderCalendarInput
+            {
+                Month = _anchor,
+                BranchId = _branchFilter
+            });
+
+            BuildGrid();
+
+            // Auto-select today when it sits inside the rendered month, else clear.
+            if (_data.TodayUtc.Date >= _data.GridStart.Date && _data.TodayUtc.Date <= _data.GridEnd.Date)
+            {
+                _selectedDay = _data.TodayUtc.Date;
+            }
+            else
+            {
+                _selectedDay = null;
+            }
+        }
+        catch (Exception ex)
+        {
+            _error = $"{ex.GetType().Name}: {ex.Message}";
+            await HandleErrorAsync(ex);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void BuildGrid()
+    {
+        _gridDays = new List<DateTime>();
+        _eventsByDay = new Dictionary<DateTime, List<CalendarEventDto>>();
+        if (_data == null) return;
+
+        for (var day = _data.GridStart.Date; day <= _data.GridEnd.Date; day = day.AddDays(1))
+        {
+            _gridDays.Add(day);
+        }
+
+        foreach (var ev in _data.Events)
+        {
+            var key = ev.Date.Date;
+            if (!_eventsByDay.TryGetValue(key, out var list))
+            {
+                list = new List<CalendarEventDto>();
+                _eventsByDay[key] = list;
+            }
+            list.Add(ev);
+        }
+    }
+
+    private List<CalendarEventDto> EventsOn(DateTime day)
+        => _eventsByDay.TryGetValue(day.Date, out var list) ? list : new List<CalendarEventDto>();
+
+    private static IEnumerable<IGrouping<string, CalendarEventDto>> GroupByType(List<CalendarEventDto> events)
+        => events.GroupBy(e => e.EventType)
+                 .OrderBy(g => TypeRank(g.Key));
+
+    private List<CalendarEventDto> UpcomingEvents()
+    {
+        if (_data == null) return new List<CalendarEventDto>();
+        var from = _data.TodayUtc.Date;
+        var to = from.AddDays(UpcomingDays);
+        return _data.Events
+            .Where(e => e.Date.Date >= from && e.Date.Date <= to)
+            .OrderBy(e => e.Date)
+            .ThenBy(e => TypeRank(e.EventType))
+            .Take(UpcomingLimit)
+            .ToList();
+    }
+
+    private void SelectDay(DateTime day) => _selectedDay = day.Date;
+    private void ClearSelection() => _selectedDay = null;
+
+    private async Task PrevMonthAsync()
+    {
+        _anchor = _anchor.AddMonths(-1);
+        await LoadAsync();
+    }
+
+    private async Task NextMonthAsync()
+    {
+        _anchor = _anchor.AddMonths(1);
+        await LoadAsync();
+    }
+
+    private async Task TodayAsync()
+    {
+        _anchor = new DateTime(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1, 0, 0, 0, DateTimeKind.Utc);
+        await LoadAsync();
+    }
+
+    private async Task OnBranchChangedAsync(Guid? branchId)
+    {
+        _branchFilter = branchId;
+        await LoadAsync();
+    }
+
+    private static int TypeRank(string eventType) => eventType switch
+    {
+        CalendarEventTypes.Stockout => 0,
+        CalendarEventTypes.Expiry => 1,
+        CalendarEventTypes.Delivery => 2,
+        _ => 3
+    };
+
+    private static string PillClass(string eventType) => eventType switch
+    {
+        CalendarEventTypes.Stockout => "rc-pill--danger",
+        CalendarEventTypes.Expiry => "rc-pill--warn",
+        CalendarEventTypes.Delivery => "rc-pill--success",
+        _ => ""
+    };
+
+    private static string EventClass(string eventType) => eventType switch
+    {
+        CalendarEventTypes.Stockout => "rc-event--danger",
+        CalendarEventTypes.Expiry => "rc-event--warn",
+        CalendarEventTypes.Delivery => "rc-event--success",
+        _ => ""
+    };
+
+    private string EventTypeLabel(string eventType) => eventType switch
+    {
+        CalendarEventTypes.Stockout => IntL["ReorderCalendar:Type:Stockout"],
+        CalendarEventTypes.Expiry => IntL["ReorderCalendar:Type:Expiry"],
+        CalendarEventTypes.Delivery => IntL["ReorderCalendar:Type:Delivery"],
+        _ => eventType
+    };
+
+    private string PillTitle(string eventType, int count)
+        => $"{count} {EventTypeLabel(eventType)}";
+}

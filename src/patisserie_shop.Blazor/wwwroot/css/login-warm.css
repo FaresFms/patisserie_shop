@@ -199,12 +199,12 @@ body {
 .login-forgot:hover { color: var(--accent-hover); }
 
 .login-input-wrap { position: relative; }
-.login-input-wrap .material-icons-outlined {
+.login-input-wrap > .material-icons-outlined {
   position: absolute; left: 11px; top: 50%; transform: translateY(-50%);
   color: var(--fg-4); font-size: 17px; pointer-events: none;
   transition: color .12s;
 }
-.login-input-wrap:focus-within .material-icons-outlined { color: var(--fg-2); }
+.login-input-wrap:focus-within > .material-icons-outlined { color: var(--fg-2); }
 
 .login-input-wrap input,
 .login-card input[type="text"],
@@ -241,13 +241,20 @@ body {
 
 .pw-toggle {
   position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+  width: 30px; height: 30px;
   background: transparent; border: 0;
   color: var(--fg-3); cursor: pointer;
-  display: inline-flex; align-items: center;
+  display: inline-flex; align-items: center; justify-content: center;
   padding: 4px; border-radius: 4px;
 }
 .pw-toggle:hover { color: var(--fg-1); }
-.pw-toggle .material-icons-outlined { font-size: 17px; }
+.pw-toggle .material-icons-outlined {
+  position: static;
+  transform: none;
+  color: currentColor;
+  font-size: 18px;
+  pointer-events: none;
+}
 
 /* Remember me */
 .remember-row {

@@ -122,6 +122,13 @@ public class patisserie_shopMenuContributor : IMenuContributor
             order: 3
         );
         operationsMenu.AddItem(new ApplicationMenuItem(
+            patisserie_shopMenus.Cashier,
+            l["Menu:Cashier"],
+            "/cashier",
+            icon: "fas fa-cash-register",
+            order: 0
+        ).RequirePermissions(OperationsPermissions.Cashier.Default));
+        operationsMenu.AddItem(new ApplicationMenuItem(
             patisserie_shopMenus.PurchaseOrders,
             opsL["Menu:PurchaseOrders"],
             "/operations/purchase-orders",
@@ -145,6 +152,24 @@ public class patisserie_shopMenuContributor : IMenuContributor
             "/operations/sales-analytics",
             icon: "fas fa-chart-line"
         ).RequirePermissions(OperationsPermissions.Sales.Default));
+        operationsMenu.AddItem(new ApplicationMenuItem(
+            patisserie_shopMenus.CashierShifts,
+            l["Menu:CashierShifts"],
+            "/operations/cashier-shifts",
+            icon: "fas fa-money-bill-wave"
+        ).RequirePermissions(OperationsPermissions.Cashier.ViewAllShifts));
+        operationsMenu.AddItem(new ApplicationMenuItem(
+            patisserie_shopMenus.CashierAssignments,
+            l["Menu:CashierAssignments"],
+            "/operations/cashier-assignments",
+            icon: "fas fa-user-tag"
+        ).RequirePermissions(OperationsPermissions.Cashier.ViewAllShifts));
+        operationsMenu.AddItem(new ApplicationMenuItem(
+            patisserie_shopMenus.AddCashier,
+            l["Menu:AddCashier"],
+            "/operations/add-cashier",
+            icon: "fas fa-user-plus"
+        ).RequirePermissions(OperationsPermissions.Cashier.ManageCashiers));
         context.Menu.AddItem(operationsMenu);
 
         var intelL = context.GetLocalizer<IntelligenceResource>();
@@ -171,6 +196,12 @@ public class patisserie_shopMenuContributor : IMenuContributor
             intelL["Menu:ProductVelocity"],
             "/intelligence/product-velocity",
             icon: "fas fa-tachometer-alt"
+        ).RequirePermissions(IntelligencePermissions.DecisionLogs.Default));
+        intelligenceMenu.AddItem(new ApplicationMenuItem(
+            patisserie_shopMenus.ReorderCalendar,
+            intelL["Menu:ReorderCalendar"],
+            "/intelligence/reorder-calendar",
+            icon: "fas fa-calendar-alt"
         ).RequirePermissions(IntelligencePermissions.DecisionLogs.Default));
         context.Menu.AddItem(intelligenceMenu);
 

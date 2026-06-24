@@ -21,9 +21,14 @@ public class patisserie_shopMenus
     public const string Sales = Operations + ".Sales";
     public const string StockTransfers = Operations + ".StockTransfers";
     public const string SalesAnalytics = Operations + ".SalesAnalytics";
+    public const string Cashier = Operations + ".Cashier";
+    public const string CashierShifts = Operations + ".CashierShifts";
+    public const string CashierAssignments = Operations + ".CashierAssignments";
+    public const string AddCashier = Operations + ".AddCashier";
 
     public const string Intelligence = Prefix + ".Intelligence";
     public const string InventoryRules = Intelligence + ".InventoryRules";
     public const string DecisionLog = Intelligence + ".DecisionLog";
     public const string ProductVelocity = Intelligence + ".ProductVelocity";
+    public const string ReorderCalendar = Intelligence + ".ReorderCalendar";
 }

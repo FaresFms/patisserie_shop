@@ -2,6 +2,7 @@
 @attribute [Authorize(IntelligencePermissions.DecisionLogs.Default)]
 @using System.Threading.Tasks
 @using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.WebUtilities
 @using Volo.Abp.Application.Dtos
 @using Volo.Abp.AspNetCore.Components.Web.Theming.Layout
 @using Volo.Abp.Identity
@@ -22,6 +23,7 @@
 @inject IProductAppService ProductAppService
 @inject IIdentityUserAppService IdentityUserAppService
 @inject PageLayout PageLayout
+@inject NavigationManager NavigationManager
 @inject ISnackbar Snackbar
 @inject IStringLocalizer<IntelligenceResource> IntL
 
@@ -36,6 +38,15 @@
             <div class="page-sub">@IntL["DecisionLogSubtitle"]</div>
         </div>
         <div class="page-head-actions">
+            @if (_canAcknowledge && _pendingReorderInView > 0)
+            {
+                <SoftButton Variant="Variant.Filled" Color="Color.Primary"
+                            StartIcon="@Icons.Material.Filled.PlaylistAddCheck"
+                            OnClick="OpenConsolidateDialog"
+                            Disabled="_consolidating">
+                    @IntL["DecisionLog:Consolidate"]
+                </SoftButton>
+            }
             <SoftButton Variant="Variant.Text" Color="Color.Primary"
                         StartIcon="@Icons.Material.Filled.Refresh"
                         OnClick="RefreshAllAsync">
@@ -314,6 +325,46 @@
     </SoftCardContent>
 </SoftCard>
 
+@if (_consolidateDialogVisible)
+{
+    <div class="glass-modal-backdrop" @onclick="CloseConsolidateDialog">
+        <div class="glass-modal-container glass-modal-container--sm" @onclick:stopPropagation="true">
+            <SoftCard Elevation="24" Class="glass-modal">
+                <SoftCardHeader Class="pa-4">
+                    <CardHeaderContent>
+                        <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <SoftIcon Icon="@Icons.Material.Filled.PlaylistAddCheck"
+                                      Color="Color.Primary" Size="Size.Medium" />
+                            <SoftText Typo="Typo.h6">@IntL["DecisionLog:Consolidate:Title"]</SoftText>
+                        </SoftStack>
+                    </CardHeaderContent>
+                    <CardHeaderActions>
+                        <SoftIconButton Icon="@Icons.Material.Filled.Close"
+                                        Size="Size.Small" OnClick="CloseConsolidateDialog" />
+                    </CardHeaderActions>
+                </SoftCardHeader>
+                <SoftDivider />
+                <SoftCardContent Class="pa-4 glass-modal-body">
+                    <SoftText Typo="Typo.body1">@IntL["DecisionLog:Consolidate:Confirm"]</SoftText>
+                </SoftCardContent>
+                <SoftDivider />
+                <div class="pa-3 d-flex justify-end" style="gap: 8px;">
+                    <SoftButton Variant="Variant.Text" OnClick="CloseConsolidateDialog"
+                                Disabled="_consolidating">
+                        @L["Cancel"]
+                    </SoftButton>
+                    <SoftButton Variant="Variant.Filled" Color="Color.Primary"
+                                StartIcon="@Icons.Material.Filled.PlaylistAddCheck"
+                                OnClick="ConsolidateAsync"
+                                Disabled="_consolidating">
+                        @IntL["DecisionLog:Consolidate:Action"]
+                    </SoftButton>
+                </div>
+            </SoftCard>
+        </div>
+    </div>
+}
+
 <style>
     .dl-summary {
         display: grid;
@@ -386,6 +437,7 @@
     .dl-card.dl-type-stockoutrisk     { border-left-color: #a4313f; } /* crimson — distinct from amber LowStock and red DeadStock */
     .dl-card.dl-type-expiryalert      { border-left-color: #7d4a8e; } /* plum — perishables / expiry family */
     .dl-card.dl-type-wastewriteoff    { border-left-color: #8d6e63; } /* brown-grey — waste, distinct from ExpiryAlert plum and DeadStock red */
+    .dl-card.dl-type-stockreport      { border-left-color: #5c7a8a; } /* blue-grey — manual cashier report, distinct from ExcessStock blue */
     .dl-card.dl-status-acknowledged,
     .dl-card.dl-status-dismissed,
     .dl-card.dl-status-executed {
@@ -408,6 +460,7 @@
     .dl-type-stockoutrisk     .dl-type-icon { color: #a4313f; }
     .dl-type-expiryalert      .dl-type-icon { color: #7d4a8e; }
     .dl-type-wastewriteoff    .dl-type-icon { color: #8d6e63; }
+    .dl-type-stockreport      .dl-type-icon { color: #5c7a8a; }
 
     .dl-card-center { min-width: 0; }
     .dl-reasoning {
@@ -512,6 +565,19 @@
     private bool _canAcknowledge;
     private Guid? _busyId;
 
+    private bool _consolidateDialogVisible;
+    private bool _consolidating;
+
+    /// <summary>Pending reorder-type decisions (LowStock / Reorder / Stockout) in the current view.</summary>
+    private int _pendingReorderInView;
+
+    private static readonly string[] _reorderTypes =
+    {
+        DecisionTypes.LowStockAlert,
+        DecisionTypes.ReorderSuggestion,
+        DecisionTypes.StockoutRisk
+    };
+
     private string? _filter;
     private string? _typeFilter;
     private string? _statusFilter;
@@ -547,7 +613,9 @@
             new(DecisionTypes.ReorderSuggestion,  IntL["DecisionType:ReorderSuggestion"]),
             new(DecisionTypes.StockoutRisk,       IntL["DecisionType:StockoutRisk"]),
             new(DecisionTypes.ExpiryAlert,        IntL["DecisionType:ExpiryAlert"]),
-            new(DecisionTypes.WasteWriteOff,      IntL["DecisionType:WasteWriteOff"])
+            new(DecisionTypes.WasteWriteOff,      IntL["DecisionType:WasteWriteOff"]),
+            new(DecisionTypes.StockReport,        IntL["DecisionType:StockReport"]),
+            new(DecisionTypes.CashierVariance,    IntL["DecisionType:CashierVariance"])
         };
 
         _statusOptions = new List<LabeledOption>
@@ -610,6 +678,9 @@
 
             _items = result.Items.ToList();
             _totalCount = (int)result.TotalCount;
+
+            _pendingReorderInView = _items.Count(i =>
+                i.Status == DecisionLogStatuses.Pending && _reorderTypes.Contains(i.DecisionType));
 
             await ResolveUserNamesAsync(_items);
         }
@@ -719,6 +790,12 @@
 
     private async Task ExecuteAsync(DecisionLogDto item)
     {
+        if (item.DecisionType == DecisionTypes.StockReport)
+        {
+            OpenTransferRequest(item);
+            return;
+        }
+
         _busyId = item.Id;
         try
         {
@@ -756,6 +833,76 @@
         finally
         {
             _busyId = null;
+        }
+    }
+
+    private void OpenTransferRequest(DecisionLogDto item)
+    {
+        var parameters = new Dictionary<string, string?>
+        {
+            ["new"] = "true"
+        };
+
+        if (item.BranchId.HasValue)
+        {
+            parameters["toBranchId"] = item.BranchId.Value.ToString();
+        }
+
+        parameters["notes"] = $"Created from cashier stock report {item.Id}. {item.Reasoning}";
+
+        NavigationManager.NavigateTo(QueryHelpers.AddQueryString("/operations/stock-transfers", parameters));
+    }
+
+    private void OpenConsolidateDialog() => _consolidateDialogVisible = true;
+
+    private void CloseConsolidateDialog()
+    {
+        if (_consolidating) return;
+        _consolidateDialogVisible = false;
+    }
+
+    private async Task ConsolidateAsync()
+    {
+        _consolidating = true;
+        try
+        {
+            // Pass the current branch filter through so the run matches what's on screen;
+            // the app service is branch-scoped server-side regardless.
+            var result = await DecisionActionAppService.ConsolidateReordersAsync(new ConsolidateReordersInput
+            {
+                BranchId = _branchFilter
+            });
+
+            _consolidateDialogVisible = false;
+
+            await RefreshAllAsync();
+
+            if (result.PurchaseOrdersCreated == 0)
+            {
+                Snackbar.Add(IntL["DecisionLog:Consolidate:Nothing"], Severity.Info);
+            }
+            else
+            {
+                var message = string.Format(
+                    IntL["DecisionLog:Consolidate:Result"],
+                    result.PurchaseOrdersCreated,
+                    result.DecisionsConsolidated);
+
+                if (result.SkippedNoSupplier > 0)
+                {
+                    message += string.Format(IntL["DecisionLog:Consolidate:Skipped"], result.SkippedNoSupplier);
+                }
+
+                Snackbar.Add(message, Severity.Success);
+            }
+        }
+        catch (Exception ex)
+        {
+            await HandleErrorAsync(ex);
+        }
+        finally
+        {
+            _consolidating = false;
         }
     }
 
@@ -814,6 +961,8 @@
         DecisionTypes.StockoutRisk => Icons.Material.Filled.HourglassBottom,
         DecisionTypes.ExpiryAlert => Icons.Material.Filled.EventBusy,
         DecisionTypes.WasteWriteOff => Icons.Material.Filled.DeleteSweep,
+        DecisionTypes.StockReport => Icons.Material.Filled.ReportProblem, // manual cashier report
+        DecisionTypes.CashierVariance => Icons.Material.Filled.PointOfSale,
         _ => Icons.Material.Filled.Info
     };
 
@@ -827,6 +976,8 @@
         DecisionTypes.StockoutRisk => Color.Secondary, // crimson family via CSS accents below
         DecisionTypes.ExpiryAlert => Color.Secondary,  // plum family via CSS accents below
         DecisionTypes.WasteWriteOff => Color.Default,  // brown-grey family via CSS accents below
+        DecisionTypes.StockReport => Color.Info,       // blue-grey info family via CSS accents below
+        DecisionTypes.CashierVariance => Color.Error,
         _ => Color.Default
     };
 

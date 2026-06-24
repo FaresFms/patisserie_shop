@@ -3,9 +3,11 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Intelligence.Entities;
+using Intelligence.Localization;
 using Intelligence.Rules;
 using Inventory.BranchInventory;
 using Inventory.Entities;
+using Microsoft.Extensions.Localization;
 using Microsoft.Extensions.Logging;
 using Volo.Abp.DependencyInjection;
 using Volo.Abp.Domain.Repositories;
@@ -30,6 +32,7 @@ public class TransferSuggestionScannerService : ITransientDependency
     private readonly IRepository<AppBranch, Guid> _branchRepository;
     private readonly IGuidGenerator _guidGenerator;
     private readonly IAsyncQueryableExecuter _asyncExecuter;
+    private readonly IStringLocalizer<IntelligenceResource> _localizer;
     private readonly ILogger<TransferSuggestionScannerService> _logger;
 
     public TransferSuggestionScannerService(
@@ -39,6 +42,7 @@ public class TransferSuggestionScannerService : ITransientDependency
         IRepository<AppBranch, Guid> branchRepository,
         IGuidGenerator guidGenerator,
         IAsyncQueryableExecuter asyncExecuter,
+        IStringLocalizer<IntelligenceResource> localizer,
         ILogger<TransferSuggestionScannerService> logger)
     {
         _inventoryRepository = inventoryRepository;
@@ -47,6 +51,7 @@ public class TransferSuggestionScannerService : ITransientDependency
         _branchRepository = branchRepository;
         _guidGenerator = guidGenerator;
         _asyncExecuter = asyncExecuter;
+        _localizer = localizer;
         _logger = logger;
     }
 
@@ -155,10 +160,15 @@ public class TransferSuggestionScannerService : ITransientDependency
                     }
 
                     var excessBranchName = branchById[excessInv.BranchId].Name;
-                    var reasoning =
-                        $"Product '{lowRow.Product.Name}': '{excessBranchName}' has {excessInv.QuantityOnHand} units (excess) " +
-                        $"while '{lowBranchName}' has only {lowInv.QuantityOnHand} units (below threshold {threshold}). " +
-                        $"Rule '{rule.RuleName}' suggests a transfer.";
+                    var reasoning = _localizer[
+                        "DecisionReasoning:TransferSuggestion",
+                        lowRow.Product.Name,
+                        lowBranchName,
+                        lowInv.QuantityOnHand,
+                        threshold,
+                        excessBranchName,
+                        excessInv.QuantityOnHand,
+                        rule.RuleName];
 
                     var log = new AppDecisionLog(
                         _guidGenerator.Create(),

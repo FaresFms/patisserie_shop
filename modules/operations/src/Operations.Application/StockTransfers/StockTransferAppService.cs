@@ -121,6 +121,8 @@ public class StockTransferAppService : OperationsAppService, IStockTransferAppSe
     [Authorize(OperationsPermissions.Transfers.Create)]
     public async Task<StockTransferDto> CreateAsync(CreateStockTransferDto input)
     {
+        await AuthorizationService.CheckAsync(OperationsPermissions.Transfers.ChooseBranches);
+
         if (input.FromBranchId == input.ToBranchId)
         {
             throw new BusinessException(OperationsErrorCodes.SameSourceAndDestination);
