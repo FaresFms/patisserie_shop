@@ -184,6 +184,7 @@ public class CashierAppService : OperationsAppService, ICashierAppService
             ProductId = r.Product.Id,
             Name = r.Product.Name,
             SKU = r.Product.SKU,
+            Description = r.Product.Description,
             SalePrice = r.Product.SalePrice,
             ImageUrl = r.Product.ImageUrl,
             QuantityOnHand = r.Inventory.QuantityOnHand,

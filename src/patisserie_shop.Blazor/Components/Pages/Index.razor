@@ -84,6 +84,7 @@ else
         else if (await AuthorizationService.IsGrantedAsync(OperationsPermissions.Cashier.Default))
         {
             // Cashiers (no dashboard permission) land straight on the POS.
+            
             Nav.NavigateTo("/cashier", forceLoad: false, replace: true);
         }
         else

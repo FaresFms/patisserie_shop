@@ -1,5 +1,6 @@
 @using System.Threading
 @using System.Threading.Tasks
+@using System.Globalization
 @using Microsoft.AspNetCore.Components
 @using Operations
 @using Operations.PurchaseOrders
@@ -54,9 +55,9 @@
 
                     <!-- Order info -->
                     @{
-                        var orderDateText    = _po.OrderDate.ToString("MMM d, yyyy");
-                        var expectedDateText = _po.ExpectedDeliveryDate?.ToString("MMM d, yyyy") ?? "-";
-                        var actualDateText   = _po.ActualDeliveryDate?.ToString("MMM d, yyyy") ?? "-";
+                        var orderDateText    = FormatDate(_po.OrderDate);
+                        var expectedDateText = _po.ExpectedDeliveryDate.HasValue ? FormatDate(_po.ExpectedDeliveryDate.Value) : "-";
+                        var actualDateText   = _po.ActualDeliveryDate.HasValue ? FormatDate(_po.ActualDeliveryDate.Value) : "-";
                         var createdByText    = _po.CreatorUserName ?? "-";
                         var totalText        = $"{_po.TotalAmount:N2} {_po.Currency}";
                     }
@@ -74,8 +75,8 @@
                         @if (!string.IsNullOrWhiteSpace(_po.Notes))
                         {
                             <div class="po-notes">
-                                <SoftText Typo="Typo.caption" Color="Color.Default">@OpsL["Notes"]</SoftText>
-                                <SoftText Typo="Typo.body2">@_po.Notes</SoftText>
+                                <div class="po-notes-label">@OpsL["Notes"]</div>
+                                <div class="po-notes-text">@_po.Notes</div>
                             </div>
                         }
                     </div>
@@ -355,15 +356,34 @@
 
     .po-info-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-        gap: 10px 24px;
+        grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+        gap: 12px 24px;
     }
 
     .po-notes {
-        margin-top: 12px;
-        padding: 10px 12px;
-        background: var(--mud-palette-background-grey);
-        border-radius: 8px;
+        margin-top: 16px;
+        padding: 14px 16px;
+        background: var(--surface-2);
+        border: 1px solid var(--bd-1);
+        border-radius: var(--r-sm);
+    }
+
+    .po-notes-label {
+        margin-bottom: 8px;
+        color: var(--fg-3);
+        font-size: 0.72rem;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+    }
+
+    .po-notes-text {
+        color: var(--fg-1);
+        font-size: 0.9rem;
+        line-height: 1.75;
+        white-space: pre-line;
+        overflow-wrap: anywhere;
+        unicode-bidi: plaintext;
     }
 
     .po-progress {
@@ -634,4 +654,7 @@
         PurchaseOrderStatuses.Cancelled => Icons.Material.Filled.Cancel,
         _ => Icons.Material.Filled.HelpOutline
     };
+
+    private static string FormatDate(DateTime date)
+        => date.ToString("dd MMMM yyyy", CultureInfo.CurrentCulture);
 }

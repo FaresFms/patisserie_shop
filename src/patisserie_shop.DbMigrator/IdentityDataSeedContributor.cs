@@ -293,6 +293,7 @@ public class IdentityDataSeedContributor : IDataSeedContributor, ITransientDepen
 
         // Operations — cashier oversight: view all shifts + create/assign cashiers
         // (host CashierAssignmentAppService scopes both to the branches they manage)
+        OperationsPermissions.Cashier.Default,
         OperationsPermissions.Cashier.ViewAllShifts,
         OperationsPermissions.Cashier.ManageCashiers,
 

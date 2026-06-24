@@ -38,7 +38,7 @@
                         Color="Color.Primary"
                         StartIcon="@Icons.Material.Filled.Add"
                         OnClick="OpenCreateDialog"
-                        Disabled="!_canCreate">
+                        Disabled="@(!_canCreate || !_canChooseTransferBranches)">
                 @OpsL["NewTransfer"]
             </SoftButton>
         </div>
@@ -222,7 +222,7 @@
                     <SoftButton Variant="Variant.Filled" Color="Color.Primary"
                                 EndIcon="@Icons.Material.Filled.ArrowForward"
                                 OnClick="ConfirmCreateAsync"
-                                Disabled="_saving">
+                                Disabled="@(_saving || !_canChooseTransferBranches)">
                         @OpsL["SaveAndAddItems"]
                     </SoftButton>
                 </div>
@@ -259,6 +259,7 @@
     private bool _loading;
     private bool _saving;
     private bool _canCreate;
+    private bool _canChooseTransferBranches;
 
     private string? _filter;
     private string? _statusFilter;
@@ -290,6 +291,7 @@
     protected override async Task OnInitializedAsync()
     {
         _canCreate = await AuthorizationService.IsGrantedAsync(OperationsPermissions.Transfers.Create);
+        _canChooseTransferBranches = await AuthorizationService.IsGrantedAsync(OperationsPermissions.Transfers.ChooseBranches);
 
         _statusOptions = StockTransferStatuses.All
             .Select(s => new StatusOption(s, OpsL[$"Status:{s}"]))
@@ -375,6 +377,12 @@
 
     private void OpenCreateDialog(Guid? toBranchId, string? notes)
     {
+        if (!_canChooseTransferBranches)
+        {
+            Snackbar.Add("Only administrators can choose transfer source and destination branches.", Severity.Warning);
+            return;
+        }
+
         _newFromId = null;
         _newToId = toBranchId;
         _newRequestedDate = DateTime.Today;

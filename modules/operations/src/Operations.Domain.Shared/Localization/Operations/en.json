@@ -19,6 +19,7 @@
     "Permission:Sales.ManageAll": "Manage all branches (admin)",
     "Permission:Transfers": "Stock transfers",
     "Permission:Transfers.Create": "Create / request",
+    "Permission:Transfers.ChooseBranches": "Choose source and destination branches",
     "Permission:Transfers.Approve": "Approve / adjust",
     "Permission:Transfers.Ship": "Mark in transit",
     "Permission:Transfers.Complete": "Complete",

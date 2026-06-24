@@ -248,7 +248,8 @@ public class DecisionActionAppService : patisserie_shopAppService, IDecisionActi
             OrderDate = DateTime.Today,
             Currency = members[0].Product.Currency,
             Notes = TruncateNotes(
-                $"Consolidated from {members.Count} decision(s) on {DateTime.Today:yyyy-MM-dd}.")
+                $"أُنشئ تلقائيًا من {members.Count} قرار مخزون بتاريخ {DateTime.Today:yyyy-MM-dd}.\n" +
+                "تم دمج الأصناف المتشابهة في أمر شراء واحد لتسهيل المتابعة.")
         });
 
         foreach (var line in lines.Values)
@@ -317,7 +318,7 @@ public class DecisionActionAppService : patisserie_shopAppService, IDecisionActi
             DestBranchId = branchId,
             OrderDate = DateTime.Today,
             Currency = product.Currency,
-            Notes = TruncateNotes($"Auto-created from decision {decision.Id}. {explanation}")
+            Notes = TruncateNotes($"أُنشئ تلقائيًا من قرار المخزون:\n{decision.Id}\n{explanation}")
         });
 
         await _purchaseOrderAppService.AddItemAsync(po.Id, new AddPurchaseOrderItemDto
@@ -543,10 +544,10 @@ public class DecisionActionAppService : patisserie_shopAppService, IDecisionActi
         {
             var measuredDays = Math.Max((int)Math.Round(measured, MidpointRounding.AwayFromZero), 0);
             return (measuredDays,
-                $"measured {measured:0.#}d lead from {row.LeadTimeSampleSize} orders");
+                $"مدة التوريد المحسوبة من آخر {row.LeadTimeSampleSize} أوامر: {measured:0.#} يوم");
         }
 
-        return (configuredLeadTimeDays, $"configured {configuredLeadTimeDays}d lead");
+        return (configuredLeadTimeDays, $"مدة التوريد المعتمدة من إعدادات المورد: {configuredLeadTimeDays} يوم");
     }
 
     /// <summary>
@@ -583,10 +584,14 @@ public class DecisionActionAppService : patisserie_shopAppService, IDecisionActi
             }
 
             var explanation =
-                $"ROP: {avg:0.##}/day × ({leadTimeDays}d lead + 7d cover) + {safety} safety " +
-                $"= {targetQty} target − {currentQty} on hand → order {quantity} " +
-                $"({leadTimeDescriptor})" +
-                (capped ? $" (capped by max stock {maximumStock!.Value})." : ".");
+                $"سبب الطلب:\n" +
+                $"- متوسط البيع اليومي خلال 30 يومًا: {avg:0.##}\n" +
+                $"- التغطية المطلوبة: {leadTimeDays} يوم توريد + 7 أيام تشغيل\n" +
+                $"- مخزون الأمان: {safety}\n" +
+                $"- الكمية المستهدفة: {targetQty}، والمتوفر حاليًا: {currentQty}\n" +
+                $"- الكمية المقترحة للطلب: {quantity}\n" +
+                $"- {leadTimeDescriptor}" +
+                (capped ? $"\n- تم تخفيض الكمية بسبب حد المخزون الأعلى: {maximumStock!.Value}." : ".");
 
             return (quantity, explanation);
         }
@@ -598,10 +603,13 @@ public class DecisionActionAppService : patisserie_shopAppService, IDecisionActi
         fallbackQty = Math.Max(fallbackQty, 1);
 
         var fallbackExplanation =
-            $"Refill qty {fallbackQty} (on hand {currentQty}, " +
+            $"سبب الطلب:\n" +
+            "- لا يوجد متوسط بيع كافٍ لحساب الطلب حسب سرعة البيع.\n" +
+            $"- المتوفر حاليًا: {currentQty}\n" +
+            $"- الكمية المقترحة للطلب: {fallbackQty}\n" +
             (maximumStock != null
-                ? $"target max {maximumStock.Value}; no sales velocity)."
-                : $"reorder level {reorderLevel}; no sales velocity).");
+                ? $"- الهدف هو الوصول إلى حد المخزون الأعلى: {maximumStock.Value}."
+                : $"- تم استخدام حد إعادة الطلب: {reorderLevel}.");
 
         return (fallbackQty, fallbackExplanation);
     }

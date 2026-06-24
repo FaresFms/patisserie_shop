@@ -127,6 +127,12 @@
                             var cannotAdd = remaining <= 0;
                             <div class="pos-tile @(cannotAdd ? "is-oos" : "")"
                                  @onclick="() => AddToCart(p)">
+                                <button type="button" class="pos-tile-info"
+                                        title="Product details"
+                                        @onclick:stopPropagation="true"
+                                        @onclick="() => OpenProductInfo(p)">
+                                    <SoftIcon Icon="@Icons.Material.Filled.Info" Size="Size.Small" />
+                                </button>
                                 @if (remaining == 1)
                                 {
                                     <span class="pos-tile-badge">@L["Cashier:LastOne"]</span>
@@ -244,6 +250,66 @@
         </div>
     }
 </div>
+
+@* ─────────── PRODUCT INFO MODAL ─────────── *@
+@if (_infoProduct is not null)
+{
+    var infoRemaining = RemainingFor(_infoProduct);
+    <div class="glass-modal-backdrop" @onclick="CloseProductInfo">
+        <div class="glass-modal-container glass-modal-container--md" @onclick:stopPropagation="true">
+            <SoftCard Elevation="24" Class="glass-modal pos-info-modal">
+                <SoftCardHeader Class="pa-4">
+                    <CardHeaderContent>
+                        <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <SoftIcon Icon="@Icons.Material.Filled.Info" Color="Color.Primary" Size="Size.Medium" />
+                            <SoftText Typo="Typo.h6">@_infoProduct.Name</SoftText>
+                        </SoftStack>
+                    </CardHeaderContent>
+                    <CardHeaderActions>
+                        <SoftIconButton Icon="@Icons.Material.Filled.Close"
+                                        Size="Size.Small"
+                                        OnClick="CloseProductInfo" />
+                    </CardHeaderActions>
+                </SoftCardHeader>
+                <SoftDivider />
+                <SoftCardContent Class="pa-4">
+                    <div class="pos-info-layout">
+                        <div class="pos-info-photo">
+                            @if (!string.IsNullOrWhiteSpace(_infoProduct.ImageUrl))
+                            {
+                                <img src="@_infoProduct.ImageUrl" alt="@_infoProduct.Name" />
+                            }
+                            else
+                            {
+                                <span class="pos-info-initial">@Initial(_infoProduct.Name)</span>
+                            }
+                        </div>
+                        <div class="pos-info-copy">
+                            <div class="pos-info-sku">@_infoProduct.SKU</div>
+                            <div class="pos-info-price">@FormatMoney(_infoProduct.SalePrice)</div>
+                            <p class="pos-info-desc">@ProductDescription(_infoProduct)</p>
+                            <div class="pos-info-stock @StockInfoClass(_infoProduct, infoRemaining)">
+                                <SoftIcon Icon="@StockInfoIcon(_infoProduct, infoRemaining)" Size="Size.Small" />
+                                <span>@StockInfoText(_infoProduct, infoRemaining)</span>
+                            </div>
+                        </div>
+                    </div>
+                </SoftCardContent>
+                <SoftDivider />
+                <div class="pa-3 d-flex justify-end" style="gap:8px;">
+                    <SoftButton Variant="Variant.Text" OnClick="CloseProductInfo">@L["Cancel"]</SoftButton>
+                    <SoftButton Variant="Variant.Filled"
+                                Color="Color.Primary"
+                                StartIcon="@Icons.Material.Filled.AddShoppingCart"
+                                Disabled="@(infoRemaining <= 0)"
+                                OnClick="AddInfoProductToCart">
+                        Add to cart
+                    </SoftButton>
+                </div>
+            </SoftCard>
+        </div>
+    </div>
+}
 
 @* ─────────── RECEIPT MODAL ─────────── *@
 @if (_receipt is not null)
@@ -433,6 +499,7 @@
 
     private CashierSaleResultDto? _receipt;
     private decimal? _receiptTendered;
+    private CashierProductDto? _infoProduct;
 
     private Guid BranchId => _shift?.BranchId ?? _myBranch?.Id ?? Guid.Empty;
     private decimal CartTotal => _cart.Sum(l => l.Subtotal);
@@ -630,6 +697,30 @@
         {
             line.AvailableQuantity = p.QuantityOnHand;
             IncLine(line);
+        }
+    }
+
+    private void OpenProductInfo(CashierProductDto product)
+    {
+        _infoProduct = product;
+    }
+
+    private void CloseProductInfo()
+    {
+        _infoProduct = null;
+    }
+
+    private void AddInfoProductToCart()
+    {
+        if (_infoProduct is null)
+        {
+            return;
+        }
+
+        AddToCart(_infoProduct);
+        if (RemainingFor(_infoProduct) <= 0)
+        {
+            _infoProduct = null;
         }
     }
 
@@ -923,6 +1014,46 @@
     {
         var inCart = _cart.FirstOrDefault(l => l.ProductId == product.ProductId)?.Quantity ?? 0;
         return Math.Max(product.QuantityOnHand - inCart, 0);
+    }
+
+    private string ProductDescription(CashierProductDto product)
+        => string.IsNullOrWhiteSpace(product.Description)
+            ? "No description was added for this item yet."
+            : product.Description.Trim();
+
+    private string StockInfoText(CashierProductDto product, int remaining)
+    {
+        if (product.IsOutOfStock || remaining <= 0)
+        {
+            return "Out of stock right now.";
+        }
+
+        if (remaining <= 2)
+        {
+            return $"Only {remaining} exist. Check with the customer before promising more.";
+        }
+
+        if (product.IsLowStock)
+        {
+            return $"{remaining} available. Running low.";
+        }
+
+        return $"{remaining} available for this shift.";
+    }
+
+    private static string StockInfoClass(CashierProductDto product, int remaining)
+    {
+        if (product.IsOutOfStock || remaining <= 0) return "is-out";
+        if (remaining <= 2) return "is-tight";
+        if (product.IsLowStock) return "is-low";
+        return "is-ok";
+    }
+
+    private static string StockInfoIcon(CashierProductDto product, int remaining)
+    {
+        if (product.IsOutOfStock || remaining <= 0) return Icons.Material.Filled.Block;
+        if (remaining <= 2 || product.IsLowStock) return Icons.Material.Filled.PriorityHigh;
+        return Icons.Material.Filled.CheckCircle;
     }
 
     private string VarianceLabel(decimal? variance)
@@ -1311,6 +1442,30 @@
         cursor: not-allowed;
     }
 
+    .pos-tile-info {
+        position: absolute;
+        top: 6px;
+        left: 6px;
+        z-index: 2;
+        width: 30px;
+        height: 30px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 999px;
+        border: 1px solid var(--bd-2);
+        background: color-mix(in srgb, var(--surface) 88%, transparent);
+        color: var(--fg-2);
+        cursor: pointer;
+        box-shadow: var(--shadow-sm);
+    }
+
+    .pos-tile-info:hover {
+        color: var(--accent);
+        border-color: var(--accent-line);
+        background: var(--surface);
+    }
+
     .pos-tile-img {
         width: 84px;
         height: 84px;
@@ -1395,6 +1550,110 @@
         border-color: var(--bd-2);
         background: var(--hover);
         color: var(--fg-3);
+    }
+
+    /* ── product info ── */
+    .pos-info-modal {
+        overflow: hidden;
+    }
+
+    .pos-info-layout {
+        display: grid;
+        grid-template-columns: minmax(190px, 240px) minmax(0, 1fr);
+        gap: 20px;
+        align-items: stretch;
+    }
+
+    .pos-info-photo {
+        min-height: 260px;
+        border-radius: var(--r-md);
+        overflow: hidden;
+        border: 1px solid var(--bd-2);
+        background: var(--surface-2);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .pos-info-photo img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+    }
+
+    .pos-info-initial {
+        font-family: var(--font-serif);
+        font-size: 4rem;
+        font-weight: 700;
+        color: var(--accent);
+    }
+
+    .pos-info-copy {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+    }
+
+    .pos-info-sku {
+        width: fit-content;
+        border: 1px dashed var(--bd-3);
+        border-radius: 999px;
+        padding: 4px 10px;
+        color: var(--fg-3);
+        font-size: .72rem;
+        font-weight: 700;
+        letter-spacing: .05em;
+        text-transform: uppercase;
+    }
+
+    .pos-info-price {
+        margin-top: 12px;
+        color: var(--accent);
+        font-size: 2rem;
+        font-weight: 800;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .pos-info-desc {
+        margin: 12px 0 16px;
+        color: var(--fg-2);
+        font-size: .98rem;
+        line-height: 1.55;
+    }
+
+    .pos-info-stock {
+        margin-top: auto;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        border-radius: var(--r-md);
+        border: 1px solid var(--bd-2);
+        padding: 12px 14px;
+        font-weight: 700;
+    }
+
+    .pos-info-stock.is-ok {
+        color: var(--green-text);
+        background: rgba(107, 142, 78, .10);
+        border-color: rgba(107, 142, 78, .24);
+    }
+
+    .pos-info-stock.is-low,
+    .pos-info-stock.is-tight {
+        color: var(--amber-text);
+        background: rgba(200, 156, 79, .14);
+        border-color: rgba(200, 156, 79, .30);
+    }
+
+    .pos-info-stock.is-tight {
+        font-size: 1.04rem;
+    }
+
+    .pos-info-stock.is-out {
+        color: var(--danger);
+        background: rgba(179, 84, 58, .12);
+        border-color: rgba(179, 84, 58, .30);
     }
 
     /* ── cart pane ── */
@@ -1706,6 +1965,11 @@
         left: 6px;
     }
 
+    html[dir="rtl"] .pos-tile-info {
+        left: auto;
+        right: 6px;
+    }
+
     html[dir="rtl"] .pos-line-sub {
         text-align: left;
     }
@@ -1737,6 +2001,8 @@
     @@media (max-width: 900px) {
         .pos-body { grid-template-columns: 1fr; }
         .pos-right { max-height: 50vh; }
+        .pos-info-layout { grid-template-columns: 1fr; }
+        .pos-info-photo { min-height: 220px; }
     }
 
     /* ── print: show only the receipt ── */

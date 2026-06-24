@@ -19,6 +19,7 @@
     "Permission:Sales.ManageAll": "إدارة كل الفروع (مدير)",
     "Permission:Transfers": "تحويلات المخزون",
     "Permission:Transfers.Create": "إنشاء / طلب",
+    "Permission:Transfers.ChooseBranches": "اختيار فرع المصدر والوجهة",
     "Permission:Transfers.Approve": "اعتماد / تعديل",
     "Permission:Transfers.Ship": "تعليم كقيد النقل",
     "Permission:Transfers.Complete": "إكمال",

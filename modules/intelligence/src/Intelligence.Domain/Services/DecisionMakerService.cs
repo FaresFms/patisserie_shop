@@ -4,9 +4,11 @@ using System.Linq;
 using System.Threading.Tasks;
 using Intelligence.Decisions;
 using Intelligence.Entities;
+using Intelligence.Localization;
 using Intelligence.Rules;
 using Intelligence.Velocity;
 using Inventory.Events;
+using Microsoft.Extensions.Localization;
 using Volo.Abp.Domain.Repositories;
 using Volo.Abp.Domain.Services;
 
@@ -23,15 +25,18 @@ public class DecisionMakerService : DomainService
     private readonly IRepository<AppInventoryRule, Guid> _rulesRepo;
     private readonly IRepository<AppDecisionLog, Guid> _logsRepo;
     private readonly IRepository<AppProductVelocity, Guid> _velocityRepo;
+    private readonly IStringLocalizer<IntelligenceResource> _localizer;
 
     public DecisionMakerService(
         IRepository<AppInventoryRule, Guid> rulesRepo,
         IRepository<AppDecisionLog, Guid> logsRepo,
-        IRepository<AppProductVelocity, Guid> velocityRepo)
+        IRepository<AppProductVelocity, Guid> velocityRepo,
+        IStringLocalizer<IntelligenceResource> localizer)
     {
         _rulesRepo = rulesRepo;
         _logsRepo = logsRepo;
         _velocityRepo = velocityRepo;
+        _localizer = localizer;
     }
 
     public async Task EvaluateAsync(StockChangedEto eto)
@@ -61,7 +66,7 @@ public class DecisionMakerService : DomainService
                 if (eto.NewQty < rule.ThresholdValue.Value)
                 {
                     await TryCreateLogAsync(raisedTypes, rule, eto.ProductId, eto.BranchId, "LowStockAlert",
-                        $"Stock={eto.NewQty} is below threshold={rule.ThresholdValue} (Rule: '{rule.RuleName}'). Suggested: reorder.",
+                        _localizer["DecisionReasoning:LowStock", eto.NewQty, rule.ThresholdValue, rule.RuleName],
                         stockAtEval: eto.NewQty);
                 }
             }
@@ -70,7 +75,7 @@ public class DecisionMakerService : DomainService
                 if (eto.NewQty > rule.ThresholdValue.Value)
                 {
                     await TryCreateLogAsync(raisedTypes, rule, eto.ProductId, eto.BranchId, "ExcessStockAlert",
-                        $"Stock={eto.NewQty} exceeds threshold={rule.ThresholdValue} (Rule: '{rule.RuleName}'). Suggested: redistribute.",
+                        _localizer["DecisionReasoning:ExcessStock", eto.NewQty, rule.ThresholdValue, rule.RuleName],
                         stockAtEval: eto.NewQty);
                 }
             }
@@ -100,9 +105,12 @@ public class DecisionMakerService : DomainService
                         if (daysOfCover < rule.ThresholdValue.Value)
                         {
                             await TryCreateLogAsync(raisedTypes, rule, eto.ProductId, eto.BranchId, DecisionTypes.StockoutRisk,
-                                $"Stock={eto.NewQty} ÷ {avgDailySales30:0.##}/day avg (30-day) = {Math.Round(daysOfCover, 1):0.#} days of cover, " +
-                                $"below the {rule.ThresholdValue}-day threshold (Rule: '{rule.RuleName}'). " +
-                                $"No weekday sales pattern — flat 30-day average used. Suggested: reorder soon.",
+                                _localizer[
+                                    "DecisionReasoning:StockoutRisk:Flat",
+                                    eto.NewQty,
+                                    Math.Round(daysOfCover, 1),
+                                    rule.ThresholdValue,
+                                    rule.RuleName],
                                 stockAtEval: eto.NewQty);
                         }
                     }
@@ -117,10 +125,12 @@ public class DecisionMakerService : DomainService
                         if (daysUntilStockout is int depletionDay && depletionDay < rule.ThresholdValue.Value)
                         {
                             await TryCreateLogAsync(raisedTypes, rule, eto.ProductId, eto.BranchId, DecisionTypes.StockoutRisk,
-                                $"Stock={eto.NewQty}; weekday-indexed forecast ({avgDailySales30:0.##}/day avg over 30 days, " +
-                                $"weighted per weekday — {ForecastWalker.DescribeWeighting(indices)}) depletes stock in " +
-                                $"{depletionDay} day(s), below the {rule.ThresholdValue}-day threshold (Rule: '{rule.RuleName}'). " +
-                                $"Suggested: reorder soon.",
+                                _localizer[
+                                    "DecisionReasoning:StockoutRisk",
+                                    eto.NewQty,
+                                    depletionDay,
+                                    rule.ThresholdValue,
+                                    rule.RuleName],
                                 stockAtEval: eto.NewQty);
                         }
                     }

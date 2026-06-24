@@ -3,10 +3,12 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Intelligence.Entities;
+using Intelligence.Localization;
 using Intelligence.Rules;
 using Intelligence.Velocity;
 using Inventory.BranchInventory;
 using Inventory.Entities;
+using Microsoft.Extensions.Localization;
 using Microsoft.Extensions.Logging;
 using Operations.Sales;
 using Volo.Abp.DependencyInjection;
@@ -48,6 +50,7 @@ public class VelocityScannerService : ITransientDependency
     private readonly IRepository<AppBranch, Guid> _branchRepository;
     private readonly IGuidGenerator _guidGenerator;
     private readonly IAsyncQueryableExecuter _asyncExecuter;
+    private readonly IStringLocalizer<IntelligenceResource> _localizer;
     private readonly ILogger<VelocityScannerService> _logger;
 
     public VelocityScannerService(
@@ -59,6 +62,7 @@ public class VelocityScannerService : ITransientDependency
         IRepository<AppBranch, Guid> branchRepository,
         IGuidGenerator guidGenerator,
         IAsyncQueryableExecuter asyncExecuter,
+        IStringLocalizer<IntelligenceResource> localizer,
         ILogger<VelocityScannerService> logger)
     {
         _saleRepository = saleRepository;
@@ -69,6 +73,7 @@ public class VelocityScannerService : ITransientDependency
         _branchRepository = branchRepository;
         _guidGenerator = guidGenerator;
         _asyncExecuter = asyncExecuter;
+        _localizer = localizer;
         _logger = logger;
     }
 
@@ -341,11 +346,15 @@ public class VelocityScannerService : ITransientDependency
                     continue;
                 }
 
-                reasoning =
-                    $"Product '{product.Name}' at '{branch.Name}': {inventory.QuantityOnHand} on hand ÷ " +
-                    $"{velocity.AvgDailySales30:0.##}/day avg (30-day) = {Math.Round(daysOfCover, 1):0.#} days of cover, " +
-                    $"below the {thresholdDays}-day threshold of rule '{rule.RuleName}'. " +
-                    $"No weekday sales pattern — flat 30-day average used. ABC class {velocity.AbcClass}.";
+                reasoning = _localizer[
+                    "DecisionReasoning:StockoutRisk:FlatWithProduct",
+                    product.Name,
+                    branch.Name,
+                    inventory.QuantityOnHand,
+                    Math.Round(daysOfCover, 1),
+                    thresholdDays,
+                    rule.RuleName,
+                    velocity.AbcClass];
             }
             else
             {
@@ -358,11 +367,15 @@ public class VelocityScannerService : ITransientDependency
                     continue;
                 }
 
-                reasoning =
-                    $"Product '{product.Name}' at '{branch.Name}': {inventory.QuantityOnHand} on hand; " +
-                    $"weekday-indexed forecast ({velocity.AvgDailySales30:0.##}/day avg over 30 days, weighted per weekday — " +
-                    $"{ForecastWalker.DescribeWeighting(indices)}) depletes stock in {depletionDay} day(s), " +
-                    $"below the {thresholdDays}-day threshold of rule '{rule.RuleName}'. ABC class {velocity.AbcClass}.";
+                reasoning = _localizer[
+                    "DecisionReasoning:StockoutRisk:WithProduct",
+                    product.Name,
+                    branch.Name,
+                    inventory.QuantityOnHand,
+                    depletionDay,
+                    thresholdDays,
+                    rule.RuleName,
+                    velocity.AbcClass];
             }
 
             var key = (inventory.ProductId, (Guid?)inventory.BranchId);

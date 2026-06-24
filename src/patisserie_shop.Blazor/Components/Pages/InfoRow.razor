@@ -6,9 +6,24 @@
 </div>
 
 <style>
-    .po-info-row { display: flex; flex-direction: column; gap: 2px; }
-    .po-info-label { font-size: 0.72rem; opacity: 0.7; text-transform: uppercase; letter-spacing: 0.04em; }
-    .po-info-value { font-size: 0.95rem; }
+    .po-info-row {
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+        min-width: 0;
+    }
+
+    .po-info-label {
+        color: var(--fg-3);
+        font-size: 0.74rem;
+        font-weight: 600;
+    }
+
+    .po-info-value {
+        color: var(--fg-1);
+        font-size: 0.95rem;
+        overflow-wrap: anywhere;
+    }
     .po-info-strong { font-size: 1.05rem; font-weight: 700; }
 </style>
 

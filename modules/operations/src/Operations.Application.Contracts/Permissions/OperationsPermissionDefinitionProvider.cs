@@ -26,6 +26,7 @@ public class OperationsPermissionDefinitionProvider : PermissionDefinitionProvid
 
         var transfers = group.AddPermission(OperationsPermissions.Transfers.Default, L("Permission:Transfers"));
         transfers.AddChild(OperationsPermissions.Transfers.Create, L("Permission:Transfers.Create"));
+        transfers.AddChild(OperationsPermissions.Transfers.ChooseBranches, L("Permission:Transfers.ChooseBranches"));
         transfers.AddChild(OperationsPermissions.Transfers.Approve, L("Permission:Transfers.Approve"));
         transfers.AddChild(OperationsPermissions.Transfers.Ship, L("Permission:Transfers.Ship"));
         transfers.AddChild(OperationsPermissions.Transfers.Complete, L("Permission:Transfers.Complete"));
