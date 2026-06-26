@@ -18,6 +18,7 @@ using Microsoft.Extensions.Options;
 using Inventory;
 using Operations;
 using Intelligence;
+using Production;
 using patisserie_shop.Blazor.Shared;
 using patisserie_shop.Blazor.Components;
 using patisserie_shop.Blazor.Menus;
@@ -63,6 +64,7 @@ namespace patisserie_shop.Blazor;
     typeof(InventoryApplicationContractsModule),
     typeof(OperationsApplicationContractsModule),
     typeof(IntelligenceApplicationContractsModule),
+    typeof(ProductionApplicationContractsModule),
     typeof(patisserie_shopApplicationModule),
     typeof(AbpStudioClientAspNetCoreModule),
     typeof(patisserie_shopEntityFrameworkCoreModule),

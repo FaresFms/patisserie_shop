@@ -155,6 +155,12 @@
     "DecisionType:WasteWriteOff": "شطب هدر",
     "DecisionType:StockReport": "بلاغ مخزون من الكاشير",
     "DecisionType:CashierVariance": "فرق نقد الكاشير",
+    "DecisionType:IngredientShortage": "نقص خامات الإنتاج",
+    "DecisionType:ProductionShortageRisk": "خطر نقص الإنتاج",
+    "DecisionType:HighKitchenWaste": "هدر مطبخ مرتفع",
+    "DecisionType:ProductionCostVariance": "فرق تكلفة الإنتاج",
+    "DecisionType:LateProductionRisk": "خطر تأخر الإنتاج",
+    "DecisionType:UnfulfilledBranchRequest": "طلب فرع غير مغلق",
 
     "Menu:ProductVelocity": "سرعة دوران المنتج",
     "ProductVelocity": "سرعة دوران المنتج",

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Inventory.Entities;
@@ -90,15 +91,30 @@ public class StockBatchManager : DomainService
     /// </summary>
     public async Task<int> ConsumeFefoAsync(Guid branchId, Guid productId, int quantity, bool expiredFirst = false)
     {
+        var consumed = await ConsumeFefoWithBreakdownAsync(branchId, productId, quantity, expiredFirst);
+        return consumed.Sum(x => x.Quantity);
+    }
+
+    /// <summary>
+    /// FEFO consumption with the consumed batch split. This is used by transfers so
+    /// the destination branch receives stock with the same expiry dates as the
+    /// source lots.
+    /// </summary>
+    public async Task<List<ConsumedStockBatchLine>> ConsumeFefoWithBreakdownAsync(
+        Guid branchId,
+        Guid productId,
+        int quantity,
+        bool expiredFirst = false)
+    {
         if (quantity <= 0)
         {
-            return 0;
+            return new List<ConsumedStockBatchLine>();
         }
 
         var batches = await _batchRepository.GetOpenBatchesAsync(branchId, productId);
         if (batches.Count == 0)
         {
-            return 0;
+            return new List<ConsumedStockBatchLine>();
         }
 
         // GetOpenBatchesAsync already orders by ExpiryDate ascending, so both
@@ -109,6 +125,7 @@ public class StockBatchManager : DomainService
             : batches.Where(b => !b.IsExpired(today)).Concat(batches.Where(b => b.IsExpired(today)));
 
         var remaining = quantity;
+        var consumed = new List<ConsumedStockBatchLine>();
         foreach (var batch in fefoOrder)
         {
             if (remaining <= 0)
@@ -117,8 +134,10 @@ public class StockBatchManager : DomainService
             }
 
             var take = Math.Min(remaining, batch.QuantityRemaining);
+            var expiryDate = batch.ExpiryDate;
             batch.Consume(take);
             await _batchRepository.UpdateAsync(batch);
+            consumed.Add(new ConsumedStockBatchLine(batch.Id, expiryDate, take));
             remaining -= take;
         }
 
@@ -130,7 +149,7 @@ public class StockBatchManager : DomainService
                 quantity, quantity - remaining, productId, branchId);
         }
 
-        return quantity - remaining;
+        return consumed;
     }
 
     private async Task<string> GenerateBatchNumberAsync()

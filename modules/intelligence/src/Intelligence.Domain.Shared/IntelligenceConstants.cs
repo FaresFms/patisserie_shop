@@ -23,4 +23,12 @@ public static class IntelligenceConstants
     /// </summary>
     public static readonly Guid CashierVarianceRuleId =
         Guid.Parse("c45f1e00-0000-4000-a000-000000000002");
+
+    /// <summary>
+    /// Sentinel rule id for deterministic production-module alerts. These alerts are
+    /// produced from production orders, branch demand, and waste telemetry, not from
+    /// AppInventoryRule threshold evaluation.
+    /// </summary>
+    public static readonly Guid ProductionOperationsRuleId =
+        Guid.Parse("c45f1e00-0000-4000-a000-000000000003");
 }

@@ -1,3 +1,4 @@
+using System;
 using Inventory.Entities;
 
 namespace Inventory.StockBatches;
@@ -16,3 +17,6 @@ public class StockBatchWithDetails
     public AppProduct Product { get; set; } = null!;
     public AppBranch Branch { get; set; } = null!;
 }
+
+/// <summary>One FEFO-consumed lot, preserving the source batch expiry date.</summary>
+public sealed record ConsumedStockBatchLine(Guid BatchId, DateTime ExpiryDate, int Quantity);

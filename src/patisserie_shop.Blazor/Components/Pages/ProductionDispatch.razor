@@ -1,0 +1,317 @@
+@page "/production/dispatch"
+@attribute [Authorize(ProductionPermissions.Dispatch.Default)]
+@using System.Threading
+@using System.Threading.Tasks
+@using Inventory.Branches
+@using Microsoft.AspNetCore.Authorization
+@using Production
+@using Production.Dispatch
+@using Production.Localization
+@using Production.Orders
+@using Production.Permissions
+@using Volo.Abp.Application.Dtos
+@using Volo.Abp.AspNetCore.Components.Web.Theming.Layout
+@using Color = MudBlazor.Color
+@using Margin = MudBlazor.Margin
+@using Size = MudBlazor.Size
+@using Variant = MudBlazor.Variant
+@inherits patisserie_shopComponentBase
+@inject IProductionOrderAppService OrderAppService
+@inject IProductionDispatchAppService DispatchAppService
+@inject IBranchAppService BranchAppService
+@inject IAuthorizationService Authz
+@inject PageLayout PageLayout
+@inject ISnackbar Snackbar
+@inject IStringLocalizer<ProductionResource> ProdL
+
+@{
+    PageLayout.Title = ProdL["DispatchBoard"];
+}
+
+<SoftCard Elevation="2" Class="pa-2 page-flat">
+    <div class="page-head">
+        <div>
+            <h1 class="page-title">@ProdL["DispatchBoard"]</h1>
+            <div class="page-sub">@ProdL["DispatchBoardSubtitle"]</div>
+        </div>
+        <div class="page-head-actions">
+            <SoftButton Variant="Variant.Text" Color="Color.Primary"
+                        StartIcon="@Icons.Material.Filled.Refresh"
+                        OnClick="ReloadAsync">
+                @ProdL["Refresh"]
+            </SoftButton>
+        </div>
+    </div>
+
+    <SoftCardContent>
+        <div class="toolbar">
+            <SoftTextField T="string" @bind-Value="_filter"
+                           Placeholder="@ProdL["Filter"]"
+                           Variant="Variant.Outlined" Margin="Margin.Dense"
+                           Adornment="Adornment.Start"
+                           AdornmentIcon="@Icons.Material.Filled.Search"
+                           OnKeyUp="OnFilterKeyUpAsync"
+                           Immediate="true"
+                           Class="toolbar-search"
+                           Style="min-width: 220px; max-width: 320px;" />
+
+            <div class="filter-chip">
+                <SoftLookupSelect TItem="BranchLookupDto" TValue="Guid?"
+                                  Items="_branches"
+                                  ToValue="@(b => (Guid?)b.Id)"
+                                  ToLabel="@(b => b.Name)"
+                                  Value="_kitchenBranchFilter"
+                                  ValueChanged="OnKitchenBranchChangedAsync"
+                                  Label="@ProdL["KitchenBranch"]"
+                                  Margin="Margin.Dense"
+                                  Dense="true"
+                                  Clearable="true" />
+            </div>
+        </div>
+
+        <SoftDataGrid T="ProductionOrderListItemDto"
+                      @ref="_grid"
+                      ServerData="LoadServerData"
+                      Dense="true"
+                      Hover="true"
+                      Bordered="false"
+                      Loading="_loading"
+                      SortMode="SortMode.Single">
+            <Columns>
+                <PropertyColumn T="ProductionOrderListItemDto" TProperty="string" Property="x => x.OrderNumber" Title="@ProdL["OrderNumber"]" />
+                <PropertyColumn T="ProductionOrderListItemDto" TProperty="string" Property="x => x.FinishedProductName" Title="@ProdL["Product"]" />
+                <PropertyColumn T="ProductionOrderListItemDto" TProperty="string" Property="x => x.KitchenBranchName" Title="@ProdL["KitchenBranch"]" />
+                <TemplateColumn T="ProductionOrderListItemDto" Title="@ProdL["AcceptedQuantity"]" SortBy="x => x.AcceptedQuantity">
+                    <CellTemplate>@context.Item.AcceptedQuantity @context.Item.Unit</CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn T="ProductionOrderListItemDto" Title="@ProdL["CompletedAt"]" SortBy="x => x.CompletedAt">
+                    <CellTemplate>@(context.Item.CompletedAt?.ToString("yyyy-MM-dd") ?? "-")</CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn T="ProductionOrderListItemDto" Title="@ProdL["Actions"]" Sortable="false">
+                    <CellTemplate>
+                        <span class="row-actions">
+                            <SoftTooltip Text="@ProdL["CreateDispatchTransfer"]">
+                                <SoftIconButton Icon="@Icons.Material.Filled.LocalShipping"
+                                                Color="Color.Primary"
+                                                Size="Size.Small"
+                                                Disabled="!_canCreateTransfer"
+                                                OnClick="() => OpenDispatchAsync(context.Item)" />
+                            </SoftTooltip>
+                        </span>
+                    </CellTemplate>
+                </TemplateColumn>
+            </Columns>
+            <PagerContent>
+                <MudDataGridPager T="ProductionOrderListItemDto" />
+            </PagerContent>
+        </SoftDataGrid>
+    </SoftCardContent>
+</SoftCard>
+
+@if (_dispatchVisible && _selectedOrder != null)
+{
+    <div class="glass-modal-backdrop" @onclick="CloseDispatch">
+        <div class="glass-modal-container glass-modal-container--md" @onclick:stopPropagation="true">
+            <SoftCard Elevation="24" Class="glass-modal">
+                <SoftCardHeader Class="pa-4">
+                    <CardHeaderContent>
+                        <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <SoftIcon Icon="@Icons.Material.Filled.LocalShipping" Color="Color.Primary" Size="Size.Medium" />
+                            <SoftText Typo="Typo.h6">@ProdL["CreateDispatchTransfer"]</SoftText>
+                        </SoftStack>
+                    </CardHeaderContent>
+                    <CardHeaderActions>
+                        <SoftIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="CloseDispatch" />
+                    </CardHeaderActions>
+                </SoftCardHeader>
+                <SoftDivider />
+                <SoftCardContent Class="pa-4 glass-modal-body">
+                    <SoftStack Spacing="3">
+                        <div class="stats">
+                            <div>
+                                <div class="stat-label">@ProdL["ProductionOrder"]</div>
+                                <div class="stat-value">@_selectedOrder.OrderNumber</div>
+                            </div>
+                            <div>
+                                <div class="stat-label">@ProdL["Product"]</div>
+                                <div class="stat-value">@_selectedOrder.FinishedProductName</div>
+                            </div>
+                            <div>
+                                <div class="stat-label">@ProdL["AvailableToDispatch"]</div>
+                                <div class="stat-value">@_selectedOrder.AcceptedQuantity @_selectedOrder.FinishedProductUnit</div>
+                            </div>
+                        </div>
+
+                        <SoftGrid>
+                            <SoftGridItem xs="12">
+                                <SoftLookupSelect TItem="BranchLookupDto" TValue="Guid?"
+                                                  Items="DispatchBranches"
+                                                  ToValue="@(b => (Guid?)b.Id)"
+                                                  ToLabel="@(b => b.Name)"
+                                                  Value="_destinationBranchId"
+                                                  ValueChanged="@(v => _destinationBranchId = v)"
+                                                  Label="@ProdL["DestinationBranch"]"
+                                                  Margin="Margin.Dense"
+                                                  Dense="true"
+                                                  Clearable="true" />
+                            </SoftGridItem>
+                            <SoftGridItem xs="12" md="6">
+                                <SoftNumericField T="int" @bind-Value="_dispatchQuantity"
+                                                  Label="@ProdL["DispatchQuantity"]"
+                                                  Variant="Variant.Outlined"
+                                                  Min="1"
+                                                  Max="_selectedOrder.AcceptedQuantity"
+                                                  HideSpinButtons="true" />
+                            </SoftGridItem>
+                            <SoftGridItem xs="12" md="6">
+                                <SoftTextField T="string" @bind-Value="_dispatchNotes"
+                                               Label="@ProdL["Notes"]"
+                                               Variant="Variant.Outlined" />
+                            </SoftGridItem>
+                        </SoftGrid>
+                    </SoftStack>
+                </SoftCardContent>
+                <SoftDivider />
+                <div class="pa-3 d-flex justify-end flex-wrap" style="gap: 8px;">
+                    <SoftButton Variant="Variant.Text" OnClick="CloseDispatch">@ProdL["Cancel"]</SoftButton>
+                    <SoftButton Variant="Variant.Filled" Color="Color.Primary"
+                                StartIcon="@Icons.Material.Filled.LocalShipping"
+                                Disabled="!CanCreateDispatch || _savingDispatch"
+                                OnClick="CreateDispatchTransferAsync">
+                        @ProdL["CreateDispatchTransfer"]
+                    </SoftButton>
+                </div>
+            </SoftCard>
+        </div>
+    </div>
+}
+
+@code {
+    private SoftDataGrid<ProductionOrderListItemDto>? _grid;
+    private bool _loading;
+    private bool _canCreateTransfer;
+    private bool _savingDispatch;
+    private string? _filter;
+    private Guid? _kitchenBranchFilter;
+    private List<BranchLookupDto> _branches = new();
+
+    private bool _dispatchVisible;
+    private ProductionOrderDto? _selectedOrder;
+    private Guid? _destinationBranchId;
+    private int _dispatchQuantity;
+    private string? _dispatchNotes;
+
+    private List<BranchLookupDto> DispatchBranches =>
+        _selectedOrder == null
+            ? _branches
+            : _branches.Where(b => b.Id != _selectedOrder.KitchenBranchId).ToList();
+
+    private bool CanCreateDispatch =>
+        _canCreateTransfer
+        && _selectedOrder != null
+        && _destinationBranchId.HasValue
+        && _destinationBranchId.Value != _selectedOrder.KitchenBranchId
+        && _dispatchQuantity > 0
+        && _dispatchQuantity <= _selectedOrder.AcceptedQuantity;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _canCreateTransfer = await Authz.IsGrantedAsync(ProductionPermissions.Dispatch.CreateTransfer);
+        _branches = await BranchAppService.GetLookupAsync();
+    }
+
+    private async Task<GridData<ProductionOrderListItemDto>> LoadServerData(GridState<ProductionOrderListItemDto> state, CancellationToken cancellationToken)
+    {
+        _loading = true;
+        try
+        {
+            var sorting = state.SortDefinitions.FirstOrDefault();
+            var result = await OrderAppService.GetListAsync(new GetProductionOrdersInput
+            {
+                Filter = _filter,
+                Status = ProductionOrderStatuses.Completed,
+                KitchenBranchId = _kitchenBranchFilter,
+                SkipCount = state.Page * state.PageSize,
+                MaxResultCount = state.PageSize,
+                Sorting = sorting == null ? string.Empty : $"{sorting.SortBy} {(sorting.Descending ? "desc" : "asc")}"
+            });
+
+            return new GridData<ProductionOrderListItemDto>
+            {
+                Items = result.Items,
+                TotalItems = (int)result.TotalCount
+            };
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private Task OnFilterKeyUpAsync(KeyboardEventArgs _) => ReloadAsync();
+
+    private async Task OnKitchenBranchChangedAsync(Guid? value)
+    {
+        _kitchenBranchFilter = value;
+        await ReloadAsync();
+    }
+
+    private Task ReloadAsync() => _grid?.ReloadServerData() ?? Task.CompletedTask;
+
+    private async Task OpenDispatchAsync(ProductionOrderListItemDto row)
+    {
+        _selectedOrder = await OrderAppService.GetAsync(row.Id);
+        _destinationBranchId = null;
+        _dispatchQuantity = Math.Max(1, _selectedOrder.AcceptedQuantity);
+        _dispatchNotes = null;
+        _dispatchVisible = true;
+    }
+
+    private void CloseDispatch()
+    {
+        if (_savingDispatch)
+        {
+            return;
+        }
+
+        _dispatchVisible = false;
+        _selectedOrder = null;
+        _destinationBranchId = null;
+        _dispatchNotes = null;
+    }
+
+    private async Task CreateDispatchTransferAsync()
+    {
+        if (!CanCreateDispatch || _selectedOrder == null || !_destinationBranchId.HasValue)
+        {
+            return;
+        }
+
+        _savingDispatch = true;
+        try
+        {
+            var result = await DispatchAppService.CreateTransferAsync(new CreateProductionDispatchTransferDto
+            {
+                ProductionOrderId = _selectedOrder.Id,
+                DestinationBranchId = _destinationBranchId.Value,
+                Quantity = _dispatchQuantity,
+                Notes = _dispatchNotes
+            });
+
+            Snackbar.Add(
+                ProdL["DispatchTransferCompleted", result.StockTransferReference, result.FulfilledRequestQuantity],
+                Severity.Success);
+            _dispatchVisible = false;
+            _selectedOrder = null;
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            await HandleErrorAsync(ex);
+        }
+        finally
+        {
+            _savingDispatch = false;
+        }
+    }
+}

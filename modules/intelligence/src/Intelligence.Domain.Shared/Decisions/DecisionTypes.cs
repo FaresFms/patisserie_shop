@@ -42,6 +42,13 @@ public static class DecisionTypes
     /// </summary>
     public const string CashierVariance = "CashierVariance";
 
+    public const string IngredientShortage = "IngredientShortage";
+    public const string ProductionShortageRisk = "ProductionShortageRisk";
+    public const string HighKitchenWaste = "HighKitchenWaste";
+    public const string ProductionCostVariance = "ProductionCostVariance";
+    public const string LateProductionRisk = "LateProductionRisk";
+    public const string UnfulfilledBranchRequest = "UnfulfilledBranchRequest";
+
     public static readonly string[] All =
     {
         LowStockAlert,
@@ -53,7 +60,13 @@ public static class DecisionTypes
         ExpiryAlert,
         WasteWriteOff,
         StockReport,
-        CashierVariance
+        CashierVariance,
+        IngredientShortage,
+        ProductionShortageRisk,
+        HighKitchenWaste,
+        ProductionCostVariance,
+        LateProductionRisk,
+        UnfulfilledBranchRequest
     };
 
     public static bool IsValid(string? decisionType)

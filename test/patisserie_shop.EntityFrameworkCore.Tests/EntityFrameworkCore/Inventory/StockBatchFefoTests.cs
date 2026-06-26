@@ -3,9 +3,11 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Inventory;
+using Inventory.BranchInventory;
 using Inventory.Entities;
 using Inventory.StockBatches;
 using Operations.Sales;
+using Operations.StockTransfers;
 using patisserie_shop.EntityFrameworkCore.Testing;
 using Shouldly;
 using Volo.Abp;
@@ -61,6 +63,13 @@ public class StockBatchFefoTests : IntegrationTestBase
         return await WithUnitOfWorkAsync(() => repository.GetListAsync(b => b.ProductId == productId));
     }
 
+    private async Task<List<AppStockBatch>> LoadBatchesAsync(Guid branchId, Guid productId)
+    {
+        var repository = GetRequiredService<IRepository<AppStockBatch, Guid>>();
+        return await WithUnitOfWorkAsync(() =>
+            repository.GetListAsync(b => b.BranchId == branchId && b.ProductId == productId));
+    }
+
     [Fact]
     public async Task A_Sale_Consumes_The_Earliest_Expiring_Batch_First()
     {
@@ -89,6 +98,88 @@ public class StockBatchFefoTests : IntegrationTestBase
         var batch = (await LoadBatchesAsync(productId)).Single(b => b.Id == only.Id);
         batch.QuantityRemaining.ShouldBe(0);
         batch.IsDepleted.ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task Production_Waste_Consumes_Expired_Batches_First()
+    {
+        var (branchId, productId) = await ArrangePerishableProductAsync(onHand: 10);
+        var fresh = await CreateBatchAsync(branchId, productId, quantity: 6, expiresInDays: 5);
+        var expired = await CreateBatchAsync(branchId, productId, quantity: 4, expiresInDays: -2);
+        var inventoryRepository = GetRequiredService<IRepository<AppBranchInventory, Guid>>();
+        var inventory = await WithUnitOfWorkAsync(async () =>
+            (await inventoryRepository.GetListAsync(i => i.BranchId == branchId && i.ProductId == productId)).Single());
+        var inventoryService = GetRequiredService<IBranchInventoryAppService>();
+
+        await inventoryService.AdjustStockAsync(inventory.Id, new AdjustStockDto
+        {
+            NewQuantity = 6,
+            MovementType = StockMovementTypes.ProductionWaste,
+            Notes = "Expired finished goods before dispatch"
+        });
+
+        var batches = await LoadBatchesAsync(branchId, productId);
+        batches.Single(b => b.Id == expired.Id).QuantityRemaining.ShouldBe(0);
+        batches.Single(b => b.Id == fresh.Id).QuantityRemaining.ShouldBe(6);
+    }
+
+    [Fact]
+    public async Task ConsumeFefo_WithBreakdown_Returns_The_Source_Expiry_Splits()
+    {
+        var (branchId, productId) = await ArrangePerishableProductAsync(onHand: 10);
+        var later = await CreateBatchAsync(branchId, productId, quantity: 5, expiresInDays: 9);
+        var earlier = await CreateBatchAsync(branchId, productId, quantity: 5, expiresInDays: 2);
+        var manager = GetRequiredService<StockBatchManager>();
+
+        var consumed = await WithUnitOfWorkAsync(() =>
+            manager.ConsumeFefoWithBreakdownAsync(branchId, productId, quantity: 7));
+
+        consumed.Count.ShouldBe(2);
+        consumed[0].BatchId.ShouldBe(earlier.Id);
+        consumed[0].ExpiryDate.ShouldBe(earlier.ExpiryDate);
+        consumed[0].Quantity.ShouldBe(5);
+        consumed[1].BatchId.ShouldBe(later.Id);
+        consumed[1].ExpiryDate.ShouldBe(later.ExpiryDate);
+        consumed[1].Quantity.ShouldBe(2);
+    }
+
+    [Fact]
+    public async Task Transfer_Completion_Carries_Source_Batch_Expiry_To_The_Destination()
+    {
+        var (sourceBranchId, productId) = await ArrangePerishableProductAsync(onHand: 10);
+        var destinationBranch = await CreateBranchAsync();
+        var later = await CreateBatchAsync(sourceBranchId, productId, quantity: 5, expiresInDays: 9);
+        var earlier = await CreateBatchAsync(sourceBranchId, productId, quantity: 5, expiresInDays: 2);
+        var transfers = GetRequiredService<IStockTransferAppService>();
+
+        var transfer = await transfers.CreateAsync(new CreateStockTransferDto
+        {
+            FromBranchId = sourceBranchId,
+            ToBranchId = destinationBranch.Id,
+            RequestedDate = DateTime.UtcNow,
+            Notes = "Expiry-preserving transfer test"
+        });
+        var item = await transfers.AddItemAsync(transfer.Id, new AddStockTransferItemDto
+        {
+            ProductId = productId,
+            RequestedQuantity = 7
+        });
+
+        await transfers.SubmitAsync(transfer.Id);
+        await transfers.ApproveAsync(transfer.Id);
+        await transfers.ShipAsync(transfer.Id);
+        await transfers.CompleteAsync(transfer.Id, new CompleteStockTransferDto
+        {
+            Lines = new List<CompleteTransferLineDto>
+            {
+                new() { ItemId = item.Id, TransferredQuantity = 7 }
+            }
+        });
+
+        var destinationBatches = await LoadBatchesAsync(destinationBranch.Id, productId);
+        destinationBatches.Count.ShouldBe(2);
+        destinationBatches.Single(b => b.ExpiryDate == earlier.ExpiryDate).QuantityRemaining.ShouldBe(5);
+        destinationBatches.Single(b => b.ExpiryDate == later.ExpiryDate).QuantityRemaining.ShouldBe(2);
     }
 
     [Fact]

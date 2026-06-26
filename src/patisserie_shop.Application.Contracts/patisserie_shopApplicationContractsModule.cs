@@ -1,5 +1,6 @@
 using Operations;
 using Intelligence;
+using Production;
 using Volo.Abp.Account;
 using Volo.Abp.Modularity;
 using Volo.Abp.PermissionManagement;
@@ -12,6 +13,7 @@ namespace patisserie_shop;
 [DependsOn(
     typeof(OperationsApplicationContractsModule),
     typeof(IntelligenceApplicationContractsModule),
+    typeof(ProductionApplicationContractsModule),
     typeof(patisserie_shopDomainSharedModule),
     typeof(AbpFeatureManagementApplicationContractsModule),
     typeof(AbpSettingManagementApplicationContractsModule),

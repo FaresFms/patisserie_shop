@@ -4,12 +4,15 @@ using System.Linq;
 using System.Security.Claims;
 using System.Threading.Tasks;
 using Intelligence.Permissions;
+using Inventory;
+using Inventory.Branches;
 using Inventory.Entities;
 using Inventory.Permissions;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Logging;
 using Operations;
 using Operations.Permissions;
+using Production.Permissions;
 using Volo.Abp.Data;
 using Volo.Abp.DependencyInjection;
 using Volo.Abp.Domain.Repositories;
@@ -37,6 +40,7 @@ public class IdentityDataSeedContributor : IDataSeedContributor, ITransientDepen
     public const string AdminRoleName = "admin";
     public const string BranchManagerRoleName = "BranchManager";
     public const string CashierRoleName = "Cashier";
+    public const string KitchenManagerRoleName = "KitchenManager";
 
     public const string BranchManagerUserName = "manager.demo";
     public const string BranchManagerEmail = "manager@patisserie.com";
@@ -46,8 +50,19 @@ public class IdentityDataSeedContributor : IDataSeedContributor, ITransientDepen
     public const string CashierEmail = "cashier@patisserie.com";
     public const string CashierPassword = "Cashier@2026";
 
+    public const string KitchenManagerUserName = "kitchen.demo";
+    public const string KitchenManagerEmail = "kitchen@patisserie.com";
+    public const string KitchenManagerPassword = "Kitchen@2026";
+
     /// <summary>The branch cashier.demo is assigned to (matches a seeded branch name).</summary>
     public const string CashierAssignedBranchName = "بوتيك الشارع الرئيسي";
+
+    /// <summary>
+    /// The Main Kitchen (production site) branch name. Resolved/created idempotently by
+    /// this name; kitchen.demo is set as its ManagerUserId so the existing branch-manager
+    /// scoping mechanism scopes the kitchen manager to it.
+    /// </summary>
+    public const string MainKitchenBranchName = "Main Kitchen";
 
     // ABP's RolePermissionValueProvider.ProviderName ("R"). Hardcoded here so
     // the seeder doesn't need a transitive dep on the permission-management
@@ -61,6 +76,8 @@ public class IdentityDataSeedContributor : IDataSeedContributor, ITransientDepen
     private readonly IGuidGenerator _guidGenerator;
     private readonly ICurrentTenant _currentTenant;
     private readonly IRepository<AppBranch, Guid> _branchRepository;
+    private readonly BranchManager _branchManager;
+    private readonly IRepository<AppProduct, Guid> _productRepository;
     private readonly ILogger<IdentityDataSeedContributor> _logger;
 
     public IdentityDataSeedContributor(
@@ -71,6 +88,8 @@ public class IdentityDataSeedContributor : IDataSeedContributor, ITransientDepen
         IGuidGenerator guidGenerator,
         ICurrentTenant currentTenant,
         IRepository<AppBranch, Guid> branchRepository,
+        BranchManager branchManager,
+        IRepository<AppProduct, Guid> productRepository,
         ILogger<IdentityDataSeedContributor> logger)
     {
         _roleRepository = roleRepository;
@@ -80,6 +99,8 @@ public class IdentityDataSeedContributor : IDataSeedContributor, ITransientDepen
         _guidGenerator = guidGenerator;
         _currentTenant = currentTenant;
         _branchRepository = branchRepository;
+        _branchManager = branchManager;
+        _productRepository = productRepository;
         _logger = logger;
     }
 
@@ -90,6 +111,7 @@ public class IdentityDataSeedContributor : IDataSeedContributor, ITransientDepen
         await EnsureRoleExistsAsync(AdminRoleName, isStatic: true);
         await EnsureRoleExistsAsync(BranchManagerRoleName, isStatic: false);
         await EnsureRoleExistsAsync(CashierRoleName, isStatic: false);
+        await EnsureRoleExistsAsync(KitchenManagerRoleName, isStatic: false);
 
         // 2) Permissions on each role
         await _permissionDataSeeder.SeedAsync(
@@ -110,6 +132,12 @@ public class IdentityDataSeedContributor : IDataSeedContributor, ITransientDepen
             CashierPermissions(),
             context.TenantId);
 
+        await _permissionDataSeeder.SeedAsync(
+            RoleProviderName,
+            KitchenManagerRoleName,
+            KitchenManagerPermissions(),
+            context.TenantId);
+
         // 3) Demo BranchManager user (only if missing)
         await EnsureUserExistsAsync(
             userName: BranchManagerUserName,
@@ -124,8 +152,108 @@ public class IdentityDataSeedContributor : IDataSeedContributor, ITransientDepen
             password: CashierPassword,
             roleName: CashierRoleName);
 
-        // 5) Assign cashier.demo to the Main Street branch via a persistent claim.
+        // 5) Demo KitchenManager user (only if missing) — must exist before the
+        // Main Kitchen branch is created so it can be set as the branch's ManagerUserId.
+        await EnsureUserExistsAsync(
+            userName: KitchenManagerUserName,
+            email: KitchenManagerEmail,
+            password: KitchenManagerPassword,
+            roleName: KitchenManagerRoleName);
+
+        // 6) Assign cashier.demo to the Main Street branch via a persistent claim.
         await EnsureCashierBranchAssignmentAsync();
+
+        // 7) Seed the Main Kitchen (production) branch, managed by kitchen.demo.
+        await EnsureMainKitchenBranchAsync();
+
+        // 8) Mark the seeded finished-good (pastry) products as producible so later
+        // production waves can build them. Idempotent — only flips IsProducible.
+        await EnsureProducibleProductsAsync();
+    }
+
+    /// <summary>
+    /// Creates the "Main Kitchen" production branch (<see cref="BranchTypes.MainKitchen"/>)
+    /// managed by kitchen.demo, idempotently by name. If kitchen.demo can't be resolved yet
+    /// it logs and skips; a later migrator run completes it. The branch is created via the
+    /// <see cref="BranchManager"/> (same path PatisserieDataSeedContributor uses) so the
+    /// name-uniqueness invariant is enforced.
+    ///
+    /// NOTE: this runs only after at least one branch already exists, so it never trips
+    /// PatisserieDataSeedContributor's "branches already exist — skip" count guard on a
+    /// fresh database (that seeder seeds its three demo branches first). On a fresh DB where
+    /// Identity happens to run before Patisserie, the kitchen branch is deferred to the next
+    /// migrator pass — exactly like the cashier branch-assignment above.
+    /// </summary>
+    private async Task EnsureMainKitchenBranchAsync()
+    {
+        // Already present (by name)? Idempotent no-op.
+        if (await _branchRepository.AnyAsync(b => b.Name == MainKitchenBranchName))
+        {
+            return;
+        }
+
+        // Defer until PatisserieDataSeedContributor has seeded its demo branches, so we
+        // never pre-empt its count-based guard and leave the retail branches unseeded.
+        if (await _branchRepository.CountAsync() == 0)
+        {
+            _logger.LogWarning(
+                "[Seed] No branches exist yet — deferring Main Kitchen branch creation to the " +
+                "next migrator run (so the demo branch seeder runs first).");
+            return;
+        }
+
+        var kitchenUser = await _userManager.FindByNameAsync(KitchenManagerUserName);
+        if (kitchenUser == null)
+        {
+            _logger.LogWarning(
+                "[Seed] Kitchen manager '{User}' not found — skipping Main Kitchen branch creation.",
+                KitchenManagerUserName);
+            return;
+        }
+
+        var branch = await _branchManager.CreateAsync(
+            name: MainKitchenBranchName,
+            address: null,
+            phone: null,
+            email: null,
+            managerUserId: kitchenUser.Id,
+            isActive: true,
+            branchType: BranchTypes.MainKitchen);
+        await _branchRepository.InsertAsync(branch, autoSave: true);
+
+        _logger.LogInformation(
+            "[Seed] Created Main Kitchen branch ({BranchId}) managed by '{User}'.",
+            branch.Id, KitchenManagerUserName);
+    }
+
+    /// <summary>
+    /// Marks the seeded finished-good (pastry) products as producible by flipping
+    /// <see cref="AppProduct.IsProducible"/> to true via <c>SetClassification</c>, preserving
+    /// the product's existing type / sellable / purchasable flags. Idempotent — only products
+    /// that aren't already producible are touched. All currently-seeded active products are
+    /// finished goods (pastries); raw-material products and kitchen inventory are deferred to
+    /// a later wave.
+    /// </summary>
+    private async Task EnsureProducibleProductsAsync()
+    {
+        var products = await _productRepository.GetListAsync(p => p.IsActive && !p.IsProducible);
+        if (products.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var product in products)
+        {
+            product.SetClassification(
+                product.ProductType,
+                product.IsSellable,
+                product.IsPurchasable,
+                isProducible: true);
+            await _productRepository.UpdateAsync(product, autoSave: true);
+        }
+
+        _logger.LogInformation(
+            "[Seed] Marked {Count} finished-good product(s) as producible.", products.Count);
     }
 
     /// <summary>
@@ -245,13 +373,15 @@ public class IdentityDataSeedContributor : IDataSeedContributor, ITransientDepen
         permissions.AddRange(InventoryPermissions.GetAll());
         permissions.AddRange(OperationsPermissions.GetAll());
         permissions.AddRange(IntelligencePermissions.GetAll());
+        permissions.AddRange(ProductionPermissions.GetAll());
 
         // Strip the group-name root entries ABP's reflection walk picks up —
         // they aren't real permissions (just the group key).
         return permissions
             .Where(p => p != InventoryPermissions.GroupName
                      && p != OperationsPermissions.GroupName
-                     && p != IntelligencePermissions.GroupName)
+                     && p != IntelligencePermissions.GroupName
+                     && p != ProductionPermissions.GroupName)
             .Distinct();
     }
 
@@ -289,6 +419,7 @@ public class IdentityDataSeedContributor : IDataSeedContributor, ITransientDepen
         OperationsPermissions.Sales.Manage,
         OperationsPermissions.Transfers.Default,
         OperationsPermissions.Transfers.Create,
+        OperationsPermissions.Transfers.ChooseBranches,
         OperationsPermissions.Transfers.Ship,
 
         // Operations — cashier oversight: view all shifts + create/assign cashiers
@@ -299,7 +430,10 @@ public class IdentityDataSeedContributor : IDataSeedContributor, ITransientDepen
 
         // Intelligence — decision logs only (no Rules read/manage)
         IntelligencePermissions.DecisionLogs.Default,
-        IntelligencePermissions.DecisionLogs.Acknowledge
+        IntelligencePermissions.DecisionLogs.Acknowledge,
+
+        // Production — branch-scoped kitchen requests only.
+        ProductionPermissions.BranchRequests.Default
     };
 
     /// <summary>
@@ -312,4 +446,48 @@ public class IdentityDataSeedContributor : IDataSeedContributor, ITransientDepen
         OperationsPermissions.Cashier.Default,
         OperationsPermissions.Cashier.ReportLowStock
     };
+
+    /// <summary>
+    /// KitchenManager: runs the Main Kitchen. Gets the full Production permission set
+    /// (every node minus the group root) plus a limited slice of the existing catalogue /
+    /// operations permissions needed to plan and execute production: read-only catalogue +
+    /// branch inventory + stock movements, receive purchase orders for raw materials, and
+    /// create / ship stock transfers to dispatch finished goods to sales branches.
+    ///
+    /// Deliberately withheld: Cashier (POS), Sales.Manage, Products.Manage,
+    /// Intelligence Rules, and all Identity admin permissions.
+    /// </summary>
+    private static IEnumerable<string> KitchenManagerPermissions()
+    {
+        // All Production permissions except the group-name root entry.
+        var permissions = ProductionPermissions.GetAll()
+            .Where(p => p != ProductionPermissions.GroupName)
+            .ToList();
+
+        // Limited existing permissions the kitchen manager needs (per spec §2).
+        permissions.AddRange(new[]
+        {
+            // Inventory — read-only catalogue + branch stock visibility
+            InventoryPermissions.Products.Default,
+            InventoryPermissions.Categories.Default,
+            InventoryPermissions.Suppliers.Default,
+            InventoryPermissions.Branches.Default,
+            InventoryPermissions.BranchInventory.Default,
+            InventoryPermissions.StockMovements.Default,
+
+            // Operations — receive raw-material POs; create + complete dispatch transfers
+            OperationsPermissions.PurchaseOrders.Default,
+            OperationsPermissions.PurchaseOrders.Create,
+            OperationsPermissions.PurchaseOrders.Edit,
+            OperationsPermissions.PurchaseOrders.Receive,
+            OperationsPermissions.Transfers.Default,
+            OperationsPermissions.Transfers.Create,
+            OperationsPermissions.Transfers.ChooseBranches,
+            OperationsPermissions.Transfers.Approve,
+            OperationsPermissions.Transfers.Ship,
+            OperationsPermissions.Transfers.Complete
+        });
+
+        return permissions.Distinct();
+    }
 }

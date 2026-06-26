@@ -6,6 +6,7 @@
 @using Volo.Abp.Application.Dtos
 @using Volo.Abp.AspNetCore.Components.Web.Theming.Layout
 @using Volo.Abp.Identity
+@using Inventory
 @using Inventory.Branches
 @using Inventory.Permissions
 @using Inventory.Localization
@@ -79,6 +80,18 @@
                 <TemplateColumn T="BranchDto" Title="@InvL["Manager"]" Sortable="false">
                     <CellTemplate>
                         <SoftText Typo="Typo.body2">@GetManagerName(context.Item.ManagerUserId)</SoftText>
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn T="BranchDto" Title="@InvL["BranchType"]" Sortable="true" SortBy="x => x.BranchType">
+                    <CellTemplate>
+                        @if (context.Item.BranchType == BranchTypes.MainKitchen)
+                        {
+                            <SoftChip T="string" Color="Color.Info" Size="Size.Small" Variant="Variant.Filled">@InvL["BranchType:MainKitchen"]</SoftChip>
+                        }
+                        else
+                        {
+                            <SoftChip T="string" Color="Color.Default" Size="Size.Small" Variant="Variant.Outlined">@InvL["BranchType:SalesBranch"]</SoftChip>
+                        }
                     </CellTemplate>
                 </TemplateColumn>
                 <TemplateColumn T="BranchDto" Title="@InvL["IsActive"]" Sortable="true" SortBy="x => x.IsActive">
@@ -165,6 +178,14 @@
                                                   Label="@InvL["Manager"]"
                                                   Placeholder="@InvL["SelectManager"]"
                                                   Clearable="true" />
+                                <SoftSelect T="string"
+                                            Label="@InvL["BranchType"]"
+                                            @bind-Value="_editBranchType"
+                                            Variant="Variant.Outlined"
+                                            Required="true">
+                                    <MudSelectItem T="string" Value="@BranchTypes.SalesBranch">@InvL["BranchType:SalesBranch"]</MudSelectItem>
+                                    <MudSelectItem T="string" Value="@BranchTypes.MainKitchen">@InvL["BranchType:MainKitchen"]</MudSelectItem>
+                                </SoftSelect>
                             </SoftStack>
                         </div>
 
@@ -265,6 +286,7 @@
     private string? _editEmail;
     private Guid? _editManagerUserId;
     private bool _editIsActive = true;
+    private string _editBranchType = BranchTypes.SalesBranch;
 
     private bool _confirmVisible;
     private BranchDto? _pendingDelete;
@@ -364,6 +386,7 @@
         _editEmail = null;
         _editManagerUserId = null;
         _editIsActive = true;
+        _editBranchType = BranchTypes.SalesBranch;
         _dialogVisible = true;
     }
 
@@ -376,6 +399,7 @@
         _editEmail = b.Email;
         _editManagerUserId = b.ManagerUserId;
         _editIsActive = b.IsActive;
+        _editBranchType = b.BranchType;
         _dialogVisible = true;
     }
 
@@ -404,7 +428,8 @@
                     Phone = _editPhone,
                     Email = _editEmail,
                     ManagerUserId = _editManagerUserId,
-                    IsActive = _editIsActive
+                    IsActive = _editIsActive,
+                    BranchType = _editBranchType
                 });
             }
             else
@@ -416,7 +441,8 @@
                     Phone = _editPhone,
                     Email = _editEmail,
                     ManagerUserId = _editManagerUserId,
-                    IsActive = _editIsActive
+                    IsActive = _editIsActive,
+                    BranchType = _editBranchType
                 });
             }
             Snackbar.Add(L["SuccessfullySaved"], Severity.Success);

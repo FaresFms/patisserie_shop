@@ -45,6 +45,13 @@ public static class InventoryDbContextModelCreatingExtensions
             b.Property(x => x.Unit).IsRequired().HasMaxLength(32);
             b.Property(x => x.Currency).HasMaxLength(3).HasDefaultValue("USD");
             b.Property(x => x.ImageUrl).HasMaxLength(512);
+            // NO HasDefaultValue (project convention): code defaults + migration backfill
+            // handle existing rows. Backfill: ProductType=FinishedGood, IsSellable=true,
+            // IsPurchasable=true, IsProducible=false.
+            b.Property(x => x.ProductType).IsRequired().HasMaxLength(16);
+            b.Property(x => x.IsSellable).IsRequired();
+            b.Property(x => x.IsPurchasable).IsRequired();
+            b.Property(x => x.IsProducible).IsRequired();
             b.HasIndex(x => x.SKU).IsUnique();
         });
 
@@ -56,6 +63,9 @@ public static class InventoryDbContextModelCreatingExtensions
             b.Property(x => x.Address).HasMaxLength(512);
             b.Property(x => x.Phone).HasMaxLength(32);
             b.Property(x => x.Email).HasMaxLength(256);
+            // NO HasDefaultValue (project convention): code defaults + migration backfill
+            // handle existing rows. Backfill: BranchType=SalesBranch.
+            b.Property(x => x.BranchType).IsRequired().HasMaxLength(16);
         });
 
         builder.Entity<AppBranchInventory>(b =>

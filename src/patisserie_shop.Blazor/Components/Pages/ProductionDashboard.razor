@@ -1,0 +1,491 @@
+@page "/production/dashboard"
+@attribute [Authorize(ProductionPermissions.Dashboard.Default)]
+@using System.Globalization
+@using System.Threading.Tasks
+@using Inventory.Branches
+@using Microsoft.AspNetCore.Authorization
+@using Production.Dashboard
+@using Production.Localization
+@using Production.Permissions
+@using Volo.Abp.AspNetCore.Components.Web.Theming.Layout
+@using ApexCharts
+@using Color = MudBlazor.Color
+@using Variant = MudBlazor.Variant
+@using Size = MudBlazor.Size
+@using Margin = MudBlazor.Margin
+@inherits patisserie_shopComponentBase
+@inject IProductionDashboardAppService DashboardAppService
+@inject IBranchAppService BranchAppService
+@inject NavigationManager Nav
+@inject PageLayout PageLayout
+@inject IStringLocalizer<ProductionResource> ProdL
+
+@{
+    PageLayout.Title = ProdL["ProductionDashboard"];
+}
+
+<SoftCard Elevation="2" Class="pa-2 page-flat prod-dash">
+    <div class="page-head">
+        <div>
+            <h1 class="page-title">@ProdL["ProductionDashboard"]</h1>
+            <div class="page-sub">
+                @if (_lastRefresh.HasValue)
+                {
+                    <span>@ProdL["ProductionDashboardSubtitle"] · @_lastRefresh.Value.ToString("HH:mm", CultureInfo.CurrentCulture)</span>
+                }
+                else
+                {
+                    <span>@ProdL["ProductionDashboardSubtitle"]</span>
+                }
+            </div>
+        </div>
+        <div class="page-head-actions">
+            <SoftButton Variant="Variant.Text" Color="Color.Primary"
+                        StartIcon="@Icons.Material.Filled.Refresh"
+                        OnClick="LoadAsync"
+                        Disabled="_loading">
+                @ProdL["Refresh"]
+            </SoftButton>
+        </div>
+    </div>
+
+    <SoftCardContent>
+        <div class="toolbar">
+            <div class="filter-chip">
+                <SoftLookupSelect TItem="BranchLookupDto" TValue="Guid?"
+                                  Items="_branches"
+                                  ToValue="@(b => (Guid?)b.Id)"
+                                  ToLabel="@(b => b.Name)"
+                                  Value="_kitchenBranchId"
+                                  ValueChanged="OnBranchChangedAsync"
+                                  Label="@ProdL["KitchenBranch"]"
+                                  Margin="Margin.Dense"
+                                  Dense="true"
+                                  Clearable="true" />
+            </div>
+            <div class="toolbar-right">
+                <SoftButton Variant="Variant.Text" Color="Color.Primary"
+                            StartIcon="@Icons.Material.Filled.Analytics"
+                            OnClick="@(() => Nav.NavigateTo("/production/analytics"))">
+                    @ProdL["ProductionAnalytics"]
+                </SoftButton>
+            </div>
+        </div>
+
+        @if (_error != null)
+        {
+            <SoftAlert Severity="Severity.Error" Variant="Variant.Filled" Class="ma-4">@_error</SoftAlert>
+        }
+        else if (_data == null)
+        {
+            <div class="pd-skeleton-row">
+                @for (var i = 0; i < 6; i++)
+                {
+                    <SoftSkeleton SkeletonType="SkeletonType.Rectangle" Height="86px" Width="100%" />
+                }
+            </div>
+            <div class="pd-two">
+                <SoftSkeleton SkeletonType="SkeletonType.Rectangle" Height="320px" Width="100%" />
+                <SoftSkeleton SkeletonType="SkeletonType.Rectangle" Height="320px" Width="100%" />
+            </div>
+        }
+        else
+        {
+            <div class="pd-kpis">
+                <div class="pd-kpi pd-kpi--accent">
+                    <div class="pd-kpi-icon"><SoftIcon Icon="@Icons.Material.Filled.BakeryDining" /></div>
+                    <div>
+                        <div class="pd-kpi-value">@_data.AcceptedToday.ToString("N0")</div>
+                        <div class="pd-kpi-label">@ProdL["AcceptedToday"]</div>
+                        <div class="pd-kpi-sub">@_data.CompletedToday @ProdL["CompletedToday"]</div>
+                    </div>
+                </div>
+
+                <div class="pd-kpi @(_data.YieldPercentToday < 90m ? "pd-kpi--warn" : "pd-kpi--success")">
+                    <div class="pd-kpi-icon"><SoftIcon Icon="@Icons.Material.Filled.Percent" /></div>
+                    <div>
+                        <div class="pd-kpi-value">@FormatPercent(_data.YieldPercentToday)</div>
+                        <div class="pd-kpi-label">@ProdL["YieldToday"]</div>
+                        <div class="pd-kpi-sub">@_data.RejectedToday.ToString("N0") @ProdL["RejectedToday"]</div>
+                    </div>
+                </div>
+
+                <div class="pd-kpi @(_data.FulfillmentPercent < 90m ? "pd-kpi--warn" : "pd-kpi--success")">
+                    <div class="pd-kpi-icon"><SoftIcon Icon="@Icons.Material.Filled.TaskAlt" /></div>
+                    <div>
+                        <div class="pd-kpi-value">@FormatPercent(_data.FulfillmentPercent)</div>
+                        <div class="pd-kpi-label">@ProdL["Fulfillment"]</div>
+                        <div class="pd-kpi-sub">@_data.UnfulfilledDueToday @ProdL["UnfulfilledDueToday"]</div>
+                    </div>
+                </div>
+
+                <div class="pd-kpi @(_data.WasteCostToday > 0 ? "pd-kpi--danger" : "pd-kpi--success")">
+                    <div class="pd-kpi-icon"><SoftIcon Icon="@Icons.Material.Filled.DeleteSweep" /></div>
+                    <div>
+                        <div class="pd-kpi-value">@FormatMoney(_data.WasteCostToday)</div>
+                        <div class="pd-kpi-label">@ProdL["WasteCostToday"]</div>
+                        <div class="pd-kpi-sub">@_data.RejectedToday.ToString("N0") @ProdL["WasteQuantity"]</div>
+                    </div>
+                </div>
+
+                <div class="pd-kpi pd-kpi--info" @onclick="@(() => Nav.NavigateTo("/production/cook"))">
+                    <div class="pd-kpi-icon"><SoftIcon Icon="@Icons.Material.Filled.Restaurant" /></div>
+                    <div>
+                        <div class="pd-kpi-value">@(_data.WaitingForIngredients + _data.ReadyToCook + _data.InProduction)</div>
+                        <div class="pd-kpi-label">@ProdL["CookScreen"]</div>
+                        <div class="pd-kpi-sub">@_data.ReadyToCook @ProdL["ReadyToCook"] · @_data.InProduction @ProdL["InProduction"]</div>
+                    </div>
+                </div>
+
+                <div class="pd-kpi pd-kpi--neutral" @onclick="@(() => Nav.NavigateTo("/production/branch-requests"))">
+                    <div class="pd-kpi-icon"><SoftIcon Icon="@Icons.Material.Filled.Inbox" /></div>
+                    <div>
+                        <div class="pd-kpi-value">@_data.PendingRequests</div>
+                        <div class="pd-kpi-label">@ProdL["PendingRequests"]</div>
+                        <div class="pd-kpi-sub">@ProdL["BranchRequests"]</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="pd-two">
+                <section class="pd-section">
+                    <header class="pd-section-head">
+                        <div>
+                            <h2 class="pd-section-title">@ProdL["ActionQueue"]</h2>
+                            <div class="pd-section-sub">@ProdL["ActionQueueSubtitle"]</div>
+                        </div>
+                    </header>
+                    @if (_data.ActionItems.Count == 0)
+                    {
+                        <div class="pd-empty">
+                            <SoftIcon Icon="@Icons.Material.Filled.CheckCircle" />
+                            <span>@ProdL["NoActionItems"]</span>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="pd-action-list">
+                            @foreach (var item in _data.ActionItems)
+                            {
+                                <button type="button" class="@($"pd-action pd-action--{item.Severity.ToLowerInvariant()}")" @onclick="@(() => Nav.NavigateTo(item.Url))">
+                                    <span class="pd-action-count">@item.Count</span>
+                                    <span class="pd-action-body">
+                                        <strong>@item.Title</strong>
+                                        <span>@item.Detail</span>
+                                    </span>
+                                    <SoftIcon Icon="@Icons.Material.Filled.ChevronRight" />
+                                </button>
+                            }
+                        </div>
+                    }
+                </section>
+
+                <section class="pd-section">
+                    <header class="pd-section-head">
+                        <div>
+                            <h2 class="pd-section-title">@ProdL["OutputLast7Days"]</h2>
+                            <div class="pd-section-sub">@ProdL["Accepted"] / @ProdL["Rejected"]</div>
+                        </div>
+                    </header>
+                    @if (_data.OutputLast7Days.All(x => x.AcceptedQuantity == 0 && x.RejectedQuantity == 0))
+                    {
+                        <div class="pd-empty">@ProdL["NoProductionData"]</div>
+                    }
+                    else
+                    {
+                        <div class="pd-chart">
+                            <ApexChart TItem="ProductionDailyOutputPointDto" @key="_data" Options="_outputOptions" Height="280">
+                                <ApexPointSeries TItem="ProductionDailyOutputPointDto"
+                                                 Items="_data.OutputLast7Days"
+                                                 Name="@ProdL["Accepted"]"
+                                                 SeriesType="SeriesType.Area"
+                                                 XValue="@(d => d.Date.ToString("ddd", CultureInfo.CurrentCulture))"
+                                                 YValue="@(d => d.AcceptedQuantity)" />
+                                <ApexPointSeries TItem="ProductionDailyOutputPointDto"
+                                                 Items="_data.OutputLast7Days"
+                                                 Name="@ProdL["Rejected"]"
+                                                 SeriesType="SeriesType.Bar"
+                                                 XValue="@(d => d.Date.ToString("ddd", CultureInfo.CurrentCulture))"
+                                                 YValue="@(d => d.RejectedQuantity)" />
+                            </ApexChart>
+                        </div>
+                    }
+                </section>
+            </div>
+
+            <section class="pd-section pd-section--wide">
+                <header class="pd-section-head">
+                    <div>
+                        <h2 class="pd-section-title">@ProdL["ProductFocus"]</h2>
+                        <div class="pd-section-sub">@ProdL["OutputLast7Days"]</div>
+                    </div>
+                </header>
+                @if (_data.ProductFocus.Count == 0)
+                {
+                    <div class="pd-empty">@ProdL["NoProductionData"]</div>
+                }
+                else
+                {
+                    <table class="pd-table">
+                        <thead>
+                            <tr>
+                                <th>@ProdL["Product"]</th>
+                                <th class="pd-num">@ProdL["Accepted"]</th>
+                                <th class="pd-num">@ProdL["Rejected"]</th>
+                                <th class="pd-num">@ProdL["YieldPercent"]</th>
+                                <th class="pd-num">@ProdL["PlannedUnitCost"]</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var row in _data.ProductFocus)
+                            {
+                                <tr>
+                                    <td>
+                                        <div class="pd-product">@row.ProductName</div>
+                                        <div class="pd-sku">@row.ProductSku</div>
+                                    </td>
+                                    <td class="pd-num">@row.AcceptedQuantity.ToString("N0")</td>
+                                    <td class="pd-num">@row.RejectedQuantity.ToString("N0")</td>
+                                    <td class="pd-num">@FormatPercent(row.YieldPercent)</td>
+                                    <td class="pd-num">@FormatMoneyExact(row.UnitCost)</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                }
+            </section>
+        }
+    </SoftCardContent>
+</SoftCard>
+
+<style>
+    .prod-dash { animation: pd-fade .22s ease-out; }
+    @@keyframes pd-fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+    .pd-skeleton-row, .pd-kpis {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+        gap: 14px;
+        padding: 14px 32px 0;
+    }
+    .pd-kpi {
+        display: flex;
+        gap: 12px;
+        align-items: flex-start;
+        min-height: 92px;
+        padding: 16px;
+        border: 1px solid var(--bd-1);
+        border-radius: var(--r-md);
+        background: var(--surface);
+        box-shadow: var(--shadow-sm);
+        cursor: default;
+        border-left: 4px solid var(--pd-accent, var(--accent));
+    }
+    .pd-kpi[onclick] { cursor: pointer; }
+    .pd-kpi:hover { border-color: var(--accent-line); }
+    .pd-kpi-icon {
+        width: 38px;
+        height: 38px;
+        border-radius: var(--r-sm);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--pd-soft, var(--accent-soft));
+        color: var(--pd-accent, var(--accent));
+        flex-shrink: 0;
+    }
+    .pd-kpi-value {
+        font-family: var(--font-serif);
+        font-size: 28px;
+        font-weight: 700;
+        color: var(--fg-1);
+        line-height: 1;
+        font-variant-numeric: tabular-nums;
+    }
+    .pd-kpi-label {
+        margin-top: 6px;
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        color: var(--fg-3);
+    }
+    .pd-kpi-sub { margin-top: 3px; font-size: 12px; color: var(--fg-2); }
+    .pd-kpi--accent { --pd-accent: var(--accent); --pd-soft: var(--accent-soft); }
+    .pd-kpi--success { --pd-accent: var(--success); --pd-soft: rgba(107,142,78,.13); }
+    .pd-kpi--warn { --pd-accent: var(--warn); --pd-soft: rgba(200,156,79,.15); }
+    .pd-kpi--danger { --pd-accent: var(--danger); --pd-soft: rgba(179,84,58,.13); }
+    .pd-kpi--info { --pd-accent: #4a7da8; --pd-soft: rgba(74,125,168,.13); }
+    .pd-kpi--neutral { --pd-accent: #8a7e6e; --pd-soft: rgba(138,126,110,.12); }
+
+    .pd-two {
+        display: grid;
+        grid-template-columns: minmax(0, .95fr) minmax(0, 1.25fr);
+        gap: 16px;
+        padding: 16px 32px 0;
+    }
+    @@media (max-width: 1000px) { .pd-two { grid-template-columns: 1fr; } }
+    .pd-section {
+        background: var(--surface);
+        border: 1px solid var(--bd-1);
+        border-radius: var(--r-md);
+        box-shadow: var(--shadow-sm);
+        padding: 16px 18px;
+    }
+    .pd-section--wide { margin: 16px 32px 0; }
+    .pd-section-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        margin-bottom: 14px;
+    }
+    .pd-section-title {
+        font-family: var(--font-serif);
+        font-size: 18px;
+        font-weight: 700;
+        margin: 0;
+        color: var(--fg-1);
+    }
+    .pd-section-sub { font-size: 12.5px; color: var(--fg-3); margin-top: 2px; }
+    .pd-chart { min-height: 280px; }
+    .pd-chart .apexcharts-svg { background: transparent !important; }
+    .pd-empty {
+        min-height: 112px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        color: var(--fg-3);
+        font-size: 13px;
+        text-align: center;
+    }
+    .pd-action-list { display: flex; flex-direction: column; gap: 10px; }
+    .pd-action {
+        width: 100%;
+        display: grid;
+        grid-template-columns: 38px 1fr 20px;
+        gap: 10px;
+        align-items: center;
+        text-align: start;
+        border: 1px solid var(--bd-1);
+        border-left: 3px solid var(--pd-action-color, var(--accent));
+        border-radius: var(--r-sm);
+        background: var(--bg-2);
+        padding: 10px 12px;
+        color: var(--fg-1);
+        cursor: pointer;
+    }
+    .pd-action:hover { background: var(--hover); }
+    .pd-action-count {
+        width: 30px;
+        height: 30px;
+        border-radius: var(--r-sm);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--pd-action-soft, var(--accent-soft));
+        color: var(--pd-action-color, var(--accent));
+        font-weight: 800;
+        font-variant-numeric: tabular-nums;
+    }
+    .pd-action-body { display: flex; flex-direction: column; gap: 2px; }
+    .pd-action-body strong { font-size: 13.5px; }
+    .pd-action-body span { font-size: 12px; color: var(--fg-2); line-height: 1.35; }
+    .pd-action--danger { --pd-action-color: var(--danger); --pd-action-soft: rgba(179,84,58,.13); }
+    .pd-action--warning { --pd-action-color: var(--warn); --pd-action-soft: rgba(200,156,79,.15); }
+    .pd-action--success { --pd-action-color: var(--success); --pd-action-soft: rgba(107,142,78,.13); }
+    .pd-action--info { --pd-action-color: #4a7da8; --pd-action-soft: rgba(74,125,168,.13); }
+    .pd-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13.5px;
+    }
+    .pd-table th {
+        text-align: start;
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        color: var(--fg-3);
+        padding: 7px 10px;
+        border-bottom: 1px solid var(--bd-2);
+    }
+    .pd-table td {
+        padding: 9px 10px;
+        border-bottom: 1px solid var(--bd-1);
+        color: var(--fg-1);
+    }
+    .pd-table tbody tr:hover td { background: var(--hover); }
+    .pd-product { font-weight: 700; }
+    .pd-sku { font-family: var(--font-mono); font-size: 11.5px; color: var(--fg-3); }
+    .pd-num { text-align: end; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    html[dir="rtl"] .prod-dash { direction: rtl; text-align: right; }
+    html[dir="rtl"] .prod-dash .pd-kpi { border-left: 1px solid var(--bd-1); border-right: 4px solid var(--pd-accent, var(--accent)); }
+    html[dir="rtl"] .prod-dash .pd-action { border-left: 1px solid var(--bd-1); border-right: 3px solid var(--pd-action-color, var(--accent)); }
+</style>
+
+@code {
+    private ProductionDashboardDto? _data;
+    private List<BranchLookupDto> _branches = new();
+    private Guid? _kitchenBranchId;
+    private bool _loading;
+    private DateTime? _lastRefresh;
+    private string? _error;
+
+    private readonly ApexChartOptions<ProductionDailyOutputPointDto> _outputOptions = new()
+    {
+        Chart = new ApexCharts.Chart
+        {
+            Toolbar = new ApexCharts.Toolbar { Show = false },
+            Background = "transparent",
+            FontFamily = "Inter, sans-serif",
+            ForeColor = "#8a7e6e"
+        },
+        Colors = new List<string> { "#c8633f", "#b3543a" },
+        Stroke = new ApexCharts.Stroke { Curve = ApexCharts.Curve.Smooth, Width = 3 },
+        DataLabels = new ApexCharts.DataLabels { Enabled = false },
+        Grid = new ApexCharts.Grid { BorderColor = "rgba(138, 126, 110, .25)", StrokeDashArray = 3 },
+        Legend = new ApexCharts.Legend { Position = ApexCharts.LegendPosition.Top },
+        Xaxis = new ApexCharts.XAxis
+        {
+            AxisBorder = new ApexCharts.AxisBorder { Show = false },
+            AxisTicks = new ApexCharts.AxisTicks { Show = false }
+        }
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        _branches = await BranchAppService.GetLookupAsync();
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error = null;
+        try
+        {
+            _data = await DashboardAppService.GetAsync(new GetProductionDashboardInput
+            {
+                KitchenBranchId = _kitchenBranchId
+            });
+            _lastRefresh = DateTime.Now;
+        }
+        catch (Exception ex)
+        {
+            _error = $"{ex.GetType().Name}: {ex.Message}";
+            await HandleErrorAsync(ex);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task OnBranchChangedAsync(Guid? branchId)
+    {
+        _kitchenBranchId = branchId;
+        await LoadAsync();
+    }
+
+    private static string FormatPercent(decimal value) => $"{value:0.#}%";
+    private static string FormatMoney(decimal value) => value.ToString("C0", CultureInfo.GetCultureInfo("en-US"));
+    private static string FormatMoneyExact(decimal value) => value.ToString("C2", CultureInfo.GetCultureInfo("en-US"));
+}

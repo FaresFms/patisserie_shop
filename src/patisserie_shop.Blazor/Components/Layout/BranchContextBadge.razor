@@ -1,0 +1,161 @@
+@using Inventory
+@using Inventory.Branches
+@using Inventory.Permissions
+@using Microsoft.AspNetCore.Authorization
+@using Operations.Cashier
+@using Operations.Permissions
+@using patisserie_shop.Localization
+@using Volo.Abp.Application.Dtos
+@using Volo.Abp.Users
+@namespace patisserie_shop.Blazor.Components.Layout
+@inject ICurrentUser CurrentUser
+@inject ICashierAppService CashierAppService
+@inject IBranchAppService BranchAppService
+@inject IAuthorizationService AuthorizationService
+@inject IStringLocalizer<patisserie_shopResource> L
+
+@if (_visible)
+{
+    <SoftTooltip Text="@_tooltip" Placement="MudBlazor.Placement.Bottom">
+        <SoftChip T="string"
+                  Color="MudBlazor.Color.Transparent"
+                  Class="branch-context-badge"
+                  Size="MudBlazor.Size.Small">
+            <SoftIcon Icon="@_icon" Size="MudBlazor.Size.Small" />
+            <span class="branch-context-role">@_roleLabel</span>
+            <span class="branch-context-name">@_branchLabel</span>
+        </SoftChip>
+    </SoftTooltip>
+}
+
+@code {
+    private bool _visible;
+    private string _roleLabel = string.Empty;
+    private string _branchLabel = string.Empty;
+    private string _tooltip = string.Empty;
+    private string _icon = Icons.Material.Filled.Storefront;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!CurrentUser.IsAuthenticated)
+        {
+            return;
+        }
+
+        if (await TryResolveCashierBranchAsync())
+        {
+            return;
+        }
+
+        await TryResolveManagedBranchAsync();
+    }
+
+    private async Task<bool> TryResolveCashierBranchAsync()
+    {
+        if (!await AuthorizationService.IsGrantedAsync(OperationsPermissions.Cashier.Default))
+        {
+            return false;
+        }
+
+        var branch = await CashierAppService.GetMyBranchAsync();
+        if (branch == null)
+        {
+            return false;
+        }
+
+        Show(
+            L["NavBranch:Cashier"],
+            branch.Name,
+            L["NavBranch:CashierTooltip", branch.Name],
+            Icons.Material.Filled.PointOfSale);
+        return true;
+    }
+
+    private async Task TryResolveManagedBranchAsync()
+    {
+        if (!await AuthorizationService.IsGrantedAsync(InventoryPermissions.Branches.Default) ||
+            CurrentUser.Id == null)
+        {
+            return;
+        }
+
+        var result = await BranchAppService.GetListAsync(new GetBranchesInput
+        {
+            IsActive = true,
+            Sorting = nameof(BranchDto.Name),
+            SkipCount = 0,
+            MaxResultCount = 200
+        });
+
+        var branches = result.Items
+            .Where(b => b.ManagerUserId == CurrentUser.Id)
+            .OrderByDescending(b => b.BranchType == BranchTypes.MainKitchen)
+            .ThenBy(b => b.Name)
+            .ToList();
+
+        if (branches.Count == 0)
+        {
+            return;
+        }
+
+        var branch = branches[0];
+        var extra = branches.Count > 1 ? $" +{branches.Count - 1}" : string.Empty;
+        var isKitchen = branch.BranchType == BranchTypes.MainKitchen;
+
+        Show(
+            isKitchen ? L["NavBranch:Kitchen"] : L["NavBranch:Manager"],
+            branch.Name + extra,
+            branches.Count > 1
+                ? L["NavBranch:MultipleTooltip", string.Join(", ", branches.Select(b => b.Name))]
+                : L["NavBranch:ManagedTooltip", branch.Name],
+            isKitchen ? Icons.Material.Filled.Restaurant : Icons.Material.Filled.Storefront);
+    }
+
+    private void Show(string roleLabel, string branchLabel, string tooltip, string icon)
+    {
+        _roleLabel = roleLabel;
+        _branchLabel = branchLabel;
+        _tooltip = tooltip;
+        _icon = icon;
+        _visible = true;
+    }
+}
+
+<style>
+    .branch-context-badge {
+        gap: 6px;
+        height: 30px;
+        margin-left: 10px;
+        border: 1px solid rgba(255, 255, 255, 0.28);
+        background: rgba(255, 255, 255, 0.12) !important;
+        color: inherit !important;
+        max-width: 340px;
+    }
+
+    .branch-context-role {
+        font-size: 0.68rem;
+        font-weight: 800;
+        letter-spacing: 0.02em;
+        opacity: 0.78;
+        text-transform: uppercase;
+    }
+
+    .branch-context-name {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-weight: 700;
+    }
+
+    @@media (max-width: 720px) {
+        .branch-context-badge {
+            max-width: 170px;
+            margin-left: 6px;
+        }
+
+        .branch-context-role {
+            display: none;
+        }
+    }
+</style>

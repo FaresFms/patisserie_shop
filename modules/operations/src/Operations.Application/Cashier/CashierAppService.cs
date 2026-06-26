@@ -168,7 +168,7 @@ public class CashierAppService : OperationsAppService, ICashierAppService
 
         // Typed read model (Product × BranchInventory) from the custom repo — no LINQ here.
         // Active products initialised at the branch; out-of-stock rows are returned so the UI
-        // can render them disabled.
+        // can render them disabled. Only sellable products (raw materials never appear at the POS).
         var rows = await _branchInventoryRepository.GetListWithProductAsync(
             branchId,
             filter,
@@ -177,7 +177,8 @@ public class CashierAppService : OperationsAppService, ICashierAppService
             includeInactiveProducts: false,
             sorting: "ProductName",
             skipCount: 0,
-            maxResultCount: 500);
+            maxResultCount: 500,
+            onlySellable: true);
 
         return rows.ConvertAll(r => new CashierProductDto
         {

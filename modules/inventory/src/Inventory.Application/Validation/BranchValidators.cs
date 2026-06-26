@@ -21,6 +21,10 @@ public class CreateBranchDtoValidator : AbstractValidator<CreateBranchDto>
             .MaximumLength(256).WithMessage("Email must not exceed 256 characters.")
             .EmailAddress().WithMessage("Email must be a valid email address.")
             .When(x => !string.IsNullOrWhiteSpace(x.Email));
+
+        RuleFor(x => x.BranchType)
+            .NotEmpty().WithMessage("Branch type is required.")
+            .Must(BranchTypes.IsValid).WithMessage("Invalid branch type.");
     }
 }
 
@@ -42,5 +46,9 @@ public class UpdateBranchDtoValidator : AbstractValidator<UpdateBranchDto>
             .MaximumLength(256).WithMessage("Email must not exceed 256 characters.")
             .EmailAddress().WithMessage("Email must be a valid email address.")
             .When(x => !string.IsNullOrWhiteSpace(x.Email));
+
+        RuleFor(x => x.BranchType)
+            .NotEmpty().WithMessage("Branch type is required.")
+            .Must(BranchTypes.IsValid).WithMessage("Invalid branch type.");
     }
 }

@@ -46,6 +46,10 @@ public class CreateProductDtoValidator : AbstractValidator<CreateProductDto>
         RuleFor(x => x.ShelfLifeDays)
             .InclusiveBetween(1, 3650).When(x => x.ShelfLifeDays.HasValue)
             .WithMessage("Shelf life must be between 1 and 3650 days (leave empty for non-perishable).");
+
+        RuleFor(x => x.ProductType)
+            .NotEmpty().WithMessage("Product type is required.")
+            .Must(ProductTypes.IsValid).WithMessage("Invalid product type.");
     }
 }
 
@@ -92,5 +96,9 @@ public class UpdateProductDtoValidator : AbstractValidator<UpdateProductDto>
         RuleFor(x => x.ShelfLifeDays)
             .InclusiveBetween(1, 3650).When(x => x.ShelfLifeDays.HasValue)
             .WithMessage("Shelf life must be between 1 and 3650 days (leave empty for non-perishable).");
+
+        RuleFor(x => x.ProductType)
+            .NotEmpty().WithMessage("Product type is required.")
+            .Must(ProductTypes.IsValid).WithMessage("Invalid product type.");
     }
 }

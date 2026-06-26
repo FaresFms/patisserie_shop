@@ -1,6 +1,6 @@
 # Database Schema
 
-One PostgreSQL database (`patisserie`, `Default` connection string) shared by all three
+One PostgreSQL database (`patisserie`, `Default` connection string) shared by all four
 modules. Isolation is logical: each module configures its own tables with a module prefix
 in its `*DbContextModelCreatingExtensions.cs`:
 
@@ -9,6 +9,7 @@ in its `*DbContextModelCreatingExtensions.cs`:
 | Inventory | `Inventory*` | `modules/inventory/src/Inventory.EntityFrameworkCore/EntityFrameworkCore/InventoryDbContextModelCreatingExtensions.cs` |
 | Operations | `Operations*` | `modules/operations/src/Operations.EntityFrameworkCore/EntityFrameworkCore/OperationsDbContextModelCreatingExtensions.cs` |
 | Intelligence | `Intelligence*` | `modules/intelligence/src/Intelligence.EntityFrameworkCore/EntityFrameworkCore/IntelligenceDbContextModelCreatingExtensions.cs` |
+| Production | `Production*` | `modules/production/src/Production.EntityFrameworkCore/EntityFrameworkCore/ProductionDbContextModelCreatingExtensions.cs` |
 
 ABP's framework tables (`AbpUsers`, `AbpRoles`, …) coexist in the same database and are
 omitted here; the only business link to them is `InventoryBranches.ManagerUserId → AbpUsers.Id`.
@@ -51,6 +52,10 @@ erDiagram
         string Currency "char(3), default USD"
         int ReorderLevel
         int ShelfLifeDays "nullable; null = non-perishable"
+        string ProductType "FinishedGood|RawMaterial|Packaging|SemiFinished"
+        bool IsSellable
+        bool IsPurchasable
+        bool IsProducible
         bool IsActive
     }
     InventoryBranches {
@@ -58,6 +63,7 @@ erDiagram
         string Name
         string Address
         guid ManagerUserId "nullable, AbpUsers.Id"
+        string BranchType "SalesBranch|MainKitchen"
         bool IsActive
     }
     InventoryBranchInventories {
@@ -75,7 +81,7 @@ erDiagram
         guid Id PK
         guid BranchId FK "logical, indexed"
         guid ProductId FK "logical, indexed"
-        string MovementType "Purchase|Sale|TransferIn|TransferOut|ManualAdjustment|WriteOff"
+        string MovementType "Purchase|Sale|TransferIn|TransferOut|ManualAdjustment|WriteOff|ProductionConsumption|ProductionOutput|ProductionWaste"
         int Quantity "signed delta"
         int QuantityBefore
         int QuantityAfter
@@ -175,7 +181,7 @@ erDiagram
         guid BranchId FK "logical, nullable, indexed"
         guid SourceBranchId "nullable, transfers"
         guid TargetBranchId "nullable, transfers"
-        string DecisionType "LowStockAlert|ExcessStockAlert|DeadStockFlag|TransferSuggestion|ReorderSuggestion|StockoutRisk|ExpiryAlert|WasteWriteOff"
+        string DecisionType "LowStockAlert|ExcessStockAlert|DeadStockFlag|TransferSuggestion|ReorderSuggestion|StockoutRisk|ExpiryAlert|WasteWriteOff|Production*"
         string Reasoning "human-readable evidence"
         string SuggestedAction
         int StockAtEvaluation "nullable snapshot"
@@ -208,10 +214,118 @@ erDiagram
         datetime ComputedAtUtc "upserted by VelocityScanner"
     }
 
+    %% ============ PRODUCTION ============
+    ProductionFormulas {
+        guid Id PK
+        guid FinishedProductId FK "logical"
+        string FormulaName
+        int Version
+        int OutputQuantity
+        decimal ExpectedWastePercent
+        decimal LaborCostPerBatch
+        decimal OverheadCostPerBatch
+        int EstimatedProductionMinutes
+        bool IsActive
+        bool IsDefault
+        string Notes
+    }
+    ProductionFormulaItems {
+        guid Id PK
+        guid FormulaId FK "owned child, cascade"
+        guid IngredientProductId FK "logical"
+        int Quantity
+        decimal LossPercent
+        int SortOrder
+    }
+    ProductionBranchRequests {
+        guid Id PK
+        string RequestNumber UK
+        guid BranchId FK "logical"
+        datetime NeededByDate
+        string Priority
+        string Status "Draft|Submitted|Approved|Planned|PartiallyFulfilled|Fulfilled|Rejected|Cancelled"
+        guid RequestedByUserId "nullable"
+        guid ApprovedByUserId "nullable"
+        string Notes
+    }
+    ProductionBranchRequestItems {
+        guid Id PK
+        guid RequestId FK "owned child, cascade"
+        guid ProductId FK "logical"
+        int RequestedQuantity
+        int ApprovedQuantity
+        int FulfilledQuantity
+    }
+    ProductionPlans {
+        guid Id PK
+        string PlanNumber UK
+        guid KitchenBranchId FK "logical"
+        datetime ProductionDate
+        string Status "Draft|Confirmed|InProgress|Closed|Cancelled"
+    }
+    ProductionPlanLines {
+        guid Id PK
+        guid PlanId FK "owned child, cascade"
+        guid ProductId FK "logical"
+        int RequestedQuantity
+        int ForecastQuantity
+        int CurrentKitchenStock
+        int SuggestedQuantity
+        int PlannedQuantity
+        decimal EstimatedTotalCost
+    }
+    ProductionOrders {
+        guid Id PK
+        string OrderNumber UK
+        guid KitchenBranchId FK "logical"
+        guid ProductionPlanId "nullable"
+        guid FinishedProductId FK "logical"
+        guid FormulaId FK "logical"
+        string Status "ReadyToCook|WaitingForIngredients|InProduction|Completed|Cancelled"
+        int PlannedOutputQuantity
+        int AcceptedQuantity
+        int RejectedQuantity
+        decimal UnitProductionCost
+        datetime ExpiryDate "nullable"
+    }
+    ProductionOrderIngredients {
+        guid Id PK
+        guid ProductionOrderId FK "owned child, cascade"
+        guid IngredientProductId FK "logical"
+        int RequiredQuantity
+        int ConsumedQuantity
+        decimal UnitCostSnapshot
+    }
+    ProductionOrderAllocations {
+        guid Id PK
+        guid ProductionOrderId FK "owned child, cascade"
+        guid BranchId FK "logical"
+        guid BranchProductionRequestItemId "nullable"
+        int AllocatedQuantity
+        int FulfilledQuantity
+    }
+    ProductionWastes {
+        guid Id PK
+        guid ProductionOrderId "nullable"
+        guid KitchenBranchId FK "logical"
+        guid ProductId FK "logical"
+        string WasteType
+        int Quantity
+        decimal UnitCost
+        decimal TotalCost
+        string Reason
+        datetime RecordedAt
+    }
+
     %% ---- aggregate ownership (real FKs, cascade delete) ----
     OperationsPurchaseOrders ||--o{ OperationsPurchaseOrderItems : "owns"
     OperationsSales ||--o{ OperationsSaleItems : "owns"
     OperationsStockTransfers ||--o{ OperationsStockTransferItems : "owns"
+    ProductionFormulas ||--o{ ProductionFormulaItems : "owns"
+    ProductionBranchRequests ||--o{ ProductionBranchRequestItems : "owns"
+    ProductionPlans ||--o{ ProductionPlanLines : "owns"
+    ProductionOrders ||--o{ ProductionOrderIngredients : "owns"
+    ProductionOrders ||--o{ ProductionOrderAllocations : "owns"
 
     %% ---- logical by-id references ----
     InventoryCategories ||--o{ InventoryProducts : "categorizes"
@@ -230,6 +344,14 @@ erDiagram
     InventoryProducts ||--o{ IntelligenceDecisionLogs : "about"
     InventoryProducts ||--o{ IntelligenceProductVelocities : "measured"
     InventoryBranches ||--o{ IntelligenceProductVelocities : "per branch"
+    InventoryProducts ||--o{ ProductionFormulas : "finished product"
+    InventoryProducts ||--o{ ProductionFormulaItems : "ingredient"
+    InventoryBranches ||--o{ ProductionBranchRequests : "requests from"
+    InventoryBranches ||--o{ ProductionPlans : "kitchen"
+    InventoryBranches ||--o{ ProductionOrders : "kitchen"
+    InventoryProducts ||--o{ ProductionOrders : "produces"
+    InventoryBranches ||--o{ ProductionWastes : "recorded at"
+    InventoryProducts ||--o{ ProductionWastes : "wasted"
 ```
 
 ## Aggregate Ownership
@@ -239,6 +361,10 @@ erDiagram
 | `AppPurchaseOrder` | `AppPurchaseOrderItem` (`OperationsPurchaseOrderItems`) |
 | `AppSale` | `AppSaleItem` (`OperationsSaleItems`) |
 | `AppStockTransfer` | `AppStockTransferItem` (`OperationsStockTransferItems`) |
+| `AppProductionFormula` | `AppProductionFormulaItem` (`ProductionFormulaItems`) |
+| `AppBranchProductionRequest` | `AppBranchProductionRequestItem` (`ProductionBranchRequestItems`) |
+| `AppProductionPlan` | `AppProductionPlanLine` (`ProductionPlanLines`) |
+| `AppProductionOrder` | `AppProductionOrderIngredient`, `AppProductionOrderAllocation` |
 
 Children are reachable only through their root (`Items` collection) and are cascade-deleted
 with it. Every other entity is its own aggregate root with its own repository.
@@ -261,6 +387,10 @@ with it. Every other entity is its own aggregate root with its own repository.
   `AddWeekdayDemandIndices`, backfilled to `1.0` = flat / no weekday pattern) store the
   per-weekday demand multipliers the forecast walk consumes (see
   [architecture.md §6](architecture.md) — weekday-indexed forecasting).
+- **`ProductionWastes`** (`AppProductionWaste`, `CreationAuditedAggregateRoot`):
+  append-only cost ledger for rejected output, expired finished goods, ingredient spoilage,
+  and manual kitchen write-offs. Corrections are compensating rows; the stock decrement is
+  recorded separately as an immutable `ProductionWaste` stock movement.
 - Everything else is soft-deleted (`FullAuditedAggregateRoot`) except
   `AppBranchInventory` and `AppStockBatch` (`AuditedAggregateRoot` — hard rows, no soft
   delete; the branch-inventory row additionally carries a `ConcurrencyStamp` used as an
@@ -278,6 +408,11 @@ with it. Every other entity is its own aggregate root with its own repository.
 | `OperationsSales` | unique `InvoiceNumber`; `BranchId`; `SaleDate` | sales history / velocity windows |
 | `IntelligenceDecisionLogs` | `Status`, `DecisionType`, `ProductId`, `RuleId`, `BranchId` | pending-dedup checks and decision-log filters |
 | `IntelligenceProductVelocities` | unique `(ProductId, BranchId)` | upsert target for the velocity scanner |
+| `ProductionFormulas` | `(FinishedProductId, IsDefault)` + active/default filters | default formula lookup for costing/orders |
+| `ProductionBranchRequests` | unique `RequestNumber`; `BranchId`; `Status`; `NeededByDate` | request queues and planning suggestions |
+| `ProductionPlans` | unique `PlanNumber`; `KitchenBranchId`; `Status`; `ProductionDate` | plan list and confirmed plan lookup |
+| `ProductionOrders` | unique `OrderNumber`; `KitchenBranchId`; `Status`; `FinishedProductId` | cook screen, dashboard, dispatch board |
+| `ProductionWastes` | `KitchenBranchId`; `ProductId`; `WasteType`; `RecordedAt`; `ProductionOrderId` | waste ledger and analytics |
 
 ## Migration History
 
@@ -287,7 +422,7 @@ Migrations live in `src/patisserie_shop.EntityFrameworkCore/Migrations/`, applie
 | Migration | What it adds |
 |---|---|
 | `Initial` | ABP framework tables |
-| `InitialDomainSchema` | all three modules' business tables |
+| `InitialDomainSchema` | original inventory / operations / intelligence business tables |
 | `AddDecisionLogScopeColumns` | `SourceBranchId` / `TargetBranchId` on decision logs |
 | `AddStockMovementQuantityColumns` | `QuantityBefore` / `QuantityAfter` on movements |
 | `AddDecisionLogExecutedAction` | `ExecutedActionType` / `ExecutedActionId` / outcome columns |

@@ -11,5 +11,6 @@ public class BranchDto : EntityDto<Guid>
     public string? Email { get; set; }
     public Guid? ManagerUserId { get; set; }
     public bool IsActive { get; set; }
+    public string BranchType { get; set; } = Inventory.BranchTypes.SalesBranch;
     public DateTime CreationTime { get; set; }
 }

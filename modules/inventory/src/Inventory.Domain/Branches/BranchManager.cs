@@ -22,7 +22,8 @@ public class BranchManager : DomainService
         string? phone = null,
         string? email = null,
         Guid? managerUserId = null,
-        bool isActive = true)
+        bool isActive = true,
+        string branchType = BranchTypes.SalesBranch)
     {
         await EnsureNameIsUniqueAsync(name);
 
@@ -33,7 +34,8 @@ public class BranchManager : DomainService
             phone,
             email,
             managerUserId,
-            isActive);
+            isActive,
+            branchType);
     }
 
     public async Task ChangeNameAsync(AppBranch branch, string newName)

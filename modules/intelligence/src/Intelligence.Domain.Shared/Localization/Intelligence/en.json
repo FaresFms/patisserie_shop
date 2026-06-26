@@ -163,6 +163,12 @@
     "DecisionType:WasteWriteOff": "Waste Write-Off",
     "DecisionType:StockReport": "Cashier Stock Report",
     "DecisionType:CashierVariance": "Cashier Variance",
+    "DecisionType:IngredientShortage": "Ingredient Shortage",
+    "DecisionType:ProductionShortageRisk": "Production Shortage Risk",
+    "DecisionType:HighKitchenWaste": "High Kitchen Waste",
+    "DecisionType:ProductionCostVariance": "Production Cost Variance",
+    "DecisionType:LateProductionRisk": "Late Production Risk",
+    "DecisionType:UnfulfilledBranchRequest": "Unfulfilled Branch Request",
 
     "Menu:ReorderCalendar": "Reorder Calendar",
     "ReorderCalendar": "Reorder Calendar",

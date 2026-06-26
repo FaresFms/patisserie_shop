@@ -11,7 +11,7 @@ relative to the repository root).
 
 ## 1. Modular Monolith Layout
 
-The solution is a **modular monolith**: one process, one PostgreSQL database, three
+The solution is a **modular monolith**: one process, one PostgreSQL database, four
 domain modules plus a thin host application. Each module follows Clean/Onion layering
 with ABP's rich domain model (entities with private setters and behavior methods,
 domain services, custom repositories, thin application services).
@@ -28,6 +28,7 @@ flowchart TB
         Inv["inventory<br/>Products · Branches · BranchInventory ·<br/>StockMovements · StockBatches (FEFO)"]
         Ops["operations<br/>PurchaseOrders · Sales · StockTransfers"]
         Intel["intelligence<br/>InventoryRules · DecisionLogs ·<br/>ProductVelocity · Scanners"]
+        Prod["production<br/>Formulas · BranchRequests · Plans ·<br/>Orders · Dispatch · Waste"]
     end
 
     Shared["modules/Shared/patisserie_shop.Blazor.Shared<br/>(SoftComponents, theme)"]
@@ -38,12 +39,16 @@ flowchart TB
     HostApp --> Inv
     HostApp --> Ops
     HostApp --> Intel
+    HostApp --> Prod
     Ops -->|"BranchInventoryManager.AdjustStockAsync"| Inv
+    Prod -->|"BranchInventoryManager.AdjustStockAsync"| Inv
+    Prod -->|"draft ingredient POs / dispatch transfers"| Ops
     Inv -.->|"StockChangedEto (event bus)"| Intel
     Intel -.->|"DecisionMadeEto (event bus)"| HostApp
     Inv --> DB
     Ops --> DB
     Intel --> DB
+    Prod --> DB
     Migrator --> DB
 ```
 
@@ -110,6 +115,8 @@ Key event types (ETOs):
 |---|---|---|
 | `StockChangedEto` | `AppBranchInventory.UpdateStock()` (inside the aggregate) | `StockChangedEventHandler` → `DecisionMakerService` (intelligence) |
 | `SaleRecordedEto` | `AppSale` aggregate | operations-side bookkeeping |
+| `PurchaseReceivedEto` | `AppPurchaseOrder` aggregate | stock receipt bookkeeping |
+| `TransferCompletedEto` | `AppStockTransfer` aggregate | transfer stock movement bookkeeping |
 | `DecisionMadeEto` | `AppDecisionLog` constructor | `DecisionMadeEventHandler` (UI bell bridge) and `DecisionAutopilotHandler` (autopilot) |
 
 Events are **always published from aggregate methods**, never from application services.
@@ -171,7 +178,9 @@ stateDiagram-v2
 - **Decision types** (`DecisionTypes`): `LowStockAlert`, `ExcessStockAlert`, `DeadStockFlag`,
   `TransferSuggestion`, `ReorderSuggestion`, `StockoutRisk` (raised by DaysOfCover rules),
   `ExpiryAlert` (raised by ExpiringSoon rules), `WasteWriteOff` (raised by ExpiredStock rules —
-  human-only execution, see §4).
+  human-only execution, see §4), plus the production-operation types
+  `IngredientShortage`, `ProductionShortageRisk`, `HighKitchenWaste`,
+  `ProductionCostVariance`, `LateProductionRisk`, and `UnfulfilledBranchRequest`.
 - **Outcomes** (`DecisionOutcomes`): `Resolved`, `Unresolved`, `StockedOut` — recorded once,
   ~48 hours after creation (§6).
 - Every decision stores its evidence: `RuleId`, `Reasoning` (human-readable sentence),
@@ -368,6 +377,42 @@ days) would have warned, because the weekend rush is front-loaded. `DescribeWeig
 adds a human note to the reasoning, e.g. *"busiest Saturday ×1.80, quietest Sunday ×0.50"*.
 The velocity read model also exposes a **`Next7DaysForecast`** = Σ of the next 7 days'
 weekday-indexed demand, surfaced as the "Next 7 days" column on the Product Velocity page.
+
+### Main Kitchen production formulas and shortage loop
+
+The Production module keeps the thesis rule intact: production suggestions, ingredient
+requirements, cost estimates, shortages, and waste alerts are deterministic arithmetic.
+`AppProductionFormula` is a BOM-lite formula for one finished product. Its items store
+ingredient product ids, integer base-unit quantities, and loss percentages. The pure
+`ProductionCostCalculator` computes:
+
+```
+batches      = plannedOutput / formula.OutputQuantity
+requiredQty  = ceil(batches × ingredientQty × (1 + lossPercent/100))
+lineCost     = requiredQty × ingredientCostSnapshot
+totalCost    = ingredientCost + laborCostPerBatch×batches + overheadCostPerBatch×batches
+unitCost     = totalCost / plannedOutput
+```
+
+Production planning combines approved branch requests, the existing weekday demand
+forecast, and Main Kitchen finished-goods stock:
+
+```
+SuggestedProductionQty = max(0, requestedQty + forecastQty - kitchenFinishedStock)
+```
+
+Confirmed plans create production orders. Each order snapshots the formula's ingredient
+requirements and checks Main Kitchen on-hand quantities. If any line is short, the order
+stays `WaitingForIngredients`; the Cook screen can create draft ingredient purchase
+orders grouped by the ingredient's default supplier. Receiving those POs goes through the
+normal purchase-order flow and the same `BranchInventoryManager.AdjustStockAsync`
+chokepoint. Refreshing availability then moves the order to `ReadyToCook`.
+
+Starting a cook consumes ingredients with stock movement type `ProductionConsumption`.
+Completing it creates accepted finished goods with `ProductionOutput` and a batch expiry
+date; rejected output is written to the append-only `ProductionWastes` ledger. Dispatch
+uses the existing stock-transfer lifecycle from Main Kitchen to a sales branch, preserving
+source batch expiry dates.
 
 ### 6.4 Reorder point (Execute → draft PO)
 
@@ -654,9 +699,9 @@ system cannot discover patterns it was not told about (seasonality, cross-produc
 cannibalization); the forecast quality ceiling is the 30-day moving average. That
 trade-off is the point of the project: decision *support*, explainable by design.
 
-**One database, three module prefixes.**
-All three modules share the `Default` PostgreSQL connection string; isolation is logical
-(table prefixes `Inventory*`, `Operations*`, `Intelligence*`, separate DbContexts — see
+**One database, four module prefixes.**
+All four modules share the `Default` PostgreSQL connection string; isolation is logical
+(table prefixes `Inventory*`, `Operations*`, `Intelligence*`, `Production*`, separate DbContexts — see
 [database.md](database.md)). *Why:* transactional consistency across the sale → stock →
 decision chain without distributed transactions. *Cost:* modules can't scale their storage
 independently — irrelevant at this system's scale.

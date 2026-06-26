@@ -16,10 +16,11 @@ public class patisserie_shopDbMigratorModule : AbpModule
     {
         Configure<AbpDataSeedOptions>(options =>
         {
-            // Sales history depends on the branches/products created by
-            // PatisserieDataSeedContributor — move it to the end of the
-            // contributor list so it always runs last.
+            // Production demo data depends on the branches/products/users created
+            // by the earlier contributors. Sales history still runs last.
+            options.Contributors.Remove<ProductionDemoSeedContributor>();
             options.Contributors.Remove<SalesHistorySeedContributor>();
+            options.Contributors.Add<ProductionDemoSeedContributor>();
             options.Contributors.Add<SalesHistorySeedContributor>();
         });
     }

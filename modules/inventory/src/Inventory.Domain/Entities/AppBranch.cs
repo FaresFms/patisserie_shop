@@ -13,6 +13,12 @@ public class AppBranch : FullAuditedAggregateRoot<Guid>
     public Guid? ManagerUserId { get; private set; }
     public bool IsActive { get; private set; } = true;
 
+    /// <summary>
+    /// What this branch is for: <see cref="BranchTypes.SalesBranch"/> (sells finished goods)
+    /// or <see cref="BranchTypes.MainKitchen"/> (produces goods from raw materials).
+    /// </summary>
+    public string BranchType { get; private set; } = BranchTypes.SalesBranch;
+
     protected AppBranch() { }
 
     internal AppBranch(
@@ -22,7 +28,8 @@ public class AppBranch : FullAuditedAggregateRoot<Guid>
         string? phone = null,
         string? email = null,
         Guid? managerUserId = null,
-        bool isActive = true)
+        bool isActive = true,
+        string branchType = BranchTypes.SalesBranch)
         : base(id)
     {
         SetName(name);
@@ -31,6 +38,7 @@ public class AppBranch : FullAuditedAggregateRoot<Guid>
         Email = email;
         ManagerUserId = managerUserId;
         IsActive = isActive;
+        SetBranchType(branchType);
     }
 
     public void UpdateInfo(
@@ -38,13 +46,26 @@ public class AppBranch : FullAuditedAggregateRoot<Guid>
         string? phone,
         string? email,
         Guid? managerUserId,
-        bool isActive)
+        bool isActive,
+        string branchType = BranchTypes.SalesBranch)
     {
         Address = address;
         Phone = phone;
         Email = email;
         ManagerUserId = managerUserId;
         IsActive = isActive;
+        SetBranchType(branchType);
+    }
+
+    public void SetBranchType(string branchType)
+    {
+        if (!BranchTypes.IsValid(branchType))
+        {
+            throw new BusinessException(InventoryErrorCodes.InvalidBranchType)
+                .WithData("BranchType", branchType);
+        }
+
+        BranchType = branchType;
     }
 
     internal void SetName(string name)

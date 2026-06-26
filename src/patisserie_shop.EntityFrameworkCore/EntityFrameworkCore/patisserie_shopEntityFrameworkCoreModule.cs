@@ -1,6 +1,7 @@
 using Inventory.EntityFrameworkCore;
 using Operations.EntityFrameworkCore;
 using Intelligence.EntityFrameworkCore;
+using Production.EntityFrameworkCore;
 using System;
 using Microsoft.Extensions.DependencyInjection;
 using Volo.Abp.Uow;
@@ -23,6 +24,7 @@ namespace patisserie_shop.EntityFrameworkCore;
     typeof(InventoryEntityFrameworkCoreModule),
     typeof(OperationsEntityFrameworkCoreModule),
     typeof(IntelligenceEntityFrameworkCoreModule),
+    typeof(ProductionEntityFrameworkCoreModule),
     typeof(patisserie_shopDomainModule),
     typeof(AbpPermissionManagementEntityFrameworkCoreModule),
     typeof(AbpSettingManagementEntityFrameworkCoreModule),

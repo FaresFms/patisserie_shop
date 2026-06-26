@@ -1,0 +1,824 @@
+@page "/production/formulas"
+@attribute [Authorize(ProductionPermissions.Formulas.Default)]
+@using System.Threading
+@using System.Threading.Tasks
+@using Microsoft.AspNetCore.Authorization
+@using Volo.Abp.Application.Dtos
+@using Volo.Abp.AspNetCore.Components.Web.Theming.Layout
+@using Production.Formulas
+@using Production.Permissions
+@using Production.Localization
+@using Color = MudBlazor.Color
+@using Variant = MudBlazor.Variant
+@using Size = MudBlazor.Size
+@using Margin = MudBlazor.Margin
+@inherits patisserie_shopComponentBase
+@inject IProductionFormulaAppService FormulaAppService
+@inject PageLayout PageLayout
+@inject ISnackbar Snackbar
+@inject IStringLocalizer<ProductionResource> ProdL
+
+@{
+    PageLayout.Title = ProdL["Formulas"];
+}
+
+<SoftCard Elevation="2" Class="pa-2 page-flat">
+    <div class="page-head">
+        <div>
+            <h1 class="page-title">@ProdL["Formulas"]</h1>
+            <div class="page-sub">@ProdL["FormulasSubtitle"]</div>
+        </div>
+        <div class="page-head-actions">
+            <SoftButton Variant="Variant.Filled"
+                        Color="Color.Primary"
+                        StartIcon="@Icons.Material.Filled.Add"
+                        OnClick="OpenCreateDialog"
+                        Disabled="!_canManage">
+                @ProdL["NewFormula"]
+            </SoftButton>
+        </div>
+    </div>
+    <SoftCardContent>
+        <div class="toolbar">
+            <SoftTextField T="string"
+                           Placeholder="@ProdL["Filter"]"
+                           @bind-Value="_filter"
+                           Variant="Variant.Outlined"
+                           Margin="Margin.Dense"
+                           Adornment="Adornment.Start"
+                           AdornmentIcon="@Icons.Material.Filled.Search"
+                           OnKeyUp="OnFilterKeyUpAsync"
+                           Immediate="true"
+                           Class="toolbar-search"
+                           Style="min-width: 220px; max-width: 320px;" />
+
+            <div class="filter-chip">
+                <SoftLookupSelect TItem="ActiveOption" TValue="string"
+                                  Items="_activeOptions"
+                                  ToValue="@(o => o.Value)"
+                                  ToLabel="@(o => o.Label)"
+                                  Value="_activeFilter"
+                                  ValueChanged="OnActiveFilterChangedAsync"
+                                  Label="@ProdL["Status:All"]"
+                                  Margin="Margin.Dense"
+                                  Dense="true" />
+            </div>
+
+            <div class="toolbar-right">
+                <SoftButton Variant="Variant.Text" Color="Color.Primary"
+                            OnClick="ReloadAsync" StartIcon="@Icons.Material.Filled.Refresh">
+                    @ProdL["Refresh"]
+                </SoftButton>
+            </div>
+        </div>
+
+        <SoftDataGrid T="ProductionFormulaListItemDto"
+                      @ref="_grid"
+                      ServerData="LoadServerData"
+                      Dense="true"
+                      Hover="true"
+                      Bordered="false"
+                      Loading="_loading"
+                      SortMode="SortMode.Single">
+            <Columns>
+                <TemplateColumn T="ProductionFormulaListItemDto" Title="@ProdL["FormulaName"]" SortBy="x => x.FormulaName">
+                    <CellTemplate>
+                        <SoftText Typo="Typo.body2" Style="font-weight:600;">@context.Item.FormulaName</SoftText>
+                    </CellTemplate>
+                </TemplateColumn>
+                <PropertyColumn T="ProductionFormulaListItemDto" TProperty="string" Property="x => x.FinishedProductName" Title="@ProdL["FinishedProduct"]" />
+                <TemplateColumn T="ProductionFormulaListItemDto" Title="@ProdL["OutputQuantity"]" SortBy="x => x.OutputQuantity">
+                    <CellTemplate>
+                        <SoftText Typo="Typo.body2">@context.Item.OutputQuantity @context.Item.FinishedProductUnit</SoftText>
+                    </CellTemplate>
+                </TemplateColumn>
+                <PropertyColumn T="ProductionFormulaListItemDto" TProperty="int" Property="x => x.Version" Title="@ProdL["Version"]" />
+                <PropertyColumn T="ProductionFormulaListItemDto" TProperty="int" Property="x => x.ItemCount" Title="@ProdL["ItemCount"]" />
+                <TemplateColumn T="ProductionFormulaListItemDto" Title="@ProdL["IsActive"]" SortBy="x => x.IsActive">
+                    <CellTemplate>
+                        @if (context.Item.IsActive)
+                        {
+                            <SoftChip T="string" Color="Color.Success" Size="Size.Small" Variant="Variant.Filled">@ProdL["IsActive"]</SoftChip>
+                        }
+                        else
+                        {
+                            <SoftChip T="string" Color="Color.Default" Size="Size.Small" Variant="Variant.Outlined">-</SoftChip>
+                        }
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn T="ProductionFormulaListItemDto" Title="@ProdL["IsDefault"]" SortBy="x => x.IsDefault">
+                    <CellTemplate>
+                        @if (context.Item.IsDefault)
+                        {
+                            <SoftChip T="string" Color="Color.Info" Size="Size.Small" Variant="Variant.Filled">@ProdL["IsDefault"]</SoftChip>
+                        }
+                        else
+                        {
+                            <SoftText Typo="Typo.caption" Color="Color.Default">—</SoftText>
+                        }
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn T="ProductionFormulaListItemDto" Title="@ProdL["Actions"]" Sortable="false">
+                    <CellTemplate>
+                        <span class="row-actions">
+                            <SoftStack Row="true" Spacing="1">
+                                <SoftIconButton Icon="@Icons.Material.Filled.Edit"
+                                                Color="Color.Primary"
+                                                Size="Size.Small"
+                                                OnClick="() => OpenEditDialogAsync(context.Item.Id)"
+                                                Disabled="!_canManage" />
+                                <SoftIconButton Icon="@Icons.Material.Filled.Delete"
+                                                Color="Color.Error"
+                                                Size="Size.Small"
+                                                OnClick="() => DeleteAsync(context.Item)"
+                                                Disabled="!_canManage" />
+                            </SoftStack>
+                        </span>
+                    </CellTemplate>
+                </TemplateColumn>
+            </Columns>
+            <NoRecordsContent>
+                <SoftStack AlignItems="AlignItems.Center" Spacing="2" Class="pa-6">
+                    <SoftIcon Icon="@Icons.Material.Outlined.Science" Style="font-size: 56px; opacity: 0.4;" />
+                    <SoftText Typo="Typo.body1" Color="Color.Default">@ProdL["Formulas"]</SoftText>
+                </SoftStack>
+            </NoRecordsContent>
+            <PagerContent>
+                <MudDataGridPager T="ProductionFormulaListItemDto" />
+            </PagerContent>
+        </SoftDataGrid>
+    </SoftCardContent>
+</SoftCard>
+
+@if (_dialogVisible)
+{
+    <div class="glass-modal-backdrop" @onclick="CloseDialog">
+        <div class="glass-modal-container glass-modal-container--lg" @onclick:stopPropagation="true">
+            <SoftCard Elevation="24" Class="glass-modal">
+                <SoftCardHeader Class="pa-4">
+                    <CardHeaderContent>
+                        <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <SoftIcon Icon="@(_editingId.HasValue ? Icons.Material.Filled.Edit : Icons.Material.Filled.AddCircle)"
+                                      Color="Color.Primary" Size="Size.Medium" />
+                            <SoftText Typo="Typo.h6">
+                                @(_editingId.HasValue ? ProdL["EditFormula"] : ProdL["NewFormula"])
+                            </SoftText>
+                        </SoftStack>
+                    </CardHeaderContent>
+                    <CardHeaderActions>
+                        <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <MudSwitch T="bool" @bind-Value="_editIsActive" Color="Color.Primary" Label="@ProdL["IsActive"]" />
+                            <MudSwitch T="bool" @bind-Value="_editIsDefault" Color="Color.Info" Label="@ProdL["IsDefault"]" />
+                            <SoftIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="CloseDialog" />
+                        </SoftStack>
+                    </CardHeaderActions>
+                </SoftCardHeader>
+                <SoftDivider />
+                <SoftCardContent Class="pa-4 glass-modal-body">
+                    <SoftStack Spacing="4">
+                        <div>
+                            <SoftText Typo="Typo.overline" Color="Color.Primary">@ProdL["BasicInfo"]</SoftText>
+                            <SoftDivider Class="mb-3" />
+                            <SoftStack Spacing="3">
+                                <SoftLookupSelect TItem="ProductLookupDto" TValue="Guid?"
+                                                  Items="_finishedProducts"
+                                                  ToValue="@(p => (Guid?)p.Id)"
+                                                  ToLabel="@(p => $"{p.SKU} — {p.Name}")"
+                                                  Value="@((Guid?)_editFinishedProductId)"
+                                                  ValueChanged="OnFinishedProductChangedAsync"
+                                                  Label="@ProdL["FinishedProduct"]"
+                                                  Clearable="false" />
+                                <SoftStack Row="true" Spacing="2">
+                                    <SoftTextField T="string"
+                                                   Label="@ProdL["FormulaName"]"
+                                                   @bind-Value="_editName"
+                                                   Variant="Variant.Outlined"
+                                                   MaxLength="128"
+                                                   Required="true"
+                                                   Immediate="true" />
+                                    <SoftNumericField T="int"
+                                                      Label="@ProdL["Version"]"
+                                                      @bind-Value="_editVersion"
+                                                      Variant="Variant.Outlined"
+                                                      Min="1"
+                                                      HideSpinButtons="true"
+                                                      Style="max-width: 140px;" />
+                                </SoftStack>
+                            </SoftStack>
+                        </div>
+
+                        <div>
+                            <SoftText Typo="Typo.overline" Color="Color.Primary">@ProdL["CostsSection"]</SoftText>
+                            <SoftDivider Class="mb-3" />
+                            <SoftStack Row="true" Spacing="2">
+                                <SoftNumericField T="int"
+                                                  Label="@($"{ProdL["OutputQuantity"]}{(_outputUnit is null ? "" : $" ({_outputUnit})")}")"
+                                                  Value="_editOutputQuantity"
+                                                  ValueChanged="OnOutputQuantityChangedAsync"
+                                                  Variant="Variant.Outlined"
+                                                  Min="1"
+                                                  HideSpinButtons="true" />
+                                <SoftNumericField T="decimal"
+                                                  Label="@ProdL["ExpectedWastePercent"]"
+                                                  @bind-Value="_editWastePercent"
+                                                  Variant="Variant.Outlined"
+                                                  Min="0" Max="100"
+                                                  AdornmentText="%"
+                                                  Adornment="Adornment.End"
+                                                  HideSpinButtons="true" />
+                            </SoftStack>
+                            <SoftStack Row="true" Spacing="2" Class="mt-3">
+                                <SoftNumericField T="decimal"
+                                                  Label="@ProdL["LaborCostPerBatch"]"
+                                                  Value="_editLaborCost"
+                                                  ValueChanged="OnLaborCostChangedAsync"
+                                                  Variant="Variant.Outlined"
+                                                  Min="0"
+                                                  AdornmentText="$"
+                                                  Adornment="Adornment.Start"
+                                                  HideSpinButtons="true" />
+                                <SoftNumericField T="decimal"
+                                                  Label="@ProdL["OverheadCostPerBatch"]"
+                                                  Value="_editOverheadCost"
+                                                  ValueChanged="OnOverheadCostChangedAsync"
+                                                  Variant="Variant.Outlined"
+                                                  Min="0"
+                                                  AdornmentText="$"
+                                                  Adornment="Adornment.Start"
+                                                  HideSpinButtons="true" />
+                                <SoftNumericField T="int"
+                                                  Label="@ProdL["EstimatedProductionMinutes"]"
+                                                  @bind-Value="_editMinutes"
+                                                  Variant="Variant.Outlined"
+                                                  Min="0"
+                                                  HideSpinButtons="true" />
+                            </SoftStack>
+                        </div>
+
+                        <div>
+                            <SoftStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                                <SoftText Typo="Typo.overline" Color="Color.Primary">@ProdL["Ingredients"]</SoftText>
+                                <SoftButton Variant="Variant.Text" Color="Color.Primary"
+                                            StartIcon="@Icons.Material.Filled.Add"
+                                            OnClick="AddIngredientRow">
+                                    @ProdL["AddIngredient"]
+                                </SoftButton>
+                            </SoftStack>
+                            <SoftDivider Class="mb-3" />
+                            @if (_editItems.Count == 0)
+                            {
+                                <SoftText Typo="Typo.caption" Color="Color.Default">@ProdL["NoIngredients"]</SoftText>
+                            }
+                            else
+                            {
+                                <SoftStack Spacing="2">
+                                    @foreach (var row in _editItems)
+                                    {
+                                        <SoftStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                                            <div style="flex: 1 1 auto;">
+                                                <SoftLookupSelect TItem="ProductLookupDto" TValue="Guid?"
+                                                                  Items="_ingredients"
+                                                                  ToValue="@(p => (Guid?)p.Id)"
+                                                                  ToLabel="@(p => $"{p.SKU} — {p.Name}")"
+                                                                  Value="@((Guid?)(row.IngredientProductId == Guid.Empty ? (Guid?)null : row.IngredientProductId))"
+                                                                  ValueChanged="@(v => OnIngredientChangedAsync(row, v))"
+                                                                  Label="@ProdL["Ingredient"]"
+                                                                  Clearable="false" />
+                                            </div>
+                                            <SoftNumericField T="int"
+                                                              Label="@ProdL["Quantity"]"
+                                                              Value="row.Quantity"
+                                                              ValueChanged="@(v => OnRowQuantityChangedAsync(row, v))"
+                                                              Variant="Variant.Outlined"
+                                                              Min="1"
+                                                              HideSpinButtons="true"
+                                                              Style="max-width: 160px;" />
+                                            <SoftNumericField T="decimal"
+                                                              Label="@ProdL["LossPercent"]"
+                                                              Value="row.LossPercent"
+                                                              ValueChanged="@(v => OnRowLossChangedAsync(row, v))"
+                                                              Variant="Variant.Outlined"
+                                                              Min="0" Max="100"
+                                                              AdornmentText="%"
+                                                              Adornment="Adornment.End"
+                                                              HideSpinButtons="true"
+                                                              Style="max-width: 130px;" />
+                                            <SoftIconButton Icon="@Icons.Material.Filled.Delete"
+                                                            Color="Color.Error"
+                                                            Size="Size.Small"
+                                                            OnClick="@(() => RemoveIngredientRowAsync(row))" />
+                                        </SoftStack>
+                                    }
+                                </SoftStack>
+                            }
+                        </div>
+
+                        <div>
+                            <SoftText Typo="Typo.overline" Color="Color.Primary">@ProdL["PlannedCostPreview"]</SoftText>
+                            <SoftDivider Class="mb-2" />
+                            <SoftText Typo="Typo.caption" Color="Color.Default" Class="mb-2" Style="display:block;">
+                                @ProdL["PlannedCostHint"]
+                            </SoftText>
+                            @if (_cost == null)
+                            {
+                                <SoftText Typo="Typo.caption" Color="Color.Default">@ProdL["SelectFinishedProductFirst"]</SoftText>
+                            }
+                            else
+                            {
+                                @if (_cost.HasZeroCostIngredient)
+                                {
+                                    <SoftAlert Severity="Severity.Warning" Dense="true" Class="mb-2">@ProdL["ZeroCostWarning"]</SoftAlert>
+                                }
+                                <table class="cost-breakdown" style="width:100%; border-collapse:collapse;">
+                                    <thead>
+                                        <tr style="border-bottom:1px solid var(--bd-2); text-align:left;">
+                                            <th style="padding:4px 8px;">@ProdL["Ingredient"]</th>
+                                            <th style="padding:4px 8px; text-align:right;">@ProdL["RequiredQuantity"]</th>
+                                            <th style="padding:4px 8px; text-align:right;">@ProdL["UnitCost"]</th>
+                                            <th style="padding:4px 8px; text-align:right;">@ProdL["LineCost"]</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var line in _cost.Lines)
+                                        {
+                                            <tr style="border-bottom:1px solid var(--bd-1);">
+                                                <td style="padding:4px 8px;">
+                                                    @(line.IngredientProductName ?? line.IngredientProductId.ToString())
+                                                    @if (line.HasZeroCost)
+                                                    {
+                                                        <SoftIcon Icon="@Icons.Material.Filled.Warning" Color="Color.Warning" Size="Size.Small" Class="ml-1" />
+                                                    }
+                                                </td>
+                                                <td style="padding:4px 8px; text-align:right;">@line.RequiredQuantity @line.IngredientUnit</td>
+                                                <td style="padding:4px 8px; text-align:right;">@line.UnitCost.ToString("0.00")</td>
+                                                <td style="padding:4px 8px; text-align:right;">@line.LineCost.ToString("0.00")</td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                                <SoftStack Spacing="1" Class="mt-2" Style="max-width: 360px; margin-left:auto;">
+                                    <SoftStack Row="true" Justify="Justify.SpaceBetween">
+                                        <SoftText Typo="Typo.body2" Color="Color.Default">@ProdL["Batches"]</SoftText>
+                                        <SoftText Typo="Typo.body2">@_cost.Batches</SoftText>
+                                    </SoftStack>
+                                    <SoftStack Row="true" Justify="Justify.SpaceBetween">
+                                        <SoftText Typo="Typo.body2" Color="Color.Default">@ProdL["PlannedIngredientCost"]</SoftText>
+                                        <SoftText Typo="Typo.body2">$@_cost.PlannedIngredientCost.ToString("0.00")</SoftText>
+                                    </SoftStack>
+                                    <SoftStack Row="true" Justify="Justify.SpaceBetween">
+                                        <SoftText Typo="Typo.body2" Color="Color.Default">@ProdL["PlannedLaborCost"]</SoftText>
+                                        <SoftText Typo="Typo.body2">$@_cost.LaborCost.ToString("0.00")</SoftText>
+                                    </SoftStack>
+                                    <SoftStack Row="true" Justify="Justify.SpaceBetween">
+                                        <SoftText Typo="Typo.body2" Color="Color.Default">@ProdL["PlannedOverheadCost"]</SoftText>
+                                        <SoftText Typo="Typo.body2">$@_cost.OverheadCost.ToString("0.00")</SoftText>
+                                    </SoftStack>
+                                    <SoftDivider />
+                                    <SoftStack Row="true" Justify="Justify.SpaceBetween">
+                                        <SoftText Typo="Typo.subtitle2">@ProdL["PlannedTotalCost"]</SoftText>
+                                        <SoftText Typo="Typo.subtitle2">$@_cost.PlannedTotalCost.ToString("0.00")</SoftText>
+                                    </SoftStack>
+                                    <SoftStack Row="true" Justify="Justify.SpaceBetween">
+                                        <SoftText Typo="Typo.subtitle2" Color="Color.Primary">@ProdL["PlannedUnitCost"]</SoftText>
+                                        <SoftText Typo="Typo.subtitle2" Color="Color.Primary">$@_cost.PlannedUnitCost.ToString("0.0000")</SoftText>
+                                    </SoftStack>
+                                </SoftStack>
+                            }
+                        </div>
+
+                        <SoftTextField T="string"
+                                       Label="@ProdL["Notes"]"
+                                       @bind-Value="_editNotes"
+                                       Variant="Variant.Outlined"
+                                       Lines="2"
+                                       MaxLength="1024" />
+                    </SoftStack>
+                </SoftCardContent>
+                <SoftDivider />
+                <div class="pa-3 d-flex justify-end" style="gap: 8px;">
+                    <SoftButton Variant="Variant.Text" OnClick="CloseDialog">@L["Cancel"]</SoftButton>
+                    <SoftButton Variant="Variant.Filled"
+                                Color="Color.Primary"
+                                StartIcon="@Icons.Material.Filled.Save"
+                                OnClick="SaveAsync"
+                                Disabled="_saving">
+                        @L["Save"]
+                    </SoftButton>
+                </div>
+            </SoftCard>
+        </div>
+    </div>
+}
+
+@if (_confirmVisible)
+{
+    <div class="glass-modal-backdrop" @onclick="() => _confirmVisible = false">
+        <div class="glass-modal-container glass-modal-container--sm" @onclick:stopPropagation="true">
+            <SoftCard Elevation="24" Class="glass-modal">
+                <SoftCardHeader Class="pa-4">
+                    <CardHeaderContent>
+                        <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <SoftIcon Icon="@Icons.Material.Filled.Warning" Color="Color.Error" Size="Size.Medium" />
+                            <SoftText Typo="Typo.h6">@L["AreYouSure"]</SoftText>
+                        </SoftStack>
+                    </CardHeaderContent>
+                </SoftCardHeader>
+                <SoftDivider />
+                <SoftCardContent Class="pa-4">
+                    <SoftText>@ProdL["DeleteFormulaConfirmation"]</SoftText>
+                </SoftCardContent>
+                <SoftDivider />
+                <div class="pa-3 d-flex justify-end" style="gap: 8px;">
+                    <SoftButton Variant="Variant.Text" OnClick="() => _confirmVisible = false">@L["Cancel"]</SoftButton>
+                    <SoftButton Variant="Variant.Filled"
+                                Color="Color.Error"
+                                StartIcon="@Icons.Material.Filled.Delete"
+                                OnClick="ConfirmDeleteAsync">
+                        @L["Yes"]
+                    </SoftButton>
+                </div>
+            </SoftCard>
+        </div>
+    </div>
+}
+
+@code {
+    private SoftDataGrid<ProductionFormulaListItemDto> _grid = null!;
+    private bool _loading;
+    private bool _saving;
+    private bool _canManage;
+
+    private string? _filter;
+    private string? _activeFilter = "all";
+    private List<ActiveOption> _activeOptions = new();
+
+    private List<ProductLookupDto> _finishedProducts = new();
+    private List<ProductLookupDto> _ingredients = new();
+
+    private bool _dialogVisible;
+    private Guid? _editingId;
+    private Guid _editFinishedProductId;
+    private string _editName = string.Empty;
+    private int _editVersion = 1;
+    private int _editOutputQuantity = 1;
+    private decimal _editWastePercent;
+    private decimal _editLaborCost;
+    private decimal _editOverheadCost;
+    private int _editMinutes;
+    private bool _editIsActive = true;
+    private bool _editIsDefault;
+    private string? _editNotes;
+    private string? _outputUnit;
+    private List<ItemRow> _editItems = new();
+
+    private PlannedCostDto? _cost;
+
+    private bool _confirmVisible;
+    private ProductionFormulaListItemDto? _pendingDelete;
+
+    public record ActiveOption(string Value, string Label);
+
+    public class ItemRow
+    {
+        public Guid IngredientProductId { get; set; }
+        public int Quantity { get; set; } = 1;
+        public decimal LossPercent { get; set; }
+        public int SortOrder { get; set; }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        _canManage = await AuthorizationService.IsGrantedAsync(ProductionPermissions.Formulas.Manage);
+
+        _activeOptions = new List<ActiveOption>
+        {
+            new("all", ProdL["Status:All"]),
+            new("active", ProdL["Status:ActiveOnly"]),
+            new("inactive", ProdL["Status:InactiveOnly"])
+        };
+
+        await LoadLookupsAsync();
+    }
+
+    private async Task LoadLookupsAsync()
+    {
+        try
+        {
+            _finishedProducts = await FormulaAppService.GetProducibleFinishedProductsLookupAsync();
+            _ingredients = await FormulaAppService.GetIngredientProductsLookupAsync();
+        }
+        catch (Exception ex)
+        {
+            await HandleErrorAsync(ex);
+        }
+    }
+
+    private async Task<GridData<ProductionFormulaListItemDto>> LoadServerData(
+        GridState<ProductionFormulaListItemDto> state, CancellationToken cancellationToken)
+    {
+        _loading = true;
+        try
+        {
+            string? sorting = null;
+            var sort = state.SortDefinitions.FirstOrDefault();
+            if (sort != null)
+            {
+                sorting = $"{sort.SortBy} {(sort.Descending ? "desc" : "asc")}";
+            }
+
+            bool? isActive = _activeFilter switch
+            {
+                "active" => true,
+                "inactive" => false,
+                _ => null
+            };
+
+            var result = await FormulaAppService.GetListAsync(new GetProductionFormulasInput
+            {
+                Filter = _filter,
+                IsActive = isActive,
+                SkipCount = state.Page * state.PageSize,
+                MaxResultCount = state.PageSize,
+                Sorting = sorting
+            });
+
+            return new GridData<ProductionFormulaListItemDto>
+            {
+                Items = result.Items,
+                TotalItems = (int)result.TotalCount
+            };
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task OnFilterKeyUpAsync(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await ReloadAsync();
+        }
+    }
+
+    private async Task OnActiveFilterChangedAsync(string? value)
+    {
+        _activeFilter = string.IsNullOrEmpty(value) ? "all" : value;
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        if (_grid != null)
+        {
+            await _grid.ReloadServerData();
+        }
+    }
+
+    private void OpenCreateDialog()
+    {
+        _editingId = null;
+        _editFinishedProductId = Guid.Empty;
+        _editName = string.Empty;
+        _editVersion = 1;
+        _editOutputQuantity = 1;
+        _editWastePercent = 0;
+        _editLaborCost = 0;
+        _editOverheadCost = 0;
+        _editMinutes = 0;
+        _editIsActive = true;
+        _editIsDefault = false;
+        _editNotes = null;
+        _outputUnit = null;
+        _editItems = new();
+        _cost = null;
+        _dialogVisible = true;
+    }
+
+    private async Task OpenEditDialogAsync(Guid id)
+    {
+        try
+        {
+            var f = await FormulaAppService.GetAsync(id);
+            _editingId = f.Id;
+            _editFinishedProductId = f.FinishedProductId;
+            _editName = f.FormulaName;
+            _editVersion = f.Version;
+            _editOutputQuantity = f.OutputQuantity;
+            _editWastePercent = f.ExpectedWastePercent;
+            _editLaborCost = f.LaborCostPerBatch;
+            _editOverheadCost = f.OverheadCostPerBatch;
+            _editMinutes = f.EstimatedProductionMinutes;
+            _editIsActive = f.IsActive;
+            _editIsDefault = f.IsDefault;
+            _editNotes = f.Notes;
+            _outputUnit = f.FinishedProductUnit
+                ?? _finishedProducts.FirstOrDefault(p => p.Id == f.FinishedProductId)?.Unit;
+            _editItems = f.Items
+                .OrderBy(i => i.SortOrder)
+                .Select(i => new ItemRow
+                {
+                    IngredientProductId = i.IngredientProductId,
+                    Quantity = i.Quantity,
+                    LossPercent = i.LossPercent,
+                    SortOrder = i.SortOrder
+                })
+                .ToList();
+            _dialogVisible = true;
+            await RecomputeCostAsync();
+        }
+        catch (Exception ex)
+        {
+            await HandleErrorAsync(ex);
+        }
+    }
+
+    private void CloseDialog() => _dialogVisible = false;
+
+    private async Task OnFinishedProductChangedAsync(Guid? value)
+    {
+        _editFinishedProductId = value ?? Guid.Empty;
+        _outputUnit = _finishedProducts.FirstOrDefault(p => p.Id == _editFinishedProductId)?.Unit;
+        await RecomputeCostAsync();
+    }
+
+    private async Task OnOutputQuantityChangedAsync(int value)
+    {
+        _editOutputQuantity = value;
+        await RecomputeCostAsync();
+    }
+
+    private async Task OnLaborCostChangedAsync(decimal value)
+    {
+        _editLaborCost = value;
+        await RecomputeCostAsync();
+    }
+
+    private async Task OnOverheadCostChangedAsync(decimal value)
+    {
+        _editOverheadCost = value;
+        await RecomputeCostAsync();
+    }
+
+    private void AddIngredientRow()
+    {
+        _editItems.Add(new ItemRow { SortOrder = _editItems.Count });
+    }
+
+    private async Task RemoveIngredientRowAsync(ItemRow row)
+    {
+        _editItems.Remove(row);
+        await RecomputeCostAsync();
+    }
+
+    private async Task OnIngredientChangedAsync(ItemRow row, Guid? value)
+    {
+        row.IngredientProductId = value ?? Guid.Empty;
+        await RecomputeCostAsync();
+    }
+
+    private async Task OnRowQuantityChangedAsync(ItemRow row, int value)
+    {
+        row.Quantity = value;
+        await RecomputeCostAsync();
+    }
+
+    private async Task OnRowLossChangedAsync(ItemRow row, decimal value)
+    {
+        row.LossPercent = value;
+        await RecomputeCostAsync();
+    }
+
+    /// <summary>
+    /// Live planned-cost preview at the formula's own output quantity. Uses the
+    /// non-persisting PreviewPlannedCostAsync so nothing is written while the user types;
+    /// it runs the exact same deterministic calculator the saved formula would use.
+    /// </summary>
+    private async Task RecomputeCostAsync()
+    {
+        if (_editFinishedProductId == Guid.Empty
+            || string.IsNullOrWhiteSpace(_editName)
+            || _editOutputQuantity <= 0
+            || _editItems.Count == 0
+            || _editItems.Any(i => i.IngredientProductId == Guid.Empty || i.Quantity <= 0))
+        {
+            _cost = null;
+            return;
+        }
+
+        try
+        {
+            _cost = await FormulaAppService.PreviewPlannedCostAsync(BuildCreateDto(), _editOutputQuantity);
+        }
+        catch (Exception ex)
+        {
+            _cost = null;
+            await HandleErrorAsync(ex);
+        }
+    }
+
+    private CreateProductionFormulaDto BuildCreateDto()
+    {
+        var order = 0;
+        return new CreateProductionFormulaDto
+        {
+            FinishedProductId = _editFinishedProductId,
+            FormulaName = _editName,
+            Version = _editVersion <= 0 ? 1 : _editVersion,
+            OutputQuantity = _editOutputQuantity,
+            ExpectedWastePercent = _editWastePercent,
+            LaborCostPerBatch = _editLaborCost,
+            OverheadCostPerBatch = _editOverheadCost,
+            EstimatedProductionMinutes = _editMinutes,
+            IsActive = _editIsActive,
+            IsDefault = _editIsDefault,
+            Notes = _editNotes,
+            Items = _editItems.Select(i => new CreateProductionFormulaItemDto
+            {
+                IngredientProductId = i.IngredientProductId,
+                Quantity = i.Quantity,
+                LossPercent = i.LossPercent,
+                SortOrder = order++
+            }).ToList()
+        };
+    }
+
+    private static UpdateProductionFormulaDto ToUpdateDto(CreateProductionFormulaDto dto) => new()
+    {
+        FinishedProductId = dto.FinishedProductId,
+        FormulaName = dto.FormulaName,
+        Version = dto.Version,
+        OutputQuantity = dto.OutputQuantity,
+        ExpectedWastePercent = dto.ExpectedWastePercent,
+        LaborCostPerBatch = dto.LaborCostPerBatch,
+        OverheadCostPerBatch = dto.OverheadCostPerBatch,
+        EstimatedProductionMinutes = dto.EstimatedProductionMinutes,
+        IsActive = dto.IsActive,
+        IsDefault = dto.IsDefault,
+        Notes = dto.Notes,
+        Items = dto.Items
+    };
+
+    private async Task SaveAsync()
+    {
+        if (_editFinishedProductId == Guid.Empty)
+        {
+            Snackbar.Add(L["ThisFieldIsRequired", ProdL["FinishedProduct"]], Severity.Warning);
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(_editName))
+        {
+            Snackbar.Add(L["ThisFieldIsRequired", ProdL["FormulaName"]], Severity.Warning);
+            return;
+        }
+
+        _saving = true;
+        try
+        {
+            var dto = BuildCreateDto();
+            if (_editingId.HasValue)
+            {
+                await FormulaAppService.UpdateAsync(_editingId.Value, ToUpdateDto(dto));
+            }
+            else
+            {
+                await FormulaAppService.CreateAsync(dto);
+            }
+            Snackbar.Add(L["SuccessfullySaved"], Severity.Success);
+            _dialogVisible = false;
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            await HandleErrorAsync(ex);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private void DeleteAsync(ProductionFormulaListItemDto formula)
+    {
+        _pendingDelete = formula;
+        _confirmVisible = true;
+    }
+
+    private async Task ConfirmDeleteAsync()
+    {
+        if (_pendingDelete == null) return;
+        try
+        {
+            await FormulaAppService.DeleteAsync(_pendingDelete.Id);
+            Snackbar.Add(L["SuccessfullyDeleted"], Severity.Success);
+            _confirmVisible = false;
+            _pendingDelete = null;
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            await HandleErrorAsync(ex);
+        }
+    }
+}

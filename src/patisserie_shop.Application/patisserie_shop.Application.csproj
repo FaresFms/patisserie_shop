@@ -10,6 +10,7 @@
     <ProjectReference Include="..\patisserie_shop.Application.Contracts\patisserie_shop.Application.Contracts.csproj" />
     <ProjectReference Include="../../modules/inventory/src/Inventory.Application/Inventory.Application.csproj" />
     <ProjectReference Include="../../modules/intelligence/src/Intelligence.Application/Intelligence.Application.csproj" />
+    <ProjectReference Include="../../modules/production/src/Production.Application/Production.Application.csproj" />
     <ProjectReference Include="../../modules/operations/src/Operations.Application/Operations.Application.csproj" />
   </ItemGroup>
   <ItemGroup>

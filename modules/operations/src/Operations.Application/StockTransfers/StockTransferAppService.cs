@@ -258,7 +258,7 @@ public class StockTransferAppService : OperationsAppService, IStockTransferAppSe
         {
             // Source branch — decrement (TransferOut).
             var srcInv = sourceByProduct[line.ProductId];
-            await _inventoryManager.AdjustStockAsync(
+            var sourceAdjustment = await _inventoryManager.AdjustStockDetailedAsync(
                 srcInv,
                 srcInv.QuantityOnHand - line.Quantity,
                 StockMovementTypes.TransferOut,
@@ -276,13 +276,34 @@ public class StockTransferAppService : OperationsAppService, IStockTransferAppSe
                 await _branchInventoryRepository.InsertAsync(dstInv);
             }
 
-            await _inventoryManager.AdjustStockAsync(
-                dstInv,
-                dstInv.QuantityOnHand + line.Quantity,
-                StockMovementTypes.TransferIn,
-                notes: reference,
-                referenceId: transfer.Id,
-                referenceType: TransferReferenceType);
+            var transferredBatchQuantity = 0;
+            foreach (var batchLine in sourceAdjustment.ConsumedBatches
+                         .GroupBy(x => x.ExpiryDate.Date)
+                         .Select(g => new { ExpiryDate = g.Key, Quantity = g.Sum(x => x.Quantity) }))
+            {
+                transferredBatchQuantity += batchLine.Quantity;
+                await _inventoryManager.AdjustStockAsync(
+                    dstInv,
+                    dstInv.QuantityOnHand + batchLine.Quantity,
+                    StockMovementTypes.TransferIn,
+                    notes: reference,
+                    referenceId: transfer.Id,
+                    referenceType: TransferReferenceType,
+                    batchExpiryDate: batchLine.ExpiryDate);
+            }
+
+            var untrackedQuantity = line.Quantity - transferredBatchQuantity;
+            if (untrackedQuantity > 0)
+            {
+                await _inventoryManager.AdjustStockAsync(
+                    dstInv,
+                    dstInv.QuantityOnHand + untrackedQuantity,
+                    StockMovementTypes.TransferIn,
+                    notes: reference,
+                    referenceId: transfer.Id,
+                    referenceType: TransferReferenceType);
+            }
+
             await _branchInventoryRepository.UpdateAsync(dstInv);
         }
 

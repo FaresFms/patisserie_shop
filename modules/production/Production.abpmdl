@@ -1,0 +1,41 @@
+{
+  "folders": {
+    "items": {
+      "src": {}
+    }
+  },
+  "packages": {
+    "Production.Domain": {
+      "path": "src/Production.Domain/Production.Domain.abppkg",
+      "folder": "src"
+    },
+    "Production.Application.Contracts": {
+      "path": "src/Production.Application.Contracts/Production.Application.Contracts.abppkg",
+      "folder": "src"
+    },
+    "Production.Application": {
+      "path": "src/Production.Application/Production.Application.abppkg",
+      "folder": "src"
+    },
+    "Production.EntityFrameworkCore": {
+      "path": "src/Production.EntityFrameworkCore/Production.EntityFrameworkCore.abppkg",
+      "folder": "src"
+    },
+    "Production.HttpApi": {
+      "path": "src/Production.HttpApi/Production.HttpApi.abppkg",
+      "folder": "src"
+    },
+    "Production.HttpApi.Client": {
+      "path": "src/Production.HttpApi.Client/Production.HttpApi.Client.abppkg",
+      "folder": "src"
+    },
+    "Production.Domain.Shared": {
+      "path": "src/Production.Domain.Shared/Production.Domain.Shared.abppkg",
+      "folder": "src"
+    },
+    "Production.Installer": {
+       "path": "src/Production.Installer/Production.Installer.abppkg",
+       "folder": "src"
+    }
+  }
+}

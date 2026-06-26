@@ -1,5 +1,6 @@
 using Operations;
 using Intelligence;
+using Production;
 using patisserie_shop.Localization;
 using Volo.Abp.AuditLogging;
 using Volo.Abp.BackgroundJobs;
@@ -20,6 +21,7 @@ namespace patisserie_shop;
 [DependsOn(
     typeof(OperationsDomainSharedModule),
     typeof(IntelligenceDomainSharedModule),
+    typeof(ProductionDomainSharedModule),
     typeof(AbpAuditLoggingDomainSharedModule),
     typeof(AbpBackgroundJobsDomainSharedModule),
     typeof(AbpFeatureManagementDomainSharedModule),

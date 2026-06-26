@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="..\..\common.props" />
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <RootNamespace>Production</RootNamespace>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Volo.Abp.Ddd.Domain" Version="10.1.1"/>
+    <ProjectReference Include="..\Production.Domain.Shared\Production.Domain.Shared.csproj" />
+    <ProjectReference Include="..\..\..\inventory\src\Inventory.Domain\Inventory.Domain.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Test-only: lets unit tests construct AppProductionFormula (internal ctor; normally built via ProductionFormulaManager). -->
+    <InternalsVisibleTo Include="patisserie_shop.Domain.Tests" />
+  </ItemGroup>
+
+</Project>

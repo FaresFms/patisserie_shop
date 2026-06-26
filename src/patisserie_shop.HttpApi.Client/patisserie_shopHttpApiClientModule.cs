@@ -1,5 +1,6 @@
 using Operations;
 using Intelligence;
+using Production;
 using Microsoft.Extensions.DependencyInjection;
 using Volo.Abp.Account;
 using Volo.Abp.Modularity;
@@ -14,6 +15,7 @@ namespace patisserie_shop;
 [DependsOn(
     typeof(OperationsHttpApiClientModule),
     typeof(IntelligenceHttpApiClientModule),
+    typeof(ProductionHttpApiClientModule),
     typeof(patisserie_shopApplicationContractsModule),
     typeof(AbpPermissionManagementHttpApiClientModule),
     typeof(AbpFeatureManagementHttpApiClientModule),

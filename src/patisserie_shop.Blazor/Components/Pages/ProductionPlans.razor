@@ -1,0 +1,443 @@
+@page "/production/plans"
+@attribute [Authorize(ProductionPermissions.Plans.Default)]
+@using System.Threading
+@using System.Threading.Tasks
+@using Inventory.Branches
+@using Microsoft.AspNetCore.Authorization
+@using Production
+@using Production.Localization
+@using Production.Permissions
+@using Production.Plans
+@using Volo.Abp.Application.Dtos
+@using Volo.Abp.AspNetCore.Components.Web.Theming.Layout
+@using Color = MudBlazor.Color
+@using Variant = MudBlazor.Variant
+@using Size = MudBlazor.Size
+@using Margin = MudBlazor.Margin
+@inherits patisserie_shopComponentBase
+@inject IProductionPlanAppService PlanAppService
+@inject IBranchAppService BranchAppService
+@inject IAuthorizationService Authz
+@inject PageLayout PageLayout
+@inject ISnackbar Snackbar
+@inject IStringLocalizer<ProductionResource> ProdL
+
+@{
+    PageLayout.Title = ProdL["ProductionPlans"];
+}
+
+<SoftCard Elevation="2" Class="pa-2 page-flat">
+    <div class="page-head">
+        <div>
+            <h1 class="page-title">@ProdL["ProductionPlans"]</h1>
+            <div class="page-sub">@ProdL["ProductionPlansSubtitle"]</div>
+        </div>
+        <div class="page-head-actions">
+            <SoftButton Variant="Variant.Filled" Color="Color.Primary"
+                        StartIcon="@Icons.Material.Filled.Add"
+                        OnClick="OpenCreateDialog"
+                        Disabled="!_canManage">
+                @ProdL["NewPlan"]
+            </SoftButton>
+        </div>
+    </div>
+
+    <SoftCardContent>
+        <div class="toolbar">
+            <SoftTextField T="string" @bind-Value="_filter"
+                           Placeholder="@ProdL["Filter"]"
+                           Variant="Variant.Outlined" Margin="Margin.Dense"
+                           Adornment="Adornment.Start"
+                           AdornmentIcon="@Icons.Material.Filled.Search"
+                           OnKeyUp="OnFilterKeyUpAsync"
+                           Immediate="true"
+                           Class="toolbar-search"
+                           Style="min-width: 220px; max-width: 320px;" />
+
+            <div class="filter-chip">
+                <SoftLookupSelect TItem="StatusOption" TValue="string"
+                                  Items="_statusOptions"
+                                  ToValue="@(s => s.Value)"
+                                  ToLabel="@(s => s.Label)"
+                                  Value="_statusFilter"
+                                  ValueChanged="OnStatusChangedAsync"
+                                  Label="@ProdL["Status:All"]"
+                                  Margin="Margin.Dense"
+                                  Dense="true" />
+            </div>
+
+            <div class="toolbar-right">
+                <SoftButton Variant="Variant.Text" Color="Color.Primary"
+                            StartIcon="@Icons.Material.Filled.Refresh"
+                            OnClick="ReloadAsync">
+                    @ProdL["Refresh"]
+                </SoftButton>
+            </div>
+        </div>
+
+        <SoftDataGrid T="ProductionPlanListItemDto"
+                      @ref="_grid"
+                      ServerData="LoadServerData"
+                      Dense="true"
+                      Hover="true"
+                      Bordered="false"
+                      Loading="_loading"
+                      SortMode="SortMode.Single">
+            <Columns>
+                <PropertyColumn T="ProductionPlanListItemDto" TProperty="string" Property="x => x.PlanNumber" Title="@ProdL["PlanNumber"]" />
+                <PropertyColumn T="ProductionPlanListItemDto" TProperty="string" Property="x => x.KitchenBranchName" Title="@ProdL["KitchenBranch"]" />
+                <TemplateColumn T="ProductionPlanListItemDto" Title="@ProdL["ProductionDate"]" SortBy="x => x.ProductionDate">
+                    <CellTemplate>@context.Item.ProductionDate.ToString("yyyy-MM-dd")</CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn T="ProductionPlanListItemDto" Title="@ProdL["Status"]" SortBy="x => x.Status">
+                    <CellTemplate>@StatusChip(context.Item.Status)</CellTemplate>
+                </TemplateColumn>
+                <PropertyColumn T="ProductionPlanListItemDto" TProperty="int" Property="x => x.SuggestedTotalQuantity" Title="@ProdL["SuggestedQuantity"]" />
+                <PropertyColumn T="ProductionPlanListItemDto" TProperty="int" Property="x => x.PlannedTotalQuantity" Title="@ProdL["PlannedQuantity"]" />
+                <TemplateColumn T="ProductionPlanListItemDto" Title="@ProdL["EstimatedTotalCost"]" SortBy="x => x.EstimatedTotalCost">
+                    <CellTemplate>@context.Item.EstimatedTotalCost.ToString("0.00")</CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn T="ProductionPlanListItemDto" Title="@ProdL["Actions"]" Sortable="false">
+                    <CellTemplate>
+                        <span class="row-actions">
+                            <SoftIconButton Icon="@Icons.Material.Filled.Visibility"
+                                            Color="Color.Primary"
+                                            Size="Size.Small"
+                                            OnClick="() => OpenDetailAsync(context.Item.Id)" />
+                        </span>
+                    </CellTemplate>
+                </TemplateColumn>
+            </Columns>
+            <PagerContent>
+                <MudDataGridPager T="ProductionPlanListItemDto" />
+            </PagerContent>
+        </SoftDataGrid>
+    </SoftCardContent>
+</SoftCard>
+
+@if (_createVisible)
+{
+    <div class="glass-modal-backdrop" @onclick="CloseCreateDialog">
+        <div class="glass-modal-container" @onclick:stopPropagation="true">
+            <SoftCard Elevation="24" Class="glass-modal">
+                <SoftCardHeader Class="pa-4">
+                    <CardHeaderContent>
+                        <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <SoftIcon Icon="@Icons.Material.Filled.AddCircle" Color="Color.Primary" Size="Size.Medium" />
+                            <SoftText Typo="Typo.h6">@ProdL["NewPlan"]</SoftText>
+                        </SoftStack>
+                    </CardHeaderContent>
+                    <CardHeaderActions>
+                        <SoftIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="CloseCreateDialog" />
+                    </CardHeaderActions>
+                </SoftCardHeader>
+                <SoftDivider />
+                <SoftCardContent Class="pa-4 glass-modal-body">
+                    <SoftStack Spacing="3">
+                        <SoftAlert Severity="Severity.Info">@ProdL["CreatePlanHint"]</SoftAlert>
+                        <SoftLookupSelect TItem="BranchLookupDto" TValue="Guid?"
+                                          Items="_branches"
+                                          ToValue="@(b => (Guid?)b.Id)"
+                                          ToLabel="@(b => b.Name)"
+                                          Value="_createKitchenBranchId"
+                                          ValueChanged="@(v => _createKitchenBranchId = v)"
+                                          Label="@ProdL["KitchenBranch"]"
+                                          Clearable="false" />
+                        <SoftDatePicker Label="@ProdL["ProductionDate"]"
+                                        Date="_createProductionDate"
+                                        DateChanged="@(d => _createProductionDate = d)"
+                                        Variant="Variant.Outlined" />
+                        <SoftTextField T="string" @bind-Value="_createNotes"
+                                       Label="@ProdL["Notes"]"
+                                       Variant="Variant.Outlined"
+                                       Lines="2" />
+                    </SoftStack>
+                </SoftCardContent>
+                <SoftDivider />
+                <div class="pa-3 d-flex justify-end" style="gap: 8px;">
+                    <SoftButton Variant="Variant.Text" OnClick="CloseCreateDialog">@ProdL["Cancel"]</SoftButton>
+                    <SoftButton Variant="Variant.Filled" Color="Color.Primary"
+                                StartIcon="@Icons.Material.Filled.AutoAwesome"
+                                OnClick="CreatePlanAsync">
+                        @ProdL["NewPlan"]
+                    </SoftButton>
+                </div>
+            </SoftCard>
+        </div>
+    </div>
+}
+
+@if (_detailVisible && _detail != null)
+{
+    <div class="glass-modal-backdrop" @onclick="CloseDetail">
+        <div class="glass-modal-container glass-modal-container--lg" @onclick:stopPropagation="true">
+            <SoftCard Elevation="24" Class="glass-modal">
+                <SoftCardHeader Class="pa-4">
+                    <CardHeaderContent>
+                        <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <SoftIcon Icon="@Icons.Material.Filled.CalendarMonth" Color="Color.Primary" Size="Size.Medium" />
+                            <SoftText Typo="Typo.h6">@_detail.PlanNumber</SoftText>
+                            @StatusChip(_detail.Status)
+                        </SoftStack>
+                    </CardHeaderContent>
+                    <CardHeaderActions>
+                        <SoftIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="CloseDetail" />
+                    </CardHeaderActions>
+                </SoftCardHeader>
+                <SoftDivider />
+                <SoftCardContent Class="pa-4 glass-modal-body">
+                    <SoftStack Spacing="3">
+                        <SoftText Typo="Typo.body2">@_detail.KitchenBranchName · @_detail.ProductionDate.ToString("yyyy-MM-dd")</SoftText>
+
+                        <SoftTable T="ProductionPlanLineDto" Items="_detail.Lines" Dense="true" Hover="true">
+                            <HeaderContent>
+                                <MudTh>@ProdL["Product"]</MudTh>
+                                <MudTh>@ProdL["RequestedQuantity"]</MudTh>
+                                <MudTh>@ProdL["ForecastQuantity"]</MudTh>
+                                <MudTh>@ProdL["CurrentKitchenStock"]</MudTh>
+                                <MudTh>@ProdL["SuggestedQuantity"]</MudTh>
+                                <MudTh>@ProdL["PlannedQuantity"]</MudTh>
+                                <MudTh>@ProdL["EstimatedTotalCost"]</MudTh>
+                                <MudTh></MudTh>
+                            </HeaderContent>
+                            <RowTemplate>
+                                @{
+                                    var edit = _lineEdits[context.Id];
+                                }
+                                <MudTd>@context.ProductSku - @context.ProductName</MudTd>
+                                <MudTd>@context.RequestedQuantity @context.ProductUnit</MudTd>
+                                <MudTd>@context.ForecastQuantity @context.ProductUnit</MudTd>
+                                <MudTd>@context.CurrentKitchenStock @context.ProductUnit</MudTd>
+                                <MudTd>@context.SuggestedQuantity @context.ProductUnit</MudTd>
+                                <MudTd>
+                                    @if (_canManage && _detail.Status == ProductionPlanStatuses.Draft)
+                                    {
+                                        <SoftNumericField T="int" @bind-Value="edit.PlannedQuantity"
+                                                          Variant="Variant.Outlined"
+                                                          Min="0"
+                                                          HideSpinButtons="true"
+                                                          Style="max-width: 120px;" />
+                                        @if (edit.PlannedQuantity != context.SuggestedQuantity)
+                                        {
+                                            <SoftTextField T="string" @bind-Value="edit.OverrideReason"
+                                                           Placeholder="@ProdL["OverrideReason"]"
+                                                           Variant="Variant.Outlined"
+                                                           Margin="Margin.Dense"
+                                                           Style="min-width: 160px;" />
+                                        }
+                                    }
+                                    else
+                                    {
+                                        <span>@context.PlannedQuantity @context.ProductUnit</span>
+                                    }
+                                </MudTd>
+                                <MudTd>@context.EstimatedTotalCost.ToString("0.00")</MudTd>
+                                <MudTd>
+                                    @if (_canManage && _detail.Status == ProductionPlanStatuses.Draft)
+                                    {
+                                        <SoftIconButton Icon="@Icons.Material.Filled.Save"
+                                                        Color="Color.Primary"
+                                                        Size="Size.Small"
+                                                        OnClick="() => SaveLineAsync(context.Id)" />
+                                    }
+                                </MudTd>
+                            </RowTemplate>
+                        </SoftTable>
+                    </SoftStack>
+                </SoftCardContent>
+                <SoftDivider />
+                <div class="pa-3 d-flex justify-end" style="gap: 8px;">
+                    <SoftButton Variant="Variant.Text" OnClick="CloseDetail">@ProdL["Cancel"]</SoftButton>
+                    @if (_canManage && _detail.Status == ProductionPlanStatuses.Draft)
+                    {
+                        <SoftButton Variant="Variant.Outlined" Color="Color.Error"
+                                    StartIcon="@Icons.Material.Filled.Cancel"
+                                    OnClick="CancelPlanAsync">
+                            @ProdL["Cancel"]
+                        </SoftButton>
+                        <SoftButton Variant="Variant.Filled" Color="Color.Primary"
+                                    StartIcon="@Icons.Material.Filled.Check"
+                                    OnClick="ConfirmPlanAsync">
+                            @ProdL["ConfirmPlan"]
+                        </SoftButton>
+                    }
+                </div>
+            </SoftCard>
+        </div>
+    </div>
+}
+
+@code {
+    private SoftDataGrid<ProductionPlanListItemDto>? _grid;
+    private bool _loading;
+    private bool _canManage;
+    private string? _filter;
+    private string _statusFilter = string.Empty;
+    private List<BranchLookupDto> _branches = new();
+    private List<StatusOption> _statusOptions = new();
+
+    private bool _createVisible;
+    private Guid? _createKitchenBranchId;
+    private DateTime? _createProductionDate = DateTime.Today;
+    private string? _createNotes;
+
+    private bool _detailVisible;
+    private ProductionPlanDto? _detail;
+    private readonly Dictionary<Guid, LineEdit> _lineEdits = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _canManage = await Authz.IsGrantedAsync(ProductionPermissions.Plans.Manage);
+        _branches = await BranchAppService.GetLookupAsync();
+        _statusOptions =
+        [
+            new(string.Empty, ProdL["Status:All"]),
+            new(ProductionPlanStatuses.Draft, ProdL["Status:Draft"]),
+            new(ProductionPlanStatuses.Confirmed, ProdL["Status:Confirmed"]),
+            new(ProductionPlanStatuses.Cancelled, ProdL["Status:Cancelled"])
+        ];
+    }
+
+    private async Task<GridData<ProductionPlanListItemDto>> LoadServerData(GridState<ProductionPlanListItemDto> state, CancellationToken cancellationToken)
+    {
+        _loading = true;
+        try
+        {
+            var sorting = state.SortDefinitions.FirstOrDefault();
+            var result = await PlanAppService.GetListAsync(new GetProductionPlansInput
+            {
+                Filter = _filter,
+                Status = string.IsNullOrWhiteSpace(_statusFilter) ? null : _statusFilter,
+                SkipCount = state.Page * state.PageSize,
+                MaxResultCount = state.PageSize,
+                Sorting = sorting == null ? string.Empty : $"{sorting.SortBy} {(sorting.Descending ? "desc" : "asc")}"
+            });
+
+            return new GridData<ProductionPlanListItemDto>
+            {
+                Items = result.Items,
+                TotalItems = (int)result.TotalCount
+            };
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private Task OnFilterKeyUpAsync(KeyboardEventArgs _) => ReloadAsync();
+    private async Task OnStatusChangedAsync(string value)
+    {
+        _statusFilter = value;
+        await ReloadAsync();
+    }
+    private Task ReloadAsync() => _grid?.ReloadServerData() ?? Task.CompletedTask;
+
+    private void OpenCreateDialog()
+    {
+        _createKitchenBranchId = _branches.FirstOrDefault()?.Id;
+        _createProductionDate = DateTime.Today;
+        _createNotes = null;
+        _createVisible = true;
+    }
+
+    private void CloseCreateDialog() => _createVisible = false;
+
+    private async Task CreatePlanAsync()
+    {
+        var plan = await PlanAppService.CreateDraftAsync(new CreateProductionPlanDto
+        {
+            KitchenBranchId = _createKitchenBranchId ?? Guid.Empty,
+            ProductionDate = (_createProductionDate ?? DateTime.Today).Date,
+            Notes = _createNotes
+        });
+
+        Snackbar.Add(ProdL["SavedSuccessfully"], Severity.Success);
+        CloseCreateDialog();
+        await ReloadAsync();
+        await OpenDetailAsync(plan.Id);
+    }
+
+    private async Task OpenDetailAsync(Guid id)
+    {
+        _detail = await PlanAppService.GetAsync(id);
+        _lineEdits.Clear();
+        foreach (var line in _detail.Lines)
+        {
+            _lineEdits[line.Id] = new LineEdit
+            {
+                PlannedQuantity = line.PlannedQuantity,
+                OverrideReason = line.OverrideReason
+            };
+        }
+        _detailVisible = true;
+    }
+
+    private void CloseDetail() => _detailVisible = false;
+
+    private async Task SaveLineAsync(Guid lineId)
+    {
+        if (_detail == null || !_lineEdits.TryGetValue(lineId, out var edit)) return;
+
+        _detail = await PlanAppService.UpdateLineAsync(_detail.Id, lineId, new UpdateProductionPlanLineDto
+        {
+            PlannedQuantity = edit.PlannedQuantity,
+            OverrideReason = edit.OverrideReason
+        });
+        Snackbar.Add(ProdL["SavedSuccessfully"], Severity.Success);
+        await OpenDetailAsync(_detail.Id);
+        await ReloadAsync();
+    }
+
+    private async Task ConfirmPlanAsync()
+    {
+        if (_detail == null) return;
+        await PlanAppService.ConfirmAsync(_detail.Id);
+        Snackbar.Add(ProdL["SavedSuccessfully"], Severity.Success);
+        CloseDetail();
+        await ReloadAsync();
+    }
+
+    private async Task CancelPlanAsync()
+    {
+        if (_detail == null) return;
+        await PlanAppService.CancelAsync(_detail.Id);
+        Snackbar.Add(ProdL["SavedSuccessfully"], Severity.Success);
+        CloseDetail();
+        await ReloadAsync();
+    }
+
+    private RenderFragment StatusChip(string status) => builder =>
+    {
+        var color = status switch
+        {
+            ProductionPlanStatuses.Confirmed or ProductionPlanStatuses.Closed => Color.Success,
+            ProductionPlanStatuses.InProgress => Color.Info,
+            ProductionPlanStatuses.Cancelled => Color.Error,
+            _ => Color.Default
+        };
+        var variant = status == ProductionPlanStatuses.Draft ? Variant.Outlined : Variant.Filled;
+        builder.OpenComponent<SoftChip<string>>(0);
+        builder.AddAttribute(1, "Color", color);
+        builder.AddAttribute(2, "Size", Size.Small);
+        builder.AddAttribute(3, "Variant", variant);
+        builder.AddAttribute(4, "ChildContent", (RenderFragment)(b => b.AddContent(0, StatusLabel(status))));
+        builder.CloseComponent();
+    };
+
+    private string StatusLabel(string status) => status switch
+    {
+        ProductionPlanStatuses.Draft => ProdL["Status:Draft"],
+        ProductionPlanStatuses.Confirmed => ProdL["Status:Confirmed"],
+        ProductionPlanStatuses.Cancelled => ProdL["Status:Cancelled"],
+        _ => status
+    };
+
+    private sealed class LineEdit
+    {
+        public int PlannedQuantity { get; set; }
+        public string? OverrideReason { get; set; }
+    }
+
+    private sealed record StatusOption(string Value, string Label);
+}

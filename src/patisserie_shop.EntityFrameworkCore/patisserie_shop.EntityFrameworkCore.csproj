@@ -9,6 +9,7 @@
     <ProjectReference Include="..\patisserie_shop.Domain\patisserie_shop.Domain.csproj" />
     <ProjectReference Include="../../modules/inventory/src/Inventory.EntityFrameworkCore/Inventory.EntityFrameworkCore.csproj" />
     <ProjectReference Include="../../modules/intelligence/src/Intelligence.EntityFrameworkCore/Intelligence.EntityFrameworkCore.csproj" />
+    <ProjectReference Include="../../modules/production/src/Production.EntityFrameworkCore/Production.EntityFrameworkCore.csproj" />
     <ProjectReference Include="../../modules/operations/src/Operations.EntityFrameworkCore/Operations.EntityFrameworkCore.csproj" />
   </ItemGroup>
   <ItemGroup>

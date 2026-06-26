@@ -36,7 +36,11 @@ public class ProductManager : DomainService
         int reorderLevel = 5,
         string? imageUrl = null,
         bool isActive = true,
-        int? shelfLifeDays = null)
+        int? shelfLifeDays = null,
+        string productType = ProductTypes.FinishedGood,
+        bool isSellable = true,
+        bool isPurchasable = true,
+        bool isProducible = false)
     {
         await EnsureCategoryExistsAsync(categoryId);
         await EnsureSupplierExistsAsync(defaultSupplierId);
@@ -56,7 +60,11 @@ public class ProductManager : DomainService
             reorderLevel,
             imageUrl,
             isActive,
-            shelfLifeDays);
+            shelfLifeDays,
+            productType,
+            isSellable,
+            isPurchasable,
+            isProducible);
     }
 
     public async Task EnsureReferencesAsync(Guid categoryId, Guid? defaultSupplierId)
