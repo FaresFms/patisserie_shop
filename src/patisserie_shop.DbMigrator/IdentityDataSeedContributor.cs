@@ -412,15 +412,15 @@ public class IdentityDataSeedContributor : IDataSeedContributor, ITransientDepen
         InventoryPermissions.BranchInventory.Adjust,
         InventoryPermissions.StockMovements.Default,
 
-        // Operations — read POs + receive; manage sales; create/ship transfers
+        // Operations — read POs + receive; manage sales; request/ship/receive transfers
         OperationsPermissions.PurchaseOrders.Default,
         OperationsPermissions.PurchaseOrders.Receive,
         OperationsPermissions.Sales.Default,
         OperationsPermissions.Sales.Manage,
         OperationsPermissions.Transfers.Default,
         OperationsPermissions.Transfers.Create,
-        OperationsPermissions.Transfers.ChooseBranches,
         OperationsPermissions.Transfers.Ship,
+        OperationsPermissions.Transfers.Complete,
 
         // Operations — cashier oversight: view all shifts + create/assign cashiers
         // (host CashierAssignmentAppService scopes both to the branches they manage)
@@ -485,7 +485,11 @@ public class IdentityDataSeedContributor : IDataSeedContributor, ITransientDepen
             OperationsPermissions.Transfers.ChooseBranches,
             OperationsPermissions.Transfers.Approve,
             OperationsPermissions.Transfers.Ship,
-            OperationsPermissions.Transfers.Complete
+            OperationsPermissions.Transfers.Complete,
+
+            // Intelligence — kitchen-scoped decision logs in the page + top notification bell
+            IntelligencePermissions.DecisionLogs.Default,
+            IntelligencePermissions.DecisionLogs.Acknowledge
         });
 
         return permissions.Distinct();

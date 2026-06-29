@@ -107,7 +107,7 @@ public class StockTransferRepository
 
         if (fromBranchId.HasValue)
         {
-            query = query.Where(t => t.FromBranchId == fromBranchId.Value);
+            query = query.Where(t => t.FromBranchId.HasValue && t.FromBranchId.Value == fromBranchId.Value);
         }
 
         if (toBranchId.HasValue)

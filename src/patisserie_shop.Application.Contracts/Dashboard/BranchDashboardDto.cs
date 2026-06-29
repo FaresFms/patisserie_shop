@@ -67,7 +67,7 @@ public class RecentSaleDto
 public class IncomingTransferDto
 {
     public Guid TransferId { get; set; }
-    public Guid FromBranchId { get; set; }
+    public Guid? FromBranchId { get; set; }
     public string FromBranchName { get; set; } = string.Empty;
     public string Status { get; set; } = string.Empty;
     public DateTime RequestedDate { get; set; }

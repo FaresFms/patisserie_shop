@@ -79,7 +79,28 @@ public class CashierAppService : OperationsAppService, ICashierAppService
         var userId = CurrentUser.GetId();
         await _branchRepository.GetAsync(input.BranchId);
 
-        var shift = await _shiftManager.CreateOpenAsync(input.BranchId, userId, input.OpeningFloat);
+        var existingShift = await _shiftRepository.FindOpenShiftAsync(input.BranchId, userId);
+        if (existingShift is not null)
+        {
+            return await ProjectShiftAsync(existingShift);
+        }
+
+        AppCashierShift shift;
+        try
+        {
+            shift = await _shiftManager.CreateOpenAsync(input.BranchId, userId, input.OpeningFloat);
+        }
+        catch (BusinessException ex) when (ex.Code == OperationsErrorCodes.ShiftAlreadyOpen)
+        {
+            existingShift = await _shiftRepository.FindOpenShiftAsync(input.BranchId, userId);
+            if (existingShift is not null)
+            {
+                return await ProjectShiftAsync(existingShift);
+            }
+
+            throw;
+        }
+
         await _shiftRepository.InsertAsync(shift, autoSave: true);
 
         return await ProjectShiftAsync(shift);

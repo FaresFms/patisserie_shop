@@ -11,6 +11,7 @@ public static class DecisionActionTypes
 {
     public const string PurchaseOrder = "PurchaseOrder";
     public const string StockTransfer = "StockTransfer";
+    public const string BranchProductionRequest = "BranchProductionRequest";
 
     /// <summary>
     /// The corrective action was a direct stock adjustment (e.g. a waste write-off
@@ -23,6 +24,7 @@ public static class DecisionActionTypes
     {
         PurchaseOrder,
         StockTransfer,
+        BranchProductionRequest,
         StockAdjustment
     };
 

@@ -12,7 +12,7 @@ public class StockTransferManager : DomainService
     /// (id generation, defaulting) so the app service stays a thin orchestrator.
     /// </summary>
     public AppStockTransfer CreateDraft(
-        Guid fromBranchId,
+        Guid? fromBranchId,
         Guid toBranchId,
         DateTime requestedDate,
         Guid? requestedByUserId,

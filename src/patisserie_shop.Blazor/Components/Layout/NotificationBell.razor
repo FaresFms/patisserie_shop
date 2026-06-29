@@ -329,8 +329,17 @@
         DecisionTypes.DeadStockFlag => IntL["DecisionType:DeadStockFlag"],
         DecisionTypes.TransferSuggestion => IntL["DecisionType:TransferSuggestion"],
         DecisionTypes.ReorderSuggestion => IntL["DecisionType:ReorderSuggestion"],
+        DecisionTypes.StockoutRisk => IntL["DecisionType:StockoutRisk"],
+        DecisionTypes.ExpiryAlert => IntL["DecisionType:ExpiryAlert"],
+        DecisionTypes.WasteWriteOff => IntL["DecisionType:WasteWriteOff"],
         DecisionTypes.StockReport => IntL["DecisionType:StockReport"],
         DecisionTypes.CashierVariance => IntL["DecisionType:CashierVariance"],
+        DecisionTypes.IngredientShortage => IntL["DecisionType:IngredientShortage"],
+        DecisionTypes.ProductionShortageRisk => IntL["DecisionType:ProductionShortageRisk"],
+        DecisionTypes.HighKitchenWaste => IntL["DecisionType:HighKitchenWaste"],
+        DecisionTypes.ProductionCostVariance => IntL["DecisionType:ProductionCostVariance"],
+        DecisionTypes.LateProductionRisk => IntL["DecisionType:LateProductionRisk"],
+        DecisionTypes.UnfulfilledBranchRequest => IntL["DecisionType:UnfulfilledBranchRequest"],
         _ => decisionType
     };
 
@@ -357,8 +366,17 @@
         DecisionTypes.DeadStockFlag => "#b3543a",
         DecisionTypes.TransferSuggestion => "#4a8e8e",
         DecisionTypes.ReorderSuggestion => "var(--accent)",
+        DecisionTypes.StockoutRisk => "#9a4f68",
+        DecisionTypes.ExpiryAlert => "#8461a6",
+        DecisionTypes.WasteWriteOff => "#7a6258",
         DecisionTypes.StockReport => "var(--accent)",
         DecisionTypes.CashierVariance => "#b3543a",
+        DecisionTypes.IngredientShortage => "#c89c4f",
+        DecisionTypes.ProductionShortageRisk => "#9a4f68",
+        DecisionTypes.HighKitchenWaste => "#b3543a",
+        DecisionTypes.ProductionCostVariance => "#4a7da8",
+        DecisionTypes.LateProductionRisk => "#8461a6",
+        DecisionTypes.UnfulfilledBranchRequest => "#4a8e8e",
         _ => "var(--fg-3)"
     };
 

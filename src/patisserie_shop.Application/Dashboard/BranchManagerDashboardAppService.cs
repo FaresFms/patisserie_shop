@@ -142,7 +142,11 @@ public class BranchManagerDashboardAppService : patisserie_shopAppService, IBran
 
         // Incoming transfers for this branch
         var incomingRows = await _stockTransferRepository.GetActiveIncomingAsync(branchId, IncomingTransfersLimit);
-        var sourceBranchIds = incomingRows.Select(r => r.Transfer.FromBranchId).Distinct().ToList();
+        var sourceBranchIds = incomingRows
+            .Where(r => r.Transfer.FromBranchId.HasValue)
+            .Select(r => r.Transfer.FromBranchId!.Value)
+            .Distinct()
+            .ToList();
         var sourceBranches = sourceBranchIds.Count == 0
             ? new List<AppBranch>()
             : await _branchRepository.GetListAsync(b => sourceBranchIds.Contains(b.Id));
@@ -152,7 +156,10 @@ public class BranchManagerDashboardAppService : patisserie_shopAppService, IBran
         {
             TransferId = r.Transfer.Id,
             FromBranchId = r.Transfer.FromBranchId,
-            FromBranchName = sourceBranchNames.TryGetValue(r.Transfer.FromBranchId, out var n) ? n : "—",
+            FromBranchName = r.Transfer.FromBranchId.HasValue &&
+                             sourceBranchNames.TryGetValue(r.Transfer.FromBranchId.Value, out var n)
+                ? n
+                : "Waiting for admin",
             Status = r.Transfer.Status,
             RequestedDate = r.Transfer.RequestedDate,
             ItemCount = r.ItemCount

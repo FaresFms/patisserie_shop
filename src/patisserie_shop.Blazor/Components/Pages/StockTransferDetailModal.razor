@@ -5,12 +5,18 @@
 @using Operations.StockTransfers
 @using Operations.Permissions
 @using Operations.Localization
+@using Inventory
+@using Inventory.Branches
+@using Inventory.BranchInventory
+@using Volo.Abp
 @using Color = MudBlazor.Color
 @using Variant = MudBlazor.Variant
 @using Size = MudBlazor.Size
 @using Margin = MudBlazor.Margin
 @inherits patisserie_shopComponentBase
 @inject IStockTransferAppService StockTransferAppService
+@inject IBranchAppService BranchAppService
+@inject IBranchInventoryAppService BranchInventoryAppService
 @inject ISnackbar Snackbar
 @inject IStringLocalizer<OperationsResource> OpsL
 
@@ -78,12 +84,27 @@
                             </div>
                         }
                     </div>
+                    @if (_transfer.Status == StockTransferStatuses.Pending && _canApprove && !_transfer.FromBranchId.HasValue)
+                    {
+                        <div class="sts-source-assign">
+                            <SoftText Typo="Typo.overline" Color="Color.Primary">@OpsL["AssignSourceBranch"]</SoftText>
+                            <SoftText Typo="Typo.caption" Color="Color.Default">@OpsL["ChooseSourceBranchHint"]</SoftText>
+                            <SoftLookupSelect TItem="BranchLookupDto" TValue="Guid?"
+                                              Items="AvailableSourceBranches"
+                                              ToValue="@(b => (Guid?)b.Id)"
+                                              ToLabel="@(b => b.Name)"
+                                              Value="_sourceBranchId"
+                                              ValueChanged="@(v => _sourceBranchId = v)"
+                                              Label="@OpsL["FromBranch"]"
+                                              Required="true" />
+                        </div>
+                    }
 
                     <!-- Items -->
                     <div>
                         <SoftStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
                             <SoftText Typo="Typo.overline" Color="Color.Primary">@OpsL["Items"] (@_transfer.Items.Count)</SoftText>
-                            @if (_transfer.Status == StockTransferStatuses.Draft && _canCreate)
+                            @if (_transfer.Status == StockTransferStatuses.Draft && CanEditCurrentRequest)
                             {
                                 <SoftButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary"
                                             StartIcon="@Icons.Material.Filled.Add"
@@ -149,7 +170,7 @@
                                         @(item.TransferredQuantity?.ToString() ?? "-")
                                     </MudTd>
                                     <MudTd>
-                                        @if (_transfer.Status == StockTransferStatuses.Draft && _canCreate)
+                                        @if (_transfer.Status == StockTransferStatuses.Draft && CanEditCurrentRequest)
                                         {
                                             <SoftIconButton Icon="@Icons.Material.Filled.Delete"
                                                             Color="Color.Error"
@@ -169,25 +190,31 @@
             <div class="pa-3 d-flex justify-end flex-wrap" style="gap: 8px;">
                 <SoftButton Variant="Variant.Text" OnClick="CloseAsync">@L["Close"]</SoftButton>
 
-                @if (_transfer.Status == StockTransferStatuses.Draft && _transfer.Items.Count > 0 && _canCreate)
+                @if (_transfer.Status == StockTransferStatuses.Draft && _transfer.Items.Count > 0 && CanEditCurrentRequest)
                 {
                     <SoftButton Variant="Variant.Filled" Color="Color.Primary"
                                 StartIcon="@Icons.Material.Filled.Send"
                                 OnClick="SubmitAsync" Disabled="_saving">@OpsL["SubmitRequest"]</SoftButton>
                 }
-                @if (_transfer.Status == StockTransferStatuses.Pending && _canApprove)
+                @if (_transfer.Status == StockTransferStatuses.Pending && _canApprove && !_transfer.FromBranchId.HasValue)
+                {
+                    <SoftButton Variant="Variant.Filled" Color="Color.Success"
+                                StartIcon="@Icons.Material.Filled.Route"
+                                OnClick="AssignSourceAsync" Disabled="_saving">@OpsL["AssignSourceBranch"]</SoftButton>
+                }
+                @if (_transfer.Status == StockTransferStatuses.Pending && _canApprove && _transfer.FromBranchId.HasValue)
                 {
                     <SoftButton Variant="Variant.Filled" Color="Color.Success"
                                 StartIcon="@Icons.Material.Filled.CheckCircle"
                                 OnClick="ApproveAsync" Disabled="_saving">@OpsL["Approve"]</SoftButton>
                 }
-                @if (_transfer.Status == StockTransferStatuses.Approved && _canShip)
+                @if (_transfer.Status == StockTransferStatuses.Approved && CanShipCurrentTransfer)
                 {
                     <SoftButton Variant="Variant.Filled" Color="Color.Info"
                                 StartIcon="@Icons.Material.Filled.LocalShipping"
                                 OnClick="ShipAsync" Disabled="_saving">@OpsL["Ship"]</SoftButton>
                 }
-                @if (_transfer.Status == StockTransferStatuses.InTransit && _canComplete)
+                @if (_transfer.Status == StockTransferStatuses.InTransit && CanCompleteCurrentTransfer)
                 {
                     <SoftButton Variant="Variant.Filled" Color="Color.Tertiary"
                                 StartIcon="@Icons.Material.Filled.TaskAlt"
@@ -282,6 +309,12 @@
                 </SoftCardHeader>
                 <SoftDivider />
                 <SoftCardContent Class="pa-4 sts-modal-body">
+                    @if (HasCompleteStockShortage)
+                    {
+                        <SoftAlert Severity="Severity.Error" Variant="Variant.Outlined" Dense="true" Class="mb-3">
+                            @BuildCompleteStockWarning()
+                        </SoftAlert>
+                    }
                     <MudTable T="CompleteRow" Items="@_completeRows" Dense="true" Hover="true" Bordered="false">
                         <HeaderContent>
                             <MudTh>@OpsL["Product"]</MudTh>
@@ -318,7 +351,7 @@
                     </SoftButton>
                     <SoftButton Variant="Variant.Filled" Color="Color.Tertiary"
                                 StartIcon="@Icons.Material.Filled.CheckCircle"
-                                OnClick="ConfirmComplete" Disabled="_saving">@OpsL["ConfirmComplete"]</SoftButton>
+                                OnClick="ConfirmComplete" Disabled="@(_saving || HasCompleteStockShortage)">@OpsL["ConfirmComplete"]</SoftButton>
                 </div>
             </SoftCard>
         </div>
@@ -342,6 +375,15 @@
         padding: 10px 12px;
         background: var(--mud-palette-background-grey);
         border-radius: 8px;
+    }
+
+    .sts-source-assign {
+        display: grid;
+        gap: 8px;
+        padding: 12px;
+        border: 1px solid var(--bd-2);
+        border-radius: var(--r-md);
+        background: var(--surface-2);
     }
 
     .sts-status {
@@ -370,8 +412,15 @@
     private bool _canShip;
     private bool _canComplete;
     private bool _canCancel;
+    private List<Guid> _accessibleBranchIds = new();
 
     private readonly Dictionary<Guid, int> _approvedEdits = new();
+    private List<BranchLookupDto> _branches = new();
+    private Guid? _sourceBranchId;
+    private List<BranchLookupDto> AvailableSourceBranches =>
+        _transfer is null
+            ? _branches
+            : _branches.Where(b => b.Id != _transfer.ToBranchId).ToList();
 
     private bool _addItemVisible;
     private List<StockTransferProductLookupDto> _availableProducts = new();
@@ -381,6 +430,14 @@
 
     private bool _completeVisible;
     private List<CompleteRow> _completeRows = new();
+    private bool CanEditCurrentRequest =>
+        _canCreate && _transfer is not null && _accessibleBranchIds.Contains(_transfer.ToBranchId);
+    private bool CanShipCurrentTransfer =>
+        _canShip && _transfer?.FromBranchId is Guid sourceBranchId && _accessibleBranchIds.Contains(sourceBranchId);
+    private bool CanCompleteCurrentTransfer =>
+        _canComplete && _transfer is not null && _accessibleBranchIds.Contains(_transfer.ToBranchId);
+    private bool HasCompleteStockShortage =>
+        _completeRows.Any(r => r.TransferNow > r.SourceStock);
 
     public class CompleteRow
     {
@@ -396,6 +453,11 @@
         _canShip     = await AuthorizationService.IsGrantedAsync(OperationsPermissions.Transfers.Ship);
         _canComplete = await AuthorizationService.IsGrantedAsync(OperationsPermissions.Transfers.Complete);
         _canCancel   = await AuthorizationService.IsGrantedAsync(OperationsPermissions.Transfers.Cancel);
+        _accessibleBranchIds = await BranchInventoryAppService.GetAccessibleBranchIdsAsync();
+        if (_canApprove)
+        {
+            _branches = await BranchAppService.GetLookupAsync();
+        }
         await LoadAsync();
     }
 
@@ -404,6 +466,7 @@
         try
         {
             _transfer = await StockTransferAppService.GetAsync(TransferId);
+            _sourceBranchId = _transfer.FromBranchId;
             _approvedEdits.Clear();
             foreach (var i in _transfer.Items)
             {
@@ -412,7 +475,7 @@
         }
         catch (Exception ex)
         {
-            await HandleErrorAsync(ex);
+            await HandleTransferErrorAsync(ex);
         }
     }
 
@@ -444,7 +507,7 @@
         }
         catch (Exception ex)
         {
-            await HandleErrorAsync(ex);
+            await HandleTransferErrorAsync(ex);
         }
         _addItemVisible = true;
     }
@@ -480,7 +543,7 @@
         }
         catch (Exception ex)
         {
-            await HandleErrorAsync(ex);
+            await HandleTransferErrorAsync(ex);
         }
         finally
         {
@@ -498,7 +561,7 @@
         }
         catch (Exception ex)
         {
-            await HandleErrorAsync(ex);
+            await HandleTransferErrorAsync(ex);
         }
     }
 
@@ -516,7 +579,7 @@
         }
         catch (Exception ex)
         {
-            await HandleErrorAsync(ex);
+            await HandleTransferErrorAsync(ex);
         }
     }
 
@@ -527,6 +590,23 @@
 
     private async Task ApproveAsync() => await RunAsync(
         () => StockTransferAppService.ApproveAsync(TransferId), OpsL["TransferApproved"], Severity.Success);
+
+    private async Task AssignSourceAsync()
+    {
+        if (!_sourceBranchId.HasValue)
+        {
+            Snackbar.Add(L["ThisFieldIsRequired", OpsL["FromBranch"]], Severity.Warning);
+            return;
+        }
+
+        await RunAsync(
+            () => StockTransferAppService.AssignSourceAsync(TransferId, new AssignStockTransferSourceDto
+            {
+                FromBranchId = _sourceBranchId.Value
+            }),
+            OpsL["TransferSourceAssigned"],
+            Severity.Success);
+    }
 
     private async Task ShipAsync() => await RunAsync(
         () => StockTransferAppService.ShipAsync(TransferId), OpsL["TransferShipped"], Severity.Success);
@@ -544,7 +624,7 @@
             await NotifyChanged();
             await CloseAsync();
         }
-        catch (Exception ex) { await HandleErrorAsync(ex); }
+        catch (Exception ex) { await HandleTransferErrorAsync(ex); }
         finally { _saving = false; }
     }
 
@@ -567,7 +647,7 @@
         }
         catch (Exception ex)
         {
-            await HandleErrorAsync(ex);
+            await HandleTransferErrorAsync(ex);
         }
     }
 
@@ -583,6 +663,12 @@
 
     private async Task ConfirmComplete()
     {
+        if (HasCompleteStockShortage)
+        {
+            Snackbar.Add(BuildCompleteStockWarning(), Severity.Error);
+            return;
+        }
+
         var lines = _completeRows
             .Select(r => new CompleteTransferLineDto { ItemId = r.Item.Id, TransferredQuantity = r.TransferNow })
             .ToList();
@@ -596,8 +682,59 @@
             await NotifyChanged();
             await CloseAsync();
         }
-        catch (Exception ex) { await HandleErrorAsync(ex); }
+        catch (Exception ex) { await HandleTransferErrorAsync(ex); }
         finally { _saving = false; }
+    }
+
+    private string BuildCompleteStockWarning()
+    {
+        var row = _completeRows.FirstOrDefault(r => r.TransferNow > r.SourceStock);
+        return row == null
+            ? string.Empty
+            : string.Format(OpsL["TransferCompleteStockShortage"], row.Item.ProductName, row.TransferNow, row.SourceStock);
+    }
+
+    private async Task HandleTransferErrorAsync(Exception ex)
+    {
+        if (TryFindBusinessException(ex, out var business))
+        {
+            if (business.Code == OperationsErrorCodes.InsufficientStockAtSource)
+            {
+                Snackbar.Add(OpsL["TransferSourceStockMissingNow"], Severity.Error);
+                return;
+            }
+
+            if (business.Code == InventoryErrorCodes.BranchAccessDenied)
+            {
+                Snackbar.Add(OpsL["TransferBranchActionDenied"], Severity.Error);
+                return;
+            }
+
+            if (business.Code == OperationsErrorCodes.TransferSourceBranchRequired)
+            {
+                Snackbar.Add(OpsL["Operations:Transfers:SourceBranchRequired"], Severity.Warning);
+                return;
+            }
+        }
+
+        await HandleErrorAsync(ex);
+    }
+
+    private static bool TryFindBusinessException(Exception? ex, out BusinessException business)
+    {
+        while (ex != null)
+        {
+            if (ex is BusinessException found)
+            {
+                business = found;
+                return true;
+            }
+
+            ex = ex.InnerException;
+        }
+
+        business = null!;
+        return false;
     }
 
     private static string StatusIcon(string status) => status switch

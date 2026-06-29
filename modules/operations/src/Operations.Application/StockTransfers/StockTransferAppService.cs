@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Inventory;
 using Inventory.BranchInventory;
 using Inventory.Entities;
+using Inventory.Permissions;
 using Microsoft.AspNetCore.Authorization;
 using Operations.Entities;
 using Operations.Permissions;
@@ -68,7 +69,10 @@ public class StockTransferAppService : OperationsAppService, IStockTransferAppSe
         var userIds = new HashSet<Guid>();
         foreach (var r in rows)
         {
-            branchIds.Add(r.Transfer.FromBranchId);
+            if (r.Transfer.FromBranchId.HasValue)
+            {
+                branchIds.Add(r.Transfer.FromBranchId.Value);
+            }
             branchIds.Add(r.Transfer.ToBranchId);
             if (r.Transfer.RequestedByUserId is { } req) userIds.Add(req);
         }
@@ -82,7 +86,9 @@ public class StockTransferAppService : OperationsAppService, IStockTransferAppSe
             Reference = BuildReference(r.Transfer.Id),
             Status = r.Transfer.Status,
             FromBranchId = r.Transfer.FromBranchId,
-            FromBranchName = branchNames.GetValueOrDefault(r.Transfer.FromBranchId, "-"),
+            FromBranchName = r.Transfer.FromBranchId.HasValue
+                ? branchNames.GetValueOrDefault(r.Transfer.FromBranchId.Value, "-")
+                : "Waiting for admin",
             ToBranchId = r.Transfer.ToBranchId,
             ToBranchName = branchNames.GetValueOrDefault(r.Transfer.ToBranchId, "-"),
             RequestedDate = r.Transfer.RequestedDate,
@@ -104,7 +110,29 @@ public class StockTransferAppService : OperationsAppService, IStockTransferAppSe
     public async Task<List<StockTransferProductLookupDto>> GetSourceProductsAsync(Guid id)
     {
         var transfer = await _transferRepository.GetAsync(id);
-        var rows = await _branchInventoryRepository.GetAvailableProductsAsync(transfer.FromBranchId);
+        if (!transfer.FromBranchId.HasValue)
+        {
+            var requestableRows = await _branchInventoryRepository.GetListWithProductAsync(
+                transfer.ToBranchId,
+                filter: null,
+                onlyOutOfStock: false,
+                onlyLowStock: false,
+                includeInactiveProducts: false,
+                sorting: "ProductName",
+                skipCount: 0,
+                maxResultCount: 500);
+
+            return requestableRows.ConvertAll(r => new StockTransferProductLookupDto
+            {
+                ProductId = r.Product.Id,
+                Name = r.Product.Name,
+                SKU = r.Product.SKU,
+                Unit = r.Product.Unit,
+                QuantityOnHand = r.Inventory.QuantityOnHand
+            });
+        }
+
+        var rows = await _branchInventoryRepository.GetAvailableProductsAsync(transfer.FromBranchId.Value);
 
         return rows.ConvertAll(r => new StockTransferProductLookupDto
         {
@@ -121,14 +149,33 @@ public class StockTransferAppService : OperationsAppService, IStockTransferAppSe
     [Authorize(OperationsPermissions.Transfers.Create)]
     public async Task<StockTransferDto> CreateAsync(CreateStockTransferDto input)
     {
-        await AuthorizationService.CheckAsync(OperationsPermissions.Transfers.ChooseBranches);
-
-        if (input.FromBranchId == input.ToBranchId)
+        if (input.FromBranchId.HasValue && input.FromBranchId.Value == input.ToBranchId)
         {
             throw new BusinessException(OperationsErrorCodes.SameSourceAndDestination);
         }
 
-        await _branchRepository.GetAsync(input.FromBranchId);
+        if (await IsManageAllBranchesAsync())
+        {
+            if (input.FromBranchId.HasValue)
+            {
+                await AuthorizationService.CheckAsync(OperationsPermissions.Transfers.ChooseBranches);
+            }
+        }
+        else
+        {
+            if (input.FromBranchId.HasValue)
+            {
+                throw new BusinessException(InventoryErrorCodes.BranchAccessDenied)
+                    .WithData("BranchId", input.FromBranchId.Value);
+            }
+
+            await EnsureManagedBranchAsync(input.ToBranchId);
+        }
+
+        if (input.FromBranchId.HasValue)
+        {
+            await _branchRepository.GetAsync(input.FromBranchId.Value);
+        }
         await _branchRepository.GetAsync(input.ToBranchId);
 
         var transfer = _manager.CreateDraft(
@@ -147,6 +194,7 @@ public class StockTransferAppService : OperationsAppService, IStockTransferAppSe
     {
         await _productRepository.GetAsync(input.ProductId);
         var transfer = await _transferRepository.GetWithItemsAsync(id);
+        await EnsureCanEditRequestAsync(transfer);
         var item = transfer.AddItem(GuidGenerator.Create(), input.ProductId, input.RequestedQuantity);
         await _transferRepository.UpdateAsync(transfer, autoSave: true);
         return await ProjectItemAsync(item);
@@ -156,6 +204,7 @@ public class StockTransferAppService : OperationsAppService, IStockTransferAppSe
     public async Task RemoveItemAsync(Guid id, Guid itemId)
     {
         var transfer = await _transferRepository.GetWithItemsAsync(id);
+        await EnsureCanEditRequestAsync(transfer);
         transfer.RemoveItem(itemId);
         await _transferRepository.UpdateAsync(transfer, autoSave: true);
     }
@@ -176,7 +225,18 @@ public class StockTransferAppService : OperationsAppService, IStockTransferAppSe
     public async Task<StockTransferDto> SubmitAsync(Guid id)
     {
         var transfer = await _transferRepository.GetWithItemsAsync(id);
+        await EnsureCanEditRequestAsync(transfer);
         transfer.Submit();
+        await _transferRepository.UpdateAsync(transfer, autoSave: true);
+        return await ProjectAsync(transfer);
+    }
+
+    [Authorize(OperationsPermissions.Transfers.Approve)]
+    public async Task<StockTransferDto> AssignSourceAsync(Guid id, AssignStockTransferSourceDto input)
+    {
+        var transfer = await _transferRepository.GetWithItemsAsync(id);
+        await _branchRepository.GetAsync(input.FromBranchId);
+        transfer.AssignSourceAndApprove(input.FromBranchId, CurrentUser.Id);
         await _transferRepository.UpdateAsync(transfer, autoSave: true);
         return await ProjectAsync(transfer);
     }
@@ -194,6 +254,9 @@ public class StockTransferAppService : OperationsAppService, IStockTransferAppSe
     public async Task<StockTransferDto> ShipAsync(Guid id)
     {
         var transfer = await _transferRepository.GetWithItemsAsync(id);
+        var sourceBranchId = EnsureSourceAssigned(transfer);
+        await EnsureManagedBranchAsync(sourceBranchId);
+        await EnsureSourceStockAvailableAsync(transfer, sourceBranchId);
         transfer.Ship();
         await _transferRepository.UpdateAsync(transfer, autoSave: true);
         return await ProjectAsync(transfer);
@@ -219,6 +282,8 @@ public class StockTransferAppService : OperationsAppService, IStockTransferAppSe
     public async Task<StockTransferDto> CompleteAsync(Guid id, CompleteStockTransferDto input)
     {
         var transfer = await _transferRepository.GetWithItemsAsync(id);
+        var sourceBranchId = EnsureSourceAssigned(transfer);
+        await EnsureManagedBranchAsync(transfer.ToBranchId);
 
         var transferredByItem = new Dictionary<Guid, int>();
         foreach (var line in input.Lines)
@@ -226,29 +291,7 @@ public class StockTransferAppService : OperationsAppService, IStockTransferAppSe
             transferredByItem[line.ItemId] = line.TransferredQuantity;
         }
 
-        // Load source-branch stock for the products involved.
-        var productIds = transfer.Items.Select(i => i.ProductId).Distinct().ToList();
-        var sourceInventories = await _branchInventoryRepository.GetListAsync(
-            x => x.BranchId == transfer.FromBranchId && productIds.Contains(x.ProductId));
-        var sourceByProduct = sourceInventories.ToDictionary(x => x.ProductId);
-
-        // Validate availability before mutating anything.
-        foreach (var item in transfer.Items)
-        {
-            var qty = transferredByItem.TryGetValue(item.Id, out var supplied)
-                ? supplied
-                : (item.ApprovedQuantity ?? item.RequestedQuantity);
-            if (qty <= 0) continue;
-
-            var available = sourceByProduct.TryGetValue(item.ProductId, out var inv) ? inv.QuantityOnHand : 0;
-            if (available < qty)
-            {
-                throw new BusinessException(OperationsErrorCodes.InsufficientStockAtSource)
-                    .WithData("ProductId", item.ProductId)
-                    .WithData("Requested", qty)
-                    .WithData("Available", available);
-            }
-        }
+        var sourceByProduct = await EnsureSourceStockAvailableAsync(transfer, sourceBranchId, transferredByItem);
 
         // Domain records transferred quantities, flips status, raises TransferCompletedEto.
         var lines = transfer.Complete(transferredByItem);
@@ -315,7 +358,9 @@ public class StockTransferAppService : OperationsAppService, IStockTransferAppSe
 
     private async Task<StockTransferDto> ProjectAsync(AppStockTransfer transfer)
     {
-        var fromBranch = await _branchRepository.GetAsync(transfer.FromBranchId);
+        var fromBranch = transfer.FromBranchId.HasValue
+            ? await _branchRepository.FindAsync(transfer.FromBranchId.Value)
+            : null;
         var toBranch = await _branchRepository.GetAsync(transfer.ToBranchId);
 
         var requestedBy = transfer.RequestedByUserId.HasValue
@@ -335,7 +380,7 @@ public class StockTransferAppService : OperationsAppService, IStockTransferAppSe
             Reference = BuildReference(transfer.Id),
             Status = transfer.Status,
             FromBranchId = transfer.FromBranchId,
-            FromBranchName = fromBranch.Name,
+            FromBranchName = fromBranch?.Name ?? "Waiting for admin",
             ToBranchId = transfer.ToBranchId,
             ToBranchName = toBranch.Name,
             RequestedDate = transfer.RequestedDate,
@@ -387,4 +432,73 @@ public class StockTransferAppService : OperationsAppService, IStockTransferAppSe
     }
 
     private static string BuildReference(Guid id) => $"TR-{id.ToString("N")[..8].ToUpperInvariant()}";
+
+    private Task<bool> IsManageAllBranchesAsync()
+        => AuthorizationService.IsGrantedAsync(InventoryPermissions.BranchInventory.ManageAll);
+
+    private async Task EnsureCanEditRequestAsync(AppStockTransfer transfer)
+    {
+        if (await IsManageAllBranchesAsync())
+        {
+            return;
+        }
+
+        await EnsureManagedBranchAsync(transfer.ToBranchId);
+    }
+
+    private async Task EnsureManagedBranchAsync(Guid branchId)
+    {
+        if (await IsManageAllBranchesAsync())
+        {
+            return;
+        }
+
+        var userId = CurrentUser.Id;
+        if (userId == null ||
+            !await _branchRepository.AnyAsync(b => b.Id == branchId && b.ManagerUserId == userId))
+        {
+            throw new BusinessException(InventoryErrorCodes.BranchAccessDenied)
+                .WithData("BranchId", branchId);
+        }
+    }
+
+    private static Guid EnsureSourceAssigned(AppStockTransfer transfer)
+        => transfer.FromBranchId
+           ?? throw new BusinessException(OperationsErrorCodes.TransferSourceBranchRequired)
+               .WithData("TransferId", transfer.Id);
+
+    private async Task<Dictionary<Guid, AppBranchInventory>> EnsureSourceStockAvailableAsync(
+        AppStockTransfer transfer,
+        Guid sourceBranchId,
+        IReadOnlyDictionary<Guid, int>? quantitiesByItem = null)
+    {
+        var productIds = transfer.Items.Select(i => i.ProductId).Distinct().ToList();
+        var sourceInventories = await _branchInventoryRepository.GetListAsync(
+            x => x.BranchId == sourceBranchId && productIds.Contains(x.ProductId));
+        var sourceByProduct = sourceInventories.ToDictionary(x => x.ProductId);
+
+        foreach (var item in transfer.Items)
+        {
+            var qty = quantitiesByItem != null && quantitiesByItem.TryGetValue(item.Id, out var supplied)
+                ? supplied
+                : (item.ApprovedQuantity ?? item.RequestedQuantity);
+            if (qty <= 0)
+            {
+                continue;
+            }
+
+            var available = sourceByProduct.TryGetValue(item.ProductId, out var inventory)
+                ? inventory.QuantityOnHand
+                : 0;
+            if (available < qty)
+            {
+                throw new BusinessException(OperationsErrorCodes.InsufficientStockAtSource)
+                    .WithData("ProductId", item.ProductId)
+                    .WithData("Requested", qty)
+                    .WithData("Available", available);
+            }
+        }
+
+        return sourceByProduct;
+    }
 }

@@ -1253,7 +1253,7 @@ namespace patisserie_shop.Migrations
                         .HasColumnType("text")
                         .HasColumnName("ExtraProperties");
 
-                    b.Property<Guid>("FromBranchId")
+                    b.Property<Guid?>("FromBranchId")
                         .HasColumnType("uuid");
 
                     b.Property<bool>("IsDeleted")

@@ -11,6 +11,8 @@ namespace patisserie_shop.Decisions;
 /// </summary>
 public interface IDecisionActionAppService : IApplicationService
 {
+    Task<DecisionActionPreviewDto> PrepareDecisionActionAsync(Guid decisionLogId);
+
     Task<DecisionActionResultDto> ExecuteDecisionAsync(Guid decisionLogId);
 
     /// <summary>

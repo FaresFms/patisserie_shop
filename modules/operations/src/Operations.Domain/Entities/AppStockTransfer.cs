@@ -10,7 +10,7 @@ namespace Operations.Entities;
 
 public class AppStockTransfer : FullAuditedAggregateRoot<Guid>
 {
-    public Guid FromBranchId { get; private set; }
+    public Guid? FromBranchId { get; private set; }
     public Guid ToBranchId { get; private set; }
     public string Status { get; private set; } = null!;
     public DateTime RequestedDate { get; private set; }
@@ -30,14 +30,14 @@ public class AppStockTransfer : FullAuditedAggregateRoot<Guid>
 
     public AppStockTransfer(
         Guid id,
-        Guid fromBranchId,
+        Guid? fromBranchId,
         Guid toBranchId,
         DateTime requestedDate,
         Guid? requestedByUserId = null,
         string? notes = null)
         : base(id)
     {
-        if (fromBranchId == toBranchId)
+        if (fromBranchId.HasValue && fromBranchId.Value == toBranchId)
             throw new BusinessException(OperationsErrorCodes.SameSourceAndDestination);
 
         FromBranchId = fromBranchId;
@@ -85,7 +85,25 @@ public class AppStockTransfer : FullAuditedAggregateRoot<Guid>
     {
         if (Status != StockTransferStatuses.Pending)
             throw InvalidTransition(StockTransferStatuses.Approved);
+        if (!FromBranchId.HasValue)
+            throw new BusinessException(OperationsErrorCodes.TransferSourceBranchRequired);
 
+        ApproveCore(approvedByUserId);
+    }
+
+    public void AssignSourceAndApprove(Guid fromBranchId, Guid? approvedByUserId)
+    {
+        if (Status != StockTransferStatuses.Pending)
+            throw InvalidTransition(StockTransferStatuses.Approved);
+        if (fromBranchId == ToBranchId)
+            throw new BusinessException(OperationsErrorCodes.SameSourceAndDestination);
+
+        FromBranchId = fromBranchId;
+        ApproveCore(approvedByUserId);
+    }
+
+    private void ApproveCore(Guid? approvedByUserId)
+    {
         Status = StockTransferStatuses.Approved;
         ApprovedDate = DateTime.UtcNow;
         ApprovedByUserId = approvedByUserId;
@@ -115,6 +133,8 @@ public class AppStockTransfer : FullAuditedAggregateRoot<Guid>
     {
         if (Status != StockTransferStatuses.Approved)
             throw InvalidTransition(StockTransferStatuses.InTransit);
+        if (!FromBranchId.HasValue)
+            throw new BusinessException(OperationsErrorCodes.TransferSourceBranchRequired);
         Status = StockTransferStatuses.InTransit;
     }
 
@@ -137,6 +157,8 @@ public class AppStockTransfer : FullAuditedAggregateRoot<Guid>
     {
         if (Status != StockTransferStatuses.InTransit)
             throw InvalidTransition(StockTransferStatuses.Completed);
+        if (!FromBranchId.HasValue)
+            throw new BusinessException(OperationsErrorCodes.TransferSourceBranchRequired);
 
         var lines = new List<TransferLine>();
         foreach (var item in _items)
@@ -158,7 +180,7 @@ public class AppStockTransfer : FullAuditedAggregateRoot<Guid>
         AddDistributedEvent(new TransferCompletedEto
         {
             TransferId = Id,
-            FromBranchId = FromBranchId,
+            FromBranchId = FromBranchId.Value,
             ToBranchId = ToBranchId
         });
 

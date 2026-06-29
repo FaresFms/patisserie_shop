@@ -3,6 +3,7 @@
 @attribute [Authorize(ProductionPermissions.BranchRequests.Default)]
 @using System.Threading
 @using System.Threading.Tasks
+@using Intelligence.Decisions
 @using Inventory.Branches
 @using Microsoft.AspNetCore.Authorization
 @using Production
@@ -18,6 +19,7 @@
 @using Margin = MudBlazor.Margin
 @inherits patisserie_shopComponentBase
 @inject IBranchProductionRequestAppService RequestAppService
+@inject IDecisionLogAppService DecisionLogAppService
 @inject IBranchAppService BranchAppService
 @inject IAuthorizationService Authz
 @inject PageLayout PageLayout
@@ -338,6 +340,7 @@
     private List<BranchLookupDto> _branches = new();
     private List<ProductLookupDto> _products = new();
     private bool _createVisible;
+    private Guid? _sourceDecisionId;
     private Guid? _editBranchId;
     private DateTime? _editNeededBy = DateTime.Today.AddDays(1);
     private string _editPriority = ProductionPriorities.Normal;
@@ -351,6 +354,21 @@
 
     private List<StatusOption> _statusOptions = new();
     private List<StatusOption> _priorityOptions = new();
+
+    [Parameter, SupplyParameterFromQuery(Name = "new")]
+    public bool NewRequest { get; set; }
+
+    [Parameter, SupplyParameterFromQuery(Name = "decisionId")]
+    public Guid? NewRequestDecisionId { get; set; }
+
+    [Parameter, SupplyParameterFromQuery(Name = "branchId")]
+    public Guid? NewRequestBranchId { get; set; }
+
+    [Parameter, SupplyParameterFromQuery(Name = "productId")]
+    public Guid? NewRequestProductId { get; set; }
+
+    [Parameter, SupplyParameterFromQuery(Name = "notes")]
+    public string? NewRequestNotes { get; set; }
 
     protected override async Task OnInitializedAsync()
     {
@@ -373,6 +391,11 @@
             new(ProductionPriorities.Normal, ProdL["Priority:Normal"]),
             new(ProductionPriorities.Urgent, ProdL["Priority:Urgent"])
         ];
+
+        if (NewRequest)
+        {
+            await OpenCreateDialogFromQueryAsync();
+        }
     }
 
     private async Task<GridData<BranchProductionRequestListItemDto>> LoadServerData(GridState<BranchProductionRequestListItemDto> state, CancellationToken cancellationToken)
@@ -411,19 +434,72 @@
     private Task ReloadAsync() => _grid?.ReloadServerData() ?? Task.CompletedTask;
 
     private void OpenCreateDialog()
+        => OpenCreateDialog(null, null, null, null, null);
+
+    private async Task OpenCreateDialogFromQueryAsync()
     {
-        _editBranchId = _branches.FirstOrDefault()?.Id;
+        var branchId = NewRequestBranchId;
+        var productId = NewRequestProductId;
+        var notes = NewRequestNotes;
+        var sourceDecisionId = NewRequestDecisionId;
+
+        if (sourceDecisionId.HasValue)
+        {
+            try
+            {
+                var decision = await DecisionLogAppService.GetAsync(sourceDecisionId.Value);
+                branchId ??= decision.BranchId;
+                if (!productId.HasValue && decision.ProductId != Guid.Empty)
+                {
+                    productId = decision.ProductId;
+                }
+
+                notes = string.IsNullOrWhiteSpace(notes)
+                    ? string.Format(ProdL["RequestCreatedFromInventoryDecisionNote"], decision.Id, decision.Reasoning)
+                    : notes;
+            }
+            catch (Exception ex)
+            {
+                await HandleErrorAsync(ex);
+            }
+        }
+
+        OpenCreateDialog(branchId, productId, null, notes, sourceDecisionId);
+    }
+
+    private void OpenCreateDialog(Guid? branchId, Guid? productId, int? quantity, string? notes, Guid? sourceDecisionId)
+    {
+        _sourceDecisionId = sourceDecisionId;
+        _editBranchId = branchId.HasValue && _branches.Any(b => b.Id == branchId.Value)
+            ? branchId.Value
+            : _branches.FirstOrDefault()?.Id;
         _editNeededBy = DateTime.Today.AddDays(1);
         _editPriority = ProductionPriorities.Normal;
-        _editNotes = null;
+        _editNotes = notes;
         _editItems.Clear();
-        AddEditLine();
+        AddEditLine(productId, quantity);
         _createVisible = true;
     }
 
-    private void CloseCreateDialog() => _createVisible = false;
+    private void CloseCreateDialog()
+    {
+        _createVisible = false;
+        _sourceDecisionId = null;
+    }
 
-    private void AddEditLine() => _editItems.Add(new EditLine { ProductId = _products.FirstOrDefault()?.Id, Quantity = 1 });
+    private void AddEditLine() => AddEditLine(null, null);
+    private void AddEditLine(Guid? productId, int? quantity)
+    {
+        var selectedProductId = productId.HasValue && _products.Any(p => p.Id == productId.Value)
+            ? productId.Value
+            : _products.FirstOrDefault()?.Id;
+
+        _editItems.Add(new EditLine
+        {
+            ProductId = selectedProductId,
+            Quantity = Math.Max(quantity ?? 1, 1)
+        });
+    }
     private void RemoveEditLine(EditLine line) => _editItems.Remove(line);
 
     private async Task SaveRequestAsync()
@@ -448,8 +524,21 @@
             }
         }
 
-        await RequestAppService.CreateAsync(input);
-        Snackbar.Add(ProdL["SavedSuccessfully"], Severity.Success);
+        var created = await RequestAppService.CreateAsync(input);
+        if (_sourceDecisionId.HasValue)
+        {
+            await DecisionLogAppService.ExecuteAsync(_sourceDecisionId.Value, new ExecuteDecisionLogInput
+            {
+                ActionType = DecisionActionTypes.BranchProductionRequest,
+                ActionId = created.Id
+            });
+            Snackbar.Add(string.Format(ProdL["RequestSavedFromDecision"], created.RequestNumber), Severity.Success);
+        }
+        else
+        {
+            Snackbar.Add(ProdL["SavedSuccessfully"], Severity.Success);
+        }
+
         CloseCreateDialog();
         await ReloadAsync();
     }
