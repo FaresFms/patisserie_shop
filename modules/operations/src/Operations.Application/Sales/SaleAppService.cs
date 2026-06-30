@@ -103,7 +103,7 @@ public class SaleAppService : OperationsAppService, ISaleAppService
     {
         await EnsureBranchAccessAsync(branchId);
 
-        var rows = await _branchInventoryRepository.GetAvailableProductsAsync(branchId);
+        var rows = await _branchInventoryRepository.GetAvailableProductsAsync(branchId, onlySellable: true);
 
         return rows.ConvertAll(r => new SaleProductLookupDto
         {

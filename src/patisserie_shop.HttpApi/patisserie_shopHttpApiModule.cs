@@ -1,5 +1,6 @@
 using Operations;
 using Intelligence;
+using Production;
 using Localization.Resources.AbpUi;
 using patisserie_shop.Localization;
 using Volo.Abp.Account;
@@ -15,6 +16,7 @@ namespace patisserie_shop;
  [DependsOn(
     typeof(OperationsHttpApiModule),
     typeof(IntelligenceHttpApiModule),
+    typeof(ProductionHttpApiModule),
     typeof(patisserie_shopApplicationContractsModule),
     typeof(AbpPermissionManagementHttpApiModule),
     typeof(AbpSettingManagementHttpApiModule),

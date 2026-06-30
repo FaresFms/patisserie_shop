@@ -37,6 +37,7 @@ public static class OperationsErrorCodes
     public const string TransferItemNotFound = "Operations:Transfers:ItemNotFound";
     public const string DuplicateProductInTransfer = "Operations:Transfers:DuplicateProduct";
     public const string SameSourceAndDestination = "Operations:Transfers:SameBranch";
+    public const string TransferSourceBranchRequired = "Operations:Transfers:SourceBranchRequired";
     public const string InsufficientStockAtSource = "Operations:Transfers:InsufficientStock";
     public const string TransferInvalidQuantity = "Operations:Transfers:InvalidQuantity";
     public const string CannotApproveTransferItem = "Operations:Transfers:CannotApproveItem";

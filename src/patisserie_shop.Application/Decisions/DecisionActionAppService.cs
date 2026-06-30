@@ -100,13 +100,7 @@ public class DecisionActionAppService : patisserie_shopAppService, IDecisionActi
     {
         var decision = await _decisionLogAppService.GetAsync(decisionLogId);
 
-        // Fail fast before creating any document — the final ExecuteAsync would
-        // reject a non-Pending log anyway, but by then the draft would exist.
-        if (decision.Status != DecisionLogStatuses.Pending)
-        {
-            throw new BusinessException(IntelligenceErrorCodes.DecisionLogNotPending)
-                .WithData("CurrentStatus", decision.Status);
-        }
+        EnsurePending(decision);
 
         var result = decision.DecisionType switch
         {
@@ -126,6 +120,40 @@ public class DecisionActionAppService : patisserie_shopAppService, IDecisionActi
         });
 
         return result;
+    }
+
+    public async Task<DecisionActionPreviewDto> PrepareDecisionActionAsync(Guid decisionLogId)
+    {
+        var decision = await _decisionLogAppService.GetAsync(decisionLogId);
+        EnsurePending(decision);
+
+        return decision.DecisionType switch
+        {
+            DecisionTypes.LowStockAlert or DecisionTypes.ReorderSuggestion or DecisionTypes.StockoutRisk
+                => await PreviewDraftPurchaseOrderAsync(decision),
+            DecisionTypes.TransferSuggestion
+                => await PreviewDraftStockTransferAsync(decision),
+            DecisionTypes.WasteWriteOff
+                => await PreviewWasteWriteOffAsync(decision),
+            _ => new DecisionActionPreviewDto
+            {
+                ActionCreated = false,
+                ProductName = decision.ProductName,
+                BranchName = decision.BranchName,
+                Notes = decision.SuggestedAction
+            }
+        };
+    }
+
+    private static void EnsurePending(DecisionLogDto decision)
+    {
+        // Fail fast before creating any document — the final ExecuteAsync would
+        // reject a non-Pending log anyway, but by then the draft would exist.
+        if (decision.Status != DecisionLogStatuses.Pending)
+        {
+            throw new BusinessException(IntelligenceErrorCodes.DecisionLogNotPending)
+                .WithData("CurrentStatus", decision.Status);
+        }
     }
 
     /// <summary>
@@ -337,6 +365,46 @@ public class DecisionActionAppService : patisserie_shopAppService, IDecisionActi
         };
     }
 
+    private async Task<DecisionActionPreviewDto> PreviewDraftPurchaseOrderAsync(DecisionLogDto decision)
+    {
+        if (!decision.BranchId.HasValue)
+        {
+            throw new BusinessException(IntelligenceErrorCodes.DecisionBranchRequired)
+                .WithData("DecisionType", decision.DecisionType);
+        }
+
+        var product = await _productAppService.GetAsync(decision.ProductId);
+        if (!product.DefaultSupplierId.HasValue)
+        {
+            throw new BusinessException(IntelligenceErrorCodes.DecisionProductHasNoDefaultSupplier)
+                .WithData("ProductName", product.Name);
+        }
+
+        var supplier = await _supplierAppService.GetAsync(product.DefaultSupplierId.Value);
+        var (quantity, explanation) = await ComputeReorderLineAsync(decision, product);
+
+        return new DecisionActionPreviewDto
+        {
+            ActionCreated = true,
+            ActionType = DecisionActionTypes.PurchaseOrder,
+            ProductName = product.Name,
+            BranchName = decision.BranchName,
+            SupplierName = supplier.Name,
+            Quantity = quantity,
+            Notes = explanation,
+            Lines =
+            {
+                new DecisionActionPreviewLineDto
+                {
+                    ProductName = product.Name,
+                    Quantity = quantity,
+                    UnitPrice = product.CostPrice,
+                    Notes = explanation
+                }
+            }
+        };
+    }
+
     /// <summary>
     /// Computes the order quantity (and its human-readable explanation) for a single
     /// reorder decision against a product whose default supplier is already resolved.
@@ -382,6 +450,60 @@ public class DecisionActionAppService : patisserie_shopAppService, IDecisionActi
     /// </summary>
     private async Task<DecisionActionResultDto> CreateDraftStockTransferAsync(DecisionLogDto decision)
     {
+        var plan = await ComputeStockTransferPlanAsync(decision);
+
+        var transfer = await _stockTransferAppService.CreateAsync(new CreateStockTransferDto
+        {
+            FromBranchId = decision.SourceBranchId!.Value,
+            ToBranchId = decision.TargetBranchId!.Value,
+            RequestedDate = DateTime.Today,
+            Notes = $"Auto-created from decision {decision.Id}. " +
+                    $"Suggested qty {plan.Quantity} = min(max(target deficit {plan.TargetDeficit}, " +
+                    $"half source surplus {plan.SourceSurplus / 2}), source surplus {plan.SourceSurplus})."
+        });
+
+        await _stockTransferAppService.AddItemAsync(transfer.Id, new AddStockTransferItemDto
+        {
+            ProductId = decision.ProductId,
+            RequestedQuantity = plan.Quantity
+        });
+
+        return new DecisionActionResultDto
+        {
+            ActionCreated = true,
+            ActionType = DecisionActionTypes.StockTransfer,
+            ActionId = transfer.Id,
+            ActionNumber = transfer.Reference
+        };
+    }
+
+    private async Task<DecisionActionPreviewDto> PreviewDraftStockTransferAsync(DecisionLogDto decision)
+    {
+        var plan = await ComputeStockTransferPlanAsync(decision);
+
+        return new DecisionActionPreviewDto
+        {
+            ActionCreated = true,
+            ActionType = DecisionActionTypes.StockTransfer,
+            ProductName = plan.Product.Name,
+            SourceBranchName = decision.SourceBranchName,
+            TargetBranchName = decision.TargetBranchName,
+            Quantity = plan.Quantity,
+            Notes = $"الكمية المقترحة للتحويل: {plan.Quantity}. العجز في الفرع المستلم {plan.TargetDeficit}، والفائض المتاح في الفرع المصدر {plan.SourceSurplus}.",
+            Lines =
+            {
+                new DecisionActionPreviewLineDto
+                {
+                    ProductName = plan.Product.Name,
+                    Quantity = plan.Quantity
+                }
+            }
+        };
+    }
+
+    private async Task<(ProductDto Product, int Quantity, int TargetDeficit, int SourceSurplus)> ComputeStockTransferPlanAsync(
+        DecisionLogDto decision)
+    {
         if (!decision.SourceBranchId.HasValue || !decision.TargetBranchId.HasValue)
         {
             throw new BusinessException(IntelligenceErrorCodes.DecisionTransferBranchesRequired)
@@ -404,29 +526,7 @@ public class DecisionActionAppService : patisserie_shopAppService, IDecisionActi
         var quantity = Math.Min(Math.Max(targetDeficit, sourceSurplus / 2), sourceSurplus);
         quantity = Math.Max(quantity, 1);
 
-        var transfer = await _stockTransferAppService.CreateAsync(new CreateStockTransferDto
-        {
-            FromBranchId = decision.SourceBranchId.Value,
-            ToBranchId = decision.TargetBranchId.Value,
-            RequestedDate = DateTime.Today,
-            Notes = $"Auto-created from decision {decision.Id}. " +
-                    $"Suggested qty {quantity} = min(max(target deficit {targetDeficit}, " +
-                    $"half source surplus {sourceSurplus / 2}), source surplus {sourceSurplus})."
-        });
-
-        await _stockTransferAppService.AddItemAsync(transfer.Id, new AddStockTransferItemDto
-        {
-            ProductId = decision.ProductId,
-            RequestedQuantity = quantity
-        });
-
-        return new DecisionActionResultDto
-        {
-            ActionCreated = true,
-            ActionType = DecisionActionTypes.StockTransfer,
-            ActionId = transfer.Id,
-            ActionNumber = transfer.Reference
-        };
+        return (product, quantity, targetDeficit, sourceSurplus);
     }
 
     /// <summary>
@@ -488,6 +588,67 @@ public class DecisionActionAppService : patisserie_shopAppService, IDecisionActi
             ActionType = DecisionActionTypes.StockAdjustment,
             ActionId = null, // no document — the AppStockMovement ledger is the trail
             ActionNumber = $"WriteOff −{writeOffQty}"
+        };
+    }
+
+    private async Task<DecisionActionPreviewDto> PreviewWasteWriteOffAsync(DecisionLogDto decision)
+    {
+        if (!decision.BranchId.HasValue)
+        {
+            throw new BusinessException(IntelligenceErrorCodes.WasteWriteOffBranchRequired)
+                .WithData("DecisionId", decision.Id);
+        }
+
+        var branchId = decision.BranchId.Value;
+        var product = await _productAppService.GetAsync(decision.ProductId);
+
+        var expiredQty = await _stockBatchRepository.GetExpiredQuantityAsync(
+            branchId, decision.ProductId, DateTime.UtcNow);
+        if (expiredQty <= 0)
+        {
+            return new DecisionActionPreviewDto
+            {
+                ActionCreated = false,
+                ActionType = DecisionActionTypes.StockAdjustment,
+                ProductName = product.Name,
+                BranchName = decision.BranchName,
+                Notes = "لا توجد كمية منتهية الصلاحية الآن. سيُغلق القرار دون تسجيل حركة شطب."
+            };
+        }
+
+        var inventory = await FindBranchInventoryAsync(branchId, decision.ProductId, product.SKU)
+            ?? throw new BusinessException(IntelligenceErrorCodes.WasteWriteOffNoInventory)
+                .WithData("ProductName", product.Name);
+
+        var writeOffQty = Math.Min(expiredQty, inventory.QuantityOnHand);
+        if (writeOffQty <= 0)
+        {
+            return new DecisionActionPreviewDto
+            {
+                ActionCreated = false,
+                ActionType = DecisionActionTypes.StockAdjustment,
+                ProductName = product.Name,
+                BranchName = decision.BranchName,
+                Notes = "لا توجد كمية متاحة للشطب الآن. سيُغلق القرار دون تسجيل حركة شطب."
+            };
+        }
+
+        return new DecisionActionPreviewDto
+        {
+            ActionCreated = true,
+            ActionType = DecisionActionTypes.StockAdjustment,
+            ProductName = product.Name,
+            BranchName = decision.BranchName,
+            Quantity = writeOffQty,
+            Notes = $"سيتم شطب {writeOffQty} وحدة من المخزون المنتهي الصلاحية وتسجيل حركة مخزون مباشرة.",
+            Lines =
+            {
+                new DecisionActionPreviewLineDto
+                {
+                    ProductName = product.Name,
+                    Quantity = writeOffQty
+                }
+            }
         };
     }
 

@@ -1,0 +1,605 @@
+@page "/production/waste"
+@attribute [Authorize(ProductionPermissions.Waste.Default)]
+@using System.Globalization
+@using System.Threading
+@using System.Threading.Tasks
+@using Inventory.Branches
+@using Inventory.BranchInventory
+@using Microsoft.AspNetCore.Authorization
+@using Production
+@using Production.Localization
+@using Production.Permissions
+@using Production.Waste
+@using Volo.Abp.Application.Dtos
+@using Volo.Abp.AspNetCore.Components.Web.Theming.Layout
+@using ApexCharts
+@using Color = MudBlazor.Color
+@using Variant = MudBlazor.Variant
+@using Size = MudBlazor.Size
+@using Margin = MudBlazor.Margin
+@inherits patisserie_shopComponentBase
+@inject IProductionWasteAppService WasteAppService
+@inject IBranchAppService BranchAppService
+@inject IBranchInventoryAppService BranchInventoryAppService
+@inject IAuthorizationService Authz
+@inject PageLayout PageLayout
+@inject ISnackbar Snackbar
+@inject IStringLocalizer<ProductionResource> ProdL
+
+@{
+    PageLayout.Title = ProdL["ProductionWaste"];
+}
+
+<SoftCard Elevation="2" Class="pa-2 page-flat prod-waste">
+    <div class="page-head">
+        <div>
+            <h1 class="page-title">@ProdL["ProductionWaste"]</h1>
+            <div class="page-sub">@ProdL["ProductionWasteSubtitle"]</div>
+        </div>
+        <div class="page-head-actions">
+            @if (_canWriteOff)
+            {
+                <SoftButton Variant="Variant.Filled" Color="Color.Primary"
+                            StartIcon="@Icons.Material.Filled.Add"
+                            OnClick="OpenWriteOffDialog">
+                    @ProdL["NewWasteWriteOff"]
+                </SoftButton>
+            }
+        </div>
+    </div>
+
+    <SoftCardContent>
+        <div class="toolbar">
+            <SoftTextField T="string" @bind-Value="_filter"
+                           Placeholder="@ProdL["Filter"]"
+                           Variant="Variant.Outlined"
+                           Margin="Margin.Dense"
+                           Adornment="Adornment.Start"
+                           AdornmentIcon="@Icons.Material.Filled.Search"
+                           OnKeyUp="OnFilterKeyUpAsync"
+                           Immediate="true"
+                           Class="toolbar-search"
+                           Style="min-width: 220px; max-width: 320px;" />
+
+            <div class="filter-chip">
+                <SoftLookupSelect TItem="Option" TValue="string"
+                                  Items="_wasteTypeOptions"
+                                  ToValue="@(o => o.Value)"
+                                  ToLabel="@(o => o.Label)"
+                                  Value="_wasteTypeFilter"
+                                  ValueChanged="OnWasteTypeChangedAsync"
+                                  Label="@ProdL["AllWasteTypes"]"
+                                  Margin="Margin.Dense"
+                                  Dense="true" />
+            </div>
+
+            <div class="filter-chip">
+                <SoftLookupSelect TItem="BranchLookupDto" TValue="Guid?"
+                                  Items="_branches"
+                                  ToValue="@(b => (Guid?)b.Id)"
+                                  ToLabel="@(b => b.Name)"
+                                  Value="_kitchenBranchFilter"
+                                  ValueChanged="OnBranchFilterChangedAsync"
+                                  Label="@ProdL["KitchenBranch"]"
+                                  Margin="Margin.Dense"
+                                  Dense="true"
+                                  Clearable="true" />
+            </div>
+
+            <div class="toolbar-right">
+                <SoftButton Variant="Variant.Text" Color="Color.Primary"
+                            StartIcon="@Icons.Material.Filled.Refresh"
+                            OnClick="ReloadAllAsync">
+                    @ProdL["Refresh"]
+                </SoftButton>
+            </div>
+        </div>
+
+        @if (_analytics != null)
+        {
+            <div class="stats pw-stats">
+                <div>
+                    <span class="stat-label">@ProdL["WasteQuantity"]</span>
+                    <span class="stat-value">@_analytics.Summary.TotalQuantity.ToString("N0")</span>
+                </div>
+                <div>
+                    <span class="stat-label">@ProdL["WasteCost"]</span>
+                    <span class="stat-value">@FormatMoney(_analytics.Summary.TotalCost)</span>
+                </div>
+                <div>
+                    <span class="stat-label">@ProdL["WasteReason"]</span>
+                    <span class="stat-value">@FormatMaybeReason(_analytics.Summary.TopReason)</span>
+                </div>
+                <div>
+                    <span class="stat-label">@ProdL["Product"]</span>
+                    <span class="stat-value">@(_analytics.Summary.TopProductName ?? "-")</span>
+                </div>
+            </div>
+        }
+
+        <div class="pw-two">
+            <section class="pw-section">
+                <header class="pw-section-head">
+                    <div>
+                        <h2 class="pw-section-title">@ProdL["WasteTrend"]</h2>
+                        <div class="pw-section-sub">@ProdL["Days30"]</div>
+                    </div>
+                </header>
+                @if (_analytics == null || _analytics.DailySeries.All(x => x.Quantity == 0))
+                {
+                    <div class="pw-empty">@ProdL["NoProductionData"]</div>
+                }
+                else
+                {
+                    <div class="pw-chart">
+                        <ApexChart TItem="ProductionWasteDailyPointDto" @key="_analytics" Options="_wasteTrendOptions" Height="260">
+                            <ApexPointSeries TItem="ProductionWasteDailyPointDto"
+                                             Items="_analytics.DailySeries"
+                                             Name="@ProdL["WasteQuantity"]"
+                                             SeriesType="SeriesType.Area"
+                                             XValue="@(d => d.Date.ToString("MMM d", CultureInfo.CurrentCulture))"
+                                             YValue="@(d => d.Quantity)" />
+                        </ApexChart>
+                    </div>
+                }
+            </section>
+
+            <section class="pw-section">
+                <header class="pw-section-head">
+                    <div>
+                        <h2 class="pw-section-title">@ProdL["TopWasteProducts"]</h2>
+                        <div class="pw-section-sub">@ProdL["WasteCost"]</div>
+                    </div>
+                </header>
+                @if (_analytics == null || _analytics.TopProducts.Count == 0)
+                {
+                    <div class="pw-empty">@ProdL["NoProductionData"]</div>
+                }
+                else
+                {
+                    <div class="pw-mini-list">
+                        @foreach (var row in _analytics.TopProducts.Take(5))
+                        {
+                            <div class="pw-mini-row">
+                                <div>
+                                    <strong>@row.ProductName</strong>
+                                    <span>@row.ProductSku</span>
+                                </div>
+                                <div class="pw-mini-num">
+                                    <strong>@row.Quantity.ToString("N0")</strong>
+                                    <span>@FormatMoney(row.Cost)</span>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+            </section>
+        </div>
+
+        <SoftDataGrid T="ProductionWasteDto"
+                      @ref="_grid"
+                      ServerData="LoadServerData"
+                      Dense="true"
+                      Hover="true"
+                      Bordered="false"
+                      Loading="_loading"
+                      SortMode="SortMode.Single"
+                      Class="pw-grid">
+            <Columns>
+                <TemplateColumn T="ProductionWasteDto" Title="@ProdL["RecordedAt"]" SortBy="x => x.RecordedAt">
+                    <CellTemplate>@context.Item.RecordedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn T="ProductionWasteDto" Title="@ProdL["Product"]" SortBy="x => x.ProductName">
+                    <CellTemplate>
+                        <div class="pw-product">@context.Item.ProductName</div>
+                        <div class="pw-sku">@context.Item.ProductSku</div>
+                    </CellTemplate>
+                </TemplateColumn>
+                <PropertyColumn T="ProductionWasteDto" TProperty="string" Property="x => x.KitchenBranchName" Title="@ProdL["KitchenBranch"]" />
+                <TemplateColumn T="ProductionWasteDto" Title="@ProdL["WasteType"]" SortBy="x => x.WasteType">
+                    <CellTemplate>
+                        <SoftChip T="string" Size="Size.Small" Color="@WasteTypeColor(context.Item.WasteType)" Variant="Variant.Filled">
+                            @FormatWasteType(context.Item.WasteType)
+                        </SoftChip>
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn T="ProductionWasteDto" Title="@ProdL["WasteReason"]" SortBy="x => x.Reason">
+                    <CellTemplate>@FormatReason(context.Item.Reason)</CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn T="ProductionWasteDto" Title="@ProdL["WasteQuantity"]" SortBy="x => x.Quantity">
+                    <CellTemplate>@context.Item.Quantity.ToString("N0") @context.Item.ProductUnit</CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn T="ProductionWasteDto" Title="@ProdL["TotalCost"]" SortBy="x => x.TotalCost">
+                    <CellTemplate>@FormatMoneyExact(context.Item.TotalCost)</CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn T="ProductionWasteDto" Title="@ProdL["ProductionOrder"]" Sortable="false">
+                    <CellTemplate>@(context.Item.ProductionOrderNumber ?? "-")</CellTemplate>
+                </TemplateColumn>
+            </Columns>
+            <PagerContent>
+                <MudDataGridPager T="ProductionWasteDto" />
+            </PagerContent>
+        </SoftDataGrid>
+    </SoftCardContent>
+</SoftCard>
+
+@if (_writeOffVisible)
+{
+    <div class="glass-modal-backdrop" @onclick="CloseWriteOffDialog">
+        <div class="glass-modal-container glass-modal-container--md" @onclick:stopPropagation="true">
+            <SoftCard Elevation="24" Class="glass-modal">
+                <SoftCardHeader Class="pa-4">
+                    <CardHeaderContent>
+                        <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <SoftIcon Icon="@Icons.Material.Filled.DeleteSweep" Color="Color.Primary" Size="Size.Medium" />
+                            <SoftText Typo="Typo.h6">@ProdL["NewWasteWriteOff"]</SoftText>
+                        </SoftStack>
+                    </CardHeaderContent>
+                    <CardHeaderActions>
+                        <SoftIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="CloseWriteOffDialog" />
+                    </CardHeaderActions>
+                </SoftCardHeader>
+                <SoftDivider />
+                <SoftCardContent Class="pa-4 glass-modal-body">
+                    <SoftStack Spacing="3">
+                        <SoftLookupSelect TItem="BranchLookupDto" TValue="Guid?"
+                                          Items="_branches"
+                                          ToValue="@(b => (Guid?)b.Id)"
+                                          ToLabel="@(b => b.Name)"
+                                          Value="_writeOffBranchId"
+                                          ValueChanged="OnWriteOffBranchChangedAsync"
+                                          Label="@ProdL["KitchenBranch"]"
+                                          Clearable="false" />
+
+                        <SoftLookupSelect TItem="BranchInventoryDto" TValue="Guid?"
+                                          Items="_writeOffProducts"
+                                          ToValue="@(p => (Guid?)p.ProductId)"
+                                          ToLabel="@(p => $"{p.ProductSKU} - {p.ProductName} ({p.QuantityOnHand} {p.ProductUnit})")"
+                                          Value="_writeOffProductId"
+                                          ValueChanged="@(v => _writeOffProductId = v)"
+                                          Label="@ProdL["Product"]"
+                                          Clearable="false" />
+
+                        <SoftGrid>
+                            <SoftGridItem xs="12" md="6">
+                                <SoftNumericField T="int" @bind-Value="_writeOffQuantity"
+                                                  Label="@ProdL["WasteQuantity"]"
+                                                  Variant="Variant.Outlined"
+                                                  Min="1"
+                                                  HideSpinButtons="true" />
+                            </SoftGridItem>
+                            <SoftGridItem xs="12" md="6">
+                                <SoftLookupSelect TItem="Option" TValue="string"
+                                                  Items="_reasonOptions"
+                                                  ToValue="@(o => o.Value)"
+                                                  ToLabel="@(o => o.Label)"
+                                                  Value="_writeOffReason"
+                                                  ValueChanged="@(v => _writeOffReason = v)"
+                                                  Label="@ProdL["WasteReason"]"
+                                                  Clearable="false" />
+                            </SoftGridItem>
+                            <SoftGridItem xs="12">
+                                <SoftTextField T="string" @bind-Value="_writeOffNotes"
+                                               Label="@ProdL["Notes"]"
+                                               Variant="Variant.Outlined"
+                                               Lines="2" />
+                            </SoftGridItem>
+                        </SoftGrid>
+                    </SoftStack>
+                </SoftCardContent>
+                <SoftDivider />
+                <div class="pa-3 d-flex justify-end" style="gap: 8px;">
+                    <SoftButton Variant="Variant.Text" OnClick="CloseWriteOffDialog">@ProdL["Cancel"]</SoftButton>
+                    <SoftButton Variant="Variant.Filled" Color="Color.Primary"
+                                StartIcon="@Icons.Material.Filled.Save"
+                                Disabled="!CanSaveWriteOff || _savingWriteOff"
+                                OnClick="SaveWriteOffAsync">
+                        @ProdL["Save"]
+                    </SoftButton>
+                </div>
+            </SoftCard>
+        </div>
+    </div>
+}
+
+<style>
+    .prod-waste { animation: pw-fade .22s ease-out; }
+    @@keyframes pw-fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+    .pw-stats { margin-top: 10px; }
+    .pw-two {
+        display: grid;
+        grid-template-columns: minmax(0, 1.2fr) minmax(0, .8fr);
+        gap: 16px;
+        padding: 16px 32px 0;
+    }
+    @@media (max-width: 1000px) { .pw-two { grid-template-columns: 1fr; } }
+    .pw-section {
+        background: var(--surface);
+        border: 1px solid var(--bd-1);
+        border-radius: var(--r-md);
+        box-shadow: var(--shadow-sm);
+        padding: 16px 18px;
+    }
+    .pw-section-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 10px;
+        margin-bottom: 14px;
+    }
+    .pw-section-title {
+        font-family: var(--font-serif);
+        font-size: 18px;
+        font-weight: 700;
+        color: var(--fg-1);
+        margin: 0;
+    }
+    .pw-section-sub { font-size: 12.5px; color: var(--fg-3); margin-top: 2px; }
+    .pw-chart { min-height: 260px; }
+    .pw-chart .apexcharts-svg { background: transparent !important; }
+    .pw-empty {
+        min-height: 160px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--fg-3);
+        text-align: center;
+        font-size: 13px;
+    }
+    .pw-mini-list { display: flex; flex-direction: column; gap: 8px; }
+    .pw-mini-row {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 10px 12px;
+        border: 1px solid var(--bd-1);
+        border-radius: var(--r-sm);
+        background: var(--bg-2);
+    }
+    .pw-mini-row strong { display: block; color: var(--fg-1); font-size: 13.5px; }
+    .pw-mini-row span { display: block; color: var(--fg-3); font-size: 11.5px; }
+    .pw-mini-num { text-align: end; font-variant-numeric: tabular-nums; }
+    .pw-grid { margin: 16px 32px 0; }
+    .pw-product { font-weight: 700; }
+    .pw-sku { font-family: var(--font-mono); font-size: 11.5px; color: var(--fg-3); }
+    html[dir="rtl"] .prod-waste { direction: rtl; text-align: right; }
+</style>
+
+@code {
+    private SoftDataGrid<ProductionWasteDto>? _grid;
+    private bool _loading;
+    private bool _canWriteOff;
+    private string? _filter;
+    private string _wasteTypeFilter = string.Empty;
+    private Guid? _kitchenBranchFilter;
+    private List<BranchLookupDto> _branches = new();
+    private List<Option> _wasteTypeOptions = new();
+    private List<Option> _reasonOptions = new();
+    private ProductionWasteAnalyticsDto? _analytics;
+
+    private bool _writeOffVisible;
+    private bool _savingWriteOff;
+    private Guid? _writeOffBranchId;
+    private Guid? _writeOffProductId;
+    private int _writeOffQuantity = 1;
+    private string _writeOffReason = ProductionWasteReasons.Other;
+    private string? _writeOffNotes;
+    private List<BranchInventoryDto> _writeOffProducts = new();
+
+    private bool CanSaveWriteOff =>
+        _writeOffBranchId.HasValue
+        && _writeOffProductId.HasValue
+        && _writeOffQuantity > 0;
+
+    private readonly ApexChartOptions<ProductionWasteDailyPointDto> _wasteTrendOptions = new()
+    {
+        Chart = new ApexCharts.Chart
+        {
+            Toolbar = new ApexCharts.Toolbar { Show = false },
+            Background = "transparent",
+            FontFamily = "Inter, sans-serif",
+            ForeColor = "#8a7e6e"
+        },
+        Colors = new List<string> { "#b3543a" },
+        Stroke = new ApexCharts.Stroke { Curve = ApexCharts.Curve.Smooth, Width = 3 },
+        DataLabels = new ApexCharts.DataLabels { Enabled = false },
+        Fill = new ApexCharts.Fill
+        {
+            Type = ApexCharts.FillType.Gradient,
+            Gradient = new ApexCharts.FillGradient { OpacityFrom = .35, OpacityTo = .05 }
+        },
+        Grid = new ApexCharts.Grid { BorderColor = "rgba(138, 126, 110, .25)", StrokeDashArray = 3 },
+        Legend = new ApexCharts.Legend { Show = false }
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        _canWriteOff = await Authz.IsGrantedAsync(ProductionPermissions.Waste.WriteOff);
+        _branches = await BranchAppService.GetLookupAsync();
+        _wasteTypeOptions =
+        [
+            new(string.Empty, ProdL["AllWasteTypes"]),
+            new(ProductionWasteTypes.RejectedOutput, ProdL["WasteType:RejectedOutput"]),
+            new(ProductionWasteTypes.ExpiredFinishedGood, ProdL["WasteType:ExpiredFinishedGood"]),
+            new(ProductionWasteTypes.IngredientSpoilage, ProdL["WasteType:IngredientSpoilage"]),
+            new(ProductionWasteTypes.ManualWriteOff, ProdL["WasteType:ManualWriteOff"])
+        ];
+        _reasonOptions =
+        [
+            new(ProductionWasteReasons.Burned, ProdL["Reason:Burned"]),
+            new(ProductionWasteReasons.UnderBaked, ProdL["Reason:UnderBaked"]),
+            new(ProductionWasteReasons.OverBaked, ProdL["Reason:OverBaked"]),
+            new(ProductionWasteReasons.ShapeDamaged, ProdL["Reason:ShapeDamaged"]),
+            new(ProductionWasteReasons.Dropped, ProdL["Reason:Dropped"]),
+            new(ProductionWasteReasons.Contaminated, ProdL["Reason:Contaminated"]),
+            new(ProductionWasteReasons.IngredientSpoilage, ProdL["Reason:IngredientSpoilage"]),
+            new(ProductionWasteReasons.PackagingDamage, ProdL["Reason:PackagingDamage"]),
+            new(ProductionWasteReasons.ExpiredBeforeDispatch, ProdL["Reason:ExpiredBeforeDispatch"]),
+            new(ProductionWasteReasons.TestBatch, ProdL["Reason:TestBatch"]),
+            new(ProductionWasteReasons.Other, ProdL["Reason:Other"])
+        ];
+        await LoadAnalyticsAsync();
+    }
+
+    private async Task<GridData<ProductionWasteDto>> LoadServerData(GridState<ProductionWasteDto> state, CancellationToken cancellationToken)
+    {
+        _loading = true;
+        try
+        {
+            var sorting = state.SortDefinitions.FirstOrDefault();
+            var result = await WasteAppService.GetListAsync(new GetProductionWastesInput
+            {
+                Filter = _filter,
+                WasteType = string.IsNullOrWhiteSpace(_wasteTypeFilter) ? null : _wasteTypeFilter,
+                KitchenBranchId = _kitchenBranchFilter,
+                SkipCount = state.Page * state.PageSize,
+                MaxResultCount = state.PageSize,
+                Sorting = sorting == null ? string.Empty : $"{sorting.SortBy} {(sorting.Descending ? "desc" : "asc")}"
+            });
+
+            return new GridData<ProductionWasteDto>
+            {
+                Items = result.Items,
+                TotalItems = (int)result.TotalCount
+            };
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task LoadAnalyticsAsync()
+    {
+        try
+        {
+            _analytics = await WasteAppService.GetAnalyticsAsync(new GetProductionWasteAnalyticsInput
+            {
+                Days = 30,
+                KitchenBranchId = _kitchenBranchFilter
+            });
+        }
+        catch (Exception ex)
+        {
+            await HandleErrorAsync(ex);
+        }
+    }
+
+    private Task OnFilterKeyUpAsync(KeyboardEventArgs _) => ReloadGridAsync();
+
+    private async Task OnWasteTypeChangedAsync(string value)
+    {
+        _wasteTypeFilter = value;
+        await ReloadGridAsync();
+    }
+
+    private async Task OnBranchFilterChangedAsync(Guid? branchId)
+    {
+        _kitchenBranchFilter = branchId;
+        await ReloadAllAsync();
+    }
+
+    private async Task ReloadAllAsync()
+    {
+        await LoadAnalyticsAsync();
+        await ReloadGridAsync();
+    }
+
+    private Task ReloadGridAsync() => _grid?.ReloadServerData() ?? Task.CompletedTask;
+
+    private async Task OpenWriteOffDialog()
+    {
+        _writeOffBranchId = _kitchenBranchFilter ?? _branches.FirstOrDefault()?.Id;
+        _writeOffProductId = null;
+        _writeOffQuantity = 1;
+        _writeOffReason = ProductionWasteReasons.Other;
+        _writeOffNotes = null;
+        _writeOffVisible = true;
+        await LoadWriteOffProductsAsync();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void CloseWriteOffDialog()
+    {
+        if (_savingWriteOff) return;
+        _writeOffVisible = false;
+    }
+
+    private async Task OnWriteOffBranchChangedAsync(Guid? branchId)
+    {
+        _writeOffBranchId = branchId;
+        _writeOffProductId = null;
+        await LoadWriteOffProductsAsync();
+    }
+
+    private async Task LoadWriteOffProductsAsync()
+    {
+        _writeOffProducts.Clear();
+        if (!_writeOffBranchId.HasValue)
+        {
+            return;
+        }
+
+        var result = await BranchInventoryAppService.GetListAsync(new GetBranchInventoryInput
+        {
+            BranchId = _writeOffBranchId.Value,
+            MaxResultCount = 200,
+            IncludeInactiveProducts = false,
+            Sorting = "ProductName"
+        });
+
+        _writeOffProducts = result.Items
+            .Where(p => p.QuantityOnHand > 0)
+            .ToList();
+        _writeOffProductId = _writeOffProducts.FirstOrDefault()?.ProductId;
+    }
+
+    private async Task SaveWriteOffAsync()
+    {
+        if (!CanSaveWriteOff || !_writeOffBranchId.HasValue || !_writeOffProductId.HasValue)
+        {
+            return;
+        }
+
+        _savingWriteOff = true;
+        try
+        {
+            await WasteAppService.CreateWriteOffAsync(new CreateProductionWasteWriteOffDto
+            {
+                KitchenBranchId = _writeOffBranchId.Value,
+                ProductId = _writeOffProductId.Value,
+                Quantity = _writeOffQuantity,
+                Reason = _writeOffReason,
+                Notes = _writeOffNotes
+            });
+
+            Snackbar.Add(ProdL["SavedSuccessfully"], Severity.Success);
+            _writeOffVisible = false;
+            await ReloadAllAsync();
+        }
+        catch (Exception ex)
+        {
+            await HandleErrorAsync(ex);
+        }
+        finally
+        {
+            _savingWriteOff = false;
+        }
+    }
+
+    private Color WasteTypeColor(string type) => type switch
+    {
+        ProductionWasteTypes.RejectedOutput => Color.Warning,
+        ProductionWasteTypes.ExpiredFinishedGood => Color.Error,
+        ProductionWasteTypes.IngredientSpoilage => Color.Error,
+        _ => Color.Default
+    };
+
+    private string FormatWasteType(string type) => ProdL[$"WasteType:{type}"].Value;
+    private string FormatReason(string reason) => ProdL[$"Reason:{reason}"].Value;
+    private string FormatMaybeReason(string? reason) => string.IsNullOrWhiteSpace(reason) ? "-" : FormatReason(reason);
+    private static string FormatMoney(decimal value) => value.ToString("C0", CultureInfo.GetCultureInfo("en-US"));
+    private static string FormatMoneyExact(decimal value) => value.ToString("C2", CultureInfo.GetCultureInfo("en-US"));
+
+    private sealed record Option(string Value, string Label);
+}

@@ -1,6 +1,7 @@
 using Inventory;
 using Operations;
 using Intelligence;
+using Production;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using patisserie_shop.Localization;
@@ -27,6 +28,7 @@ namespace patisserie_shop;
     typeof(InventoryDomainModule),
     typeof(OperationsDomainModule),
     typeof(IntelligenceDomainModule),
+    typeof(ProductionDomainModule),
     typeof(patisserie_shopDomainSharedModule),
     typeof(AbpAuditLoggingDomainModule),
     typeof(AbpCachingModule),

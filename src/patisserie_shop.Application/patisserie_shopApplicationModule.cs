@@ -1,6 +1,7 @@
 using Inventory;
 using Operations;
 using Intelligence;
+using Production;
 using Volo.Abp.PermissionManagement;
 using Volo.Abp.SettingManagement;
 using Volo.Abp.Account;
@@ -16,6 +17,7 @@ namespace patisserie_shop;
     typeof(InventoryApplicationModule),
     typeof(OperationsApplicationModule),
     typeof(IntelligenceApplicationModule),
+    typeof(ProductionApplicationModule),
     typeof(patisserie_shopDomainModule),
     typeof(patisserie_shopApplicationContractsModule),
     typeof(AbpPermissionManagementApplicationModule),

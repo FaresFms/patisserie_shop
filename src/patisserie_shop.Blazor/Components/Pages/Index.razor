@@ -4,6 +4,7 @@
 @using Microsoft.AspNetCore.Components.Authorization
 @using Inventory.Permissions
 @using Operations.Permissions
+@using Production.Permissions
 @using Volo.Abp.AspNetCore.Components.Web.Theming.Layout
 @inherits patisserie_shopComponentBase
 @attribute [Authorize]
@@ -84,8 +85,15 @@ else
         else if (await AuthorizationService.IsGrantedAsync(OperationsPermissions.Cashier.Default))
         {
             // Cashiers (no dashboard permission) land straight on the POS.
-            
+
             Nav.NavigateTo("/cashier", forceLoad: false, replace: true);
+        }
+        else if (await AuthorizationService.IsGrantedAsync(ProductionPermissions.Dashboard.Default)
+                 || await AuthorizationService.IsGrantedAsync(ProductionPermissions.Formulas.Default))
+        {
+            // Kitchen managers (production-only, not admin/manager/cashier) land on the
+            // formulas list for now — the real production dashboard arrives in a later wave.
+            Nav.NavigateTo("/production/formulas", forceLoad: false, replace: true);
         }
         else
         {

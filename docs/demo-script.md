@@ -3,11 +3,11 @@
 A scripted walkthrough of the live demo for the thesis defense. Every route, button label,
 and expected behavior below is verified against the code (`@page` directives +
 `Menus/patisserie_shopMenuContributor.cs`). Steps 0–1 happen **before** the defense starts;
-steps 2–10 are the live demo. Steps 7b–7f are the Phase-5 standout features — include them
+steps 2–10 are the live demo. Steps 7b–7g are the Phase-5/Production standout features — include them
 when time allows (see the timing table at the end).
 
 **Demo users:** `admin` (full access) and `manager.demo` (BranchManager of *Main Street
-Boutique*). Passwords are defined in
+Boutique*), plus `kitchen.demo` for the Main Kitchen production path. Passwords are defined in
 `src/patisserie_shop.DbMigrator/IdentityDataSeedContributor.cs` (and ABP's standard
 identity seed for `admin`).
 
@@ -90,6 +90,11 @@ Running `patisserie_shop.DbMigrator` applied all migrations and seeded:
   from `IntelligenceDataSeedContributor`; the last three (DaysOfCover / ExpiringSoon /
   ExpiredStock) from `PatisserieDataSeedContributor.SeedDemoRulesAsync`.
 - Roles `admin` and `BranchManager`, users `admin` and `manager.demo`.
+- **Main Kitchen production seed**: user `kitchen.demo`, branch `Main Kitchen`, Arabic raw
+  materials/packaging, Arabic default formulas, approved branch production requests, ready
+  cook orders, and one deliberate shortage scenario tagged `[DEMO-PRODUCTION-AR-SHORTAGE]`:
+  *مقهى ضفة النهر* requests **340 بان أو شوكولا**, and the Cook screen shows a clear
+  **زبدة فرنسية غير مملحة** shortage while the other ingredients are available.
 
 ---
 
@@ -284,6 +289,40 @@ The seeded rule: **"Global Low Stock Alert"** — LowStock, threshold **5**, glo
 > branch filter — trigger a couple of LowStock breaches first (Step 3), and make sure their
 > products have a default supplier.
 
+## Step 7g — الإنتاج في المطبخ الرئيسي: نقص زبدة → شراء → طبخ → صرف (3 min)
+
+هذا الجزء استخدمه مع المستخدم `kitchen.demo` حتى تكون الصفحة عربية ومفهومة من منظور مدير
+المطبخ.
+
+1. سجّل الدخول باسم `kitchen.demo` وافتح `/production/dashboard`. اعرض البطاقات السريعة:
+   أوامر تنتظر خامات، جاهز للطبخ، إنتاج اليوم، والهدر. الفكرة: هذه ليست صفحة تسويق؛ هي
+   قائمة تشغيل يومية للمطبخ.
+2. افتح `/production/cook` وابحث عن الطلب التجريبي الذي يحتوي في الملاحظات على
+   `[DEMO-PRODUCTION-AR-SHORTAGE]` أو المنتج **بان أو شوكولا**. افتح الأمر. جدول
+   **توفر الخامات** يجب أن يوضح أن **زبدة فرنسية غير مملحة** ناقصة، بينما الدقيق
+   والشوكولا والبيض والخميرة والملح متوفرة.
+3. اضغط **إنشاء طلب شراء خامات**. تظهر رسالة عربية تقول إن النظام أنشأ مسودة طلب شراء
+   بإجمالي النقص. هذا الطلب لا يعتمد نفسه؛ يبقى مسودة حتى يراجعه الإنسان.
+4. افتح `/operations/purchase-orders`. ابحث عن طلب الشراء الجديد، وافتح التفاصيل. يجب أن
+   ترى بند الزبدة بكمية النقص تقريبًا **1261 غرام** وملاحظة عربية تربطه بأمر الطبخ.
+   اضغط بالترتيب: **إرسال** ثم **اعتماد** ثم **استلام**، واستلم الكمية كاملة.
+5. ارجع إلى `/production/cook`، افتح نفس أمر الطبخ، واضغط **تحديث توفر الخامات**. الحالة
+   تتحول إلى **جاهز للطبخ**. اضغط **بدء الطبخ**؛ هنا تُسحب الخامات من مخزون المطبخ
+   بحركة `ProductionConsumption`.
+6. اضغط **إكمال الطبخ** وأدخل:
+   `الناتج الفعلي = 340`، `الكمية المقبولة = 340`، `الكمية المرفوضة = 0`.
+   عند الحفظ يدخل المنتج النهائي إلى مخزون المطبخ بحركة `ProductionOutput` مع تاريخ
+   صلاحية دفعة.
+7. افتح `/production/dispatch`. اختر الأمر المكتمل، ثم اختر فرع **مقهى ضفة النهر**،
+   واصرف **340**. زر الصرف ينشئ التحويل ويشحنه ويكمله مباشرة، لذلك يرتفع مخزون الفرع
+   وتُغلق كمية طلب الفرع من نفس العملية.
+8. افتح `/production/analytics` أو `/production/dashboard` لإغلاق القصة: الكمية المنتجة،
+   نسبة التلبية، ومتوسط التكلفة تظهر من نفس السجلات، ولا يوجد أي حساب احتمالي أو AI/ML.
+
+نقطة الدفاع: كل رقم هنا قابل للإعادة يدويًا. كمية الزبدة = `ceil(340 / 40 × 2200 × 1.03)`
+أي حوالي 19261 غرام، والمتوفر في البذرة 18000 غرام، لذلك يظهر نقص 1261 غرام. نفس الرقم
+هو الذي يتحول إلى بند طلب الشراء.
+
 ## Step 8 — Rule effectiveness and tuning hints (1 min)
 
 1. Back on `/intelligence/inventory-rules`, point at the **Effectiveness** column:
@@ -344,7 +383,8 @@ A full run touches every Phase-5 feature; for a tight slot, the **core** path is
 | 7d. Supplier scorecards + measured lead time | 1 min |
 | 7e. Branch health league table | 0.75 min |
 | 7f. PO consolidation | 1 min |
+| 7g. Main Kitchen production shortage path | 3 min |
 | 8. Effectiveness + tuning hints | 1 min |
 | 9. Sales Analytics | 0.75 min |
 | 10. Closing | 1 min |
-| **Total** | **~18 min full** · **~9 min core** (steps 1–6 + 10) |
+| **Total** | **~21 min full** · **~9 min core** (steps 1–6 + 10) |

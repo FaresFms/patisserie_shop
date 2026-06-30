@@ -138,6 +138,10 @@
     "TransferRef": "Transfer",
     "FromBranch": "From branch",
     "ToBranch": "To branch",
+    "ReceivingBranch": "Receiving branch",
+    "SourceNotAssigned": "Waiting for admin",
+    "AssignSourceBranch": "Assign source branch",
+    "ChooseSourceBranchHint": "Choose the branch that will prepare and ship this request.",
     "RequestedDate": "Requested date",
     "ApprovedDate": "Approved date",
     "CompletedDate": "Completed date",
@@ -160,9 +164,13 @@
     "TransferAll": "Transfer all",
     "ConfirmComplete": "Confirm completion",
     "OnlyXInStock": "Only {0} units available at source",
+    "TransferCompleteStockShortage": "The source branch does not have enough stock for {0} now — requested {1}, available {2}.",
+    "TransferSourceStockMissingNow": "The source branch does not have the requested product quantity now. Check the source stock before shipping or completing this transfer.",
+    "TransferBranchActionDenied": "This action must be done by the manager of the correct branch.",
     "ApprovedQtyUpdated": "Approved quantity updated.",
     "TransferSubmitted": "Transfer submitted for approval.",
     "TransferApproved": "Transfer approved.",
+    "TransferSourceAssigned": "Source branch assigned and request approved.",
     "TransferShipped": "Transfer marked in transit.",
     "TransferCancelled": "Transfer cancelled.",
 
@@ -176,8 +184,9 @@
     "Operations:Transfers:ItemNotFound": "Transfer item not found.",
     "Operations:Transfers:DuplicateProduct": "This product is already on the transfer.",
     "Operations:Transfers:SameBranch": "Source and destination branches must be different.",
-    "Operations:Transfers:InsufficientStock": "Not enough stock at the source branch — requested {Requested}, only {Available} available.",
+    "Operations:Transfers:InsufficientStock": "The source branch does not have this product now — requested {Requested}, available {Available}.",
     "Operations:Transfers:InvalidQuantity": "Quantity must be zero or greater.",
-    "Operations:Transfers:CannotApproveItem": "Quantities can only be adjusted while the transfer is Approved (current: {CurrentStatus})."
+    "Operations:Transfers:CannotApproveItem": "Quantities can only be adjusted while the transfer is Approved (current: {CurrentStatus}).",
+    "Operations:Transfers:SourceBranchRequired": "Choose a source branch before approving or shipping this transfer."
   }
 }

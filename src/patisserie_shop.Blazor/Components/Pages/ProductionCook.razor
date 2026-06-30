@@ -1,0 +1,589 @@
+@page "/production/cook"
+@attribute [Authorize(ProductionPermissions.Orders.Default)]
+@using System.Threading
+@using System.Threading.Tasks
+@using Inventory.Branches
+@using Microsoft.AspNetCore.Authorization
+@using Production
+@using Production.Localization
+@using Production.Orders
+@using Production.Permissions
+@using Volo.Abp.Application.Dtos
+@using Volo.Abp.AspNetCore.Components.Web.Theming.Layout
+@using Color = MudBlazor.Color
+@using Margin = MudBlazor.Margin
+@using Size = MudBlazor.Size
+@using Variant = MudBlazor.Variant
+@inherits patisserie_shopComponentBase
+@inject IProductionOrderAppService OrderAppService
+@inject IBranchAppService BranchAppService
+@inject IAuthorizationService Authz
+@inject PageLayout PageLayout
+@inject ISnackbar Snackbar
+@inject IStringLocalizer<ProductionResource> ProdL
+
+@{
+    PageLayout.Title = ProdL["CookScreen"];
+}
+
+<SoftCard Elevation="2" Class="pa-2 page-flat">
+    <div class="page-head">
+        <div>
+            <h1 class="page-title">@ProdL["CookScreen"]</h1>
+            <div class="page-sub">@ProdL["CookScreenSubtitle"]</div>
+        </div>
+        <div class="page-head-actions">
+            <SoftButton Variant="Variant.Text" Color="Color.Primary"
+                        StartIcon="@Icons.Material.Filled.Refresh"
+                        OnClick="ReloadAsync">
+                @ProdL["Refresh"]
+            </SoftButton>
+        </div>
+    </div>
+
+    <SoftCardContent>
+        <div class="toolbar">
+            <SoftTextField T="string" @bind-Value="_filter"
+                           Placeholder="@ProdL["Filter"]"
+                           Variant="Variant.Outlined" Margin="Margin.Dense"
+                           Adornment="Adornment.Start"
+                           AdornmentIcon="@Icons.Material.Filled.Search"
+                           OnKeyUp="OnFilterKeyUpAsync"
+                           Immediate="true"
+                           Class="toolbar-search"
+                           Style="min-width: 220px; max-width: 320px;" />
+
+            <div class="filter-chip">
+                <SoftLookupSelect TItem="StatusOption" TValue="string"
+                                  Items="_statusOptions"
+                                  ToValue="@(s => s.Value)"
+                                  ToLabel="@(s => s.Label)"
+                                  Value="_statusFilter"
+                                  ValueChanged="OnStatusChangedAsync"
+                                  Label="@ProdL["Status:All"]"
+                                  Margin="Margin.Dense"
+                                  Dense="true" />
+            </div>
+
+            <div class="filter-chip">
+                <SoftLookupSelect TItem="BranchLookupDto" TValue="Guid?"
+                                  Items="_branches"
+                                  ToValue="@(b => (Guid?)b.Id)"
+                                  ToLabel="@(b => b.Name)"
+                                  Value="_branchFilter"
+                                  ValueChanged="OnBranchChangedAsync"
+                                  Label="@ProdL["KitchenBranch"]"
+                                  Margin="Margin.Dense"
+                                  Dense="true"
+                                  Clearable="true" />
+            </div>
+        </div>
+
+        <SoftDataGrid T="ProductionOrderListItemDto"
+                      @ref="_grid"
+                      ServerData="LoadServerData"
+                      Dense="true"
+                      Hover="true"
+                      Bordered="false"
+                      Loading="_loading"
+                      SortMode="SortMode.Single">
+            <Columns>
+                <PropertyColumn T="ProductionOrderListItemDto" TProperty="string" Property="x => x.OrderNumber" Title="@ProdL["OrderNumber"]" />
+                <PropertyColumn T="ProductionOrderListItemDto" TProperty="string" Property="x => x.FinishedProductName" Title="@ProdL["Product"]" />
+                <PropertyColumn T="ProductionOrderListItemDto" TProperty="string" Property="x => x.KitchenBranchName" Title="@ProdL["KitchenBranch"]" />
+                <TemplateColumn T="ProductionOrderListItemDto" Title="@ProdL["Status"]" SortBy="x => x.Status">
+                    <CellTemplate>@StatusChip(context.Item.Status)</CellTemplate>
+                </TemplateColumn>
+                <PropertyColumn T="ProductionOrderListItemDto" TProperty="string" Property="x => x.Priority" Title="@ProdL["Priority"]" />
+                <TemplateColumn T="ProductionOrderListItemDto" Title="@ProdL["PlannedOutput"]" SortBy="x => x.PlannedOutputQuantity">
+                    <CellTemplate>@context.Item.PlannedOutputQuantity @context.Item.Unit</CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn T="ProductionOrderListItemDto" Title="@ProdL["AcceptedQuantity"]" SortBy="x => x.AcceptedQuantity">
+                    <CellTemplate>@context.Item.AcceptedQuantity @context.Item.Unit</CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn T="ProductionOrderListItemDto" Title="@ProdL["Actions"]" Sortable="false">
+                    <CellTemplate>
+                        <span class="row-actions">
+                            <SoftTooltip Text="@ProdL["OpenOrder"]">
+                                <SoftIconButton Icon="@Icons.Material.Filled.Visibility"
+                                                Color="Color.Primary"
+                                                Size="Size.Small"
+                                                OnClick="() => OpenDetailAsync(context.Item.Id)" />
+                            </SoftTooltip>
+                        </span>
+                    </CellTemplate>
+                </TemplateColumn>
+            </Columns>
+            <PagerContent>
+                <MudDataGridPager T="ProductionOrderListItemDto" />
+            </PagerContent>
+        </SoftDataGrid>
+    </SoftCardContent>
+</SoftCard>
+
+@if (_detailVisible && _detail != null)
+{
+    <div class="glass-modal-backdrop" @onclick="CloseDetail">
+        <div class="glass-modal-container glass-modal-container--lg" @onclick:stopPropagation="true">
+            <SoftCard Elevation="24" Class="glass-modal">
+                <SoftCardHeader Class="pa-4">
+                    <CardHeaderContent>
+                        <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <SoftIcon Icon="@Icons.Material.Filled.LocalFireDepartment" Color="Color.Primary" Size="Size.Medium" />
+                            <SoftText Typo="Typo.h6">@_detail.OrderNumber</SoftText>
+                            @StatusChip(_detail.Status)
+                        </SoftStack>
+                    </CardHeaderContent>
+                    <CardHeaderActions>
+                        <SoftIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="CloseDetail" />
+                    </CardHeaderActions>
+                </SoftCardHeader>
+                <SoftDivider />
+                <SoftCardContent Class="pa-4 glass-modal-body">
+                    <SoftStack Spacing="3">
+                        <div class="stats">
+                            <div>
+                                <div class="stat-label">@ProdL["Product"]</div>
+                                <div class="stat-value">@_detail.FinishedProductSku - @_detail.FinishedProductName</div>
+                            </div>
+                            <div>
+                                <div class="stat-label">@ProdL["KitchenBranch"]</div>
+                                <div class="stat-value">@_detail.KitchenBranchName</div>
+                            </div>
+                            <div>
+                                <div class="stat-label">@ProdL["PlannedOutput"]</div>
+                                <div class="stat-value">@_detail.PlannedOutputQuantity @_detail.FinishedProductUnit</div>
+                            </div>
+                            <div>
+                                <div class="stat-label">@ProdL["PlannedUnitCost"]</div>
+                                <div class="stat-value">@_detail.UnitProductionCost.ToString("0.00")</div>
+                            </div>
+                        </div>
+
+                        @if (HasShortage)
+                        {
+                            <SoftAlert Severity="Severity.Warning">@ProdL["Error:Production:205"]</SoftAlert>
+                        }
+
+                        <SoftText Typo="Typo.subtitle2">@ProdL["Availability"]</SoftText>
+                        <SoftTable T="ProductionIngredientAvailabilityDto" Items="_detail.Availability" Dense="true" Hover="true">
+                            <HeaderContent>
+                                <MudTh>@ProdL["Ingredient"]</MudTh>
+                                <MudTh>@ProdL["RequiredQuantity"]</MudTh>
+                                <MudTh>@ProdL["AvailableQuantity"]</MudTh>
+                                <MudTh>@ProdL["ShortageQuantity"]</MudTh>
+                                <MudTh>@ProdL["Status"]</MudTh>
+                            </HeaderContent>
+                            <RowTemplate>
+                                <MudTd>@context.IngredientSku - @context.IngredientName</MudTd>
+                                <MudTd>@context.RequiredQuantity @context.Unit</MudTd>
+                                <MudTd>@context.AvailableQuantity @context.Unit</MudTd>
+                                <MudTd>@context.ShortageQuantity @context.Unit</MudTd>
+                                <MudTd>@AvailabilityChip(context.HasShortage)</MudTd>
+                            </RowTemplate>
+                        </SoftTable>
+
+                        <SoftText Typo="Typo.subtitle2">@ProdL["Ingredients"]</SoftText>
+                        <SoftTable T="ProductionOrderIngredientDto" Items="_detail.Ingredients" Dense="true" Hover="true">
+                            <HeaderContent>
+                                <MudTh>@ProdL["Ingredient"]</MudTh>
+                                <MudTh>@ProdL["RequiredQuantity"]</MudTh>
+                                <MudTh>@ProdL["Quantity"]</MudTh>
+                                <MudTh>@ProdL["LineCost"]</MudTh>
+                            </HeaderContent>
+                            <RowTemplate>
+                                <MudTd>@context.IngredientSku - @context.IngredientName</MudTd>
+                                <MudTd>@context.RequiredQuantity @context.Unit</MudTd>
+                                <MudTd>@context.ConsumedQuantity @context.Unit</MudTd>
+                                <MudTd>@context.TotalCost.ToString("0.00")</MudTd>
+                            </RowTemplate>
+                        </SoftTable>
+
+                        @if (_completeVisible)
+                        {
+                            <SoftDivider />
+                            <SoftText Typo="Typo.subtitle2">@ProdL["Completion"]</SoftText>
+                            @if (CompletionTotalsMismatch)
+                            {
+                                <SoftAlert Severity="Severity.Warning">@ProdL["ActualOutput"] = @ProdL["AcceptedQuantity"] + @ProdL["RejectedQuantity"]</SoftAlert>
+                            }
+                            <SoftGrid>
+                                <SoftGridItem xs="12" md="4">
+                                    <SoftNumericField T="int" @bind-Value="_completeActualQuantity"
+                                                      Label="@ProdL["ActualOutput"]"
+                                                      Variant="Variant.Outlined"
+                                                      Min="0"
+                                                      HideSpinButtons="true" />
+                                </SoftGridItem>
+                                <SoftGridItem xs="12" md="4">
+                                    <SoftNumericField T="int" @bind-Value="_completeAcceptedQuantity"
+                                                      Label="@ProdL["AcceptedQuantity"]"
+                                                      Variant="Variant.Outlined"
+                                                      Min="0"
+                                                      HideSpinButtons="true" />
+                                </SoftGridItem>
+                                <SoftGridItem xs="12" md="4">
+                                    <SoftNumericField T="int" @bind-Value="_completeRejectedQuantity"
+                                                      Label="@ProdL["RejectedQuantity"]"
+                                                      Variant="Variant.Outlined"
+                                                      Min="0"
+                                                      HideSpinButtons="true" />
+                                </SoftGridItem>
+                                <SoftGridItem xs="12" md="6">
+                                    <SoftDatePicker Label="@ProdL["ExpiryDate"]"
+                                                    Date="_completeExpiryDate"
+                                                    DateChanged="@(d => _completeExpiryDate = d)"
+                                                    Variant="Variant.Outlined" />
+                                </SoftGridItem>
+                                <SoftGridItem xs="12" md="6">
+                                    <SoftTextField T="string" @bind-Value="_completeWasteReason"
+                                                   Label="@ProdL["WasteReason"]"
+                                                   Variant="Variant.Outlined"
+                                                   Disabled="_completeRejectedQuantity == 0" />
+                                </SoftGridItem>
+                                <SoftGridItem xs="12">
+                                    <SoftTextField T="string" @bind-Value="_completeNotes"
+                                                   Label="@ProdL["Notes"]"
+                                                   Variant="Variant.Outlined"
+                                                   Lines="2" />
+                                </SoftGridItem>
+                            </SoftGrid>
+                        }
+                    </SoftStack>
+                </SoftCardContent>
+                <SoftDivider />
+                <div class="pa-3 d-flex justify-end flex-wrap" style="gap: 8px;">
+                    <SoftButton Variant="Variant.Text" OnClick="CloseDetail">@ProdL["Cancel"]</SoftButton>
+                    @if (_detail.Status is not ProductionOrderStatuses.Completed and not ProductionOrderStatuses.Cancelled)
+                    {
+                        <SoftButton Variant="Variant.Outlined" Color="Color.Primary"
+                                    StartIcon="@Icons.Material.Filled.Refresh"
+                                    OnClick="RefreshAvailabilityAsync">
+                            @ProdL["RefreshAvailability"]
+                        </SoftButton>
+                    }
+                    @if (_canCreateIngredientPo && HasShortage)
+                    {
+                        <SoftButton Variant="Variant.Outlined" Color="Color.Primary"
+                                    StartIcon="@Icons.Material.Filled.ShoppingCart"
+                                    Disabled="_creatingIngredientPo"
+                                    OnClick="CreateDraftIngredientPurchaseOrdersAsync">
+                            @ProdL["CreateDraftIngredientPO"]
+                        </SoftButton>
+                    }
+                    @if (_canCancel && ProductionOrderStatuses.CanCancel(_detail.Status))
+                    {
+                        <SoftButton Variant="Variant.Outlined" Color="Color.Error"
+                                    StartIcon="@Icons.Material.Filled.Cancel"
+                                    OnClick="CancelOrderAsync">
+                            @ProdL["Cancel"]
+                        </SoftButton>
+                    }
+                    @if (_canStart && _detail.Status == ProductionOrderStatuses.ReadyToCook)
+                    {
+                        <SoftButton Variant="Variant.Filled" Color="Color.Primary"
+                                    StartIcon="@Icons.Material.Filled.PlayArrow"
+                                    OnClick="StartCookAsync">
+                            @ProdL["StartCook"]
+                        </SoftButton>
+                    }
+                    @if (_canComplete && _detail.Status == ProductionOrderStatuses.InProduction && !_completeVisible)
+                    {
+                        <SoftButton Variant="Variant.Filled" Color="Color.Primary"
+                                    StartIcon="@Icons.Material.Filled.DoneAll"
+                                    OnClick="OpenCompleteForm">
+                            @ProdL["CompleteCook"]
+                        </SoftButton>
+                    }
+                    @if (_canComplete && _detail.Status == ProductionOrderStatuses.InProduction && _completeVisible)
+                    {
+                        <SoftButton Variant="Variant.Filled" Color="Color.Primary"
+                                    StartIcon="@Icons.Material.Filled.DoneAll"
+                                    Disabled="!CanSubmitCompletion"
+                                    OnClick="CompleteCookAsync">
+                            @ProdL["CompleteCook"]
+                        </SoftButton>
+                    }
+                </div>
+            </SoftCard>
+        </div>
+    </div>
+}
+
+@code {
+    private SoftDataGrid<ProductionOrderListItemDto>? _grid;
+    private bool _loading;
+    private bool _canStart;
+    private bool _canComplete;
+    private bool _canCancel;
+    private bool _canCreateIngredientPo;
+    private bool _creatingIngredientPo;
+    private string? _filter;
+    private string _statusFilter = string.Empty;
+    private Guid? _branchFilter;
+    private List<BranchLookupDto> _branches = new();
+    private List<StatusOption> _statusOptions = new();
+
+    private bool _detailVisible;
+    private ProductionOrderDto? _detail;
+
+    private bool _completeVisible;
+    private int _completeActualQuantity;
+    private int _completeAcceptedQuantity;
+    private int _completeRejectedQuantity;
+    private DateTime? _completeExpiryDate;
+    private string? _completeWasteReason;
+    private string? _completeNotes;
+
+    private bool HasShortage => _detail?.Availability.Any(x => x.HasShortage) == true;
+
+    private bool CompletionTotalsMismatch =>
+        _completeActualQuantity != _completeAcceptedQuantity + _completeRejectedQuantity;
+
+    private bool CanSubmitCompletion =>
+        _completeActualQuantity > 0
+        && _completeAcceptedQuantity > 0
+        && _completeRejectedQuantity >= 0
+        && !CompletionTotalsMismatch
+        && (_completeRejectedQuantity == 0 || !string.IsNullOrWhiteSpace(_completeWasteReason));
+
+    protected override async Task OnInitializedAsync()
+    {
+        _canStart = await Authz.IsGrantedAsync(ProductionPermissions.Orders.Start);
+        _canComplete = await Authz.IsGrantedAsync(ProductionPermissions.Orders.Complete);
+        _canCancel = await Authz.IsGrantedAsync(ProductionPermissions.Orders.Cancel);
+        _canCreateIngredientPo = await Authz.IsGrantedAsync(ProductionPermissions.Ingredients.CheckAvailability);
+        _branches = await BranchAppService.GetLookupAsync();
+        _statusOptions =
+        [
+            new(string.Empty, ProdL["Status:All"]),
+            new(ProductionOrderStatuses.ReadyToCook, ProdL["Status:ReadyToCook"]),
+            new(ProductionOrderStatuses.WaitingForIngredients, ProdL["Status:WaitingForIngredients"]),
+            new(ProductionOrderStatuses.InProduction, ProdL["Status:InProduction"]),
+            new(ProductionOrderStatuses.Completed, ProdL["Status:Completed"]),
+            new(ProductionOrderStatuses.Cancelled, ProdL["Status:Cancelled"])
+        ];
+    }
+
+    private async Task<GridData<ProductionOrderListItemDto>> LoadServerData(GridState<ProductionOrderListItemDto> state, CancellationToken cancellationToken)
+    {
+        _loading = true;
+        try
+        {
+            var sorting = state.SortDefinitions.FirstOrDefault();
+            var result = await OrderAppService.GetListAsync(new GetProductionOrdersInput
+            {
+                Filter = _filter,
+                Status = string.IsNullOrWhiteSpace(_statusFilter) ? null : _statusFilter,
+                KitchenBranchId = _branchFilter,
+                SkipCount = state.Page * state.PageSize,
+                MaxResultCount = state.PageSize,
+                Sorting = sorting == null ? string.Empty : $"{sorting.SortBy} {(sorting.Descending ? "desc" : "asc")}"
+            });
+
+            return new GridData<ProductionOrderListItemDto>
+            {
+                Items = result.Items,
+                TotalItems = (int)result.TotalCount
+            };
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private Task OnFilterKeyUpAsync(KeyboardEventArgs _) => ReloadAsync();
+
+    private async Task OnStatusChangedAsync(string value)
+    {
+        _statusFilter = value;
+        await ReloadAsync();
+    }
+
+    private async Task OnBranchChangedAsync(Guid? value)
+    {
+        _branchFilter = value;
+        await ReloadAsync();
+    }
+
+    private Task ReloadAsync() => _grid?.ReloadServerData() ?? Task.CompletedTask;
+
+    private async Task OpenDetailAsync(Guid id)
+    {
+        _detail = await OrderAppService.GetAsync(id);
+        _completeVisible = false;
+        _detailVisible = true;
+    }
+
+    private void CloseDetail() => _detailVisible = false;
+
+    private async Task RefreshAvailabilityAsync()
+    {
+        if (_detail == null) return;
+
+        try
+        {
+            _detail = await OrderAppService.RefreshAvailabilityAsync(_detail.Id);
+            Snackbar.Add(ProdL["SavedSuccessfully"], Severity.Success);
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            await HandleErrorAsync(ex);
+        }
+    }
+
+    private async Task StartCookAsync()
+    {
+        if (_detail == null) return;
+
+        try
+        {
+            _detail = await OrderAppService.StartAsync(_detail.Id);
+            Snackbar.Add(ProdL["StartedSuccessfully"], Severity.Success);
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            await HandleErrorAsync(ex);
+            _detail = await OrderAppService.GetAsync(_detail.Id);
+            await ReloadAsync();
+        }
+    }
+
+    private async Task CreateDraftIngredientPurchaseOrdersAsync()
+    {
+        if (_detail == null || _creatingIngredientPo)
+        {
+            return;
+        }
+
+        _creatingIngredientPo = true;
+        try
+        {
+            var result = await OrderAppService.CreateDraftIngredientPurchaseOrdersAsync(_detail.Id);
+            if (result.PurchaseOrderCount == 0)
+            {
+                Snackbar.Add(ProdL["NoIngredientShortageToPurchase"], Severity.Info);
+            }
+            else
+            {
+                Snackbar.Add(
+                    ProdL["IngredientPurchaseOrdersCreated", result.PurchaseOrderCount, result.TotalShortageQuantity],
+                    Severity.Success);
+            }
+
+            _detail = await OrderAppService.RefreshAvailabilityAsync(_detail.Id);
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            await HandleErrorAsync(ex);
+        }
+        finally
+        {
+            _creatingIngredientPo = false;
+        }
+    }
+
+    private void OpenCompleteForm()
+    {
+        if (_detail == null) return;
+
+        _completeActualQuantity = _detail.ActualOutputQuantity > 0 ? _detail.ActualOutputQuantity : _detail.PlannedOutputQuantity;
+        _completeAcceptedQuantity = _detail.AcceptedQuantity > 0 ? _detail.AcceptedQuantity : _completeActualQuantity;
+        _completeRejectedQuantity = _detail.RejectedQuantity;
+        _completeExpiryDate = _detail.ExpiryDate;
+        _completeWasteReason = _detail.WasteReason;
+        _completeNotes = _detail.Notes;
+        _completeVisible = true;
+    }
+
+    private async Task CompleteCookAsync()
+    {
+        if (_detail == null || !CanSubmitCompletion) return;
+
+        try
+        {
+            _detail = await OrderAppService.CompleteAsync(_detail.Id, new CompleteProductionOrderDto
+            {
+                ActualOutputQuantity = _completeActualQuantity,
+                AcceptedQuantity = _completeAcceptedQuantity,
+                RejectedQuantity = _completeRejectedQuantity,
+                ExpiryDate = _completeExpiryDate,
+                WasteReason = _completeWasteReason,
+                Notes = _completeNotes
+            });
+            _completeVisible = false;
+            Snackbar.Add(ProdL["CompletedSuccessfully"], Severity.Success);
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            await HandleErrorAsync(ex);
+        }
+    }
+
+    private async Task CancelOrderAsync()
+    {
+        if (_detail == null) return;
+
+        try
+        {
+            _detail = await OrderAppService.CancelAsync(_detail.Id);
+            Snackbar.Add(ProdL["CancelledSuccessfully"], Severity.Success);
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            await HandleErrorAsync(ex);
+        }
+    }
+
+    private RenderFragment StatusChip(string status) => builder =>
+    {
+        var color = status switch
+        {
+            ProductionOrderStatuses.ReadyToCook => Color.Success,
+            ProductionOrderStatuses.WaitingForIngredients => Color.Warning,
+            ProductionOrderStatuses.InProduction => Color.Info,
+            ProductionOrderStatuses.Completed => Color.Success,
+            ProductionOrderStatuses.Cancelled => Color.Error,
+            _ => Color.Default
+        };
+        var variant = status is ProductionOrderStatuses.Draft or ProductionOrderStatuses.Cancelled
+            ? Variant.Outlined
+            : Variant.Filled;
+
+        builder.OpenComponent<SoftChip<string>>(0);
+        builder.AddAttribute(1, "Color", color);
+        builder.AddAttribute(2, "Size", Size.Small);
+        builder.AddAttribute(3, "Variant", variant);
+        builder.AddAttribute(4, "ChildContent", (RenderFragment)(b => b.AddContent(0, StatusLabel(status))));
+        builder.CloseComponent();
+    };
+
+    private RenderFragment AvailabilityChip(bool hasShortage) => builder =>
+    {
+        builder.OpenComponent<SoftChip<string>>(0);
+        builder.AddAttribute(1, "Color", hasShortage ? Color.Warning : Color.Success);
+        builder.AddAttribute(2, "Size", Size.Small);
+        builder.AddAttribute(3, "Variant", hasShortage ? Variant.Filled : Variant.Outlined);
+        builder.AddAttribute(4, "ChildContent", (RenderFragment)(b => b.AddContent(0, hasShortage ? ProdL["ShortStock"] : ProdL["EnoughStock"])));
+        builder.CloseComponent();
+    };
+
+    private string StatusLabel(string status) => status switch
+    {
+        ProductionOrderStatuses.Draft => ProdL["Status:Draft"],
+        ProductionOrderStatuses.ReadyToCook => ProdL["Status:ReadyToCook"],
+        ProductionOrderStatuses.WaitingForIngredients => ProdL["Status:WaitingForIngredients"],
+        ProductionOrderStatuses.InProduction => ProdL["Status:InProduction"],
+        ProductionOrderStatuses.Completed => ProdL["Status:Completed"],
+        ProductionOrderStatuses.Cancelled => ProdL["Status:Cancelled"],
+        _ => status
+    };
+
+    private sealed record StatusOption(string Value, string Label);
+}

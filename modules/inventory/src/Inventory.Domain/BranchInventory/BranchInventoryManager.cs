@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using Inventory.Entities;
 using Inventory.StockBatches;
@@ -69,7 +70,29 @@ public class BranchInventoryManager : DomainService
         string movementType,
         string? notes = null,
         Guid? referenceId = null,
-        string? referenceType = null)
+        string? referenceType = null,
+        DateTime? batchExpiryDate = null)
+    {
+        var result = await AdjustStockDetailedAsync(
+            inventory,
+            newQuantity,
+            movementType,
+            notes,
+            referenceId,
+            referenceType,
+            batchExpiryDate);
+
+        return result.Movement;
+    }
+
+    public async Task<StockAdjustmentResult> AdjustStockDetailedAsync(
+        AppBranchInventory inventory,
+        int newQuantity,
+        string movementType,
+        string? notes = null,
+        Guid? referenceId = null,
+        string? referenceType = null,
+        DateTime? batchExpiryDate = null)
     {
         Check.NotNull(inventory, nameof(inventory));
 
@@ -90,7 +113,9 @@ public class BranchInventoryManager : DomainService
         inventory.UpdateStock(newQuantity);
 
         var now = Clock.Now;
-        if (delta > 0 && (movementType == StockMovementTypes.Purchase || movementType == StockMovementTypes.TransferIn))
+        if (delta > 0 && (movementType == StockMovementTypes.Purchase
+            || movementType == StockMovementTypes.TransferIn
+            || movementType == StockMovementTypes.ProductionOutput))
         {
             inventory.LastRestockedDate = now;
         }
@@ -115,9 +140,14 @@ public class BranchInventoryManager : DomainService
 
         // Parallel best-effort batch (expiry) ledger. Runs AFTER the authoritative
         // stock mutation and may never fail it.
-        await TrackBatchLedgerBestEffortAsync(inventory, delta, movementType, referenceId);
+        var consumedBatches = await TrackBatchLedgerBestEffortAsync(
+            inventory,
+            delta,
+            movementType,
+            referenceId,
+            batchExpiryDate);
 
-        return movement;
+        return new StockAdjustmentResult(movement, consumedBatches);
     }
 
     /// <summary>
@@ -125,45 +155,60 @@ public class BranchInventoryManager : DomainService
     ///   delta &lt; 0 → consume |delta| across the product+branch's batches, FEFO
     ///                (non-expired earliest-expiry first, then expired oldest first);
     ///   delta &gt; 0 → if the product is perishable (ShelfLifeDays set), create ONE
-    ///                batch of |delta| expiring at utcToday + ShelfLifeDays.
-    /// KNOWN SCOPE DECISION: TransferIn batches get a fresh ShelfLifeDays expiry —
-    /// the source batch's age is NOT carried across branches, so transferred stock
-    /// looks slightly fresher in the ledger than it really is.
+    ///                batch of |delta| using the explicit expiry date when supplied,
+    ///                otherwise expiring at utcToday + ShelfLifeDays.
     /// The whole block is try/catch-logged: batch bookkeeping is best-effort and a
     /// failure here must never roll back the stock operation.
     /// </summary>
-    private async Task TrackBatchLedgerBestEffortAsync(
+    private async Task<IReadOnlyList<ConsumedStockBatchLine>> TrackBatchLedgerBestEffortAsync(
         AppBranchInventory inventory,
         int delta,
         string movementType,
-        Guid? referenceId)
+        Guid? referenceId,
+        DateTime? batchExpiryDate)
     {
         try
         {
             if (delta < 0)
             {
-                // Waste write-offs clear EXPIRED batches first (oldest expiry first);
+                // Waste movements clear EXPIRED batches first (oldest expiry first);
                 // every other decrement uses normal FEFO (sellable, earliest-expiry first).
-                await _stockBatchManager.ConsumeFefoAsync(
+                return await _stockBatchManager.ConsumeFefoWithBreakdownAsync(
                     inventory.BranchId,
                     inventory.ProductId,
                     -delta,
-                    expiredFirst: movementType == StockMovementTypes.WriteOff);
+                    expiredFirst: movementType == StockMovementTypes.WriteOff
+                        || movementType == StockMovementTypes.ProductionWaste);
             }
             else if (delta > 0)
             {
                 var product = await _productRepository.FindAsync(inventory.ProductId);
                 if (product?.ShelfLifeDays is int shelfLifeDays)
                 {
-                    await _stockBatchManager.ReceiveAsync(
-                        inventory.BranchId,
-                        inventory.ProductId,
-                        delta,
-                        shelfLifeDays,
-                        MapBatchSourceType(movementType),
-                        referenceId);
+                    if (batchExpiryDate.HasValue)
+                    {
+                        await _stockBatchManager.CreateAsync(
+                            inventory.BranchId,
+                            inventory.ProductId,
+                            delta,
+                            batchExpiryDate.Value,
+                            MapBatchSourceType(movementType),
+                            referenceId);
+                    }
+                    else
+                    {
+                        await _stockBatchManager.ReceiveAsync(
+                            inventory.BranchId,
+                            inventory.ProductId,
+                            delta,
+                            shelfLifeDays,
+                            MapBatchSourceType(movementType),
+                            referenceId);
+                    }
                 }
             }
+
+            return Array.Empty<ConsumedStockBatchLine>();
         }
         catch (Exception ex)
         {
@@ -172,6 +217,8 @@ public class BranchInventoryManager : DomainService
                 "Stock batch ledger update failed for product {ProductId} at branch {BranchId} " +
                 "(movement {MovementType}, delta {Delta}). The stock mutation itself is unaffected.",
                 inventory.ProductId, inventory.BranchId, movementType, delta);
+
+            return Array.Empty<ConsumedStockBatchLine>();
         }
     }
 
@@ -179,6 +226,7 @@ public class BranchInventoryManager : DomainService
     {
         StockMovementTypes.Purchase => StockBatchSourceTypes.Purchase,
         StockMovementTypes.TransferIn => StockBatchSourceTypes.TransferIn,
+        StockMovementTypes.ProductionOutput => StockBatchSourceTypes.ProductionOutput,
         _ => StockBatchSourceTypes.Adjustment
     };
 

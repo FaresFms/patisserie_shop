@@ -20,6 +20,22 @@ public class AppProduct : FullAuditedAggregateRoot<Guid>
     public bool IsActive { get; private set; } = true;
 
     /// <summary>
+    /// What this product is in the production/sales pipeline: <see cref="ProductTypes.FinishedGood"/>,
+    /// <see cref="ProductTypes.RawMaterial"/>, <see cref="ProductTypes.Packaging"/> or
+    /// <see cref="ProductTypes.SemiFinished"/>.
+    /// </summary>
+    public string ProductType { get; private set; } = ProductTypes.FinishedGood;
+
+    /// <summary>Whether this product can be sold at the POS / on a sale.</summary>
+    public bool IsSellable { get; private set; } = true;
+
+    /// <summary>Whether this product can be bought from a supplier on a purchase order.</summary>
+    public bool IsPurchasable { get; private set; } = true;
+
+    /// <summary>Whether this product can be made by a production order.</summary>
+    public bool IsProducible { get; private set; } = false;
+
+    /// <summary>
     /// Days the product stays sellable after it is received. Null = non-perishable —
     /// no stock-batch (expiry) tracking happens for this product.
     /// </summary>
@@ -41,7 +57,11 @@ public class AppProduct : FullAuditedAggregateRoot<Guid>
         int reorderLevel = 5,
         string? imageUrl = null,
         bool isActive = true,
-        int? shelfLifeDays = null)
+        int? shelfLifeDays = null,
+        string productType = ProductTypes.FinishedGood,
+        bool isSellable = true,
+        bool isPurchasable = true,
+        bool isProducible = false)
         : base(id)
     {
         CategoryId = categoryId;
@@ -58,7 +78,11 @@ public class AppProduct : FullAuditedAggregateRoot<Guid>
             reorderLevel,
             imageUrl,
             isActive,
-            shelfLifeDays);
+            shelfLifeDays,
+            productType,
+            isSellable,
+            isPurchasable,
+            isProducible);
     }
 
     public void UpdateInfo(
@@ -73,7 +97,11 @@ public class AppProduct : FullAuditedAggregateRoot<Guid>
         int reorderLevel,
         string? imageUrl,
         bool isActive,
-        int? shelfLifeDays = null)
+        int? shelfLifeDays = null,
+        string productType = ProductTypes.FinishedGood,
+        bool isSellable = true,
+        bool isPurchasable = true,
+        bool isProducible = false)
     {
         Check.NotNullOrWhiteSpace(name, nameof(name));
         Check.NotNullOrWhiteSpace(unit, nameof(unit));
@@ -94,6 +122,21 @@ public class AppProduct : FullAuditedAggregateRoot<Guid>
         ImageUrl = imageUrl;
         IsActive = isActive;
         SetShelfLifeDays(shelfLifeDays);
+        SetClassification(productType, isSellable, isPurchasable, isProducible);
+    }
+
+    public void SetClassification(string productType, bool isSellable, bool isPurchasable, bool isProducible)
+    {
+        if (!ProductTypes.IsValid(productType))
+        {
+            throw new BusinessException(InventoryErrorCodes.InvalidProductType)
+                .WithData("ProductType", productType);
+        }
+
+        ProductType = productType;
+        IsSellable = isSellable;
+        IsPurchasable = isPurchasable;
+        IsProducible = isProducible;
     }
 
     /// <summary>Null clears perishability (no batch tracking); when set, 1–3650 days.</summary>

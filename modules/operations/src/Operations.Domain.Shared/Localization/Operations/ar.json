@@ -125,6 +125,10 @@
     "TransferRef": "التحويل",
     "FromBranch": "من فرع",
     "ToBranch": "إلى فرع",
+    "ReceivingBranch": "الفرع المستلم",
+    "SourceNotAssigned": "بانتظار تحديد المصدر",
+    "AssignSourceBranch": "تحديد فرع المصدر",
+    "ChooseSourceBranchHint": "اختر الفرع الذي سيجهّز هذا الطلب ويرسله.",
     "RequestedDate": "تاريخ الطلب",
     "ApprovedDate": "تاريخ الاعتماد",
     "CompletedDate": "تاريخ الإكمال",
@@ -147,9 +151,13 @@
     "TransferAll": "تحويل الكل",
     "ConfirmComplete": "تأكيد الإكمال",
     "OnlyXInStock": "تتوفّر {0} وحدة فقط في المصدر",
+    "TransferCompleteStockShortage": "فرع المصدر لا يملك مخزونًا كافيًا من {0} الآن — المطلوب {1}، والمتوفر {2}.",
+    "TransferSourceStockMissingNow": "فرع المصدر لا يملك الكمية المطلوبة من هذا المنتج الآن. راجع مخزون المصدر قبل الإرسال أو الإكمال.",
+    "TransferBranchActionDenied": "هذا الإجراء يجب أن ينفّذه مدير الفرع الصحيح.",
     "ApprovedQtyUpdated": "تم تحديث الكمية المعتمدة.",
     "TransferSubmitted": "تم إرسال التحويل للاعتماد.",
     "TransferApproved": "تم اعتماد التحويل.",
+    "TransferSourceAssigned": "تم تحديد فرع المصدر واعتماد الطلب.",
     "TransferShipped": "تم تعليم التحويل كقيد النقل.",
     "TransferCancelled": "تم إلغاء التحويل.",
 
@@ -163,8 +171,9 @@
     "Operations:Transfers:ItemNotFound": "لم يُعثر على صنف التحويل.",
     "Operations:Transfers:DuplicateProduct": "هذا المنتج موجود بالفعل في التحويل.",
     "Operations:Transfers:SameBranch": "يجب أن يكون فرع المصدر والوجهة مختلفين.",
-    "Operations:Transfers:InsufficientStock": "لا يوجد مخزون كافٍ في فرع المصدر — المطلوب {Requested}، والمتوفّر {Available} فقط.",
+    "Operations:Transfers:InsufficientStock": "فرع المصدر لا يملك هذا المنتج الآن — المطلوب {Requested}، والمتوفر {Available}.",
     "Operations:Transfers:InvalidQuantity": "يجب أن تكون الكمية صفرًا أو أكبر.",
-    "Operations:Transfers:CannotApproveItem": "لا يمكن تعديل الكميات إلا أثناء حالة الاعتماد (الحالة الحالية: {CurrentStatus})."
+    "Operations:Transfers:CannotApproveItem": "لا يمكن تعديل الكميات إلا أثناء حالة الاعتماد (الحالة الحالية: {CurrentStatus}).",
+    "Operations:Transfers:SourceBranchRequired": "اختر فرع المصدر قبل اعتماد التحويل أو إرساله."
   }
 }

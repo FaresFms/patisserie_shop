@@ -15,6 +15,7 @@
     <PackageReference Include="Volo.Abp.BlobStoring.Database.Domain.Shared" Version="10.1.1" />
     <PackageReference Include="Volo.Abp.GlobalFeatures" Version="10.1.1" />
     <ProjectReference Include="../../modules/intelligence/src/Intelligence.Domain.Shared/Intelligence.Domain.Shared.csproj" />
+    <ProjectReference Include="../../modules/production/src/Production.Domain.Shared/Production.Domain.Shared.csproj" />
     <ProjectReference Include="../../modules/operations/src/Operations.Domain.Shared/Operations.Domain.Shared.csproj" />
   </ItemGroup>
   <ItemGroup>

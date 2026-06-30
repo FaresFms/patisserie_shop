@@ -18,6 +18,11 @@ public class ProductDto : EntityDto<Guid>
     public string? ImageUrl { get; set; }
     public bool IsActive { get; set; }
 
+    public string ProductType { get; set; } = Inventory.ProductTypes.FinishedGood;
+    public bool IsSellable { get; set; } = true;
+    public bool IsPurchasable { get; set; } = true;
+    public bool IsProducible { get; set; }
+
     /// <summary>Null = non-perishable (no batch/expiry tracking).</summary>
     public int? ShelfLifeDays { get; set; }
 

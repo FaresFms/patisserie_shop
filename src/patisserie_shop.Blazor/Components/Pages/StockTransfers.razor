@@ -12,6 +12,8 @@
 @using Operations.Permissions
 @using Operations.Localization
 @using Inventory.Branches
+@using Inventory.BranchInventory
+@using Inventory.Permissions
 @using Color = MudBlazor.Color
 @using Variant = MudBlazor.Variant
 @using Size = MudBlazor.Size
@@ -19,6 +21,7 @@
 @inherits patisserie_shopComponentBase
 @inject IStockTransferAppService StockTransferAppService
 @inject IBranchAppService BranchAppService
+@inject IBranchInventoryAppService BranchInventoryAppService
 @inject PageLayout PageLayout
 @inject ISnackbar Snackbar
 @inject IStringLocalizer<OperationsResource> OpsL
@@ -38,7 +41,7 @@
                         Color="Color.Primary"
                         StartIcon="@Icons.Material.Filled.Add"
                         OnClick="OpenCreateDialog"
-                        Disabled="@(!_canCreate || !_canChooseTransferBranches)">
+                        Disabled="@(!_canCreate || !CanOpenCreate)">
                 @OpsL["NewTransfer"]
             </SoftButton>
         </div>
@@ -182,29 +185,25 @@
                 <SoftCardContent Class="pa-4">
                     <SoftStack Spacing="3">
                         <SoftAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
-                            Step 1 of 2 — choose the branches. You'll add products in the next step.
+                            Step 1 of 2 — choose the receiving branch and requested products. Admin assigns the source branch after submission.
                         </SoftAlert>
-                        <SoftLookupSelect TItem="BranchLookupDto" TValue="Guid?"
-                                          Items="_branches"
-                                          ToValue="@(b => (Guid?)b.Id)"
-                                          ToLabel="@(b => b.Name)"
-                                          Value="_newFromId"
-                                          ValueChanged="@(v => _newFromId = v)"
-                                          Label="@OpsL["FromBranch"]"
-                                          Required="true" />
-                        <SoftLookupSelect TItem="BranchLookupDto" TValue="Guid?"
-                                          Items="_branches"
-                                          ToValue="@(b => (Guid?)b.Id)"
-                                          ToLabel="@(b => b.Name)"
-                                          Value="_newToId"
-                                          ValueChanged="@(v => _newToId = v)"
-                                          Label="@OpsL["ToBranch"]"
-                                          Required="true" />
-                        @if (_newFromId.HasValue && _newToId.HasValue && _newFromId == _newToId)
+                        @if (UseFixedReceivingBranch)
                         {
-                            <SoftAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true">
-                                @OpsL["SameBranchWarning"]
-                            </SoftAlert>
+                            <div class="sts-fixed-branch">
+                                <div class="sts-fixed-label">@OpsL["ReceivingBranch"]</div>
+                                <div class="sts-fixed-value">@(_destinationBranches.FirstOrDefault()?.Name ?? "-")</div>
+                            </div>
+                        }
+                        else
+                        {
+                            <SoftLookupSelect TItem="BranchLookupDto" TValue="Guid?"
+                                              Items="DestinationBranchOptions"
+                                              ToValue="@(b => (Guid?)b.Id)"
+                                              ToLabel="@(b => b.Name)"
+                                              Value="_newToId"
+                                              ValueChanged="@(v => _newToId = v)"
+                                              Label="@OpsL["ReceivingBranch"]"
+                                              Required="true" />
                         }
                         <MudDatePicker Label="@OpsL["RequestedDate"]" Variant="Variant.Outlined"
                                        @bind-Date="_newRequestedDate" />
@@ -222,7 +221,7 @@
                     <SoftButton Variant="Variant.Filled" Color="Color.Primary"
                                 EndIcon="@Icons.Material.Filled.ArrowForward"
                                 OnClick="ConfirmCreateAsync"
-                                Disabled="@(_saving || !_canChooseTransferBranches)">
+                                Disabled="@(_saving || !CanOpenCreate)">
                         @OpsL["SaveAndAddItems"]
                     </SoftButton>
                 </div>
@@ -252,6 +251,23 @@
     .sts-status-intransit { background: rgba( 20,184,166, 0.20); border-color: rgba( 20,184,166, 0.40); color: #5eead4; }
     .sts-status-completed { background: rgba( 34,197, 94, 0.20); border-color: rgba( 34,197, 94, 0.40); color: #86efac; }
     .sts-status-cancelled { background: rgba(239, 68, 68, 0.20); border-color: rgba(239, 68, 68, 0.40); color: #fca5a5; }
+    .sts-fixed-branch {
+        border: 1px solid var(--bd-2);
+        border-radius: var(--r-md);
+        background: var(--surface-2);
+        padding: 10px 12px;
+    }
+    .sts-fixed-label {
+        color: var(--fg-3);
+        font-size: .72rem;
+        font-weight: 700;
+        text-transform: uppercase;
+    }
+    .sts-fixed-value {
+        color: var(--fg-1);
+        font-size: 1rem;
+        font-weight: 700;
+    }
 </style>
 
 @code {
@@ -259,7 +275,7 @@
     private bool _loading;
     private bool _saving;
     private bool _canCreate;
-    private bool _canChooseTransferBranches;
+    private bool _canManageAllBranches;
 
     private string? _filter;
     private string? _statusFilter;
@@ -276,22 +292,26 @@
     public string? NewTransferNotes { get; set; }
 
     private List<BranchLookupDto> _branches = new();
+    private List<BranchLookupDto> _destinationBranches = new();
     private List<StatusOption> _statusOptions = new();
 
     private Guid? _detailId;
 
     private bool _createVisible;
-    private Guid? _newFromId;
     private Guid? _newToId;
     private DateTime? _newRequestedDate = DateTime.Today;
     private string? _newNotes;
 
     public record StatusOption(string Value, string Label);
 
+    private bool CanOpenCreate => _canManageAllBranches || _destinationBranches.Count > 0;
+    private bool UseFixedReceivingBranch => !_canManageAllBranches && _destinationBranches.Count == 1;
+    private List<BranchLookupDto> DestinationBranchOptions => _canManageAllBranches ? _branches : _destinationBranches;
+
     protected override async Task OnInitializedAsync()
     {
         _canCreate = await AuthorizationService.IsGrantedAsync(OperationsPermissions.Transfers.Create);
-        _canChooseTransferBranches = await AuthorizationService.IsGrantedAsync(OperationsPermissions.Transfers.ChooseBranches);
+        _canManageAllBranches = await AuthorizationService.IsGrantedAsync(InventoryPermissions.BranchInventory.ManageAll);
 
         _statusOptions = StockTransferStatuses.All
             .Select(s => new StatusOption(s, OpsL[$"Status:{s}"]))
@@ -300,6 +320,17 @@
         try
         {
             _branches = await BranchAppService.GetLookupAsync();
+            if (_canManageAllBranches)
+            {
+                _destinationBranches = _branches;
+            }
+            else
+            {
+                var accessibleIds = await BranchInventoryAppService.GetAccessibleBranchIdsAsync();
+                _destinationBranches = _branches
+                    .Where(b => accessibleIds.Contains(b.Id))
+                    .ToList();
+            }
         }
         catch (Exception ex)
         {
@@ -377,14 +408,13 @@
 
     private void OpenCreateDialog(Guid? toBranchId, string? notes)
     {
-        if (!_canChooseTransferBranches)
+        if (!CanOpenCreate)
         {
-            Snackbar.Add("Only administrators can choose transfer source and destination branches.", Severity.Warning);
+            Snackbar.Add("No receiving branch is available for this transfer.", Severity.Warning);
             return;
         }
 
-        _newFromId = null;
-        _newToId = toBranchId;
+        _newToId = UseFixedReceivingBranch ? _destinationBranches[0].Id : toBranchId;
         _newRequestedDate = DateTime.Today;
         _newNotes = notes;
         _createVisible = true;
@@ -394,19 +424,9 @@
 
     private async Task ConfirmCreateAsync()
     {
-        if (!_newFromId.HasValue)
-        {
-            Snackbar.Add(L["ThisFieldIsRequired", OpsL["FromBranch"]], Severity.Warning);
-            return;
-        }
         if (!_newToId.HasValue)
         {
-            Snackbar.Add(L["ThisFieldIsRequired", OpsL["ToBranch"]], Severity.Warning);
-            return;
-        }
-        if (_newFromId == _newToId)
-        {
-            Snackbar.Add(OpsL["SameBranchWarning"], Severity.Warning);
+            Snackbar.Add(L["ThisFieldIsRequired", OpsL["ReceivingBranch"]], Severity.Warning);
             return;
         }
         if (!_newRequestedDate.HasValue)
@@ -420,7 +440,7 @@
         {
             var created = await StockTransferAppService.CreateAsync(new CreateStockTransferDto
             {
-                FromBranchId = _newFromId.Value,
+                FromBranchId = null,
                 ToBranchId = _newToId.Value,
                 RequestedDate = _newRequestedDate.Value,
                 Notes = _newNotes

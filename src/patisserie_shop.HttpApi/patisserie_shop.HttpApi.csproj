@@ -8,6 +8,7 @@
   <ItemGroup>
     <ProjectReference Include="..\patisserie_shop.Application.Contracts\patisserie_shop.Application.Contracts.csproj" />
     <ProjectReference Include="../../modules/intelligence/src/Intelligence.HttpApi/Intelligence.HttpApi.csproj" />
+    <ProjectReference Include="../../modules/production/src/Production.HttpApi/Production.HttpApi.csproj" />
     <ProjectReference Include="../../modules/operations/src/Operations.HttpApi/Operations.HttpApi.csproj" />
   </ItemGroup>
   <ItemGroup>

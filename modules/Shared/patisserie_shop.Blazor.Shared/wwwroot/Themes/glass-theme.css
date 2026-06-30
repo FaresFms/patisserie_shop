@@ -53,6 +53,7 @@
     --accent-soft:   rgba(200, 99, 63, 0.10);
     --accent-line:   rgba(200, 99, 63, 0.30);
     --accent-fg:     #ffffff;
+    --btn-icon-fg:   #ffffff;   /* white in light mode — icons on filled buttons */
 
     /* Semantic — all muted */
     --success:    #6b8e4e;       /* muted sage */
@@ -97,6 +98,7 @@
     --accent-soft:   rgba(217, 119, 87, 0.16);
     --accent-line:   rgba(217, 119, 87, 0.40);
     --accent-fg:     #1c1814;
+    --btn-icon-fg:   #1c1814;   /* black in dark mode — icons on filled buttons */
 
     --success:    #88a86b;
     --warn:       #d9b56c;
@@ -645,6 +647,28 @@ body.abp-application-layout .mud-svg-icon.mud-icon-color-info {
     fill: var(--accent) !important;
 }
 
+body.abp-application-layout .mud-button-filled .mud-button-icon-start,
+body.abp-application-layout .mud-button-filled .mud-button-icon-end,
+body.abp-application-layout .mud-button-filled .mud-button-icon-start .mud-icon-root,
+body.abp-application-layout .mud-button-filled .mud-button-icon-end .mud-icon-root,
+body.abp-application-layout .mud-button-filled .mud-button-icon-start .mud-svg-icon,
+body.abp-application-layout .mud-button-filled .mud-button-icon-end .mud-svg-icon {
+    color: var(--btn-icon-fg) !important;
+    fill: var(--btn-icon-fg) !important;
+}
+
+/* MudButton forwards its Color to StartIcon/EndIcon, so the icon span also
+   carries .mud-icon-color-primary, which the section-6 rule above repaints
+   to --accent — the same terracotta as the filled button, making the icon
+   blend in. This more-specific rule keeps it readable on filled buttons. */
+body.abp-application-layout .mud-button-filled .mud-icon-root.mud-icon-color-primary,
+body.abp-application-layout .mud-button-filled .mud-icon-root.mud-icon-color-info,
+body.abp-application-layout .mud-button-filled .mud-svg-icon.mud-icon-color-primary,
+body.abp-application-layout .mud-button-filled .mud-svg-icon.mud-icon-color-info {
+    color: var(--btn-icon-fg) !important;
+    fill: var(--btn-icon-fg) !important;
+}
+
 /* Primary-colored buttons that aren't filled (text/outlined) keep the
    accent color on label and border */
 body.abp-application-layout .mud-button-text-primary,
@@ -761,6 +785,7 @@ html[data-theme="dark"] body {
     --accent-soft:   rgba(217, 119, 87, 0.16);
     --accent-line:   rgba(217, 119, 87, 0.40);
     --accent-fg:     #1c1814;
+    --btn-icon-fg:   #1c1814;   /* black in dark mode — icons on filled buttons */
 
     --success:    #88a86b;
     --warn:       #d9b56c;
@@ -1088,6 +1113,19 @@ body.abp-application-layout .glass-modal .mud-icon-root.mud-icon-size-medium:fir
     fill: var(--accent) !important;
 }
 
+/* ...but the header-icon rule above also catches a filled button's StartIcon
+   inside a modal (it too is a medium, first-of-type icon). Re-assert beige on
+   filled-button icons within modals — higher specificity + later in source. */
+body.abp-application-layout .glass-modal .mud-button-filled .mud-icon-root.mud-icon-size-medium,
+body.abp-application-layout .glass-modal .mud-button-filled .mud-svg-icon.mud-icon-size-medium,
+body.abp-application-layout .soft-modal-card .mud-button-filled .mud-icon-root.mud-icon-size-medium,
+body.abp-application-layout .soft-modal-card .mud-button-filled .mud-svg-icon.mud-icon-size-medium,
+body.abp-application-layout .mud-dialog .mud-button-filled .mud-icon-root.mud-icon-size-medium,
+body.abp-application-layout .mud-dialog .mud-button-filled .mud-svg-icon.mud-icon-size-medium {
+    color: var(--btn-icon-fg) !important;
+    fill: var(--btn-icon-fg) !important;
+}
+
 /* If a dialog title uses a literal <span class="..."> for the icon
    (FontAwesome / icon font), force terracotta on the first-child of the
    modal title block */
@@ -1121,6 +1159,15 @@ body.abp-application-layout .mud-input textarea:focus {
 body.abp-application-layout .mud-button-filled-primary {
     background: var(--accent) !important;
     color: var(--accent-fg) !important;
+}
+body.abp-application-layout .mud-button-filled-primary .mud-button-icon-start,
+body.abp-application-layout .mud-button-filled-primary .mud-button-icon-end,
+body.abp-application-layout .mud-button-filled-primary .mud-button-icon-start .mud-icon-root,
+body.abp-application-layout .mud-button-filled-primary .mud-button-icon-end .mud-icon-root,
+body.abp-application-layout .mud-button-filled-primary .mud-button-icon-start .mud-svg-icon,
+body.abp-application-layout .mud-button-filled-primary .mud-button-icon-end .mud-svg-icon {
+    color: var(--btn-icon-fg) !important;
+    fill: var(--btn-icon-fg) !important;
 }
 body.abp-application-layout .mud-progress-circular.mud-primary-text circle,
 body.abp-application-layout .mud-progress-linear-bar.mud-primary-text {

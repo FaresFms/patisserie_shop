@@ -33,6 +33,11 @@
 
         <SoftText Typo="Typo.h6" Class="ml-2">Patisserie Shop</SoftText>
 
+        @if (CurrentUser.IsAuthenticated && _branchContextBadgeType is not null)
+        {
+            <DynamicComponent Type="_branchContextBadgeType" />
+        }
+
         <SoftSpacer />
 
         @* ── Language toggle (AR / EN) ── *@
@@ -196,6 +201,9 @@
     // app, so the shared theme project must not reference it directly.
     private static readonly Type? _recentSalesPanelType =
         Type.GetType("patisserie_shop.Blazor.Components.Layout.RecentSalesPanel, patisserie_shop.Blazor");
+
+    private static readonly Type? _branchContextBadgeType =
+        Type.GetType("patisserie_shop.Blazor.Components.Layout.BranchContextBadge, patisserie_shop.Blazor");
 
     private MudMenu _userMenu = default!;
     private MudBlazor.MudTheme _theme = MyTheme.Create();

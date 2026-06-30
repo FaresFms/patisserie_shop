@@ -71,7 +71,11 @@ public class ProductAppService : InventoryAppService, IProductAppService
             input.ReorderLevel,
             input.ImageUrl,
             input.IsActive,
-            input.ShelfLifeDays);
+            input.ShelfLifeDays,
+            input.ProductType,
+            input.IsSellable,
+            input.IsPurchasable,
+            input.IsProducible);
 
         await _productRepository.InsertAsync(product, autoSave: true);
         return ObjectMapper.Map<AppProduct, ProductDto>(product);
@@ -97,7 +101,11 @@ public class ProductAppService : InventoryAppService, IProductAppService
             input.ReorderLevel,
             input.ImageUrl,
             input.IsActive,
-            input.ShelfLifeDays);
+            input.ShelfLifeDays,
+            input.ProductType,
+            input.IsSellable,
+            input.IsPurchasable,
+            input.IsProducible);
 
         await _productRepository.UpdateAsync(product, autoSave: true);
         return ObjectMapper.Map<AppProduct, ProductDto>(product);

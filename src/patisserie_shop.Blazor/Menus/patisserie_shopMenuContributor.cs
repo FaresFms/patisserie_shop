@@ -5,6 +5,8 @@ using Intelligence.Localization;
 using Intelligence.Permissions;
 using Operations.Localization;
 using Operations.Permissions;
+using Production.Localization;
+using Production.Permissions;
 using patisserie_shop.Localization;
 using patisserie_shop.Permissions;
 using patisserie_shop.MultiTenancy;
@@ -204,6 +206,70 @@ public class patisserie_shopMenuContributor : IMenuContributor
             icon: "fas fa-calendar-alt"
         ).RequirePermissions(IntelligencePermissions.DecisionLogs.Default));
         context.Menu.AddItem(intelligenceMenu);
+
+        var prodL = context.GetLocalizer<ProductionResource>();
+        var productionMenu = new ApplicationMenuItem(
+            patisserie_shopMenus.Production,
+            prodL["Menu:Production"],
+            icon: "fas fa-industry",
+            order: 5
+        );
+        productionMenu.AddItem(new ApplicationMenuItem(
+            patisserie_shopMenus.ProductionDashboard,
+            prodL["Menu:ProductionDashboard"],
+            "/production/dashboard",
+            icon: "fas fa-gauge-high",
+            order: 0
+        ).RequirePermissions(ProductionPermissions.Dashboard.Default));
+        productionMenu.AddItem(new ApplicationMenuItem(
+            patisserie_shopMenus.ProductionMyRequests,
+            prodL["Menu:MyKitchenRequests"],
+            "/production/my-requests",
+            icon: "fas fa-clipboard-list"
+        ).RequirePermissions(ProductionPermissions.BranchRequests.Default));
+        productionMenu.AddItem(new ApplicationMenuItem(
+            patisserie_shopMenus.ProductionBranchRequests,
+            prodL["Menu:BranchRequests"],
+            "/production/branch-requests",
+            icon: "fas fa-inbox"
+        ).RequirePermissions(ProductionPermissions.BranchRequests.Approve));
+        productionMenu.AddItem(new ApplicationMenuItem(
+            patisserie_shopMenus.ProductionPlans,
+            prodL["Menu:ProductionPlans"],
+            "/production/plans",
+            icon: "fas fa-calendar-check"
+        ).RequirePermissions(ProductionPermissions.Plans.Default));
+        productionMenu.AddItem(new ApplicationMenuItem(
+            patisserie_shopMenus.ProductionCook,
+            prodL["Menu:CookScreen"],
+            "/production/cook",
+            icon: "fas fa-fire"
+        ).RequirePermissions(ProductionPermissions.Orders.Default));
+        productionMenu.AddItem(new ApplicationMenuItem(
+            patisserie_shopMenus.ProductionDispatch,
+            prodL["Menu:Dispatch"],
+            "/production/dispatch",
+            icon: "fas fa-shipping-fast"
+        ).RequirePermissions(ProductionPermissions.Dispatch.Default));
+        productionMenu.AddItem(new ApplicationMenuItem(
+            patisserie_shopMenus.ProductionWaste,
+            prodL["Menu:Waste"],
+            "/production/waste",
+            icon: "fas fa-trash-can"
+        ).RequirePermissions(ProductionPermissions.Waste.Default));
+        productionMenu.AddItem(new ApplicationMenuItem(
+            patisserie_shopMenus.ProductionAnalytics,
+            prodL["Menu:ProductionAnalytics"],
+            "/production/analytics",
+            icon: "fas fa-chart-line"
+        ).RequirePermissions(ProductionPermissions.Analytics.Default));
+        productionMenu.AddItem(new ApplicationMenuItem(
+            patisserie_shopMenus.ProductionFormulas,
+            prodL["Menu:Formulas"],
+            "/production/formulas",
+            icon: "fas fa-flask"
+        ).RequirePermissions(ProductionPermissions.Formulas.Default));
+        context.Menu.AddItem(productionMenu);
 
         //Administration
         var administration = context.Menu.GetAdministration();

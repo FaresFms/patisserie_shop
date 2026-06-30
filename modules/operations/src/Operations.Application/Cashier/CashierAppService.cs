@@ -79,7 +79,28 @@ public class CashierAppService : OperationsAppService, ICashierAppService
         var userId = CurrentUser.GetId();
         await _branchRepository.GetAsync(input.BranchId);
 
-        var shift = await _shiftManager.CreateOpenAsync(input.BranchId, userId, input.OpeningFloat);
+        var existingShift = await _shiftRepository.FindOpenShiftAsync(input.BranchId, userId);
+        if (existingShift is not null)
+        {
+            return await ProjectShiftAsync(existingShift);
+        }
+
+        AppCashierShift shift;
+        try
+        {
+            shift = await _shiftManager.CreateOpenAsync(input.BranchId, userId, input.OpeningFloat);
+        }
+        catch (BusinessException ex) when (ex.Code == OperationsErrorCodes.ShiftAlreadyOpen)
+        {
+            existingShift = await _shiftRepository.FindOpenShiftAsync(input.BranchId, userId);
+            if (existingShift is not null)
+            {
+                return await ProjectShiftAsync(existingShift);
+            }
+
+            throw;
+        }
+
         await _shiftRepository.InsertAsync(shift, autoSave: true);
 
         return await ProjectShiftAsync(shift);
@@ -168,7 +189,7 @@ public class CashierAppService : OperationsAppService, ICashierAppService
 
         // Typed read model (Product × BranchInventory) from the custom repo — no LINQ here.
         // Active products initialised at the branch; out-of-stock rows are returned so the UI
-        // can render them disabled.
+        // can render them disabled. Only sellable products (raw materials never appear at the POS).
         var rows = await _branchInventoryRepository.GetListWithProductAsync(
             branchId,
             filter,
@@ -177,7 +198,8 @@ public class CashierAppService : OperationsAppService, ICashierAppService
             includeInactiveProducts: false,
             sorting: "ProductName",
             skipCount: 0,
-            maxResultCount: 500);
+            maxResultCount: 500,
+            onlySellable: true);
 
         return rows.ConvertAll(r => new CashierProductDto
         {

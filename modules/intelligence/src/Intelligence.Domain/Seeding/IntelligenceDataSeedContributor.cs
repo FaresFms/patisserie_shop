@@ -56,7 +56,24 @@ public class IntelligenceDataSeedContributor : IDataSeedContributor, ITransientD
             ), autoSave: true);
         }
 
-        if (await _rulesRepository.AnyAsync(r => r.Id != IntelligenceConstants.CashierReportRuleId))
+        if (await _rulesRepository.FindAsync(IntelligenceConstants.ProductionOperationsRuleId) == null)
+        {
+            await _rulesRepository.InsertAsync(new AppInventoryRule(
+                id: IntelligenceConstants.ProductionOperationsRuleId,
+                ruleName: "تنبيهات الإنتاج التشغيلية",
+                ruleType: InventoryRuleTypes.LowStock,
+                productId: null,
+                branchId: null,
+                thresholdValue: 0,
+                thresholdDays: null,
+                suggestedAction: "راجع لوحة الإنتاج واتخذ الإجراء المناسب",
+                priority: 0,
+                isActive: false
+            ), autoSave: true);
+        }
+
+        if (await _rulesRepository.AnyAsync(r => r.Id != IntelligenceConstants.CashierReportRuleId
+                                             && r.Id != IntelligenceConstants.ProductionOperationsRuleId))
         {
             return;
         }

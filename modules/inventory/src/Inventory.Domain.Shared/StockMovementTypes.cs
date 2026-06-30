@@ -20,9 +20,19 @@ public static class StockMovementTypes
     /// </summary>
     public const string SaleReturn = "SaleReturn";
 
+    /// <summary>Raw material / packaging consumed when a production order starts.</summary>
+    public const string ProductionConsumption = "ProductionConsumption";
+
+    /// <summary>Finished goods accepted into Main Kitchen stock when production completes.</summary>
+    public const string ProductionOutput = "ProductionOutput";
+
+    /// <summary>Rejected output / kitchen waste write-off from production.</summary>
+    public const string ProductionWaste = "ProductionWaste";
+
     public static readonly string[] All =
     {
-        Purchase, Sale, TransferIn, TransferOut, ManualAdjustment, WriteOff, SaleReturn
+        Purchase, Sale, TransferIn, TransferOut, ManualAdjustment, WriteOff, SaleReturn,
+        ProductionConsumption, ProductionOutput, ProductionWaste
     };
 
     public static bool IsValid(string? type) => type != null && System.Array.IndexOf(All, type) >= 0;

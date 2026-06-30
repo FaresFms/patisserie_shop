@@ -46,6 +46,16 @@
         <Project Path="modules/intelligence/src/Intelligence.HttpApi.Client/Intelligence.HttpApi.Client.csproj" />
         <Project Path="modules/intelligence/src/Intelligence.Installer/Intelligence.Installer.csproj" />
     </Folder>
+    <Folder Name="/modules/production/">
+        <Project Path="modules/production/src/Production.Domain.Shared/Production.Domain.Shared.csproj" />
+        <Project Path="modules/production/src/Production.Domain/Production.Domain.csproj" />
+        <Project Path="modules/production/src/Production.Application.Contracts/Production.Application.Contracts.csproj" />
+        <Project Path="modules/production/src/Production.Application/Production.Application.csproj" />
+        <Project Path="modules/production/src/Production.EntityFrameworkCore/Production.EntityFrameworkCore.csproj" />
+        <Project Path="modules/production/src/Production.HttpApi/Production.HttpApi.csproj" />
+        <Project Path="modules/production/src/Production.HttpApi.Client/Production.HttpApi.Client.csproj" />
+        <Project Path="modules/production/src/Production.Installer/Production.Installer.csproj" />
+    </Folder>
     <Folder Name="/test/">
         <Project Path="test/patisserie_shop.Application.Tests/patisserie_shop.Application.Tests.csproj" />
         <Project Path="test/patisserie_shop.EntityFrameworkCore.Tests/patisserie_shop.EntityFrameworkCore.Tests.csproj" />

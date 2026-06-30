@@ -43,6 +43,14 @@ public class UpdateProductDto
 
     public bool IsActive { get; set; } = true;
 
+    [Required]
+    [StringLength(16)]
+    public string ProductType { get; set; } = Inventory.ProductTypes.FinishedGood;
+
+    public bool IsSellable { get; set; } = true;
+    public bool IsPurchasable { get; set; } = true;
+    public bool IsProducible { get; set; } = false;
+
     /// <summary>Null = non-perishable (no batch/expiry tracking).</summary>
     [Range(1, 3650)]
     public int? ShelfLifeDays { get; set; }

@@ -299,7 +299,7 @@
                                     </SoftButton>
                                     <SoftButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Info"
                                                 StartIcon="@Icons.Material.Filled.PlayArrow"
-                                                OnClick="@(() => ExecuteAsync(item))"
+                                                OnClick="@(() => OpenExecuteDialogAsync(item))"
                                                 Disabled="_busyId == item.Id">
                                         @IntL["DecisionLog:Action:Executed"]
                                     </SoftButton>
@@ -358,6 +358,128 @@
                                 OnClick="ConsolidateAsync"
                                 Disabled="_consolidating">
                         @IntL["DecisionLog:Consolidate:Action"]
+                    </SoftButton>
+                </div>
+            </SoftCard>
+        </div>
+    </div>
+}
+
+@if (_executeDialogVisible && _executeItem != null)
+{
+    <div class="glass-modal-backdrop" @onclick="CloseExecuteDialog">
+        <div class="glass-modal-container glass-modal-container--md" @onclick:stopPropagation="true">
+            <SoftCard Elevation="24" Class="glass-modal">
+                <SoftCardHeader Class="pa-4">
+                    <CardHeaderContent>
+                        <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <SoftIcon Icon="@ExecutePreviewIcon()"
+                                      Color="Color.Primary" Size="Size.Medium" />
+                            <SoftText Typo="Typo.h6">@ExecutePreviewTitle()</SoftText>
+                        </SoftStack>
+                    </CardHeaderContent>
+                    <CardHeaderActions>
+                        <SoftIconButton Icon="@Icons.Material.Filled.Close"
+                                        Size="Size.Small" OnClick="CloseExecuteDialog"
+                                        Disabled="_executingPreview" />
+                    </CardHeaderActions>
+                </SoftCardHeader>
+                <SoftDivider />
+                <SoftCardContent Class="pa-4 glass-modal-body">
+                    @if (_preparingExecute || _executePreview == null)
+                    {
+                        <SoftStack AlignItems="AlignItems.Center" Spacing="2" Class="pa-4">
+                            <SoftProgressCircular Indeterminate="true" Color="Color.Primary" />
+                            <SoftText Typo="Typo.body2" Color="Color.Default">@IntL["DecisionLog:ExecutePreview:Loading"]</SoftText>
+                        </SoftStack>
+                    }
+                    else
+                    {
+                        <SoftStack Spacing="3">
+                            <SoftAlert Severity="@(_executePreview.ActionCreated ? Severity.Info : Severity.Warning)">
+                                @ExecutePreviewIntro()
+                            </SoftAlert>
+
+                            <div class="dl-preview-grid">
+                                @if (!string.IsNullOrWhiteSpace(_executePreview.ProductName))
+                                {
+                                    <div>
+                                        <span>@IntL["DecisionLog:ExecutePreview:Product"]</span>
+                                        <strong>@_executePreview.ProductName</strong>
+                                    </div>
+                                }
+                                @if (!string.IsNullOrWhiteSpace(_executePreview.BranchName))
+                                {
+                                    <div>
+                                        <span>@IntL["DecisionLog:ExecutePreview:Branch"]</span>
+                                        <strong>@_executePreview.BranchName</strong>
+                                    </div>
+                                }
+                                @if (!string.IsNullOrWhiteSpace(_executePreview.SupplierName))
+                                {
+                                    <div>
+                                        <span>@IntL["DecisionLog:ExecutePreview:Supplier"]</span>
+                                        <strong>@_executePreview.SupplierName</strong>
+                                    </div>
+                                }
+                                @if (!string.IsNullOrWhiteSpace(_executePreview.SourceBranchName))
+                                {
+                                    <div>
+                                        <span>@IntL["DecisionLog:ExecutePreview:FromBranch"]</span>
+                                        <strong>@_executePreview.SourceBranchName</strong>
+                                    </div>
+                                }
+                                @if (!string.IsNullOrWhiteSpace(_executePreview.TargetBranchName))
+                                {
+                                    <div>
+                                        <span>@IntL["DecisionLog:ExecutePreview:ToBranch"]</span>
+                                        <strong>@_executePreview.TargetBranchName</strong>
+                                    </div>
+                                }
+                                @if (_executePreview.Quantity.HasValue)
+                                {
+                                    <div>
+                                        <span>@IntL["DecisionLog:ExecutePreview:Quantity"]</span>
+                                        <strong>@_executePreview.Quantity</strong>
+                                    </div>
+                                }
+                            </div>
+
+                            @if (_executePreview.Lines.Count > 0)
+                            {
+                                <div class="dl-preview-lines">
+                                    <SoftText Typo="Typo.overline" Color="Color.Primary">@IntL["DecisionLog:ExecutePreview:Items"]</SoftText>
+                                    @foreach (var line in _executePreview.Lines)
+                                    {
+                                        <div class="dl-preview-line">
+                                            <span>@line.ProductName</span>
+                                            <strong>@line.Quantity</strong>
+                                        </div>
+                                    }
+                                </div>
+                            }
+
+                            @if (!string.IsNullOrWhiteSpace(_executePreview.Notes))
+                            {
+                                <div class="dl-preview-notes">
+                                    <span>@IntL["DecisionLog:ExecutePreview:Notes"]</span>
+                                    <p>@_executePreview.Notes</p>
+                                </div>
+                            }
+                        </SoftStack>
+                    }
+                </SoftCardContent>
+                <SoftDivider />
+                <div class="pa-3 d-flex justify-end" style="gap: 8px;">
+                    <SoftButton Variant="Variant.Text" OnClick="CloseExecuteDialog"
+                                Disabled="_executingPreview">
+                        @L["Cancel"]
+                    </SoftButton>
+                    <SoftButton Variant="Variant.Filled" Color="Color.Primary"
+                                StartIcon="@Icons.Material.Filled.PlayArrow"
+                                OnClick="ConfirmExecuteAsync"
+                                Disabled="_preparingExecute || _executingPreview || _executePreview == null">
+                        @ExecutePreviewButtonLabel()
                     </SoftButton>
                 </div>
             </SoftCard>
@@ -540,6 +662,56 @@
         margin-top: 4px;
     }
 
+    .dl-preview-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 10px;
+    }
+    .dl-preview-grid div,
+    .dl-preview-line,
+    .dl-preview-notes {
+        border: 1px solid var(--bd-1);
+        background: var(--surface-2);
+        border-radius: var(--r-sm);
+    }
+    .dl-preview-grid div {
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+        padding: 10px 12px;
+    }
+    .dl-preview-grid span,
+    .dl-preview-notes span {
+        font-size: 11px;
+        color: var(--fg-3);
+    }
+    .dl-preview-grid strong,
+    .dl-preview-line strong {
+        color: var(--fg-1);
+        font-weight: 700;
+    }
+    .dl-preview-lines {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+    .dl-preview-line {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 8px 12px;
+    }
+    .dl-preview-notes {
+        padding: 10px 12px;
+    }
+    .dl-preview-notes p {
+        margin: 5px 0 0;
+        white-space: pre-line;
+        color: var(--fg-1);
+        line-height: 1.55;
+    }
+
     .dl-pager {
         display: flex;
         align-items: center;
@@ -567,6 +739,11 @@
 
     private bool _consolidateDialogVisible;
     private bool _consolidating;
+    private bool _executeDialogVisible;
+    private bool _preparingExecute;
+    private bool _executingPreview;
+    private DecisionLogDto? _executeItem;
+    private DecisionActionPreviewDto? _executePreview;
 
     /// <summary>Pending reorder-type decisions (LowStock / Reorder / Stockout) in the current view.</summary>
     private int _pendingReorderInView;
@@ -615,7 +792,13 @@
             new(DecisionTypes.ExpiryAlert,        IntL["DecisionType:ExpiryAlert"]),
             new(DecisionTypes.WasteWriteOff,      IntL["DecisionType:WasteWriteOff"]),
             new(DecisionTypes.StockReport,        IntL["DecisionType:StockReport"]),
-            new(DecisionTypes.CashierVariance,    IntL["DecisionType:CashierVariance"])
+            new(DecisionTypes.CashierVariance,    IntL["DecisionType:CashierVariance"]),
+            new(DecisionTypes.IngredientShortage, IntL["DecisionType:IngredientShortage"]),
+            new(DecisionTypes.ProductionShortageRisk, IntL["DecisionType:ProductionShortageRisk"]),
+            new(DecisionTypes.HighKitchenWaste,   IntL["DecisionType:HighKitchenWaste"]),
+            new(DecisionTypes.ProductionCostVariance, IntL["DecisionType:ProductionCostVariance"]),
+            new(DecisionTypes.LateProductionRisk, IntL["DecisionType:LateProductionRisk"]),
+            new(DecisionTypes.UnfulfilledBranchRequest, IntL["DecisionType:UnfulfilledBranchRequest"])
         };
 
         _statusOptions = new List<LabeledOption>
@@ -788,15 +971,63 @@
     private async Task DismissAsync(DecisionLogDto item)
         => await RunActionAsync(item, async id => await DecisionLogAppService.DismissAsync(id));
 
-    private async Task ExecuteAsync(DecisionLogDto item)
+    private async Task OpenExecuteDialogAsync(DecisionLogDto item)
     {
+        _executeItem = item;
+        _executePreview = null;
+        _executeDialogVisible = true;
+        _preparingExecute = true;
+        _busyId = item.Id;
+
+        try
+        {
+            _executePreview = item.DecisionType == DecisionTypes.StockReport
+                ? BuildStockReportPreview(item)
+                : await DecisionActionAppService.PrepareDecisionActionAsync(item.Id);
+        }
+        catch (Exception ex)
+        {
+            _executeDialogVisible = false;
+            _executeItem = null;
+            await HandleErrorAsync(ex);
+        }
+        finally
+        {
+            _preparingExecute = false;
+            _busyId = null;
+        }
+    }
+
+    private void CloseExecuteDialog()
+    {
+        if (_executingPreview) return;
+        _executeDialogVisible = false;
+        _executeItem = null;
+        _executePreview = null;
+    }
+
+    private DecisionActionPreviewDto BuildStockReportPreview(DecisionLogDto item) => new()
+    {
+        ActionCreated = true,
+        ActionType = DecisionActionTypes.BranchProductionRequest,
+        ProductName = item.ProductName,
+        BranchName = item.BranchName,
+        Notes = item.Reasoning
+    };
+
+    private async Task ConfirmExecuteAsync()
+    {
+        if (_executeItem == null) return;
+
+        var item = _executeItem;
         if (item.DecisionType == DecisionTypes.StockReport)
         {
-            OpenTransferRequest(item);
+            OpenProductionRequest(item);
             return;
         }
 
         _busyId = item.Id;
+        _executingPreview = true;
         try
         {
             var result = await DecisionActionAppService.ExecuteDecisionAsync(item.Id);
@@ -821,10 +1052,18 @@
             {
                 Snackbar.Add(string.Format(IntL["DecisionLog:WriteOffRecorded"], result.ActionNumber), Severity.Success);
             }
+            else if (result.ActionCreated && result.ActionType == DecisionActionTypes.BranchProductionRequest)
+            {
+                Snackbar.Add(string.Format(IntL["DecisionLog:ProductionRequestCreated"], result.ActionNumber), Severity.Success);
+            }
             else
             {
                 Snackbar.Add(L["SuccessfullySaved"], Severity.Success);
             }
+
+            _executeDialogVisible = false;
+            _executeItem = null;
+            _executePreview = null;
         }
         catch (Exception ex)
         {
@@ -833,24 +1072,31 @@
         finally
         {
             _busyId = null;
+            _executingPreview = false;
         }
     }
 
-    private void OpenTransferRequest(DecisionLogDto item)
+    private void OpenProductionRequest(DecisionLogDto item)
     {
         var parameters = new Dictionary<string, string?>
         {
-            ["new"] = "true"
+            ["new"] = "true",
+            ["decisionId"] = item.Id.ToString()
         };
 
         if (item.BranchId.HasValue)
         {
-            parameters["toBranchId"] = item.BranchId.Value.ToString();
+            parameters["branchId"] = item.BranchId.Value.ToString();
         }
 
-        parameters["notes"] = $"Created from cashier stock report {item.Id}. {item.Reasoning}";
+        if (item.ProductId != Guid.Empty)
+        {
+            parameters["productId"] = item.ProductId.ToString();
+        }
 
-        NavigationManager.NavigateTo(QueryHelpers.AddQueryString("/operations/stock-transfers", parameters));
+        parameters["notes"] = $"أُنشئ من بلاغ مخزون الكاشير {item.Id}.\n{item.Reasoning}";
+
+        NavigationManager.NavigateTo(QueryHelpers.AddQueryString("/production/my-requests", parameters));
     }
 
     private void OpenConsolidateDialog() => _consolidateDialogVisible = true;
@@ -934,6 +1180,7 @@
     {
         DecisionActionTypes.PurchaseOrder => "/operations/purchase-orders",
         DecisionActionTypes.StockTransfer => "/operations/stock-transfers",
+        DecisionActionTypes.BranchProductionRequest => "/production/branch-requests",
         _ => "#"
     };
 
@@ -941,6 +1188,7 @@
     {
         DecisionActionTypes.PurchaseOrder => Icons.Material.Outlined.ShoppingCart,
         DecisionActionTypes.StockTransfer => Icons.Material.Outlined.SwapHoriz,
+        DecisionActionTypes.BranchProductionRequest => Icons.Material.Outlined.Assignment,
         _ => Icons.Material.Outlined.Link
     };
 
@@ -948,8 +1196,61 @@
     {
         DecisionActionTypes.PurchaseOrder => IntL["DecisionLog:ViewPurchaseOrder"],
         DecisionActionTypes.StockTransfer => IntL["DecisionLog:ViewStockTransfer"],
+        DecisionActionTypes.BranchProductionRequest => IntL["DecisionLog:ViewProductionRequest"],
         _ => string.Empty
     };
+
+    private string ExecutePreviewTitle()
+    {
+        if (_executePreview == null) return IntL["DecisionLog:ExecutePreview:Title"];
+        if (_executeItem?.DecisionType == DecisionTypes.StockReport) return IntL["DecisionLog:ExecutePreview:ProductionRequestTitle"];
+        if (!_executePreview.ActionCreated) return IntL["DecisionLog:ExecutePreview:NoDocumentTitle"];
+
+        return _executePreview.ActionType switch
+        {
+            DecisionActionTypes.PurchaseOrder => IntL["DecisionLog:ExecutePreview:POTitle"],
+            DecisionActionTypes.StockTransfer => IntL["DecisionLog:ExecutePreview:TransferTitle"],
+            DecisionActionTypes.StockAdjustment => IntL["DecisionLog:ExecutePreview:WriteOffTitle"],
+            DecisionActionTypes.BranchProductionRequest => IntL["DecisionLog:ExecutePreview:ProductionRequestTitle"],
+            _ => IntL["DecisionLog:ExecutePreview:Title"]
+        };
+    }
+
+    private string ExecutePreviewIntro()
+    {
+        if (_executePreview == null) return string.Empty;
+        if (_executeItem?.DecisionType == DecisionTypes.StockReport) return IntL["DecisionLog:ExecutePreview:ProductionRequestIntro"];
+        if (!_executePreview.ActionCreated) return IntL["DecisionLog:ExecutePreview:NoDocumentIntro"];
+
+        return _executePreview.ActionType switch
+        {
+            DecisionActionTypes.PurchaseOrder => IntL["DecisionLog:ExecutePreview:POIntro"],
+            DecisionActionTypes.StockTransfer => IntL["DecisionLog:ExecutePreview:TransferIntro"],
+            DecisionActionTypes.StockAdjustment => IntL["DecisionLog:ExecutePreview:WriteOffIntro"],
+            DecisionActionTypes.BranchProductionRequest => IntL["DecisionLog:ExecutePreview:ProductionRequestIntro"],
+            _ => IntL["DecisionLog:ExecutePreview:GenericIntro"]
+        };
+    }
+
+    private string ExecutePreviewButtonLabel()
+        => _executeItem?.DecisionType == DecisionTypes.StockReport
+            ? IntL["DecisionLog:ExecutePreview:OpenForm"]
+            : IntL["DecisionLog:ExecutePreview:Continue"];
+
+    private string ExecutePreviewIcon()
+    {
+        if (_executePreview?.ActionType == DecisionActionTypes.StockAdjustment)
+        {
+            return Icons.Material.Filled.DeleteSweep;
+        }
+
+        if (_executeItem?.DecisionType == DecisionTypes.StockReport)
+        {
+            return Icons.Material.Filled.Assignment;
+        }
+
+        return ActionLinkIcon(_executePreview?.ActionType);
+    }
 
     private static string TypeIcon(string decisionType) => decisionType switch
     {
@@ -963,6 +1264,12 @@
         DecisionTypes.WasteWriteOff => Icons.Material.Filled.DeleteSweep,
         DecisionTypes.StockReport => Icons.Material.Filled.ReportProblem, // manual cashier report
         DecisionTypes.CashierVariance => Icons.Material.Filled.PointOfSale,
+        DecisionTypes.IngredientShortage => Icons.Material.Filled.Inventory2,
+        DecisionTypes.ProductionShortageRisk => Icons.Material.Filled.HourglassBottom,
+        DecisionTypes.HighKitchenWaste => Icons.Material.Filled.DeleteSweep,
+        DecisionTypes.ProductionCostVariance => Icons.Material.Filled.PriceChange,
+        DecisionTypes.LateProductionRisk => Icons.Material.Filled.Schedule,
+        DecisionTypes.UnfulfilledBranchRequest => Icons.Material.Filled.AssignmentLate,
         _ => Icons.Material.Filled.Info
     };
 
@@ -978,6 +1285,12 @@
         DecisionTypes.WasteWriteOff => Color.Default,  // brown-grey family via CSS accents below
         DecisionTypes.StockReport => Color.Info,       // blue-grey info family via CSS accents below
         DecisionTypes.CashierVariance => Color.Error,
+        DecisionTypes.IngredientShortage => Color.Warning,
+        DecisionTypes.ProductionShortageRisk => Color.Secondary,
+        DecisionTypes.HighKitchenWaste => Color.Error,
+        DecisionTypes.ProductionCostVariance => Color.Info,
+        DecisionTypes.LateProductionRisk => Color.Secondary,
+        DecisionTypes.UnfulfilledBranchRequest => Color.Tertiary,
         _ => Color.Default
     };
 

@@ -7,14 +7,11 @@ public class CreateStockTransferDtoValidator : AbstractValidator<CreateStockTran
 {
     public CreateStockTransferDtoValidator()
     {
-        RuleFor(x => x.FromBranchId)
-            .NotEmpty().WithMessage("Source branch is required.");
-
         RuleFor(x => x.ToBranchId)
             .NotEmpty().WithMessage("Destination branch is required.");
 
         RuleFor(x => x)
-            .Must(x => x.FromBranchId != x.ToBranchId)
+            .Must(x => !x.FromBranchId.HasValue || x.FromBranchId != x.ToBranchId)
             .WithMessage("Source and destination branches must be different.");
 
         RuleFor(x => x.RequestedDate)
@@ -22,6 +19,15 @@ public class CreateStockTransferDtoValidator : AbstractValidator<CreateStockTran
 
         RuleFor(x => x.Notes)
             .MaximumLength(512).WithMessage("Notes must not exceed 512 characters.");
+    }
+}
+
+public class AssignStockTransferSourceDtoValidator : AbstractValidator<AssignStockTransferSourceDto>
+{
+    public AssignStockTransferSourceDtoValidator()
+    {
+        RuleFor(x => x.FromBranchId)
+            .NotEmpty().WithMessage("Source branch is required.");
     }
 }
 

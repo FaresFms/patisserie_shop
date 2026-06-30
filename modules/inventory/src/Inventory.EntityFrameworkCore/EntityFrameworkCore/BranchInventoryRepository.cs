@@ -28,10 +28,11 @@ public class BranchInventoryRepository
         bool onlyOutOfStock,
         bool onlyLowStock,
         bool includeInactiveProducts,
+        bool onlySellable = false,
         CancellationToken cancellationToken = default)
     {
         var query = await BuildJoinedQueryAsync(
-            branchId, filter, onlyOutOfStock, onlyLowStock, includeInactiveProducts);
+            branchId, filter, onlyOutOfStock, onlyLowStock, includeInactiveProducts, onlySellable);
         return await query.LongCountAsync(GetCancellationToken(cancellationToken));
     }
 
@@ -44,10 +45,11 @@ public class BranchInventoryRepository
         string sorting,
         int skipCount,
         int maxResultCount,
+        bool onlySellable = false,
         CancellationToken cancellationToken = default)
     {
         var query = await BuildJoinedQueryAsync(
-            branchId, filter, onlyOutOfStock, onlyLowStock, includeInactiveProducts);
+            branchId, filter, onlyOutOfStock, onlyLowStock, includeInactiveProducts, onlySellable);
 
         var ordered = query
             .OrderBy(ResolveSorting(sorting))
@@ -132,17 +134,26 @@ public class BranchInventoryRepository
 
     public async Task<List<InventoryStockRow>> GetAvailableProductsAsync(
         Guid branchId,
+        bool onlySellable = false,
         CancellationToken cancellationToken = default)
     {
         var dbContext = await GetDbContextAsync();
 
-        return await (
+        var query =
             from inv in dbContext.Set<AppBranchInventory>()
             join p in dbContext.Set<AppProduct>() on inv.ProductId equals p.Id
             where inv.BranchId == branchId && inv.QuantityOnHand > 0 && p.IsActive
-            orderby p.Name
-            select new InventoryStockRow { Inventory = inv, Product = p }
-        ).ToListAsync(GetCancellationToken(cancellationToken));
+            select new InventoryStockRow { Inventory = inv, Product = p };
+
+        // Sales path only: never offer raw materials etc. on the New Sale picker.
+        if (onlySellable)
+        {
+            query = query.Where(x => x.Product.IsSellable);
+        }
+
+        return await query
+            .OrderBy(x => x.Product.Name)
+            .ToListAsync(GetCancellationToken(cancellationToken));
     }
 
     private static string ResolveSorting(string? sorting)
@@ -163,7 +174,8 @@ public class BranchInventoryRepository
         string? filter,
         bool onlyOutOfStock,
         bool onlyLowStock,
-        bool includeInactiveProducts)
+        bool includeInactiveProducts,
+        bool onlySellable = false)
     {
         var dbContext = await GetDbContextAsync();
 
@@ -193,6 +205,12 @@ public class BranchInventoryRepository
         if (!includeInactiveProducts)
         {
             query = query.Where(x => x.Product.IsActive);
+        }
+
+        // POS / sell paths only: never surface raw materials etc. at the till.
+        if (onlySellable)
+        {
+            query = query.Where(x => x.Product.IsSellable);
         }
 
         return query;

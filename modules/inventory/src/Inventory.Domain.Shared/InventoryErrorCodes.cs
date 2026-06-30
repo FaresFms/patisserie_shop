@@ -19,4 +19,6 @@ public static class InventoryErrorCodes
     public const string InvalidBatchQuantity = "Inventory:StockBatches:InvalidQuantity";
     public const string InvalidBatchConsumeQuantity = "Inventory:StockBatches:InvalidConsumeQuantity";
     public const string InvalidBatchSourceType = "Inventory:StockBatches:InvalidSourceType";
+    public const string InvalidBranchType = "Inventory:Branches:InvalidBranchType";
+    public const string InvalidProductType = "Inventory:Products:InvalidProductType";
 }

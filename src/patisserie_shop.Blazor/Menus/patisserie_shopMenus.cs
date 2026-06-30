@@ -31,4 +31,15 @@ public class patisserie_shopMenus
     public const string DecisionLog = Intelligence + ".DecisionLog";
     public const string ProductVelocity = Intelligence + ".ProductVelocity";
     public const string ReorderCalendar = Intelligence + ".ReorderCalendar";
+
+    public const string Production = Prefix + ".Production";
+    public const string ProductionDashboard = Production + ".Dashboard";
+    public const string ProductionFormulas = Production + ".Formulas";
+    public const string ProductionMyRequests = Production + ".MyRequests";
+    public const string ProductionBranchRequests = Production + ".BranchRequests";
+    public const string ProductionPlans = Production + ".Plans";
+    public const string ProductionCook = Production + ".Cook";
+    public const string ProductionDispatch = Production + ".Dispatch";
+    public const string ProductionWaste = Production + ".Waste";
+    public const string ProductionAnalytics = Production + ".Analytics";
 }

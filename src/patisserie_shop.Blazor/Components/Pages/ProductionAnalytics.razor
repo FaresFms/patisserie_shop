@@ -1,0 +1,441 @@
+@page "/production/analytics"
+@attribute [Authorize(ProductionPermissions.Analytics.Default)]
+@using System.Globalization
+@using System.Threading.Tasks
+@using Inventory.Branches
+@using Microsoft.AspNetCore.Authorization
+@using Production.Analytics
+@using Production.Dashboard
+@using Production.Localization
+@using Production.Permissions
+@using Volo.Abp.AspNetCore.Components.Web.Theming.Layout
+@using ApexCharts
+@using Color = MudBlazor.Color
+@using Variant = MudBlazor.Variant
+@using Size = MudBlazor.Size
+@using Margin = MudBlazor.Margin
+@inherits patisserie_shopComponentBase
+@inject IProductionAnalyticsAppService AnalyticsAppService
+@inject IBranchAppService BranchAppService
+@inject PageLayout PageLayout
+@inject IStringLocalizer<ProductionResource> ProdL
+
+@{
+    PageLayout.Title = ProdL["ProductionAnalytics"];
+}
+
+<SoftCard Elevation="2" Class="pa-2 page-flat prod-analytics">
+    <div class="page-head">
+        <div>
+            <h1 class="page-title">@ProdL["ProductionAnalytics"]</h1>
+            <div class="page-sub">@ProdL["ProductionAnalyticsSubtitle"]</div>
+        </div>
+        <div class="page-head-actions">
+            <SoftButton Variant="Variant.Text" Color="Color.Primary"
+                        StartIcon="@Icons.Material.Filled.Refresh"
+                        OnClick="LoadAsync"
+                        Disabled="_loading">
+                @ProdL["Refresh"]
+            </SoftButton>
+        </div>
+    </div>
+
+    <SoftCardContent>
+        <div class="toolbar">
+            <div class="pa-range">
+                @foreach (var day in RangeOptions)
+                {
+                    var selected = day;
+                    <SoftButton Variant="@(_days == selected ? Variant.Filled : Variant.Text)"
+                                Color="Color.Primary"
+                                Size="Size.Small"
+                                Disabled="_loading"
+                                OnClick="@(() => SetDaysAsync(selected))">
+                        @ProdL[$"Days{selected}"]
+                    </SoftButton>
+                }
+            </div>
+
+            <div class="filter-chip">
+                <SoftLookupSelect TItem="BranchLookupDto" TValue="Guid?"
+                                  Items="_branches"
+                                  ToValue="@(b => (Guid?)b.Id)"
+                                  ToLabel="@(b => b.Name)"
+                                  Value="_kitchenBranchId"
+                                  ValueChanged="OnBranchChangedAsync"
+                                  Label="@ProdL["KitchenBranch"]"
+                                  Margin="Margin.Dense"
+                                  Dense="true"
+                                  Clearable="true" />
+            </div>
+        </div>
+
+        @if (_error != null)
+        {
+            <SoftAlert Severity="Severity.Error" Variant="Variant.Filled" Class="ma-4">@_error</SoftAlert>
+        }
+        else if (_data == null)
+        {
+            <div class="pa-skeleton-row">
+                @for (var i = 0; i < 5; i++)
+                {
+                    <SoftSkeleton SkeletonType="SkeletonType.Rectangle" Height="72px" Width="100%" />
+                }
+            </div>
+            <div class="pa-two">
+                <SoftSkeleton SkeletonType="SkeletonType.Rectangle" Height="320px" Width="100%" />
+                <SoftSkeleton SkeletonType="SkeletonType.Rectangle" Height="320px" Width="100%" />
+            </div>
+        }
+        else
+        {
+            <div class="stats pa-stats">
+                <div>
+                    <span class="stat-label">@ProdL["YieldPercent"]</span>
+                    <span class="stat-value">@FormatPercent(_data.YieldPercent)</span>
+                </div>
+                <div>
+                    <span class="stat-label">@ProdL["WastePercent"]</span>
+                    <span class="stat-value">@FormatPercent(_data.WastePercent)</span>
+                </div>
+                <div>
+                    <span class="stat-label">@ProdL["Fulfillment"]</span>
+                    <span class="stat-value">@FormatPercent(_data.FulfillmentPercent)</span>
+                </div>
+                <div>
+                    <span class="stat-label">@ProdL["CostVariance"]</span>
+                    <span class="stat-value @(_data.CostVariance > 0 ? "pa-danger" : "pa-success")">@FormatMoney(_data.CostVariance)</span>
+                </div>
+                <div>
+                    <span class="stat-label">@ProdL["AverageUnitCost"]</span>
+                    <span class="stat-value">@FormatMoneyExact(_data.AverageUnitCost)</span>
+                </div>
+            </div>
+
+            <div class="pa-two">
+                <section class="pa-section">
+                    <header class="pa-section-head">
+                        <div>
+                            <h2 class="pa-section-title">@ProdL["OutputLast7Days"]</h2>
+                            <div class="pa-section-sub">@_data.Days @ProdL["DaysSuffix"] · @ProdL["Accepted"] / @ProdL["Rejected"]</div>
+                        </div>
+                    </header>
+                    <div class="pa-chart">
+                        <ApexChart TItem="ProductionDailyOutputPointDto" @key="_data" Options="_dailyOptions" Height="300">
+                            <ApexPointSeries TItem="ProductionDailyOutputPointDto"
+                                             Items="_data.DailyOutput"
+                                             Name="@ProdL["Accepted"]"
+                                             SeriesType="SeriesType.Area"
+                                             XValue="@(d => d.Date.ToString("MMM d", CultureInfo.CurrentCulture))"
+                                             YValue="@(d => d.AcceptedQuantity)" />
+                            <ApexPointSeries TItem="ProductionDailyOutputPointDto"
+                                             Items="_data.DailyOutput"
+                                             Name="@ProdL["Rejected"]"
+                                             SeriesType="SeriesType.Bar"
+                                             XValue="@(d => d.Date.ToString("MMM d", CultureInfo.CurrentCulture))"
+                                             YValue="@(d => d.RejectedQuantity)" />
+                        </ApexChart>
+                    </div>
+                </section>
+
+                <section class="pa-section">
+                    <header class="pa-section-head">
+                        <div>
+                            <h2 class="pa-section-title">@ProdL["WasteReasonMix"]</h2>
+                            <div class="pa-section-sub">@ProdL["WasteQuantity"] / @ProdL["WasteCost"]</div>
+                        </div>
+                    </header>
+                    @if (_data.WasteReasons.Count == 0)
+                    {
+                        <div class="pa-empty">@ProdL["NoProductionData"]</div>
+                    }
+                    else
+                    {
+                        <div class="pa-chart">
+                            <ApexChart TItem="ProductionWasteReasonAnalyticsRowDto" @key="_data" Options="_wasteOptions" Height="300">
+                                <ApexPointSeries TItem="ProductionWasteReasonAnalyticsRowDto"
+                                                 Items="_data.WasteReasons"
+                                                 Name="@ProdL["WasteQuantity"]"
+                                                 SeriesType="SeriesType.Donut"
+                                                 XValue="@(r => FormatReason(r.Reason))"
+                                                 YValue="@(r => r.Quantity)" />
+                            </ApexChart>
+                        </div>
+                    }
+                </section>
+            </div>
+
+            <section class="pa-section pa-section--wide">
+                <header class="pa-section-head">
+                    <div>
+                        <h2 class="pa-section-title">@ProdL["ProductionPerformance"]</h2>
+                        <div class="pa-section-sub">@ProdL["YieldPercent"] · @ProdL["AverageUnitCost"]</div>
+                    </div>
+                </header>
+                @if (_data.ProductPerformance.Count == 0)
+                {
+                    <div class="pa-empty">@ProdL["NoProductionData"]</div>
+                }
+                else
+                {
+                    <table class="pa-table">
+                        <thead>
+                            <tr>
+                                <th>@ProdL["Product"]</th>
+                                <th class="pa-num">@ProdL["Accepted"]</th>
+                                <th class="pa-num">@ProdL["Rejected"]</th>
+                                <th class="pa-num">@ProdL["YieldPercent"]</th>
+                                <th class="pa-num">@ProdL["AverageUnitCost"]</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var product in _data.ProductPerformance)
+                            {
+                                <tr>
+                                    <td>
+                                        <div class="pa-product">@product.ProductName</div>
+                                        <div class="pa-sku">@product.ProductSku</div>
+                                    </td>
+                                    <td class="pa-num">@product.AcceptedQuantity.ToString("N0")</td>
+                                    <td class="pa-num">@product.RejectedQuantity.ToString("N0")</td>
+                                    <td class="pa-num">@FormatPercent(product.YieldPercent)</td>
+                                    <td class="pa-num">@FormatMoneyExact(product.UnitCost)</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                }
+            </section>
+
+            <section class="pa-section pa-section--wide">
+                <header class="pa-section-head">
+                    <div>
+                        <h2 class="pa-section-title">@ProdL["CostVariance"]</h2>
+                        <div class="pa-section-sub">@FormatMoney(_data.ActualCost) @ProdL["ActualCost"] · @FormatMoney(_data.PlannedCost) @ProdL["PlannedCost"]</div>
+                    </div>
+                    <SoftChip T="string" Size="Size.Small" Color="@(_data.CostVariance > 0 ? Color.Warning : Color.Success)" Variant="Variant.Filled">
+                        @FormatPercent(_data.CostVariancePercent)
+                    </SoftChip>
+                </header>
+                <div class="pa-cost-band">
+                    <div>
+                        <span>@ProdL["PlannedCost"]</span>
+                        <strong>@FormatMoney(_data.PlannedCost)</strong>
+                    </div>
+                    <div>
+                        <span>@ProdL["ActualCost"]</span>
+                        <strong>@FormatMoney(_data.ActualCost)</strong>
+                    </div>
+                    <div>
+                        <span>@ProdL["CostVariance"]</span>
+                        <strong class="@(_data.CostVariance > 0 ? "pa-danger" : "pa-success")">@FormatMoney(_data.CostVariance)</strong>
+                    </div>
+                </div>
+            </section>
+        }
+    </SoftCardContent>
+</SoftCard>
+
+<style>
+    .prod-analytics { animation: pa-fade .22s ease-out; }
+    @@keyframes pa-fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+    .pa-range { display: inline-flex; gap: 4px; align-items: center; }
+    .pa-skeleton-row {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+        gap: 14px;
+        padding: 14px 32px 0;
+    }
+    .pa-stats { margin-top: 10px; }
+    .pa-two {
+        display: grid;
+        grid-template-columns: minmax(0, 1.25fr) minmax(0, .85fr);
+        gap: 16px;
+        padding: 16px 32px 0;
+    }
+    @@media (max-width: 1000px) { .pa-two { grid-template-columns: 1fr; } }
+    .pa-section {
+        background: var(--surface);
+        border: 1px solid var(--bd-1);
+        border-radius: var(--r-md);
+        box-shadow: var(--shadow-sm);
+        padding: 16px 18px;
+    }
+    .pa-section--wide { margin: 16px 32px 0; }
+    .pa-section-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 10px;
+        margin-bottom: 14px;
+    }
+    .pa-section-title {
+        font-family: var(--font-serif);
+        font-size: 18px;
+        font-weight: 700;
+        color: var(--fg-1);
+        margin: 0;
+    }
+    .pa-section-sub { font-size: 12.5px; color: var(--fg-3); margin-top: 2px; }
+    .pa-chart { min-height: 300px; }
+    .pa-chart .apexcharts-svg { background: transparent !important; }
+    .pa-empty {
+        min-height: 180px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--fg-3);
+        text-align: center;
+        font-size: 13px;
+    }
+    .pa-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13.5px;
+    }
+    .pa-table th {
+        text-align: start;
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        color: var(--fg-3);
+        padding: 7px 10px;
+        border-bottom: 1px solid var(--bd-2);
+    }
+    .pa-table td {
+        padding: 9px 10px;
+        border-bottom: 1px solid var(--bd-1);
+        color: var(--fg-1);
+    }
+    .pa-table tbody tr:hover td { background: var(--hover); }
+    .pa-product { font-weight: 700; }
+    .pa-sku { font-family: var(--font-mono); font-size: 11.5px; color: var(--fg-3); }
+    .pa-num { text-align: end; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .pa-danger { color: var(--danger) !important; }
+    .pa-success { color: var(--success) !important; }
+    .pa-cost-band {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 12px;
+    }
+    @@media (max-width: 700px) { .pa-cost-band { grid-template-columns: 1fr; } }
+    .pa-cost-band div {
+        background: var(--bg-2);
+        border: 1px solid var(--bd-1);
+        border-radius: var(--r-sm);
+        padding: 12px 14px;
+    }
+    .pa-cost-band span {
+        display: block;
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        color: var(--fg-3);
+    }
+    .pa-cost-band strong {
+        display: block;
+        margin-top: 4px;
+        font-family: var(--font-serif);
+        font-size: 22px;
+        color: var(--fg-1);
+        font-variant-numeric: tabular-nums;
+    }
+    html[dir="rtl"] .prod-analytics { direction: rtl; text-align: right; }
+</style>
+
+@code {
+    private static readonly int[] RangeOptions = { 7, 30, 90 };
+    private static readonly List<string> WarmPalette = new()
+    {
+        "#c8633f", "#6b8e4e", "#c89c4f", "#4a7da8", "#4a8e8e", "#b3543a", "#8a7e6e"
+    };
+
+    private ProductionAnalyticsDto? _data;
+    private List<BranchLookupDto> _branches = new();
+    private Guid? _kitchenBranchId;
+    private int _days = 30;
+    private bool _loading;
+    private string? _error;
+
+    private readonly ApexChartOptions<ProductionDailyOutputPointDto> _dailyOptions = new()
+    {
+        Chart = new ApexCharts.Chart
+        {
+            Toolbar = new ApexCharts.Toolbar { Show = false },
+            Background = "transparent",
+            FontFamily = "Inter, sans-serif",
+            ForeColor = "#8a7e6e"
+        },
+        Colors = new List<string> { "#c8633f", "#b3543a" },
+        Stroke = new ApexCharts.Stroke { Curve = ApexCharts.Curve.Smooth, Width = 3 },
+        DataLabels = new ApexCharts.DataLabels { Enabled = false },
+        Grid = new ApexCharts.Grid { BorderColor = "rgba(138, 126, 110, .25)", StrokeDashArray = 3 },
+        Legend = new ApexCharts.Legend { Show = true },
+        Xaxis = new ApexCharts.XAxis
+        {
+            AxisBorder = new ApexCharts.AxisBorder { Show = false },
+            AxisTicks = new ApexCharts.AxisTicks { Show = false }
+        }
+    };
+
+    private readonly ApexChartOptions<ProductionWasteReasonAnalyticsRowDto> _wasteOptions = new()
+    {
+        Chart = new ApexCharts.Chart
+        {
+            Toolbar = new ApexCharts.Toolbar { Show = false },
+            Background = "transparent",
+            FontFamily = "Inter, sans-serif",
+            ForeColor = "#8a7e6e"
+        },
+        Colors = WarmPalette,
+        DataLabels = new ApexCharts.DataLabels { Enabled = false },
+        Legend = new ApexCharts.Legend { Show = true }
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        _branches = await BranchAppService.GetLookupAsync();
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error = null;
+        try
+        {
+            _data = await AnalyticsAppService.GetAsync(new GetProductionAnalyticsInput
+            {
+                Days = _days,
+                KitchenBranchId = _kitchenBranchId
+            });
+        }
+        catch (Exception ex)
+        {
+            _error = $"{ex.GetType().Name}: {ex.Message}";
+            await HandleErrorAsync(ex);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task SetDaysAsync(int days)
+    {
+        if (_days == days) return;
+        _days = days;
+        await LoadAsync();
+    }
+
+    private async Task OnBranchChangedAsync(Guid? branchId)
+    {
+        _kitchenBranchId = branchId;
+        await LoadAsync();
+    }
+
+    private string FormatReason(string reason) => ProdL[$"Reason:{reason}"].Value;
+    private static string FormatPercent(decimal value) => $"{value:0.#}%";
+    private static string FormatMoney(decimal value) => value.ToString("C0", CultureInfo.GetCultureInfo("en-US"));
+    private static string FormatMoneyExact(decimal value) => value.ToString("C2", CultureInfo.GetCultureInfo("en-US"));
+}

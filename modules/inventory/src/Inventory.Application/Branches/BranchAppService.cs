@@ -65,7 +65,8 @@ public class BranchAppService : InventoryAppService, IBranchAppService
             input.Phone,
             input.Email,
             input.ManagerUserId,
-            input.IsActive);
+            input.IsActive,
+            input.BranchType);
 
         await _branchRepository.InsertAsync(branch, autoSave: true);
         return ObjectMapper.Map<AppBranch, BranchDto>(branch);
@@ -77,7 +78,7 @@ public class BranchAppService : InventoryAppService, IBranchAppService
         var branch = await _branchRepository.GetAsync(id);
 
         await _branchManager.ChangeNameAsync(branch, input.Name);
-        branch.UpdateInfo(input.Address, input.Phone, input.Email, input.ManagerUserId, input.IsActive);
+        branch.UpdateInfo(input.Address, input.Phone, input.Email, input.ManagerUserId, input.IsActive, input.BranchType);
 
         await _branchRepository.UpdateAsync(branch, autoSave: true);
         return ObjectMapper.Map<AppBranch, BranchDto>(branch);

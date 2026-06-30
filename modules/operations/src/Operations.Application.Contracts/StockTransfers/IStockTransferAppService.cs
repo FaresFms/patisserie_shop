@@ -18,6 +18,7 @@ public interface IStockTransferAppService : IApplicationService
     Task<StockTransferItemDto> UpdateApprovedQuantityAsync(Guid id, Guid itemId, UpdateApprovedQuantityDto input);
 
     Task<StockTransferDto> SubmitAsync(Guid id);
+    Task<StockTransferDto> AssignSourceAsync(Guid id, AssignStockTransferSourceDto input);
     Task<StockTransferDto> ApproveAsync(Guid id);
     Task<StockTransferDto> ShipAsync(Guid id);
     Task<StockTransferDto> CompleteAsync(Guid id, CompleteStockTransferDto input);

@@ -8,6 +8,7 @@
 @using Microsoft.AspNetCore.Hosting
 @using Volo.Abp.Application.Dtos
 @using Volo.Abp.AspNetCore.Components.Web.Theming.Layout
+@using Inventory
 @using Inventory.Categories
 @using Inventory.Suppliers
 @using Inventory.Products
@@ -110,6 +111,16 @@
                 <TemplateColumn T="ProductDto" Title="@InvL["Category"]" Sortable="false">
                     <CellTemplate>
                         <SoftText Typo="Typo.body2">@GetCategoryName(context.Item.CategoryId)</SoftText>
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn T="ProductDto" Title="@InvL["ProductType"]" Sortable="true" SortBy="x => x.ProductType">
+                    <CellTemplate>
+                        <SoftChip T="string"
+                                  Color="@ProductTypeColor(context.Item.ProductType)"
+                                  Size="Size.Small"
+                                  Variant="@(context.Item.ProductType == ProductTypes.FinishedGood ? Variant.Filled : Variant.Outlined)">
+                            @InvL[$"ProductType:{context.Item.ProductType}"]
+                        </SoftChip>
                     </CellTemplate>
                 </TemplateColumn>
                 <PropertyColumn T="ProductDto" TProperty="string" Property="x => x.Unit" Title="@InvL["Unit"]" Sortable="false" />
@@ -342,6 +353,28 @@
                                                       HelperText="@InvL["ShelfLifeHint"]" />
                                 </div>
                             </section>
+
+                            <section class="product-form-section">
+                                <SoftText Typo="Typo.overline" Color="Color.Primary">@InvL["Classification"]</SoftText>
+                                <SoftDivider Class="mb-3" />
+                                <div class="product-form-grid product-form-grid--two">
+                                    <SoftSelect T="string"
+                                                Label="@InvL["ProductType"]"
+                                                @bind-Value="_editProductType"
+                                                Variant="Variant.Outlined"
+                                                Required="true">
+                                        <MudSelectItem T="string" Value="@ProductTypes.FinishedGood">@InvL["ProductType:FinishedGood"]</MudSelectItem>
+                                        <MudSelectItem T="string" Value="@ProductTypes.RawMaterial">@InvL["ProductType:RawMaterial"]</MudSelectItem>
+                                        <MudSelectItem T="string" Value="@ProductTypes.Packaging">@InvL["ProductType:Packaging"]</MudSelectItem>
+                                        <MudSelectItem T="string" Value="@ProductTypes.SemiFinished">@InvL["ProductType:SemiFinished"]</MudSelectItem>
+                                    </SoftSelect>
+                                    <div class="d-flex flex-column">
+                                        <SoftCheckBox T="bool" @bind-Value="_editIsSellable" Label="@InvL["IsSellable"]" Color="Color.Primary" />
+                                        <SoftCheckBox T="bool" @bind-Value="_editIsPurchasable" Label="@InvL["IsPurchasable"]" Color="Color.Primary" />
+                                        <SoftCheckBox T="bool" @bind-Value="_editIsProducible" Label="@InvL["IsProducible"]" Color="Color.Primary" />
+                                    </div>
+                                </div>
+                            </section>
                         </div>
                     </div>
                 </SoftCardContent>
@@ -423,6 +456,10 @@
     private IBrowserFile? _selectedImageFile;
     private bool _editIsActive = true;
     private int? _editShelfLifeDays;
+    private string _editProductType = ProductTypes.FinishedGood;
+    private bool _editIsSellable = true;
+    private bool _editIsPurchasable = true;
+    private bool _editIsProducible = false;
 
     private bool _confirmVisible;
     private ProductDto? _pendingDelete;
@@ -466,6 +503,15 @@
     {
         return $"{amount:N2} {currency}";
     }
+
+    private static Color ProductTypeColor(string productType) => productType switch
+    {
+        ProductTypes.FinishedGood => Color.Success,
+        ProductTypes.SemiFinished => Color.Info,
+        ProductTypes.RawMaterial => Color.Warning,
+        ProductTypes.Packaging => Color.Default,
+        _ => Color.Default
+    };
 
     private async Task<GridData<ProductDto>> LoadServerData(GridState<ProductDto> state, CancellationToken cancellationToken)
     {
@@ -547,6 +593,10 @@
         _selectedImageFile = null;
         _editIsActive = true;
         _editShelfLifeDays = null;
+        _editProductType = ProductTypes.FinishedGood;
+        _editIsSellable = true;
+        _editIsPurchasable = true;
+        _editIsProducible = false;
         _dialogVisible = true;
     }
 
@@ -568,6 +618,10 @@
         _selectedImageFile = null;
         _editIsActive = p.IsActive;
         _editShelfLifeDays = p.ShelfLifeDays;
+        _editProductType = p.ProductType;
+        _editIsSellable = p.IsSellable;
+        _editIsPurchasable = p.IsPurchasable;
+        _editIsProducible = p.IsProducible;
         _dialogVisible = true;
     }
 
@@ -694,7 +748,11 @@
                     ReorderLevel = _editReorderLevel,
                     ImageUrl = imageUrl,
                     IsActive = _editIsActive,
-                    ShelfLifeDays = _editShelfLifeDays
+                    ShelfLifeDays = _editShelfLifeDays,
+                    ProductType = _editProductType,
+                    IsSellable = _editIsSellable,
+                    IsPurchasable = _editIsPurchasable,
+                    IsProducible = _editIsProducible
                 });
             }
             else
@@ -713,7 +771,11 @@
                     ReorderLevel = _editReorderLevel,
                     ImageUrl = imageUrl,
                     IsActive = _editIsActive,
-                    ShelfLifeDays = _editShelfLifeDays
+                    ShelfLifeDays = _editShelfLifeDays,
+                    ProductType = _editProductType,
+                    IsSellable = _editIsSellable,
+                    IsPurchasable = _editIsPurchasable,
+                    IsProducible = _editIsProducible
                 });
             }
             Snackbar.Add(L["SuccessfullySaved"], Severity.Success);

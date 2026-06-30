@@ -1,6 +1,7 @@
 using Inventory.EntityFrameworkCore;
 using Operations.EntityFrameworkCore;
 using Intelligence.EntityFrameworkCore;
+using Production.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Volo.Abp.AuditLogging.EntityFrameworkCore;
 using Volo.Abp.BackgroundJobs.EntityFrameworkCore;
@@ -67,6 +68,8 @@ public class patisserie_shopDbContext :
         builder.ConfigureOperations();
 
         builder.ConfigureIntelligence();
+
+        builder.ConfigureProduction();
 
         /* Include modules to your migration db context */
 

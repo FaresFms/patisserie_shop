@@ -1,0 +1,27 @@
+using System;
+
+namespace Production.Formulas;
+
+/// <summary>
+/// Typed read-model for the formulas list grid: flat formula header fields plus the
+/// joined finished-product name and the ingredient item count. Lives next to the
+/// repository interface (Domain) per CLAUDE.md — no anonymous types or tuples cross
+/// the repository boundary.
+/// </summary>
+public class ProductionFormulaListItem
+{
+    public Guid Id { get; set; }
+    public Guid FinishedProductId { get; set; }
+    public string FinishedProductName { get; set; } = null!;
+    public string FinishedProductUnit { get; set; } = null!;
+    public string FormulaName { get; set; } = null!;
+    public int Version { get; set; }
+    public int OutputQuantity { get; set; }
+    public decimal ExpectedWastePercent { get; set; }
+    public decimal LaborCostPerBatch { get; set; }
+    public decimal OverheadCostPerBatch { get; set; }
+    public int EstimatedProductionMinutes { get; set; }
+    public bool IsActive { get; set; }
+    public bool IsDefault { get; set; }
+    public int ItemCount { get; set; }
+}

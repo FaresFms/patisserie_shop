@@ -15,6 +15,7 @@ public interface IBranchInventoryRepository : IRepository<AppBranchInventory, Gu
         bool onlyOutOfStock,
         bool onlyLowStock,
         bool includeInactiveProducts,
+        bool onlySellable = false,
         CancellationToken cancellationToken = default);
 
     Task<List<BranchInventoryWithProduct>> GetListWithProductAsync(
@@ -26,6 +27,7 @@ public interface IBranchInventoryRepository : IRepository<AppBranchInventory, Gu
         string sorting,
         int skipCount,
         int maxResultCount,
+        bool onlySellable = false,
         CancellationToken cancellationToken = default);
 
     Task<BranchInventoryWithProduct> GetWithProductAsync(
@@ -47,10 +49,12 @@ public interface IBranchInventoryRepository : IRepository<AppBranchInventory, Gu
 
     /// <summary>
     /// Active products that currently have stock (QuantityOnHand &gt; 0) at the
-    /// given branch, ordered by product name. Backs the "sellable products"
-    /// lookup used when recording a sale.
+    /// given branch, ordered by product name. Backs the "available products"
+    /// lookup used when recording a sale or a transfer. When <paramref name="onlySellable"/>
+    /// is true, restricts to products flagged IsSellable (POS / sales path only).
     /// </summary>
     Task<List<InventoryStockRow>> GetAvailableProductsAsync(
         Guid branchId,
+        bool onlySellable = false,
         CancellationToken cancellationToken = default);
 }

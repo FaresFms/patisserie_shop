@@ -9,7 +9,7 @@ public class StockTransferDto : EntityDto<Guid>
     /// <summary>Human-friendly reference derived from the Id (no separate column).</summary>
     public string Reference { get; set; } = null!;
     public string Status { get; set; } = null!;
-    public Guid FromBranchId { get; set; }
+    public Guid? FromBranchId { get; set; }
     public string FromBranchName { get; set; } = null!;
     public Guid ToBranchId { get; set; }
     public string ToBranchName { get; set; } = null!;
