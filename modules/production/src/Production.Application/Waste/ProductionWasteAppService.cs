@@ -157,7 +157,7 @@ public class ProductionWasteAppService : ProductionAppService, IProductionWasteA
             inventoryRow.Inventory,
             inventoryRow.Inventory.QuantityOnHand - input.Quantity,
             StockMovementTypes.ProductionWaste,
-            notes: $"هدر إنتاج: {FormatReason(reason)}",
+            notes: $"Production waste: {FormatReason(reason)}",
             referenceId: waste.Id,
             referenceType: nameof(AppProductionWaste));
 
@@ -213,16 +213,16 @@ public class ProductionWasteAppService : ProductionAppService, IProductionWasteA
 
     private static string FormatReason(string reason) => reason switch
     {
-        ProductionWasteReasons.Burned => "محروق",
-        ProductionWasteReasons.UnderBaked => "غير ناضج",
-        ProductionWasteReasons.OverBaked => "ناضج أكثر من اللازم",
-        ProductionWasteReasons.ShapeDamaged => "الشكل تالف",
-        ProductionWasteReasons.Dropped => "سقط أثناء التشغيل",
-        ProductionWasteReasons.Contaminated => "تلوث",
-        ProductionWasteReasons.IngredientSpoilage => "تلف خامات",
-        ProductionWasteReasons.PackagingDamage => "تلف تغليف",
-        ProductionWasteReasons.ExpiredBeforeDispatch => "انتهت الصلاحية قبل الصرف",
-        ProductionWasteReasons.TestBatch => "دفعة تجربة",
-        _ => "سبب آخر"
+        ProductionWasteReasons.Burned => "burned",
+        ProductionWasteReasons.UnderBaked => "under-baked",
+        ProductionWasteReasons.OverBaked => "over-baked",
+        ProductionWasteReasons.ShapeDamaged => "shape damaged",
+        ProductionWasteReasons.Dropped => "dropped during handling",
+        ProductionWasteReasons.Contaminated => "contaminated",
+        ProductionWasteReasons.IngredientSpoilage => "ingredient spoilage",
+        ProductionWasteReasons.PackagingDamage => "packaging damage",
+        ProductionWasteReasons.ExpiredBeforeDispatch => "expired before dispatch",
+        ProductionWasteReasons.TestBatch => "test batch",
+        _ => "other reason"
     };
 }

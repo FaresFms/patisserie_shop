@@ -168,7 +168,7 @@ public class ProductionOrderAppService : ProductionAppService, IProductionOrderA
                 OrderDate = Clock.Now.Date,
                 ExpectedDeliveryDate = Clock.Now.Date.AddDays(1),
                 Currency = "USD",
-                Notes = $"طلب شراء خامات تلقائي لأمر الطبخ {order.OrderNumber}. يبقى مسودة حتى يراجعه مدير المطبخ."
+                Notes = $"Automatic ingredient purchase order for cook order {order.OrderNumber}. Stays in draft until the kitchen manager reviews it."
             });
 
             foreach (var shortage in group)
@@ -285,7 +285,7 @@ public class ProductionOrderAppService : ProductionAppService, IProductionOrderA
                 : order.UnitProductionCost;
             var wasteNotes = string.IsNullOrWhiteSpace(input.WasteReason) || ProductionWasteReasons.IsValid(input.WasteReason)
                 ? input.Notes
-                : $"{input.Notes} | سبب الهدر الأصلي: {input.WasteReason}".Trim(' ', '|');
+                : $"{input.Notes} | Original waste reason: {input.WasteReason}".Trim(' ', '|');
 
             var waste = await _wasteManager.CreateAsync(
                 productionOrderId: order.Id,

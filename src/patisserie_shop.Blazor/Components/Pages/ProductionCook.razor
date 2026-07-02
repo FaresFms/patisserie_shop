@@ -249,6 +249,12 @@
                                 </SoftGridItem>
                             </SoftGrid>
                         }
+                        @if (CookHint() is { Length: > 0 } cookHint)
+                        {
+                            <SoftAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+                                @cookHint
+                            </SoftAlert>
+                        }
                     </SoftStack>
                 </SoftCardContent>
                 <SoftDivider />
@@ -583,6 +589,16 @@
         ProductionOrderStatuses.Completed => ProdL["Status:Completed"],
         ProductionOrderStatuses.Cancelled => ProdL["Status:Cancelled"],
         _ => status
+    };
+
+    /// <summary>Plain-language "what happens next" line for the detail modal, per status.</summary>
+    private string? CookHint() => _detail?.Status switch
+    {
+        ProductionOrderStatuses.WaitingForIngredients => ProdL["CookHint:WaitingForIngredients"].Value,
+        ProductionOrderStatuses.ReadyToCook => ProdL["CookHint:ReadyToCook"].Value,
+        ProductionOrderStatuses.InProduction => ProdL["CookHint:InProduction"].Value,
+        ProductionOrderStatuses.Completed => ProdL["CookHint:Completed"].Value,
+        _ => null
     };
 
     private sealed record StatusOption(string Value, string Label);

@@ -58,10 +58,69 @@
             <SoftCardContent Class="pa-4 sts-modal-body">
                 <SoftStack Spacing="4">
 
+                    @if (IsClosed)
+                    {
+                        <!-- Terminal closure — replaces the stepper -->
+                        <div class="sts-closed-banner">
+                            <MudIcon Icon="@(_transfer.Status == StockTransferStatuses.Rejected ? Icons.Material.Filled.Block : Icons.Material.Filled.Cancel)"
+                                     Size="Size.Medium" />
+                            <div>
+                                <div class="sts-closed-title">
+                                    @(_transfer.Status == StockTransferStatuses.Rejected ? OpsL["Hint:Rejected"] : OpsL["Hint:Cancelled"])
+                                    @if (!string.IsNullOrWhiteSpace(_transfer.ClosedByUserName))
+                                    {
+                                        <span class="sts-closed-by"> — @OpsL["ClosedBy"]: @_transfer.ClosedByUserName</span>
+                                    }
+                                </div>
+                                @if (!string.IsNullOrWhiteSpace(_transfer.ClosureReason))
+                                {
+                                    <div class="sts-closed-reason">"@_transfer.ClosureReason"</div>
+                                }
+                            </div>
+                        </div>
+                    }
+                    else
+                    {
+                        <!-- Workflow stepper: Request → Approval → Ship → Receive -->
+                        <div class="sts-stepper">
+                            @for (var i = 0; i < StepKeys.Length; i++)
+                            {
+                                var stepIndex = i;
+                                var state = StepState(stepIndex);
+                                <div class="@($"sts-step sts-step-{state}")">
+                                    <div class="sts-step-dot">
+                                        @if (state == "done")
+                                        {
+                                            <MudIcon Icon="@Icons.Material.Filled.Check" Size="Size.Small" />
+                                        }
+                                        else
+                                        {
+                                            <MudIcon Icon="@StepIcon(stepIndex)" Size="Size.Small" />
+                                        }
+                                    </div>
+                                    <span class="sts-step-label">@OpsL[$"Step:{StepKeys[stepIndex]}"]</span>
+                                </div>
+                                @if (stepIndex < StepKeys.Length - 1)
+                                {
+                                    <div class="@($"sts-step-line {(stepIndex < CurrentStepIndex ? "sts-step-line-done" : "")}")"></div>
+                                }
+                            }
+                        </div>
+
+                        <!-- Who does what next -->
+                        var hint = CurrentHint();
+                        <div class="@(hint.Mine ? "sts-hint sts-hint-mine" : "sts-hint")">
+                            <MudIcon Icon="@(hint.Mine ? Icons.Material.Filled.TouchApp : Icons.Material.Outlined.HourglassEmpty)"
+                                     Size="Size.Small" />
+                            <span>@hint.Text</span>
+                        </div>
+                    }
+
                     <!-- Transfer info -->
                     @{
                         var requestedText = _transfer.RequestedDate.ToString("MMM d, yyyy");
                         var approvedText  = _transfer.ApprovedDate?.ToString("MMM d, yyyy") ?? "-";
+                        var shippedText   = _transfer.ShippedDate?.ToString("MMM d, yyyy") ?? "-";
                         var completedText = _transfer.CompletedDate?.ToString("MMM d, yyyy") ?? "-";
                         var requestedBy   = _transfer.RequestedByUserName ?? "-";
                         var approvedBy    = _transfer.ApprovedByUserName ?? "-";
@@ -72,6 +131,7 @@
                         <div class="sts-info-grid">
                             <InfoRow Label="@OpsL["RequestedDate"]" Value="@requestedText" />
                             <InfoRow Label="@OpsL["ApprovedDate"]" Value="@approvedText" />
+                            <InfoRow Label="@OpsL["ShippedDate"]" Value="@shippedText" />
                             <InfoRow Label="@OpsL["CompletedDate"]" Value="@completedText" />
                             <InfoRow Label="@OpsL["RequestedBy"]" Value="@requestedBy" />
                             <InfoRow Label="@OpsL["ApprovedBy"]" Value="@approvedBy" />
@@ -84,6 +144,7 @@
                             </div>
                         }
                     </div>
+
                     @if (_transfer.Status == StockTransferStatuses.Pending && _canApprove && !_transfer.FromBranchId.HasValue)
                     {
                         <div class="sts-source-assign">
@@ -139,7 +200,7 @@
                                     </MudTd>
                                     <MudTd Style="text-align:right;">@item.RequestedQuantity @item.ProductUnit</MudTd>
                                     <MudTd Style="text-align:center;">
-                                        @if (_transfer.Status == StockTransferStatuses.Approved && _canApprove)
+                                        @if (CanAdjustQuantities)
                                         {
                                             <SoftStack Row="true" Spacing="1" AlignItems="AlignItems.Center" Justify="Justify.Center">
                                                 <SoftNumericField T="int" Value="@GetApprovedEdit(item)"
@@ -190,6 +251,20 @@
             <div class="pa-3 d-flex justify-end flex-wrap" style="gap: 8px;">
                 <SoftButton Variant="Variant.Text" OnClick="CloseAsync">@L["Close"]</SoftButton>
 
+                @if ((_transfer.Status == StockTransferStatuses.Draft
+                      || _transfer.Status == StockTransferStatuses.Pending
+                      || _transfer.Status == StockTransferStatuses.Approved) && CanCancelCurrentTransfer)
+                {
+                    <SoftButton Variant="Variant.Outlined" Color="Color.Error"
+                                StartIcon="@Icons.Material.Filled.Cancel"
+                                OnClick="OpenCancelDialog" Disabled="_saving">@OpsL["CancelTransfer"]</SoftButton>
+                }
+                @if (_transfer.Status == StockTransferStatuses.Pending && _canApprove)
+                {
+                    <SoftButton Variant="Variant.Outlined" Color="Color.Error"
+                                StartIcon="@Icons.Material.Filled.Block"
+                                OnClick="OpenRejectDialog" Disabled="_saving">@OpsL["RejectRequest"]</SoftButton>
+                }
                 @if (_transfer.Status == StockTransferStatuses.Draft && _transfer.Items.Count > 0 && CanEditCurrentRequest)
                 {
                     <SoftButton Variant="Variant.Filled" Color="Color.Primary"
@@ -212,21 +287,13 @@
                 {
                     <SoftButton Variant="Variant.Filled" Color="Color.Info"
                                 StartIcon="@Icons.Material.Filled.LocalShipping"
-                                OnClick="ShipAsync" Disabled="_saving">@OpsL["Ship"]</SoftButton>
+                                OnClick="OpenShipDialog" Disabled="_saving">@OpsL["Ship"]</SoftButton>
                 }
                 @if (_transfer.Status == StockTransferStatuses.InTransit && CanCompleteCurrentTransfer)
                 {
                     <SoftButton Variant="Variant.Filled" Color="Color.Tertiary"
                                 StartIcon="@Icons.Material.Filled.TaskAlt"
                                 OnClick="OpenCompleteDialog" Disabled="_saving">@OpsL["MarkCompleted"]</SoftButton>
-                }
-                @if ((_transfer.Status == StockTransferStatuses.Draft
-                      || _transfer.Status == StockTransferStatuses.Pending
-                      || _transfer.Status == StockTransferStatuses.Approved) && _canCancel)
-                {
-                    <SoftButton Variant="Variant.Outlined" Color="Color.Error"
-                                StartIcon="@Icons.Material.Filled.Cancel"
-                                OnClick="CancelAsync" Disabled="_saving">@OpsL["Cancel"]</SoftButton>
                 }
             </div>
 
@@ -257,7 +324,9 @@
                         <SoftLookupSelect TItem="StockTransferProductLookupDto" TValue="Guid?"
                                           Items="_availableProducts"
                                           ToValue="@(p => (Guid?)p.ProductId)"
-                                          ToLabel="@(p => $"{p.Name} — {p.SKU} — {p.QuantityOnHand} in stock")"
+                                          ToLabel="@(p => _transfer?.FromBranchId != null
+                                              ? $"{p.Name} — {p.SKU} — {p.QuantityOnHand} in stock"
+                                              : $"{p.Name} — {p.SKU}")"
                                           Value="_newItemProductId"
                                           ValueChanged="OnAddItemProductChanged"
                                           Label="@OpsL["Product"]"
@@ -285,7 +354,72 @@
     </div>
 }
 
-<!-- ── Completion dialog ── -->
+<!-- ── Ship confirmation dialog ── -->
+@if (_shipVisible)
+{
+    <div class="soft-modal-backdrop" @onclick="CloseShip">
+        <div class="soft-modal-container soft-modal-container--lg" @onclick:stopPropagation="true">
+            <SoftCard Elevation="24" Class="soft-modal-card">
+                <SoftCardHeader Class="pa-4">
+                    <CardHeaderContent>
+                        <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <SoftIcon Icon="@Icons.Material.Filled.LocalShipping" Color="Color.Primary" Size="Size.Medium" />
+                            <div>
+                                <SoftText Typo="Typo.h6">@OpsL["Ship"]</SoftText>
+                                <SoftText Typo="Typo.caption" Color="Color.Default">
+                                    Stock leaves @_transfer.FromBranchName the moment you confirm.
+                                </SoftText>
+                            </div>
+                        </SoftStack>
+                    </CardHeaderContent>
+                    <CardHeaderActions>
+                        <SoftIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="CloseShip" />
+                    </CardHeaderActions>
+                </SoftCardHeader>
+                <SoftDivider />
+                <SoftCardContent Class="pa-4 sts-modal-body">
+                    @if (HasShipStockShortage)
+                    {
+                        <SoftAlert Severity="Severity.Error" Variant="Variant.Outlined" Dense="true" Class="mb-3">
+                            @OpsL["TransferSourceStockMissingNow"]
+                        </SoftAlert>
+                    }
+                    <MudTable T="ShipRow" Items="@_shipRows" Dense="true" Hover="true" Bordered="false">
+                        <HeaderContent>
+                            <MudTh>@OpsL["Product"]</MudTh>
+                            <MudTh Style="text-align:right;">@OpsL["ShippedQuantity"]</MudTh>
+                            <MudTh Style="text-align:right;">@OpsL["SourceStock"]</MudTh>
+                        </HeaderContent>
+                        <RowTemplate Context="row">
+                            <MudTd>
+                                <SoftStack Spacing="0">
+                                    <SoftText Typo="Typo.body2" Style="font-weight:500;">@row.Item.ProductName</SoftText>
+                                    <SoftText Typo="Typo.caption" Color="Color.Default">@row.Item.ProductSKU</SoftText>
+                                </SoftStack>
+                            </MudTd>
+                            <MudTd Style="text-align:right;">@row.ToShip</MudTd>
+                            <MudTd Style="text-align:right;">
+                                <SoftText Color="@(row.SourceStock < row.ToShip ? Color.Error : Color.Default)">
+                                    @row.SourceStock
+                                </SoftText>
+                            </MudTd>
+                        </RowTemplate>
+                    </MudTable>
+                </SoftCardContent>
+                <SoftDivider />
+                <div class="pa-3 d-flex justify-end" style="gap: 8px;">
+                    <SoftButton Variant="Variant.Text" OnClick="CloseShip">@L["Cancel"]</SoftButton>
+                    <SoftButton Variant="Variant.Filled" Color="Color.Info"
+                                StartIcon="@Icons.Material.Filled.LocalShipping"
+                                OnClick="ConfirmShipAsync"
+                                Disabled="@(_saving || HasShipStockShortage)">@OpsL["Ship"]</SoftButton>
+                </div>
+            </SoftCard>
+        </div>
+    </div>
+}
+
+<!-- ── Receive dialog ── -->
 @if (_completeVisible)
 {
     <div class="soft-modal-backdrop" @onclick="CloseComplete">
@@ -309,18 +443,23 @@
                 </SoftCardHeader>
                 <SoftDivider />
                 <SoftCardContent Class="pa-4 sts-modal-body">
-                    @if (HasCompleteStockShortage)
+                    @if (HasReceiveOverShipped)
                     {
                         <SoftAlert Severity="Severity.Error" Variant="Variant.Outlined" Dense="true" Class="mb-3">
-                            @BuildCompleteStockWarning()
+                            @BuildReceiveOverShippedWarning()
+                        </SoftAlert>
+                    }
+                    else if (HasReceiveShortfall)
+                    {
+                        <SoftAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true" Class="mb-3">
+                            @OpsL["TransferReceiveShortWarn"]
                         </SoftAlert>
                     }
                     <MudTable T="CompleteRow" Items="@_completeRows" Dense="true" Hover="true" Bordered="false">
                         <HeaderContent>
                             <MudTh>@OpsL["Product"]</MudTh>
-                            <MudTh Style="text-align:right;">@OpsL["ApprovedQuantity"]</MudTh>
-                            <MudTh Style="text-align:right;">@OpsL["SourceStock"]</MudTh>
-                            <MudTh Style="text-align:center; min-width: 140px;">@OpsL["TransferredQuantity"]</MudTh>
+                            <MudTh Style="text-align:right;">@OpsL["ShippedQuantity"]</MudTh>
+                            <MudTh Style="text-align:center; min-width: 140px;">@OpsL["ReceiveNow"]</MudTh>
                         </HeaderContent>
                         <RowTemplate Context="row">
                             <MudTd>
@@ -329,15 +468,10 @@
                                     <SoftText Typo="Typo.caption" Color="Color.Default">@row.Item.ProductSKU</SoftText>
                                 </SoftStack>
                             </MudTd>
-                            <MudTd Style="text-align:right;">@(row.Item.ApprovedQuantity ?? row.Item.RequestedQuantity)</MudTd>
-                            <MudTd Style="text-align:right;">
-                                <SoftText Color="@(row.SourceStock < row.TransferNow ? Color.Error : Color.Default)">
-                                    @row.SourceStock
-                                </SoftText>
-                            </MudTd>
+                            <MudTd Style="text-align:right;">@row.Shipped</MudTd>
                             <MudTd Style="text-align:center;">
-                                <SoftNumericField T="int" @bind-Value="row.TransferNow"
-                                                  Variant="Variant.Outlined" Min="0"
+                                <SoftNumericField T="int" @bind-Value="row.ReceiveNow"
+                                                  Variant="Variant.Outlined" Min="0" Max="@row.Shipped"
                                                   Margin="Margin.Dense" />
                             </MudTd>
                         </RowTemplate>
@@ -346,12 +480,100 @@
                 <SoftDivider />
                 <div class="pa-3 d-flex justify-end" style="gap: 8px;">
                     <SoftButton Variant="Variant.Text" OnClick="CloseComplete">@L["Cancel"]</SoftButton>
-                    <SoftButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="TransferAll">
+                    <SoftButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="ReceiveAll">
                         @OpsL["TransferAll"]
                     </SoftButton>
                     <SoftButton Variant="Variant.Filled" Color="Color.Tertiary"
                                 StartIcon="@Icons.Material.Filled.CheckCircle"
-                                OnClick="ConfirmComplete" Disabled="@(_saving || HasCompleteStockShortage)">@OpsL["ConfirmComplete"]</SoftButton>
+                                OnClick="ConfirmComplete" Disabled="@(_saving || HasReceiveOverShipped)">@OpsL["ConfirmComplete"]</SoftButton>
+                </div>
+            </SoftCard>
+        </div>
+    </div>
+}
+
+<!-- ── Reject dialog ── -->
+@if (_rejectVisible)
+{
+    <div class="soft-modal-backdrop" @onclick="CloseReject">
+        <div class="soft-modal-container" @onclick:stopPropagation="true">
+            <SoftCard Elevation="24" Class="soft-modal-card">
+                <SoftCardHeader Class="pa-4">
+                    <CardHeaderContent>
+                        <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <SoftIcon Icon="@Icons.Material.Filled.Block" Color="Color.Error" Size="Size.Medium" />
+                            <SoftText Typo="Typo.h6">@OpsL["RejectRequest"]</SoftText>
+                        </SoftStack>
+                    </CardHeaderContent>
+                    <CardHeaderActions>
+                        <SoftIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="CloseReject" />
+                    </CardHeaderActions>
+                </SoftCardHeader>
+                <SoftDivider />
+                <SoftCardContent Class="pa-4">
+                    <SoftStack Spacing="2">
+                        <SoftTextField T="string"
+                                       Label="@OpsL["RejectReason"]"
+                                       @bind-Value="_rejectReason"
+                                       Variant="Variant.Outlined"
+                                       Lines="3"
+                                       MaxLength="512"
+                                       Required="true" />
+                        <SoftText Typo="Typo.caption" Color="Color.Default">@OpsL["RejectReasonHint"]</SoftText>
+                    </SoftStack>
+                </SoftCardContent>
+                <SoftDivider />
+                <div class="pa-3 d-flex justify-end" style="gap: 8px;">
+                    <SoftButton Variant="Variant.Text" OnClick="CloseReject">@L["Cancel"]</SoftButton>
+                    <SoftButton Variant="Variant.Filled" Color="Color.Error"
+                                StartIcon="@Icons.Material.Filled.Block"
+                                OnClick="ConfirmRejectAsync"
+                                Disabled="@(_saving || string.IsNullOrWhiteSpace(_rejectReason))">
+                        @OpsL["RejectRequest"]
+                    </SoftButton>
+                </div>
+            </SoftCard>
+        </div>
+    </div>
+}
+
+<!-- ── Cancel dialog ── -->
+@if (_cancelVisible)
+{
+    <div class="soft-modal-backdrop" @onclick="CloseCancel">
+        <div class="soft-modal-container" @onclick:stopPropagation="true">
+            <SoftCard Elevation="24" Class="soft-modal-card">
+                <SoftCardHeader Class="pa-4">
+                    <CardHeaderContent>
+                        <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <SoftIcon Icon="@Icons.Material.Filled.Cancel" Color="Color.Error" Size="Size.Medium" />
+                            <SoftText Typo="Typo.h6">@OpsL["CancelTransfer"]</SoftText>
+                        </SoftStack>
+                    </CardHeaderContent>
+                    <CardHeaderActions>
+                        <SoftIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="CloseCancel" />
+                    </CardHeaderActions>
+                </SoftCardHeader>
+                <SoftDivider />
+                <SoftCardContent Class="pa-4">
+                    <SoftStack Spacing="3">
+                        <SoftText Typo="Typo.body2">@OpsL["CancelConfirmText"]</SoftText>
+                        <SoftTextField T="string"
+                                       Label="@OpsL["CancelReason"]"
+                                       @bind-Value="_cancelReason"
+                                       Variant="Variant.Outlined"
+                                       Lines="2"
+                                       MaxLength="512" />
+                    </SoftStack>
+                </SoftCardContent>
+                <SoftDivider />
+                <div class="pa-3 d-flex justify-end" style="gap: 8px;">
+                    <SoftButton Variant="Variant.Text" OnClick="CloseCancel">@L["Close"]</SoftButton>
+                    <SoftButton Variant="Variant.Filled" Color="Color.Error"
+                                StartIcon="@Icons.Material.Filled.Cancel"
+                                OnClick="ConfirmCancelAsync" Disabled="_saving">
+                        @OpsL["CancelTransfer"]
+                    </SoftButton>
                 </div>
             </SoftCard>
         </div>
@@ -363,6 +585,98 @@
     .soft-modal-container--lg { max-width: 760px; }
 
     .sts-modal-body { max-height: 72vh; overflow-y: auto; }
+
+    .sts-stepper {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 4px 2px;
+    }
+
+    .sts-step {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex: 0 0 auto;
+    }
+
+    .sts-step-dot {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        border: 2px solid var(--bd-3);
+        color: var(--fg-3);
+        background: var(--surface);
+    }
+
+    .sts-step-label {
+        font-size: 0.8rem;
+        font-weight: 600;
+        color: var(--fg-3);
+    }
+
+    .sts-step-done .sts-step-dot {
+        background: var(--accent);
+        border-color: var(--accent);
+        color: var(--accent-fg);
+    }
+    .sts-step-done .sts-step-label { color: var(--fg-2); }
+
+    .sts-step-current .sts-step-dot {
+        border-color: var(--accent);
+        color: var(--accent);
+        background: var(--accent-soft);
+    }
+    .sts-step-current .sts-step-label { color: var(--accent); }
+
+    .sts-step-line {
+        flex: 1 1 24px;
+        height: 2px;
+        min-width: 16px;
+        background: var(--bd-2);
+        border-radius: 2px;
+    }
+
+    .sts-step-line-done { background: var(--accent); }
+
+    .sts-hint {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 14px;
+        border: 1px dashed var(--bd-3);
+        border-radius: var(--r-md);
+        color: var(--fg-2);
+        font-size: 0.85rem;
+        background: var(--surface-2);
+    }
+
+    .sts-hint-mine {
+        border: 1px solid var(--accent-line);
+        background: var(--accent-soft);
+        color: var(--accent);
+        font-weight: 600;
+    }
+
+    .sts-closed-banner {
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+        padding: 12px 14px;
+        border: 1px solid rgba(239, 68, 68, 0.45);
+        border-radius: var(--r-md);
+        background: rgba(239, 68, 68, 0.08);
+        color: #c62828;
+    }
+
+    html[data-theme="dark"] .sts-closed-banner { color: #fca5a5; }
+
+    .sts-closed-title { font-weight: 700; font-size: 0.9rem; }
+    .sts-closed-by { font-weight: 500; opacity: 0.85; }
+    .sts-closed-reason { margin-top: 4px; font-style: italic; opacity: 0.9; }
 
     .sts-info-grid {
         display: grid;
@@ -397,12 +711,15 @@
     .sts-status-intransit { background: rgba(0,150,136,0.15);   color: #00695c; }
     .sts-status-completed { background: rgba(76,175,80,0.15);   color: #2e7d32; }
     .sts-status-cancelled { background: rgba(244,67,54,0.15);   color: #c62828; }
+    .sts-status-rejected  { background: rgba(244,67,54,0.12);   color: #c62828; }
 </style>
 
 @code {
     [Parameter, EditorRequired] public Guid TransferId { get; set; }
     [Parameter] public EventCallback OnClose { get; set; }
     [Parameter] public EventCallback Changed { get; set; }
+
+    private static readonly string[] StepKeys = { "Request", "Approval", "Ship", "Receive" };
 
     private StockTransferDto? _transfer;
     private bool _saving;
@@ -428,22 +745,56 @@
     private int _newItemQty = 1;
     private int? _selectedAvailableStock;
 
+    private bool _shipVisible;
+    private List<ShipRow> _shipRows = new();
+
     private bool _completeVisible;
     private List<CompleteRow> _completeRows = new();
+
+    private bool _rejectVisible;
+    private string? _rejectReason;
+
+    private bool _cancelVisible;
+    private string? _cancelReason;
+
+    private bool IsClosed =>
+        _transfer?.Status == StockTransferStatuses.Cancelled
+        || _transfer?.Status == StockTransferStatuses.Rejected;
+
     private bool CanEditCurrentRequest =>
-        _canCreate && _transfer is not null && _accessibleBranchIds.Contains(_transfer.ToBranchId);
+        _canCreate && _transfer is not null
+        && (_accessibleBranchIds.Contains(_transfer.ToBranchId)
+            || (_transfer.FromBranchId is Guid f && _accessibleBranchIds.Contains(f)));
     private bool CanShipCurrentTransfer =>
         _canShip && _transfer?.FromBranchId is Guid sourceBranchId && _accessibleBranchIds.Contains(sourceBranchId);
     private bool CanCompleteCurrentTransfer =>
         _canComplete && _transfer is not null && _accessibleBranchIds.Contains(_transfer.ToBranchId);
-    private bool HasCompleteStockShortage =>
-        _completeRows.Any(r => r.TransferNow > r.SourceStock);
+    private bool CanCancelCurrentTransfer =>
+        _canCancel && _transfer is not null
+        && (_canApprove
+            || _accessibleBranchIds.Contains(_transfer.ToBranchId)
+            || (_transfer.FromBranchId is Guid src && _accessibleBranchIds.Contains(src)));
+    private bool CanAdjustQuantities =>
+        _canApprove
+        && (_transfer?.Status == StockTransferStatuses.Pending
+            || _transfer?.Status == StockTransferStatuses.Approved);
+
+    private bool HasShipStockShortage => _shipRows.Any(r => r.ToShip > r.SourceStock);
+    private bool HasReceiveOverShipped => _completeRows.Any(r => r.ReceiveNow > r.Shipped);
+    private bool HasReceiveShortfall => _completeRows.Any(r => r.ReceiveNow < r.Shipped);
+
+    public class ShipRow
+    {
+        public StockTransferItemDto Item { get; set; } = null!;
+        public int ToShip { get; set; }
+        public int SourceStock { get; set; }
+    }
 
     public class CompleteRow
     {
         public StockTransferItemDto Item { get; set; } = null!;
-        public int TransferNow { get; set; }
-        public int SourceStock { get; set; }
+        public int Shipped { get; set; }
+        public int ReceiveNow { get; set; }
     }
 
     protected override async Task OnInitializedAsync()
@@ -461,21 +812,91 @@
         await LoadAsync();
     }
 
-    private async Task LoadAsync()
+    // ── Stepper / hint helpers ──
+
+    private int CurrentStepIndex => _transfer?.Status switch
+    {
+        StockTransferStatuses.Draft => 0,
+        StockTransferStatuses.Pending => 1,
+        StockTransferStatuses.Approved => 2,
+        StockTransferStatuses.InTransit => 3,
+        StockTransferStatuses.Completed => StepKeys.Length,
+        _ => -1
+    };
+
+    private string StepState(int index)
+    {
+        if (index < CurrentStepIndex) return "done";
+        if (index == CurrentStepIndex) return "current";
+        return "upcoming";
+    }
+
+    private static string StepIcon(int index) => index switch
+    {
+        0 => Icons.Material.Filled.EditNote,
+        1 => Icons.Material.Filled.FactCheck,
+        2 => Icons.Material.Filled.LocalShipping,
+        _ => Icons.Material.Filled.Inventory
+    };
+
+    private (string Text, bool Mine) CurrentHint()
+    {
+        if (_transfer == null) return (string.Empty, false);
+
+        return _transfer.Status switch
+        {
+            StockTransferStatuses.Draft => CanEditCurrentRequest
+                ? (OpsL["Hint:DraftMine"].Value, true)
+                : (string.Format(OpsL["Hint:DraftOther"], _transfer.RequestedByUserName ?? _transfer.ToBranchName), false),
+            StockTransferStatuses.Pending => _canApprove
+                ? (_transfer.FromBranchId.HasValue
+                    ? (OpsL["Hint:PendingApproverWithSource"].Value, true)
+                    : (OpsL["Hint:PendingApprover"].Value, true))
+                : (OpsL["Hint:PendingOther"].Value, false),
+            StockTransferStatuses.Approved => CanShipCurrentTransfer
+                ? (OpsL["Hint:ApprovedShipper"].Value, true)
+                : (string.Format(OpsL["Hint:ApprovedOther"], _transfer.FromBranchName), false),
+            StockTransferStatuses.InTransit => CanCompleteCurrentTransfer
+                ? (OpsL["Hint:InTransitReceiver"].Value, true)
+                : (string.Format(OpsL["Hint:InTransitOther"], _transfer.ToBranchName), false),
+            StockTransferStatuses.Completed =>
+                (string.Format(OpsL["Hint:Completed"], _transfer.CompletedDate?.ToString("MMM d, yyyy") ?? "-"), false),
+            _ => (string.Empty, false)
+        };
+    }
+
+    private async Task LoadAsync(bool keepUnsavedEdits = false)
     {
         try
         {
+            var unsaved = keepUnsavedEdits ? new Dictionary<Guid, int>(_approvedEdits) : null;
+
             _transfer = await StockTransferAppService.GetAsync(TransferId);
             _sourceBranchId = _transfer.FromBranchId;
             _approvedEdits.Clear();
             foreach (var i in _transfer.Items)
             {
-                _approvedEdits[i.Id] = i.ApprovedQuantity ?? i.RequestedQuantity;
+                _approvedEdits[i.Id] = unsaved != null && unsaved.TryGetValue(i.Id, out var pending)
+                    ? pending
+                    : (i.ApprovedQuantity ?? i.RequestedQuantity);
+            }
+
+            // Suggest the Main Kitchen as the source — it fulfils almost every request.
+            if (_sourceBranchId == null && _canApprove && _transfer.Status == StockTransferStatuses.Pending)
+            {
+                _sourceBranchId = _branches
+                    .FirstOrDefault(b => b.BranchType == BranchTypes.MainKitchen && b.Id != _transfer.ToBranchId)?.Id;
             }
         }
         catch (Exception ex)
         {
             await HandleTransferErrorAsync(ex);
+            if (_transfer == null)
+            {
+                // Nothing to render (deleted / no access) — release the parent so the
+                // row can be clicked again instead of soft-locking.
+                await CloseAsync();
+            }
         }
     }
 
@@ -504,18 +925,21 @@
             var products = await StockTransferAppService.GetSourceProductsAsync(TransferId);
             var existing = _transfer!.Items.Select(i => i.ProductId).ToHashSet();
             _availableProducts = products.Where(p => !existing.Contains(p.ProductId)).ToList();
+            _addItemVisible = true;
         }
         catch (Exception ex)
         {
             await HandleTransferErrorAsync(ex);
         }
-        _addItemVisible = true;
     }
 
     private void OnAddItemProductChanged(Guid? id)
     {
         _newItemProductId = id;
-        _selectedAvailableStock = id.HasValue
+        // The stock warning only makes sense once a source branch exists — for pull
+        // requests the lookup returns the requester's OWN (low) stock, which is
+        // exactly why they are requesting.
+        _selectedAvailableStock = id.HasValue && _transfer?.FromBranchId != null
             ? _availableProducts.FirstOrDefault(p => p.ProductId == id.Value)?.QuantityOnHand
             : null;
     }
@@ -553,6 +977,8 @@
 
     private async Task RemoveItemAsync(StockTransferItemDto item)
     {
+        if (_saving) return;
+        _saving = true;
         try
         {
             await StockTransferAppService.RemoveItemAsync(TransferId, item.Id);
@@ -563,10 +989,16 @@
         {
             await HandleTransferErrorAsync(ex);
         }
+        finally
+        {
+            _saving = false;
+        }
     }
 
     private async Task SaveApprovedAsync(StockTransferItemDto item)
     {
+        if (_saving) return;
+        _saving = true;
         try
         {
             var qty = GetApprovedEdit(item);
@@ -575,11 +1007,17 @@
                 ApprovedQuantity = qty
             });
             Snackbar.Add(OpsL["ApprovedQtyUpdated"], Severity.Success);
-            await LoadAsync();
+            // Keep the approver's typed-but-unsaved edits on the other rows.
+            await LoadAsync(keepUnsavedEdits: true);
+            _approvedEdits[item.Id] = qty;
         }
         catch (Exception ex)
         {
             await HandleTransferErrorAsync(ex);
+        }
+        finally
+        {
+            _saving = false;
         }
     }
 
@@ -608,13 +1046,87 @@
             Severity.Success);
     }
 
-    private async Task ShipAsync() => await RunAsync(
-        () => StockTransferAppService.ShipAsync(TransferId), OpsL["TransferShipped"], Severity.Success);
+    // ─── Ship flow ───
 
-    private async Task CancelAsync() => await RunAsync(
-        () => StockTransferAppService.CancelAsync(TransferId), OpsL["TransferCancelled"], Severity.Warning);
+    private async Task OpenShipDialog()
+    {
+        try
+        {
+            var source = await StockTransferAppService.GetSourceProductsAsync(TransferId);
+            var stockByProduct = source.ToDictionary(p => p.ProductId, p => p.QuantityOnHand);
 
-    private async Task RunAsync(Func<Task<StockTransferDto>> action, string message, Severity severity)
+            _shipRows = _transfer!.Items.Select(i => new ShipRow
+            {
+                Item = i,
+                ToShip = i.ApprovedQuantity ?? i.RequestedQuantity,
+                SourceStock = stockByProduct.GetValueOrDefault(i.ProductId, 0)
+            }).ToList();
+            _shipVisible = true;
+        }
+        catch (Exception ex)
+        {
+            await HandleTransferErrorAsync(ex);
+        }
+    }
+
+    private void CloseShip() => _shipVisible = false;
+
+    private async Task ConfirmShipAsync()
+    {
+        if (await RunAsync(
+                () => StockTransferAppService.ShipAsync(TransferId), OpsL["TransferShipped"], Severity.Success))
+        {
+            _shipVisible = false;
+        }
+    }
+
+    // ─── Reject / cancel flows ───
+
+    private void OpenRejectDialog()
+    {
+        _rejectReason = null;
+        _rejectVisible = true;
+    }
+
+    private void CloseReject() => _rejectVisible = false;
+
+    private async Task ConfirmRejectAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_rejectReason))
+        {
+            Snackbar.Add(L["ThisFieldIsRequired", OpsL["RejectReason"]], Severity.Warning);
+            return;
+        }
+
+        if (await RunAsync(
+                () => StockTransferAppService.RejectAsync(TransferId, new RejectStockTransferDto { Reason = _rejectReason }),
+                OpsL["TransferRejected"],
+                Severity.Warning))
+        {
+            _rejectVisible = false;
+        }
+    }
+
+    private void OpenCancelDialog()
+    {
+        _cancelReason = null;
+        _cancelVisible = true;
+    }
+
+    private void CloseCancel() => _cancelVisible = false;
+
+    private async Task ConfirmCancelAsync()
+    {
+        if (await RunAsync(
+                () => StockTransferAppService.CancelAsync(TransferId, new CancelStockTransferDto { Reason = _cancelReason }),
+                OpsL["TransferCancelled"],
+                Severity.Warning))
+        {
+            _cancelVisible = false;
+        }
+    }
+
+    private async Task<bool> RunAsync(Func<Task<StockTransferDto>> action, string message, Severity severity)
     {
         _saving = true;
         try
@@ -623,54 +1135,52 @@
             Snackbar.Add(message, severity);
             await NotifyChanged();
             await CloseAsync();
-        }
-        catch (Exception ex) { await HandleTransferErrorAsync(ex); }
-        finally { _saving = false; }
-    }
-
-    // ─── Completion flow ───
-
-    private async Task OpenCompleteDialog()
-    {
-        try
-        {
-            var source = await StockTransferAppService.GetSourceProductsAsync(TransferId);
-            var stockByProduct = source.ToDictionary(p => p.ProductId, p => p.QuantityOnHand);
-
-            _completeRows = _transfer!.Items.Select(i => new CompleteRow
-            {
-                Item = i,
-                TransferNow = i.ApprovedQuantity ?? i.RequestedQuantity,
-                SourceStock = stockByProduct.GetValueOrDefault(i.ProductId, 0)
-            }).ToList();
-            _completeVisible = true;
+            return true;
         }
         catch (Exception ex)
         {
             await HandleTransferErrorAsync(ex);
+            // Another user may have moved the transfer along — refresh so the
+            // action buttons match the real status instead of a stale one.
+            await LoadAsync(keepUnsavedEdits: true);
+            return false;
         }
+        finally { _saving = false; }
+    }
+
+    // ─── Receive flow ───
+
+    private void OpenCompleteDialog()
+    {
+        _completeRows = _transfer!.Items.Select(i => new CompleteRow
+        {
+            Item = i,
+            Shipped = i.ApprovedQuantity ?? i.RequestedQuantity,
+            ReceiveNow = i.ApprovedQuantity ?? i.RequestedQuantity
+        }).ToList();
+        _completeVisible = true;
     }
 
     private void CloseComplete() => _completeVisible = false;
 
-    private void TransferAll()
+    private void ReceiveAll()
     {
         foreach (var row in _completeRows)
         {
-            row.TransferNow = row.Item.ApprovedQuantity ?? row.Item.RequestedQuantity;
+            row.ReceiveNow = row.Shipped;
         }
     }
 
     private async Task ConfirmComplete()
     {
-        if (HasCompleteStockShortage)
+        if (HasReceiveOverShipped)
         {
-            Snackbar.Add(BuildCompleteStockWarning(), Severity.Error);
+            Snackbar.Add(BuildReceiveOverShippedWarning(), Severity.Error);
             return;
         }
 
         var lines = _completeRows
-            .Select(r => new CompleteTransferLineDto { ItemId = r.Item.Id, TransferredQuantity = r.TransferNow })
+            .Select(r => new CompleteTransferLineDto { ItemId = r.Item.Id, TransferredQuantity = r.ReceiveNow })
             .ToList();
 
         _saving = true;
@@ -678,20 +1188,28 @@
         {
             var updated = await StockTransferAppService.CompleteAsync(TransferId, new CompleteStockTransferDto { Lines = lines });
             _completeVisible = false;
-            Snackbar.Add($"Transfer {updated.Reference} completed — stock moved between branches.", Severity.Success);
+            Snackbar.Add(string.Format(OpsL["TransferCompleted"], updated.Reference), Severity.Success);
             await NotifyChanged();
             await CloseAsync();
         }
-        catch (Exception ex) { await HandleTransferErrorAsync(ex); }
+        catch (Exception ex)
+        {
+            await HandleTransferErrorAsync(ex);
+            await LoadAsync(keepUnsavedEdits: true);
+            if (_transfer?.Status != StockTransferStatuses.InTransit)
+            {
+                _completeVisible = false;
+            }
+        }
         finally { _saving = false; }
     }
 
-    private string BuildCompleteStockWarning()
+    private string BuildReceiveOverShippedWarning()
     {
-        var row = _completeRows.FirstOrDefault(r => r.TransferNow > r.SourceStock);
+        var row = _completeRows.FirstOrDefault(r => r.ReceiveNow > r.Shipped);
         return row == null
             ? string.Empty
-            : string.Format(OpsL["TransferCompleteStockShortage"], row.Item.ProductName, row.TransferNow, row.SourceStock);
+            : string.Format(OpsL["TransferReceiveOverShipped"], row.Item.ProductName, row.Shipped);
     }
 
     private async Task HandleTransferErrorAsync(Exception ex)
@@ -713,6 +1231,18 @@
             if (business.Code == OperationsErrorCodes.TransferSourceBranchRequired)
             {
                 Snackbar.Add(OpsL["Operations:Transfers:SourceBranchRequired"], Severity.Warning);
+                return;
+            }
+
+            if (business.Code == OperationsErrorCodes.TransferRejectionReasonRequired)
+            {
+                Snackbar.Add(OpsL["Operations:Transfers:RejectionReasonRequired"], Severity.Warning);
+                return;
+            }
+
+            if (business.Code == OperationsErrorCodes.TransferReceivedExceedsShipped)
+            {
+                Snackbar.Add(BuildReceiveOverShippedWarning(), Severity.Error);
                 return;
             }
         }
@@ -745,6 +1275,7 @@
         StockTransferStatuses.InTransit => Icons.Material.Filled.LocalShipping,
         StockTransferStatuses.Completed => Icons.Material.Filled.TaskAlt,
         StockTransferStatuses.Cancelled => Icons.Material.Filled.Cancel,
+        StockTransferStatuses.Rejected => Icons.Material.Filled.Block,
         _ => Icons.Material.Filled.HelpOutline
     };
 }

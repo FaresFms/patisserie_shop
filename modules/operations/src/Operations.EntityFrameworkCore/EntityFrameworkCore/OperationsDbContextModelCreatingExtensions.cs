@@ -17,6 +17,8 @@ public static class OperationsDbContextModelCreatingExtensions
             b.ConfigureByConvention();
             b.Property(x => x.Status).IsRequired().HasMaxLength(32);
             b.Property(x => x.Notes).HasMaxLength(512);
+            b.Property(x => x.ClosureReason).HasMaxLength(512);
+            b.HasIndex(x => x.Status);
 
             b.HasMany(x => x.Items)
                 .WithOne()
@@ -29,6 +31,7 @@ public static class OperationsDbContextModelCreatingExtensions
         {
             b.ToTable(OperationsDbProperties.DbTablePrefix + "StockTransferItems", OperationsDbProperties.DbSchema);
             b.ConfigureByConvention();
+            b.Property(x => x.ShippedBatchBreakdown).HasMaxLength(1024);
         });
 
         builder.Entity<AppPurchaseOrder>(b =>

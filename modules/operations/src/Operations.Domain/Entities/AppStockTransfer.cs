@@ -15,9 +15,16 @@ public class AppStockTransfer : FullAuditedAggregateRoot<Guid>
     public string Status { get; private set; } = null!;
     public DateTime RequestedDate { get; private set; }
     public DateTime? ApprovedDate { get; private set; }
+    public DateTime? ShippedDate { get; private set; }
     public DateTime? CompletedDate { get; private set; }
     public Guid? RequestedByUserId { get; private set; }
     public Guid? ApprovedByUserId { get; private set; }
+    public Guid? ShippedByUserId { get; private set; }
+    public Guid? CompletedByUserId { get; private set; }
+    /// <summary>Who rejected or cancelled the transfer (terminal closures only).</summary>
+    public Guid? ClosedByUserId { get; private set; }
+    /// <summary>Why the transfer was rejected (required) or cancelled (optional).</summary>
+    public string? ClosureReason { get; private set; }
     public string? Notes { get; private set; }
 
     private readonly List<AppStockTransferItem> _items = new();
@@ -78,7 +85,7 @@ public class AppStockTransfer : FullAuditedAggregateRoot<Guid>
             throw InvalidTransition(StockTransferStatuses.Pending);
         if (_items.Count == 0)
             throw new BusinessException(OperationsErrorCodes.CannotSubmitEmptyTransfer);
-        Status = StockTransferStatuses.Pending;
+        ChangeStatus(StockTransferStatuses.Pending);
     }
 
     public void Approve(Guid? approvedByUserId)
@@ -104,12 +111,12 @@ public class AppStockTransfer : FullAuditedAggregateRoot<Guid>
 
     private void ApproveCore(Guid? approvedByUserId)
     {
-        Status = StockTransferStatuses.Approved;
+        ChangeStatus(StockTransferStatuses.Approved);
         ApprovedDate = DateTime.UtcNow;
         ApprovedByUserId = approvedByUserId;
 
         // Default each line's approved quantity to its requested quantity so the
-        // completion step always has a value to work from; admin may still adjust.
+        // ship/receive steps always have a value to work from; approver may still adjust.
         foreach (var item in _items)
         {
             if (item.ApprovedQuantity == null)
@@ -119,41 +126,96 @@ public class AppStockTransfer : FullAuditedAggregateRoot<Guid>
         }
     }
 
-    /// <summary>Admin adjusts an approved line quantity. Only valid while Approved.</summary>
+    /// <summary>
+    /// Approver adjusts a line quantity (up or down — e.g. rounding to tray sizes;
+    /// ship-time stock validation is the backstop). Valid while the request is under
+    /// review (Pending) or already Approved but not yet shipped.
+    /// </summary>
     public void ApproveItem(Guid itemId, int approvedQty)
     {
-        if (Status != StockTransferStatuses.Approved)
+        if (Status != StockTransferStatuses.Pending && Status != StockTransferStatuses.Approved)
             throw new BusinessException(OperationsErrorCodes.CannotApproveTransferItem)
                 .WithData("CurrentStatus", Status);
         var item = FindItem(itemId);
         item.SetApprovedQuantity(approvedQty);
     }
 
-    public void Ship()
+    /// <summary>
+    /// Rejects a pending request. A reason is mandatory — the requesting branch
+    /// must be able to see why their request was refused.
+    /// </summary>
+    public void Reject(Guid? rejectedByUserId, string reason)
+    {
+        if (Status != StockTransferStatuses.Pending)
+            throw InvalidTransition(StockTransferStatuses.Rejected);
+        if (string.IsNullOrWhiteSpace(reason))
+            throw new BusinessException(OperationsErrorCodes.TransferRejectionReasonRequired);
+
+        ClosureReason = Check.Length(reason.Trim(), nameof(reason), maxLength: 512);
+        ClosedByUserId = rejectedByUserId;
+        ChangeStatus(StockTransferStatuses.Rejected);
+    }
+
+    /// <summary>
+    /// Marks the transfer in transit (Approved → InTransit) and returns the per-item
+    /// quantities leaving the source branch so the application layer can apply the
+    /// matching TransferOut stock movements. Stock physically leaves the source at
+    /// this moment — not at completion.
+    /// </summary>
+    public IReadOnlyList<TransferLine> Ship(Guid? shippedByUserId = null)
     {
         if (Status != StockTransferStatuses.Approved)
             throw InvalidTransition(StockTransferStatuses.InTransit);
         if (!FromBranchId.HasValue)
             throw new BusinessException(OperationsErrorCodes.TransferSourceBranchRequired);
-        Status = StockTransferStatuses.InTransit;
-    }
 
-    public void Cancel()
-    {
-        if (Status == StockTransferStatuses.InTransit || Status == StockTransferStatuses.Completed)
-            throw InvalidTransition(StockTransferStatuses.Cancelled);
-        if (Status == StockTransferStatuses.Cancelled)
-            return;
-        Status = StockTransferStatuses.Cancelled;
+        ShippedDate = DateTime.UtcNow;
+        ShippedByUserId = shippedByUserId;
+        ChangeStatus(StockTransferStatuses.InTransit);
+
+        return _items
+            .Select(i => new TransferLine(i.Id, i.ProductId, i.ApprovedQuantity ?? i.RequestedQuantity))
+            .Where(l => l.Quantity > 0)
+            .ToList();
     }
 
     /// <summary>
-    /// Marks the transfer completed (InTransit → Completed). Records the actual transferred
-    /// quantity per item (falling back to approved/requested when not supplied), raises
-    /// TransferCompletedEto, and returns the per-item lines so the application layer can
-    /// apply the matching TransferOut/TransferIn stock movements on both branches.
+    /// Records which expiry batches actually left the source for a shipped item.
+    /// Only valid right after <see cref="Ship"/> within the same unit of work.
     /// </summary>
-    public IReadOnlyList<TransferLine> Complete(IReadOnlyDictionary<Guid, int> transferredByItem)
+    public void RecordItemShippedBatches(Guid itemId, string? batchBreakdown)
+    {
+        if (Status != StockTransferStatuses.InTransit)
+            throw InvalidTransition(StockTransferStatuses.InTransit);
+        FindItem(itemId).SetShippedBatchBreakdown(batchBreakdown);
+    }
+
+    public void Cancel(Guid? cancelledByUserId = null, string? reason = null)
+    {
+        if (Status == StockTransferStatuses.InTransit
+            || Status == StockTransferStatuses.Completed
+            || Status == StockTransferStatuses.Rejected)
+            throw InvalidTransition(StockTransferStatuses.Cancelled);
+        if (Status == StockTransferStatuses.Cancelled)
+            return;
+
+        ClosureReason = string.IsNullOrWhiteSpace(reason)
+            ? null
+            : Check.Length(reason.Trim(), nameof(reason), maxLength: 512);
+        ClosedByUserId = cancelledByUserId;
+        ChangeStatus(StockTransferStatuses.Cancelled);
+    }
+
+    /// <summary>
+    /// Marks the transfer completed (InTransit → Completed). Records the actual received
+    /// quantity per item — capped at what was shipped (approved) — raises
+    /// TransferCompletedEto, and returns the per-item lines so the application layer can
+    /// apply the matching TransferIn stock movements at the destination. The source was
+    /// already decremented at ship time.
+    /// </summary>
+    public IReadOnlyList<TransferLine> Complete(
+        IReadOnlyDictionary<Guid, int> transferredByItem,
+        Guid? completedByUserId = null)
     {
         if (Status != StockTransferStatuses.InTransit)
             throw InvalidTransition(StockTransferStatuses.Completed);
@@ -163,9 +225,18 @@ public class AppStockTransfer : FullAuditedAggregateRoot<Guid>
         var lines = new List<TransferLine>();
         foreach (var item in _items)
         {
+            var shippedQty = item.ApprovedQuantity ?? item.RequestedQuantity;
             var qty = transferredByItem.TryGetValue(item.Id, out var supplied)
                 ? supplied
-                : (item.ApprovedQuantity ?? item.RequestedQuantity);
+                : shippedQty;
+
+            if (qty > shippedQty)
+            {
+                throw new BusinessException(OperationsErrorCodes.TransferReceivedExceedsShipped)
+                    .WithData("ProductId", item.ProductId)
+                    .WithData("Received", qty)
+                    .WithData("Shipped", shippedQty);
+            }
 
             item.SetTransferredQuantity(qty);
             if (qty > 0)
@@ -174,8 +245,9 @@ public class AppStockTransfer : FullAuditedAggregateRoot<Guid>
             }
         }
 
-        Status = StockTransferStatuses.Completed;
         CompletedDate = DateTime.UtcNow;
+        CompletedByUserId = completedByUserId;
+        ChangeStatus(StockTransferStatuses.Completed);
 
         AddDistributedEvent(new TransferCompletedEto
         {
@@ -188,6 +260,21 @@ public class AppStockTransfer : FullAuditedAggregateRoot<Guid>
     }
 
     // ── Helpers ──
+
+    private void ChangeStatus(string newStatus)
+    {
+        var oldStatus = Status;
+        Status = newStatus;
+
+        AddDistributedEvent(new TransferStatusChangedEto
+        {
+            TransferId = Id,
+            FromBranchId = FromBranchId,
+            ToBranchId = ToBranchId,
+            OldStatus = oldStatus,
+            NewStatus = newStatus
+        });
+    }
 
     private void EnsureDraft()
     {

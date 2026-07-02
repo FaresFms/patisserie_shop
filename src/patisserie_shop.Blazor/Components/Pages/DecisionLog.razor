@@ -10,7 +10,6 @@
 @using Intelligence.Permissions
 @using Intelligence.Localization
 @using Inventory.Branches
-@using Inventory.Products
 @using patisserie_shop.Decisions
 @using Color = MudBlazor.Color
 @using Variant = MudBlazor.Variant
@@ -20,7 +19,6 @@
 @inject IDecisionLogAppService DecisionLogAppService
 @inject IDecisionActionAppService DecisionActionAppService
 @inject IBranchAppService BranchAppService
-@inject IProductAppService ProductAppService
 @inject IIdentityUserAppService IdentityUserAppService
 @inject PageLayout PageLayout
 @inject NavigationManager NavigationManager
@@ -87,6 +85,22 @@
             </div>
         </div>
 
+        <div class="dl-tabs" role="tablist">
+            <button type="button" class="@TabClass(TabPending)" @onclick="@(() => SetTabAsync(TabPending))">
+                @IntL["DecisionLog:Tab:NeedsAttention"]
+                @if (_summary.TotalPending > 0)
+                {
+                    <span class="dl-tab-badge">@_summary.TotalPending</span>
+                }
+            </button>
+            <button type="button" class="@TabClass(TabHandled)" @onclick="@(() => SetTabAsync(TabHandled))">
+                @IntL["DecisionLog:Tab:Handled"]
+            </button>
+            <button type="button" class="@TabClass(TabAll)" @onclick="@(() => SetTabAsync(TabAll))">
+                @IntL["DecisionLog:Tab:All"]
+            </button>
+        </div>
+
         <div class="toolbar">
             <SoftTextField T="string"
                            Placeholder="@IntL["DecisionLog:Filter"]"
@@ -102,25 +116,12 @@
 
             <div class="filter-chip">
                 <SoftLookupSelect TItem="LabeledOption" TValue="string"
-                                  Items="_typeOptions"
+                                  Items="_groupOptions"
                                   ToValue="@(o => o.Value)"
                                   ToLabel="@(o => o.Label)"
-                                  Value="_typeFilter"
-                                  ValueChanged="OnTypeChangedAsync"
-                                  Label="@IntL["DecisionLog:AllTypes"]"
-                                  Margin="Margin.Dense"
-                                  Clearable="true"
-                                  Dense="true" />
-            </div>
-
-            <div class="filter-chip">
-                <SoftLookupSelect TItem="LabeledOption" TValue="string"
-                                  Items="_statusOptions"
-                                  ToValue="@(o => o.Value)"
-                                  ToLabel="@(o => o.Label)"
-                                  Value="_statusFilter"
-                                  ValueChanged="OnStatusChangedAsync"
-                                  Label="@IntL["DecisionLog:AllStatuses"]"
+                                  Value="_groupFilter"
+                                  ValueChanged="OnGroupChangedAsync"
+                                  Label="@IntL["DecisionLog:AllCategories"]"
                                   Margin="Margin.Dense"
                                   Clearable="true"
                                   Dense="true" />
@@ -140,26 +141,17 @@
             </div>
 
             <div class="filter-chip">
-                <SoftLookupSelect TItem="ProductLookupDto" TValue="Guid?"
-                                  Items="_products"
-                                  ToValue="@(p => (Guid?)p.Id)"
-                                  ToLabel="@(p => $"{p.SKU} — {p.Name}")"
-                                  Value="_productFilter"
-                                  ValueChanged="OnProductChangedAsync"
-                                  Label="@IntL["DecisionLog:AllProducts"]"
+                <SoftLookupSelect TItem="LabeledOption" TValue="string"
+                                  Items="_periodOptions"
+                                  ToValue="@(o => o.Value)"
+                                  ToLabel="@(o => o.Label)"
+                                  Value="_period"
+                                  ValueChanged="OnPeriodChangedAsync"
+                                  Label="@IntL["DecisionLog:Period"]"
                                   Margin="Margin.Dense"
                                   Clearable="true"
                                   Dense="true" />
             </div>
-
-            <MudDatePicker Label="@IntL["DecisionLog:FromDate"]" Variant="Variant.Outlined"
-                           Margin="Margin.Dense" Clearable="true"
-                           Date="_fromDate" DateChanged="@(d => OnFromDateChangedAsync(d))"
-                           Class="dl-date-picker" />
-            <MudDatePicker Label="@IntL["DecisionLog:ToDate"]" Variant="Variant.Outlined"
-                           Margin="Margin.Dense" Clearable="true"
-                           Date="_toDate" DateChanged="@(d => OnToDateChangedAsync(d))"
-                           Class="dl-date-picker" />
         </div>
 
         <div class="dl-list">
@@ -172,8 +164,16 @@
             else if (_items.Count == 0)
             {
                 <SoftStack AlignItems="AlignItems.Center" Spacing="2" Class="pa-6">
-                    <SoftIcon Icon="@Icons.Material.Outlined.Inbox" Style="font-size: 56px; opacity: 0.4;" />
-                    <SoftText Typo="Typo.body1" Color="Color.Default">@IntL["DecisionLog:Empty"]</SoftText>
+                    @if (_tab == TabPending)
+                    {
+                        <SoftIcon Icon="@Icons.Material.Outlined.TaskAlt" Style="font-size: 56px; opacity: 0.4;" />
+                        <SoftText Typo="Typo.body1" Color="Color.Default">@IntL["DecisionLog:EmptyPending"]</SoftText>
+                    }
+                    else
+                    {
+                        <SoftIcon Icon="@Icons.Material.Outlined.Inbox" Style="font-size: 56px; opacity: 0.4;" />
+                        <SoftText Typo="Typo.body1" Color="Color.Default">@IntL["DecisionLog:Empty"]</SoftText>
+                    }
                 </SoftStack>
             }
             else
@@ -208,10 +208,27 @@
                                         @item.BranchName
                                     </span>
                                 }
-                                <span class="dl-meta-pill">
-                                    <MudIcon Icon="@Icons.Material.Outlined.Gavel" Size="Size.Small" />
-                                    @(string.IsNullOrWhiteSpace(item.RuleName) ? IntL["DecisionLog:NoRule"].Value : item.RuleName)
-                                </span>
+                                @if (item.StockAtEvaluation.HasValue)
+                                {
+                                    <span class="dl-meta-pill" title="@IntL["DecisionLog:StockAtEvaluation"]">
+                                        <MudIcon Icon="@Icons.Material.Outlined.Numbers" Size="Size.Small" />
+                                        @IntL["DecisionLog:StockAtEvaluation"]: @item.StockAtEvaluation
+                                    </span>
+                                }
+                                @if (item.DaysWithoutSale.HasValue)
+                                {
+                                    <span class="dl-meta-pill">
+                                        <MudIcon Icon="@Icons.Material.Outlined.HistoryToggleOff" Size="Size.Small" />
+                                        @IntL["DecisionLog:DaysWithoutSale"]: @item.DaysWithoutSale
+                                    </span>
+                                }
+                                @if (!string.IsNullOrWhiteSpace(item.RuleName))
+                                {
+                                    <span class="dl-meta-pill" title="@IntL["DecisionLog:Rule"]">
+                                        <MudIcon Icon="@Icons.Material.Outlined.Gavel" Size="Size.Small" />
+                                        @item.RuleName
+                                    </span>
+                                }
                             </div>
 
                             @if (!string.IsNullOrWhiteSpace(item.SuggestedAction))
@@ -221,28 +238,17 @@
                                     <span>@item.SuggestedAction</span>
                                 </div>
                             }
-
-                            @if (item.StockAtEvaluation.HasValue || item.DaysWithoutSale.HasValue)
-                            {
-                                <div class="dl-snapshot">
-                                    @if (item.StockAtEvaluation.HasValue)
-                                    {
-                                        <span>@IntL["DecisionLog:StockAtEvaluation"]: <strong>@item.StockAtEvaluation</strong></span>
-                                    }
-                                    @if (item.DaysWithoutSale.HasValue)
-                                    {
-                                        <span>@IntL["DecisionLog:DaysWithoutSale"]: <strong>@item.DaysWithoutSale</strong></span>
-                                    }
-                                </div>
-                            }
                         </div>
 
                         <div class="dl-card-right">
-                            <SoftChip T="string" Size="Size.Small"
-                                      Color="@StatusChipColor(item.Status)"
-                                      Variant="@(item.Status == "Pending" ? Variant.Filled : Variant.Outlined)">
-                                @IntL[$"DecisionStatus:{item.Status}"]
-                            </SoftChip>
+                            @if (item.Status != DecisionLogStatuses.Pending)
+                            {
+                                <SoftChip T="string" Size="Size.Small"
+                                          Color="@StatusChipColor(item.Status)"
+                                          Variant="Variant.Outlined">
+                                    @IntL[$"DecisionStatus:{item.Status}"]
+                                </SoftChip>
+                            }
                             @if (!string.IsNullOrWhiteSpace(item.Outcome))
                             {
                                 @* 48h outcome recorded by the outcome scanner: StockedOut is loud (filled red),
@@ -285,23 +291,23 @@
                             @if (_canAcknowledge && item.Status == "Pending")
                             {
                                 <div class="dl-actions">
-                                    <SoftButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Success"
+                                    <SoftButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary"
+                                                StartIcon="@Icons.Material.Filled.PlayArrow"
+                                                OnClick="@(() => OpenExecuteDialogAsync(item))"
+                                                Disabled="_busyId == item.Id">
+                                        @IntL["DecisionLog:Action:Executed"]
+                                    </SoftButton>
+                                    <SoftButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Success"
                                                 StartIcon="@Icons.Material.Filled.Check"
                                                 OnClick="@(() => AcknowledgeAsync(item))"
                                                 Disabled="_busyId == item.Id">
                                         @IntL["DecisionLog:Action:Acknowledge"]
                                     </SoftButton>
-                                    <SoftButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default"
+                                    <SoftButton Size="Size.Small" Variant="Variant.Text" Color="Color.Default"
                                                 StartIcon="@Icons.Material.Filled.Close"
                                                 OnClick="@(() => DismissAsync(item))"
                                                 Disabled="_busyId == item.Id">
                                         @IntL["DecisionLog:Action:Dismiss"]
-                                    </SoftButton>
-                                    <SoftButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Info"
-                                                StartIcon="@Icons.Material.Filled.PlayArrow"
-                                                OnClick="@(() => OpenExecuteDialogAsync(item))"
-                                                Disabled="_busyId == item.Id">
-                                        @IntL["DecisionLog:Action:Executed"]
                                     </SoftButton>
                                 </div>
                             }
@@ -527,7 +533,47 @@
     .dl-summary-excess .mud-icon-root   { color: #4a7da8; }
     .dl-summary-resolved .mud-icon-root { color: #6b8e4e; }
 
-    .dl-date-picker { max-width: 160px; }
+    .dl-tabs {
+        display: inline-flex;
+        gap: 4px;
+        margin: 0 32px 10px;
+        padding: 4px;
+        border: 1px solid var(--bd-2);
+        border-radius: 999px;
+        background: var(--surface-2);
+    }
+    .dl-tab {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        padding: 6px 16px;
+        border: none;
+        border-radius: 999px;
+        background: transparent;
+        color: var(--fg-2);
+        font: 600 0.82rem var(--font-sans);
+        cursor: pointer;
+        transition: background .15s ease, color .15s ease;
+    }
+    .dl-tab:hover { background: var(--hover); color: var(--fg-1); }
+    .dl-tab-active,
+    .dl-tab-active:hover {
+        background: var(--accent);
+        color: var(--accent-fg);
+    }
+    .dl-tab-badge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 20px;
+        height: 20px;
+        padding: 0 6px;
+        border-radius: 999px;
+        background: var(--danger);
+        color: #fff;
+        font-size: 0.7rem;
+        font-weight: 700;
+    }
 
     .dl-list {
         padding: 4px 32px 18px;
@@ -755,25 +801,44 @@
         DecisionTypes.StockoutRisk
     };
 
+    private const string TabPending = "pending";
+    private const string TabHandled = "handled";
+    private const string TabAll = "all";
+
+    private string _tab = TabPending;
     private string? _filter;
-    private string? _typeFilter;
-    private string? _statusFilter;
     private Guid? _branchFilter;
-    private Guid? _productFilter;
-    private DateTime? _fromDate;
-    private DateTime? _toDate;
+    private string? _groupFilter;
+    private string? _period;
 
     private const int _pageSize = 10;
     private int _skipCount;
     private int _totalCount;
 
     private List<BranchLookupDto> _branches = new();
-    private List<ProductLookupDto> _products = new();
-    private List<LabeledOption> _typeOptions = new();
-    private List<LabeledOption> _statusOptions = new();
+    private List<LabeledOption> _groupOptions = new();
+    private List<LabeledOption> _periodOptions = new();
 
-    // Cache for AcknowledgedByUserId → UserName
+    /// <summary>Plain-language category groups — nobody should have to pick from 16 technical types.</summary>
+    private static readonly Dictionary<string, string[]> _typeGroups = new()
+    {
+        ["stock"] = new[] { DecisionTypes.LowStockAlert, DecisionTypes.ExcessStockAlert, DecisionTypes.DeadStockFlag, DecisionTypes.StockoutRisk },
+        ["restock"] = new[] { DecisionTypes.ReorderSuggestion, DecisionTypes.TransferSuggestion, DecisionTypes.UnfulfilledBranchRequest },
+        ["expiry"] = new[] { DecisionTypes.ExpiryAlert, DecisionTypes.WasteWriteOff, DecisionTypes.HighKitchenWaste },
+        ["production"] = new[] { DecisionTypes.IngredientShortage, DecisionTypes.ProductionShortageRisk, DecisionTypes.ProductionCostVariance, DecisionTypes.LateProductionRisk },
+        ["cashier"] = new[] { DecisionTypes.StockReport, DecisionTypes.CashierVariance }
+    };
+
+    private static readonly string[] _handledStatuses =
+    {
+        DecisionLogStatuses.Acknowledged,
+        DecisionLogStatuses.Dismissed,
+        DecisionLogStatuses.Executed
+    };
+
+    // Cache for AcknowledgedByUserId → UserName, filled once per circuit.
     private readonly Dictionary<Guid, string> _userNames = new();
+    private bool _usersLoaded;
 
     public record LabeledOption(string Value, string Label);
 
@@ -781,38 +846,26 @@
     {
         _canAcknowledge = await AuthorizationService.IsGrantedAsync(IntelligencePermissions.DecisionLogs.Acknowledge);
 
-        _typeOptions = new List<LabeledOption>
+        _groupOptions = new List<LabeledOption>
         {
-            new(DecisionTypes.LowStockAlert,     IntL["DecisionType:LowStockAlert"]),
-            new(DecisionTypes.ExcessStockAlert,  IntL["DecisionType:ExcessStockAlert"]),
-            new(DecisionTypes.DeadStockFlag,     IntL["DecisionType:DeadStockFlag"]),
-            new(DecisionTypes.TransferSuggestion, IntL["DecisionType:TransferSuggestion"]),
-            new(DecisionTypes.ReorderSuggestion,  IntL["DecisionType:ReorderSuggestion"]),
-            new(DecisionTypes.StockoutRisk,       IntL["DecisionType:StockoutRisk"]),
-            new(DecisionTypes.ExpiryAlert,        IntL["DecisionType:ExpiryAlert"]),
-            new(DecisionTypes.WasteWriteOff,      IntL["DecisionType:WasteWriteOff"]),
-            new(DecisionTypes.StockReport,        IntL["DecisionType:StockReport"]),
-            new(DecisionTypes.CashierVariance,    IntL["DecisionType:CashierVariance"]),
-            new(DecisionTypes.IngredientShortage, IntL["DecisionType:IngredientShortage"]),
-            new(DecisionTypes.ProductionShortageRisk, IntL["DecisionType:ProductionShortageRisk"]),
-            new(DecisionTypes.HighKitchenWaste,   IntL["DecisionType:HighKitchenWaste"]),
-            new(DecisionTypes.ProductionCostVariance, IntL["DecisionType:ProductionCostVariance"]),
-            new(DecisionTypes.LateProductionRisk, IntL["DecisionType:LateProductionRisk"]),
-            new(DecisionTypes.UnfulfilledBranchRequest, IntL["DecisionType:UnfulfilledBranchRequest"])
+            new("stock",      IntL["DecisionGroup:Stock"]),
+            new("restock",    IntL["DecisionGroup:Restock"]),
+            new("expiry",     IntL["DecisionGroup:Expiry"]),
+            new("production", IntL["DecisionGroup:Production"]),
+            new("cashier",    IntL["DecisionGroup:Cashier"])
         };
 
-        _statusOptions = new List<LabeledOption>
+        _periodOptions = new List<LabeledOption>
         {
-            new(DecisionLogStatuses.Pending,      IntL["DecisionStatus:Pending"]),
-            new(DecisionLogStatuses.Acknowledged, IntL["DecisionStatus:Acknowledged"]),
-            new(DecisionLogStatuses.Dismissed,    IntL["DecisionStatus:Dismissed"]),
-            new(DecisionLogStatuses.Executed,     IntL["DecisionStatus:Executed"])
+            new("today", IntL["Period:Today"]),
+            new("7d",    IntL["Period:7d"]),
+            new("30d",   IntL["Period:30d"]),
+            new("all",   IntL["Period:All"])
         };
 
         try
         {
             _branches = await BranchAppService.GetLookupAsync();
-            _products = await ProductAppService.GetLookupAsync();
         }
         catch (Exception ex)
         {
@@ -820,6 +873,16 @@
         }
 
         await RefreshAllAsync();
+    }
+
+    private string TabClass(string tab) => _tab == tab ? "dl-tab dl-tab-active" : "dl-tab";
+
+    private async Task SetTabAsync(string tab)
+    {
+        if (_tab == tab) return;
+        _tab = tab;
+        _skipCount = 0;
+        await LoadListAsync();
     }
 
     private async Task RefreshAllAsync()
@@ -848,12 +911,23 @@
             var result = await DecisionLogAppService.GetListAsync(new GetDecisionLogsInput
             {
                 Filter = _filter,
-                DecisionType = _typeFilter,
-                Status = _statusFilter,
+                Statuses = _tab switch
+                {
+                    TabPending => new List<string> { DecisionLogStatuses.Pending },
+                    TabHandled => _handledStatuses.ToList(),
+                    _ => null
+                },
+                DecisionTypes = _groupFilter != null && _typeGroups.TryGetValue(_groupFilter, out var types)
+                    ? types.ToList()
+                    : null,
                 BranchId = _branchFilter,
-                ProductId = _productFilter,
-                FromDate = _fromDate,
-                ToDate = _toDate,
+                FromDate = _period switch
+                {
+                    "today" => DateTime.Today,
+                    "7d" => DateTime.Today.AddDays(-7),
+                    "30d" => DateTime.Today.AddDays(-30),
+                    _ => null
+                },
                 SkipCount = _skipCount,
                 MaxResultCount = _pageSize,
                 Sorting = "CreationTime desc"
@@ -865,7 +939,10 @@
             _pendingReorderInView = _items.Count(i =>
                 i.Status == DecisionLogStatuses.Pending && _reorderTypes.Contains(i.DecisionType));
 
-            await ResolveUserNamesAsync(_items);
+            if (_items.Any(i => i.AcknowledgedByUserId.HasValue))
+            {
+                await EnsureUserNamesAsync();
+            }
         }
         catch (Exception ex)
         {
@@ -877,23 +954,31 @@
         }
     }
 
-    private async Task ResolveUserNamesAsync(IEnumerable<DecisionLogDto> items)
+    /// <summary>
+    /// Loads all user names ONCE per circuit instead of one round-trip per
+    /// acknowledging user per page (the old N+1). A shop has a handful of users;
+    /// if the caller lacks the Identity read permission we quietly show "—".
+    /// </summary>
+    private async Task EnsureUserNamesAsync()
     {
-        foreach (var id in items
-                     .Where(i => i.AcknowledgedByUserId.HasValue)
-                     .Select(i => i.AcknowledgedByUserId!.Value)
-                     .Distinct())
+        if (_usersLoaded) return;
+        _usersLoaded = true;
+        try
         {
-            if (_userNames.ContainsKey(id)) continue;
-            try
+            var users = await IdentityUserAppService.GetListAsync(new GetIdentityUsersInput
             {
-                var user = await IdentityUserAppService.GetAsync(id);
-                _userNames[id] = string.IsNullOrWhiteSpace(user.UserName) ? user.Name ?? "—" : user.UserName;
-            }
-            catch
+                MaxResultCount = 1000
+            });
+            foreach (var user in users.Items)
             {
-                _userNames[id] = "—";
+                _userNames[user.Id] = string.IsNullOrWhiteSpace(user.UserName)
+                    ? user.Name ?? "—"
+                    : user.UserName;
             }
+        }
+        catch
+        {
+            // Missing AbpIdentity.Users permission — names render as "—".
         }
     }
 
@@ -909,16 +994,9 @@
         }
     }
 
-    private async Task OnTypeChangedAsync(string? v)
+    private async Task OnGroupChangedAsync(string? v)
     {
-        _typeFilter = v;
-        _skipCount = 0;
-        await RefreshAllAsync();
-    }
-
-    private async Task OnStatusChangedAsync(string? v)
-    {
-        _statusFilter = v;
+        _groupFilter = v;
         _skipCount = 0;
         await RefreshAllAsync();
     }
@@ -930,23 +1008,9 @@
         await RefreshAllAsync();
     }
 
-    private async Task OnProductChangedAsync(Guid? v)
+    private async Task OnPeriodChangedAsync(string? v)
     {
-        _productFilter = v;
-        _skipCount = 0;
-        await RefreshAllAsync();
-    }
-
-    private async Task OnFromDateChangedAsync(DateTime? d)
-    {
-        _fromDate = d;
-        _skipCount = 0;
-        await RefreshAllAsync();
-    }
-
-    private async Task OnToDateChangedAsync(DateTime? d)
-    {
-        _toDate = d;
+        _period = v;
         _skipCount = 0;
         await RefreshAllAsync();
     }
@@ -971,32 +1035,88 @@
     private async Task DismissAsync(DecisionLogDto item)
         => await RunActionAsync(item, async id => await DecisionLogAppService.DismissAsync(id));
 
+    /// <summary>
+    /// "Take action": alerts that produce a document open the REAL creation form
+    /// pre-filled (New PO / New transfer / production request) so the user reviews
+    /// and sends it themselves. Only write-offs and no-document types keep the
+    /// in-place confirm dialog — and it opens only AFTER the preview succeeded,
+    /// so a failing preview shows an error message instead of a flash-and-vanish
+    /// popup.
+    /// </summary>
     private async Task OpenExecuteDialogAsync(DecisionLogDto item)
     {
-        _executeItem = item;
-        _executePreview = null;
-        _executeDialogVisible = true;
-        _preparingExecute = true;
-        _busyId = item.Id;
+        if (item.DecisionType == DecisionTypes.StockReport)
+        {
+            OpenProductionRequest(item);
+            return;
+        }
 
+        _busyId = item.Id;
         try
         {
-            _executePreview = item.DecisionType == DecisionTypes.StockReport
-                ? BuildStockReportPreview(item)
-                : await DecisionActionAppService.PrepareDecisionActionAsync(item.Id);
+            var preview = await DecisionActionAppService.PrepareDecisionActionAsync(item.Id);
+
+            if (preview.ActionCreated && preview.ActionType == DecisionActionTypes.PurchaseOrder)
+            {
+                NavigateToNewPurchaseOrder(item, preview);
+                return;
+            }
+
+            if (preview.ActionCreated && preview.ActionType == DecisionActionTypes.StockTransfer)
+            {
+                NavigateToNewTransfer(item, preview);
+                return;
+            }
+
+            _executeItem = item;
+            _executePreview = preview;
+            _executeDialogVisible = true;
         }
         catch (Exception ex)
         {
-            _executeDialogVisible = false;
-            _executeItem = null;
             await HandleErrorAsync(ex);
         }
         finally
         {
-            _preparingExecute = false;
             _busyId = null;
         }
     }
+
+    private void NavigateToNewPurchaseOrder(DecisionLogDto item, DecisionActionPreviewDto preview)
+    {
+        var parameters = new Dictionary<string, string?>
+        {
+            ["new"] = "true",
+            ["supplierId"] = preview.SupplierId?.ToString(),
+            ["branchId"] = (preview.BranchId ?? item.BranchId)?.ToString(),
+            ["productId"] = (preview.ProductId ?? item.ProductId).ToString(),
+            ["qty"] = preview.Quantity?.ToString(),
+            ["price"] = preview.UnitPrice?.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            ["decisionId"] = item.Id.ToString(),
+            ["notes"] = Truncate(preview.Notes, 400)
+        };
+
+        NavigationManager.NavigateTo(QueryHelpers.AddQueryString("/operations/purchase-orders", parameters));
+    }
+
+    private void NavigateToNewTransfer(DecisionLogDto item, DecisionActionPreviewDto preview)
+    {
+        var parameters = new Dictionary<string, string?>
+        {
+            ["new"] = "true",
+            ["toBranchId"] = (preview.TargetBranchId ?? item.TargetBranchId)?.ToString(),
+            ["fromBranchId"] = (preview.SourceBranchId ?? item.SourceBranchId)?.ToString(),
+            ["productId"] = (preview.ProductId ?? item.ProductId).ToString(),
+            ["qty"] = preview.Quantity?.ToString(),
+            ["decisionId"] = item.Id.ToString(),
+            ["notes"] = Truncate(preview.Notes, 400)
+        };
+
+        NavigationManager.NavigateTo(QueryHelpers.AddQueryString("/operations/stock-transfers", parameters));
+    }
+
+    private static string? Truncate(string? value, int maxLength)
+        => value != null && value.Length > maxLength ? value[..maxLength] : value;
 
     private void CloseExecuteDialog()
     {
@@ -1006,26 +1126,11 @@
         _executePreview = null;
     }
 
-    private DecisionActionPreviewDto BuildStockReportPreview(DecisionLogDto item) => new()
-    {
-        ActionCreated = true,
-        ActionType = DecisionActionTypes.BranchProductionRequest,
-        ProductName = item.ProductName,
-        BranchName = item.BranchName,
-        Notes = item.Reasoning
-    };
-
     private async Task ConfirmExecuteAsync()
     {
         if (_executeItem == null) return;
 
         var item = _executeItem;
-        if (item.DecisionType == DecisionTypes.StockReport)
-        {
-            OpenProductionRequest(item);
-            return;
-        }
-
         _busyId = item.Id;
         _executingPreview = true;
         try
@@ -1033,7 +1138,7 @@
             var result = await DecisionActionAppService.ExecuteDecisionAsync(item.Id);
 
             var updated = await DecisionLogAppService.GetAsync(item.Id);
-            await ResolveUserNamesAsync(new[] { updated });
+            await EnsureUserNamesAsync();
 
             var index = _items.FindIndex(x => x.Id == item.Id);
             if (index >= 0) _items[index] = updated;
@@ -1094,7 +1199,7 @@
             parameters["productId"] = item.ProductId.ToString();
         }
 
-        parameters["notes"] = $"أُنشئ من بلاغ مخزون الكاشير {item.Id}.\n{item.Reasoning}";
+        parameters["notes"] = $"Created from cashier stock report {item.Id}.\n{item.Reasoning}";
 
         NavigationManager.NavigateTo(QueryHelpers.AddQueryString("/production/my-requests", parameters));
     }
@@ -1158,7 +1263,7 @@
         try
         {
             var updated = await action(item.Id);
-            await ResolveUserNamesAsync(new[] { updated });
+            await EnsureUserNamesAsync();
 
             var index = _items.FindIndex(x => x.Id == item.Id);
             if (index >= 0) _items[index] = updated;

@@ -82,7 +82,7 @@ public class AppStockTransferTests
     }
 
     [Fact]
-    public void ApproveItem_Is_Only_Valid_While_Approved()
+    public void ApproveItem_Is_Valid_While_Pending_Or_Approved()
     {
         var transfer = NewTransfer();
         var item = transfer.AddItem(Guid.NewGuid(), Guid.NewGuid(), 5);
@@ -92,13 +92,85 @@ public class AppStockTransferTests
             .Code.ShouldBe(OperationsErrorCodes.CannotApproveTransferItem);
 
         transfer.Submit();
-        // Pending → still not allowed.
-        Should.Throw<BusinessException>(() => transfer.ApproveItem(item.Id, 3))
-            .Code.ShouldBe(OperationsErrorCodes.CannotApproveTransferItem);
+        // Pending → approver trims the line while reviewing, before approving.
+        transfer.ApproveItem(item.Id, 4);
+        item.ApprovedQuantity.ShouldBe(4);
 
+        // Approve keeps the reviewed quantity instead of resetting to requested.
         transfer.Approve(null);
-        transfer.ApproveItem(item.Id, 3); // admin trims the line
+        item.ApprovedQuantity.ShouldBe(4);
+
+        transfer.ApproveItem(item.Id, 3); // still adjustable until shipped
         item.ApprovedQuantity.ShouldBe(3);
+
+        transfer.Ship();
+        Should.Throw<BusinessException>(() => transfer.ApproveItem(item.Id, 2))
+            .Code.ShouldBe(OperationsErrorCodes.CannotApproveTransferItem);
+    }
+
+    [Fact]
+    public void Reject_Requires_Pending_And_A_Reason()
+    {
+        var transfer = NewTransfer();
+        transfer.AddItem(Guid.NewGuid(), Guid.NewGuid(), 5);
+
+        // Draft → not allowed.
+        Should.Throw<BusinessException>(() => transfer.Reject(Guid.NewGuid(), "no stock"))
+            .Code.ShouldBe(OperationsErrorCodes.TransferInvalidStatusTransition);
+
+        transfer.Submit();
+
+        Should.Throw<BusinessException>(() => transfer.Reject(Guid.NewGuid(), "  "))
+            .Code.ShouldBe(OperationsErrorCodes.TransferRejectionReasonRequired);
+
+        var rejectedBy = Guid.NewGuid();
+        transfer.Reject(rejectedBy, "Not enough stock at any branch this week.");
+
+        transfer.Status.ShouldBe(StockTransferStatuses.Rejected);
+        transfer.ClosureReason.ShouldBe("Not enough stock at any branch this week.");
+        transfer.ClosedByUserId.ShouldBe(rejectedBy);
+        transfer.IsTerminal.ShouldBeTrue();
+
+        // Terminal — cannot be cancelled or re-approved afterwards.
+        Should.Throw<BusinessException>(() => transfer.Cancel())
+            .Code.ShouldBe(OperationsErrorCodes.TransferInvalidStatusTransition);
+        Should.Throw<BusinessException>(() => transfer.Approve(null))
+            .Code.ShouldBe(OperationsErrorCodes.TransferInvalidStatusTransition);
+    }
+
+    [Fact]
+    public void Complete_Rejects_Receiving_More_Than_Was_Shipped()
+    {
+        var transfer = NewTransfer();
+        var item = transfer.AddItem(Guid.NewGuid(), Guid.NewGuid(), requestedQty: 10);
+        transfer.Submit();
+        transfer.Approve(null);
+        transfer.Ship();
+
+        Should.Throw<BusinessException>(() =>
+                transfer.Complete(new Dictionary<Guid, int> { [item.Id] = 11 }))
+            .Code.ShouldBe(OperationsErrorCodes.TransferReceivedExceedsShipped);
+    }
+
+    [Fact]
+    public void Ship_Records_Audit_Trail_And_Returns_Shipping_Lines()
+    {
+        var transfer = NewTransfer();
+        var item = transfer.AddItem(Guid.NewGuid(), Guid.NewGuid(), requestedQty: 6);
+        transfer.Submit();
+        transfer.Approve(null);
+        transfer.ApproveItem(item.Id, 5);
+
+        var shippedBy = Guid.NewGuid();
+        var lines = transfer.Ship(shippedBy);
+
+        transfer.Status.ShouldBe(StockTransferStatuses.InTransit);
+        transfer.ShippedDate.ShouldNotBeNull();
+        transfer.ShippedByUserId.ShouldBe(shippedBy);
+        lines.ShouldHaveSingleItem().Quantity.ShouldBe(5);
+
+        transfer.RecordItemShippedBatches(item.Id, "2026-07-03:5");
+        item.ShippedBatchBreakdown.ShouldBe("2026-07-03:5");
     }
 
     [Fact]
@@ -141,7 +213,7 @@ public class AppStockTransferTests
             .OfType<TransferCompletedEto>()
             .ShouldHaveSingleItem();
         eto.TransferId.ShouldBe(transfer.Id);
-        eto.FromBranchId.ShouldBe(transfer.FromBranchId);
+        eto.FromBranchId.ShouldBe(transfer.FromBranchId!.Value);
         eto.ToBranchId.ShouldBe(transfer.ToBranchId);
     }
 
@@ -159,8 +231,11 @@ public class AppStockTransferTests
         var pending = NewTransfer();
         pending.AddItem(Guid.NewGuid(), Guid.NewGuid(), 5);
         pending.Submit();
-        pending.Cancel();
+        var cancelledBy = Guid.NewGuid();
+        pending.Cancel(cancelledBy, "Ordered by mistake");
         pending.Status.ShouldBe(StockTransferStatuses.Cancelled);
+        pending.ClosureReason.ShouldBe("Ordered by mistake");
+        pending.ClosedByUserId.ShouldBe(cancelledBy);
         pending.Cancel(); // idempotent
         pending.Status.ShouldBe(StockTransferStatuses.Cancelled);
     }

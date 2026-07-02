@@ -7,6 +7,13 @@
 @using Intelligence.Localization
 @using Intelligence.Permissions
 @using Microsoft.Extensions.Localization
+@using Operations.Localization
+@using Operations.Permissions
+@using Operations.StockTransfers
+@using Production
+@using Production.BranchRequests
+@using Production.Localization
+@using Production.Permissions
 @using patisserie_shop.Blazor.Services
 @using Color = MudBlazor.Color
 @using Size = MudBlazor.Size
@@ -15,20 +22,25 @@
 @inherits patisserie_shopComponentBase
 @implements IDisposable
 @inject DecisionNotificationBridge Bridge
+@inject TransferNotificationBridge TransferBridge
 @inject IDecisionLogAppService DecisionLogAppService
+@inject IStockTransferAppService StockTransferAppService
+@inject IBranchProductionRequestAppService BranchRequestAppService
 @inject ISnackbar Snackbar
 @inject NavigationManager Navigation
 @inject IStringLocalizer<IntelligenceResource> IntL
+@inject IStringLocalizer<OperationsResource> OpsL
+@inject IStringLocalizer<ProductionResource> ProdL
 
 @if (_canView)
 {
     <div class="notif-bell">
         <SoftTooltip Text="@L["Notifications"]" Placement="Placement.Bottom">
-            <SoftBadge Content="@_pendingCount"
+            <SoftBadge Content="@TotalBadgeCount"
                        Max="99"
                        Color="Color.Error"
                        Overlap="true"
-                       Visible="@(_pendingCount > 0)">
+                       Visible="@(TotalBadgeCount > 0)">
                 <SoftIconButton Icon="@(_open ? Icons.Material.Filled.Notifications : Icons.Material.Outlined.Notifications)"
                                 Color="Color.Inherit"
                                 Size="Size.Medium"
@@ -42,21 +54,56 @@
             <div class="notif-popover" @onclick:stopPropagation="true">
                 <div class="notif-head">
                     <span class="notif-head-title">@L["Notifications"]</span>
-                    @if (_pendingCount > 0)
+                    @if (TotalBadgeCount > 0)
                     {
-                        <span class="notif-head-count">@_pendingCount @L["Notifications:Pending"]</span>
+                        <span class="notif-head-count">@TotalBadgeCount @L["Notifications:Pending"]</span>
                     }
                 </div>
 
-                @if (_recent.Count == 0)
+                @if (_pendingBranchRequests > 0)
+                {
+                    <div class="notif-section-head">@ProdL["Menu:Production"]</div>
+                    <div class="notif-list">
+                        <div class="notif-item" @onclick="GoToBranchRequests">
+                            <span class="notif-dot" style="background:#c89c4f;"></span>
+                            <div class="notif-item-body">
+                                <div class="notif-item-type">@string.Format(ProdL["Notif:RequestsToApprove"], _pendingBranchRequests)</div>
+                            </div>
+                            <SoftIcon Icon="@Icons.Material.Filled.ChevronRight" Size="Size.Small" Style="opacity:.5;" />
+                        </div>
+                    </div>
+                }
+
+                @if (TransferRows.Count > 0)
+                {
+                    <div class="notif-section-head">@OpsL["Notif:TransfersHead"]</div>
+                    <div class="notif-list">
+                        @foreach (var row in TransferRows)
+                        {
+                            <div class="notif-item" @onclick="GoToTransfers">
+                                <span class="notif-dot" style="background:#4a8e8e;"></span>
+                                <div class="notif-item-body">
+                                    <div class="notif-item-type">@row</div>
+                                </div>
+                                <SoftIcon Icon="@Icons.Material.Filled.ChevronRight" Size="Size.Small" Style="opacity:.5;" />
+                            </div>
+                        }
+                    </div>
+                }
+
+                @if (_recent.Count == 0 && TransferRows.Count == 0 && _pendingBranchRequests == 0)
                 {
                     <div class="notif-empty">
                         <SoftIcon Icon="@Icons.Material.Outlined.NotificationsNone" Size="Size.Medium" />
                         <span>@L["Notifications:Empty"]</span>
                     </div>
                 }
-                else
+                else if (_recent.Count > 0)
                 {
+                    @if (TransferRows.Count > 0)
+                    {
+                        <div class="notif-section-head">@IntL["DecisionLog"]</div>
+                    }
                     <div class="notif-list">
                         @foreach (var item in _recent)
                         {
@@ -78,9 +125,12 @@
                     </div>
                 }
 
-                <div class="notif-foot">
-                    <span class="notif-view-all" @onclick="() => GoToDecisionLog()">@L["Notifications:ViewAll"]</span>
-                </div>
+                @if (_canViewDecisions)
+                {
+                    <div class="notif-foot">
+                        <span class="notif-view-all" @onclick="() => GoToDecisionLog()">@L["Notifications:ViewAll"]</span>
+                    </div>
+                }
             </div>
         }
     </div>
@@ -132,6 +182,15 @@
 
         .notif-head-count {
             font-size: 0.72rem;
+            color: var(--fg-3);
+        }
+
+        .notif-section-head {
+            padding: 8px 14px 2px;
+            font-size: 0.68rem;
+            font-weight: 700;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
             color: var(--fg-3);
         }
 
@@ -232,14 +291,47 @@
     private const int RecentItemsCount = 8;
 
     private bool _canView;
+    private bool _canViewDecisions;
+    private bool _canViewTransfers;
+    private bool _canApproveBranchRequests;
     private bool _subscribed;
+    private bool _disposed;
     private bool _open;
     private int _pendingCount;
+    private int _pendingBranchRequests;
     private List<DecisionLogDto> _recent = new();
+    private StockTransferActionSummaryDto? _transferSummary;
+
+    private int TotalBadgeCount => _pendingCount + (_transferSummary?.Total ?? 0) + _pendingBranchRequests;
+
+    private List<string> TransferRows
+    {
+        get
+        {
+            var rows = new List<string>();
+            if (_transferSummary == null)
+            {
+                return rows;
+            }
+
+            if (_transferSummary.PendingToApprove > 0)
+                rows.Add(string.Format(OpsL["Notif:ToApprove"], _transferSummary.PendingToApprove));
+            if (_transferSummary.ApprovedToShip > 0)
+                rows.Add(string.Format(OpsL["Notif:ToShip"], _transferSummary.ApprovedToShip));
+            if (_transferSummary.InTransitToReceive > 0)
+                rows.Add(string.Format(OpsL["Notif:ToReceive"], _transferSummary.InTransitToReceive));
+            if (_transferSummary.DraftsToSubmit > 0)
+                rows.Add(string.Format(OpsL["Notif:Drafts"], _transferSummary.DraftsToSubmit));
+            return rows;
+        }
+    }
 
     protected override async Task OnInitializedAsync()
     {
-        _canView = await AuthorizationService.IsGrantedAsync(IntelligencePermissions.DecisionLogs.Default);
+        _canViewDecisions = await AuthorizationService.IsGrantedAsync(IntelligencePermissions.DecisionLogs.Default);
+        _canViewTransfers = await AuthorizationService.IsGrantedAsync(OperationsPermissions.Transfers.Default);
+        _canApproveBranchRequests = await AuthorizationService.IsGrantedAsync(ProductionPermissions.BranchRequests.Approve);
+        _canView = _canViewDecisions || _canViewTransfers || _canApproveBranchRequests;
         if (!_canView)
         {
             return;
@@ -247,24 +339,55 @@
 
         await RefreshAsync();
 
-        Bridge.DecisionMade += OnDecisionMade;
+        if (_disposed)
+        {
+            return; // Navigated away during the awaits above — never subscribe.
+        }
+
+        if (_canViewDecisions)
+        {
+            Bridge.DecisionMade += OnDecisionMade;
+        }
+        if (_canViewTransfers)
+        {
+            TransferBridge.TransferChanged += OnTransferChanged;
+        }
         _subscribed = true;
     }
 
     private async Task RefreshAsync()
     {
-        var summary = await DecisionLogAppService.GetSummaryAsync();
-
-        var pending = await DecisionLogAppService.GetListAsync(new GetDecisionLogsInput
+        if (_canViewDecisions)
         {
-            Status = DecisionLogStatuses.Pending,
-            Sorting = "CreationTime desc",
-            SkipCount = 0,
-            MaxResultCount = RecentItemsCount
-        });
+            var summary = await DecisionLogAppService.GetSummaryAsync();
 
-        _pendingCount = summary.TotalPending;
-        _recent = pending.Items.ToList();
+            var pending = await DecisionLogAppService.GetListAsync(new GetDecisionLogsInput
+            {
+                Status = DecisionLogStatuses.Pending,
+                Sorting = "CreationTime desc",
+                SkipCount = 0,
+                MaxResultCount = RecentItemsCount
+            });
+
+            _pendingCount = summary.TotalPending;
+            _recent = pending.Items.ToList();
+        }
+
+        if (_canViewTransfers)
+        {
+            _transferSummary = await StockTransferAppService.GetActionSummaryAsync();
+        }
+
+        if (_canApproveBranchRequests)
+        {
+            // Count-only query: submitted branch requests waiting for kitchen approval.
+            var pendingRequests = await BranchRequestAppService.GetListAsync(new GetBranchProductionRequestsInput
+            {
+                Status = BranchProductionRequestStatuses.Submitted,
+                MaxResultCount = 1
+            });
+            _pendingBranchRequests = (int)pendingRequests.TotalCount;
+        }
     }
 
     /// <summary>
@@ -314,12 +437,52 @@
         }
     }
 
+    /// <summary>
+    /// Fires on a non-circuit thread when any transfer changes status. Each circuit
+    /// re-queries its own branch-scoped action summary; a toast is shown only when
+    /// this user's to-do count actually grew (i.e. it is now their turn).
+    /// </summary>
+    private void OnTransferChanged(TransferNotification notification)
+    {
+        _ = InvokeAsync(async () =>
+        {
+            try
+            {
+                var before = _transferSummary?.Total ?? 0;
+                _transferSummary = await StockTransferAppService.GetActionSummaryAsync();
+
+                if (_transferSummary.Total > before)
+                {
+                    Snackbar.Add(OpsL["Notif:TransferToast"], Severity.Info);
+                }
+
+                StateHasChanged();
+            }
+            catch
+            {
+                // The circuit may be tearing down — ignore.
+            }
+        });
+    }
+
     private void CloseDropdown() => _open = false;
 
     private void GoToDecisionLog()
     {
         _open = false;
         Navigation.NavigateTo("/intelligence/decision-log");
+    }
+
+    private void GoToTransfers()
+    {
+        _open = false;
+        Navigation.NavigateTo("/operations/stock-transfers?view=action", forceLoad: false);
+    }
+
+    private void GoToBranchRequests()
+    {
+        _open = false;
+        Navigation.NavigateTo("/production/branch-requests", forceLoad: false);
     }
 
     private string TypeLabel(string decisionType) => decisionType switch
@@ -400,9 +563,17 @@
 
     public void Dispose()
     {
+        _disposed = true;
         if (_subscribed)
         {
-            Bridge.DecisionMade -= OnDecisionMade;
+            if (_canViewDecisions)
+            {
+                Bridge.DecisionMade -= OnDecisionMade;
+            }
+            if (_canViewTransfers)
+            {
+                TransferBridge.TransferChanged -= OnTransferChanged;
+            }
             _subscribed = false;
         }
     }

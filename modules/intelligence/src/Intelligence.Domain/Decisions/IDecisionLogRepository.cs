@@ -18,6 +18,8 @@ public interface IDecisionLogRepository : IRepository<AppDecisionLog, Guid>
         DateTime? fromDate,
         DateTime? toDate,
         IReadOnlyCollection<Guid>? scopedBranchIds,
+        IReadOnlyCollection<string>? statusIn = null,
+        IReadOnlyCollection<string>? decisionTypeIn = null,
         CancellationToken cancellationToken = default);
 
     Task<List<DecisionLogWithRuleName>> GetFilteredListAsync(
@@ -32,6 +34,8 @@ public interface IDecisionLogRepository : IRepository<AppDecisionLog, Guid>
         string sorting,
         int skipCount,
         int maxResultCount,
+        IReadOnlyCollection<string>? statusIn = null,
+        IReadOnlyCollection<string>? decisionTypeIn = null,
         CancellationToken cancellationToken = default);
 
     Task<DecisionLogWithRuleName?> GetByIdWithRuleNameAsync(

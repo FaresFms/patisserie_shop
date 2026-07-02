@@ -14,14 +14,19 @@
 @using Inventory.Branches
 @using Inventory.BranchInventory
 @using Inventory.Permissions
+@using Intelligence.Decisions
+@using patisserie_shop.Blazor.Services
 @using Color = MudBlazor.Color
 @using Variant = MudBlazor.Variant
 @using Size = MudBlazor.Size
 @using Margin = MudBlazor.Margin
 @inherits patisserie_shopComponentBase
+@implements IDisposable
 @inject IStockTransferAppService StockTransferAppService
 @inject IBranchAppService BranchAppService
 @inject IBranchInventoryAppService BranchInventoryAppService
+@inject IDecisionLogAppService DecisionLogAppService
+@inject TransferNotificationBridge TransferBridge
 @inject PageLayout PageLayout
 @inject ISnackbar Snackbar
 @inject IStringLocalizer<OperationsResource> OpsL
@@ -34,7 +39,7 @@
     <div class="page-head">
         <div>
             <h1 class="page-title">@OpsL["StockTransfers"]</h1>
-            <div class="page-sub">Stock moved between branches.</div>
+            <div class="page-sub">Request stock, approve, ship and receive between branches.</div>
         </div>
         <div class="page-head-actions">
             <SoftButton Variant="Variant.Filled"
@@ -47,6 +52,29 @@
         </div>
     </div>
     <SoftCardContent>
+
+        <div class="sts-tabs" role="tablist">
+            <button type="button" class="@TabClass(ViewAction)" @onclick="@(() => SetViewAsync(ViewAction))">
+                @OpsL["Tab:NeedsMyAction"]
+                @if (_summary is { Total: > 0 })
+                {
+                    <span class="sts-tab-badge">@_summary.Total</span>
+                }
+            </button>
+            @if (!_canManageAllBranches)
+            {
+                <button type="button" class="@TabClass(ViewIncoming)" @onclick="@(() => SetViewAsync(ViewIncoming))">
+                    @OpsL["Tab:Incoming"]
+                </button>
+                <button type="button" class="@TabClass(ViewOutgoing)" @onclick="@(() => SetViewAsync(ViewOutgoing))">
+                    @OpsL["Tab:Outgoing"]
+                </button>
+            }
+            <button type="button" class="@TabClass(null)" @onclick="@(() => SetViewAsync(null))">
+                @OpsL["Tab:All"]
+            </button>
+        </div>
+
         <div class="toolbar">
             <SoftTextField T="string"
                            Placeholder="@OpsL["Filter"]"
@@ -120,11 +148,11 @@
                 <PropertyColumn T="StockTransferDto" TProperty="string" Property="x => x.Reference" Title="@OpsL["TransferRef"]" Sortable="false" />
                 <PropertyColumn T="StockTransferDto" TProperty="string" Property="x => x.FromBranchName" Title="@OpsL["FromBranch"]" />
                 <PropertyColumn T="StockTransferDto" TProperty="string" Property="x => x.ToBranchName" Title="@OpsL["ToBranch"]" />
-                <TemplateColumn T="StockTransferDto" Title="@OpsL["RequestedDate"]" SortBy="x => x.RequestedDate">
+                <PropertyColumn T="StockTransferDto" TProperty="DateTime" Property="x => x.RequestedDate" Title="@OpsL["RequestedDate"]">
                     <CellTemplate>
                         <SoftText Typo="Typo.body2">@context.Item.RequestedDate.ToString("MMM d, yyyy")</SoftText>
                     </CellTemplate>
-                </TemplateColumn>
+                </PropertyColumn>
                 <TemplateColumn T="StockTransferDto" Title="@OpsL["Items"]" Sortable="false">
                     <CellTemplate>
                         <SoftChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default">
@@ -132,15 +160,30 @@
                         </SoftChip>
                     </CellTemplate>
                 </TemplateColumn>
-                <TemplateColumn T="StockTransferDto" Title="@OpsL["Status"]" SortBy="x => x.Status">
+                <PropertyColumn T="StockTransferDto" TProperty="string" Property="x => x.Status" Title="@OpsL["Status"]">
                     <CellTemplate>
                         <div class="@($"sts-status sts-status-{context.Item.Status.ToLower()}")">
                             <MudIcon Icon="@StatusIcon(context.Item.Status)" Size="Size.Small" />
                             <span>@OpsL[$"Status:{context.Item.Status}"]</span>
                         </div>
                     </CellTemplate>
+                </PropertyColumn>
+                <TemplateColumn T="StockTransferDto" Title="@OpsL["NextStep"]" Sortable="false">
+                    <CellTemplate>
+                        @{ var step = NextStep(context.Item); }
+                        @if (step.Mine)
+                        {
+                            <span class="sts-next sts-next-mine">
+                                <MudIcon Icon="@Icons.Material.Filled.TouchApp" Size="Size.Small" />
+                                @step.Label
+                            </span>
+                        }
+                        else
+                        {
+                            <span class="sts-next">@step.Label</span>
+                        }
+                    </CellTemplate>
                 </TemplateColumn>
-                <PropertyColumn T="StockTransferDto" TProperty="string" Property="x => x.RequestedByUserName!" Title="@OpsL["RequestedBy"]" Sortable="false" />
                 <TemplateColumn T="StockTransferDto" Title="" Sortable="false">
                     <CellTemplate>
                         <span class="row-actions">
@@ -154,8 +197,16 @@
             </Columns>
             <NoRecordsContent>
                 <SoftStack AlignItems="AlignItems.Center" Spacing="2" Class="pa-6">
-                    <SoftIcon Icon="@Icons.Material.Outlined.Inbox" Style="font-size: 56px; opacity: 0.4;" />
-                    <SoftText Typo="Typo.body1" Color="Color.Default">@OpsL["NoTransfers"]</SoftText>
+                    @if (_view == ViewAction)
+                    {
+                        <SoftIcon Icon="@Icons.Material.Outlined.TaskAlt" Style="font-size: 56px; opacity: 0.4;" />
+                        <SoftText Typo="Typo.body1" Color="Color.Default">@OpsL["NoActionTransfers"]</SoftText>
+                    }
+                    else
+                    {
+                        <SoftIcon Icon="@Icons.Material.Outlined.Inbox" Style="font-size: 56px; opacity: 0.4;" />
+                        <SoftText Typo="Typo.body1" Color="Color.Default">@OpsL["NoTransfers"]</SoftText>
+                    }
                 </SoftStack>
             </NoRecordsContent>
             <PagerContent>
@@ -185,7 +236,14 @@
                 <SoftCardContent Class="pa-4">
                     <SoftStack Spacing="3">
                         <SoftAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
-                            Step 1 of 2 — choose the receiving branch and requested products. Admin assigns the source branch after submission.
+                            @if (_canChooseBranches)
+                            {
+                                <text>Step 1 of 2 — choose the branches, then add the products on the next screen.</text>
+                            }
+                            else
+                            {
+                                <text>Step 1 of 2 — choose the receiving branch and requested products. The admin or kitchen assigns the source branch after you submit.</text>
+                            }
                         </SoftAlert>
                         @if (UseFixedReceivingBranch)
                         {
@@ -204,6 +262,20 @@
                                               ValueChanged="@(v => _newToId = v)"
                                               Label="@OpsL["ReceivingBranch"]"
                                               Required="true" />
+                        }
+                        @if (_canChooseBranches)
+                        {
+                            <div>
+                                <SoftLookupSelect TItem="BranchLookupDto" TValue="Guid?"
+                                                  Items="SourceBranchOptions"
+                                                  ToValue="@(b => (Guid?)b.Id)"
+                                                  ToLabel="@(b => b.Name)"
+                                                  Value="_newFromId"
+                                                  ValueChanged="@(v => _newFromId = v)"
+                                                  Label="@OpsL["SourceBranchOptional"]"
+                                                  Clearable="true" />
+                                <SoftText Typo="Typo.caption" Color="Color.Default">@OpsL["SourceBranchOptionalHint"]</SoftText>
+                            </div>
                         }
                         <MudDatePicker Label="@OpsL["RequestedDate"]" Variant="Variant.Outlined"
                                        @bind-Date="_newRequestedDate" />
@@ -239,18 +311,89 @@
 }
 
 <style>
+    .sts-tabs {
+        display: inline-flex;
+        gap: 4px;
+        margin: 4px 0 10px;
+        padding: 4px;
+        border: 1px solid var(--bd-2);
+        border-radius: 999px;
+        background: var(--surface-2);
+    }
+
+    .sts-tab {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        padding: 6px 16px;
+        border: none;
+        border-radius: 999px;
+        background: transparent;
+        color: var(--fg-2);
+        font: 600 0.82rem var(--font-sans);
+        cursor: pointer;
+        transition: background .15s ease, color .15s ease;
+    }
+
+    .sts-tab:hover { background: var(--hover); color: var(--fg-1); }
+
+    .sts-tab-active,
+    .sts-tab-active:hover {
+        background: var(--accent);
+        color: var(--accent-fg);
+    }
+
+    .sts-tab-badge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 20px;
+        height: 20px;
+        padding: 0 6px;
+        border-radius: 999px;
+        background: var(--danger);
+        color: #fff;
+        font-size: 0.7rem;
+        font-weight: 700;
+    }
+
     .sts-status {
         display: inline-flex; align-items: center; gap: 6px;
         padding: 3px 10px; border-radius: 999px;
         font-size: 0.78rem; font-weight: 600;
         border: 1px solid transparent;
     }
-    .sts-status-draft     { background: rgba(255,255,255, 0.10); border-color: rgba(255,255,255, 0.20); color: var(--glass-text-secondary); }
-    .sts-status-pending   { background: rgba(251,191, 36, 0.20); border-color: rgba(251,191, 36, 0.40); color: #fde68a; }
-    .sts-status-approved  { background: rgba( 59,130,246, 0.20); border-color: rgba( 59,130,246, 0.40); color: #93c5fd; }
-    .sts-status-intransit { background: rgba( 20,184,166, 0.20); border-color: rgba( 20,184,166, 0.40); color: #5eead4; }
-    .sts-status-completed { background: rgba( 34,197, 94, 0.20); border-color: rgba( 34,197, 94, 0.40); color: #86efac; }
-    .sts-status-cancelled { background: rgba(239, 68, 68, 0.20); border-color: rgba(239, 68, 68, 0.40); color: #fca5a5; }
+    .sts-status-draft     { background: rgba(255,255,255, 0.10); border-color: rgba(255,255,255, 0.20); color: var(--fg-2); }
+    .sts-status-pending   { background: rgba(251,191, 36, 0.20); border-color: rgba(251,191, 36, 0.40); color: #b26a00; }
+    .sts-status-approved  { background: rgba( 59,130,246, 0.20); border-color: rgba( 59,130,246, 0.40); color: #1565c0; }
+    .sts-status-intransit { background: rgba( 20,184,166, 0.20); border-color: rgba( 20,184,166, 0.40); color: #00695c; }
+    .sts-status-completed { background: rgba( 34,197, 94, 0.20); border-color: rgba( 34,197, 94, 0.40); color: #2e7d32; }
+    .sts-status-cancelled { background: rgba(239, 68, 68, 0.20); border-color: rgba(239, 68, 68, 0.40); color: #c62828; }
+    .sts-status-rejected  { background: rgba(239, 68, 68, 0.12); border-color: rgba(239, 68, 68, 0.45); color: #c62828; }
+
+    html[data-theme="dark"] .sts-status-pending   { color: #fde68a; }
+    html[data-theme="dark"] .sts-status-approved  { color: #93c5fd; }
+    html[data-theme="dark"] .sts-status-intransit { color: #5eead4; }
+    html[data-theme="dark"] .sts-status-completed { color: #86efac; }
+    html[data-theme="dark"] .sts-status-cancelled,
+    html[data-theme="dark"] .sts-status-rejected  { color: #fca5a5; }
+
+    .sts-next {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        font-size: 0.78rem;
+        color: var(--fg-3);
+    }
+
+    .sts-next-mine {
+        padding: 3px 10px;
+        border-radius: 999px;
+        background: var(--accent-soft);
+        color: var(--accent);
+        font-weight: 700;
+    }
+
     .sts-fixed-branch {
         border: 1px solid var(--bd-2);
         border-radius: var(--r-md);
@@ -271,16 +414,29 @@
 </style>
 
 @code {
+    private const string ViewAction = StockTransferViews.NeedsMyAction;
+    private const string ViewIncoming = StockTransferViews.Incoming;
+    private const string ViewOutgoing = StockTransferViews.Outgoing;
+
     private SoftDataGrid<StockTransferDto> _grid = null!;
     private bool _loading;
     private bool _saving;
     private bool _canCreate;
+    private bool _canApprove;
+    private bool _canShip;
+    private bool _canComplete;
+    private bool _canChooseBranches;
     private bool _canManageAllBranches;
+    private bool _subscribed;
+    private bool _disposed;
+    private string? _lastInitialView;
 
     private string? _filter;
     private string? _statusFilter;
     private Guid? _fromFilter;
     private Guid? _toFilter;
+    private string? _view;
+    private StockTransferActionSummaryDto? _summary;
 
     [Parameter, SupplyParameterFromQuery(Name = "new")]
     public bool OpenNewTransfer { get; set; }
@@ -291,26 +447,64 @@
     [Parameter, SupplyParameterFromQuery(Name = "notes")]
     public string? NewTransferNotes { get; set; }
 
+    [Parameter, SupplyParameterFromQuery(Name = "fromBranchId")]
+    public Guid? NewTransferFromBranchId { get; set; }
+
+    [Parameter, SupplyParameterFromQuery(Name = "productId")]
+    public Guid? NewTransferProductId { get; set; }
+
+    [Parameter, SupplyParameterFromQuery(Name = "qty")]
+    public int? NewTransferQuantity { get; set; }
+
+    [Parameter, SupplyParameterFromQuery(Name = "decisionId")]
+    public Guid? NewTransferDecisionId { get; set; }
+
+    [Parameter, SupplyParameterFromQuery(Name = "view")]
+    public string? InitialView { get; set; }
+
+    // Pre-fill handoff from the Decision Log's "Take action" button.
+    private Guid? _pendingItemProductId;
+    private int? _pendingItemQty;
+    private Guid? _sourceDecisionId;
+
     private List<BranchLookupDto> _branches = new();
     private List<BranchLookupDto> _destinationBranches = new();
+    private List<Guid> _accessibleBranchIds = new();
     private List<StatusOption> _statusOptions = new();
 
     private Guid? _detailId;
 
     private bool _createVisible;
     private Guid? _newToId;
+    private Guid? _newFromId;
     private DateTime? _newRequestedDate = DateTime.Today;
     private string? _newNotes;
 
     public record StatusOption(string Value, string Label);
 
     private bool CanOpenCreate => _canManageAllBranches || _destinationBranches.Count > 0;
-    private bool UseFixedReceivingBranch => !_canManageAllBranches && _destinationBranches.Count == 1;
-    private List<BranchLookupDto> DestinationBranchOptions => _canManageAllBranches ? _branches : _destinationBranches;
+    private bool UseFixedReceivingBranch =>
+        !_canManageAllBranches && !_canChooseBranches && _destinationBranches.Count == 1;
+    // Without a source, non-admins may only request INTO a branch they manage; once a
+    // ChooseBranches holder picks a source they manage, any branch can receive (push).
+    private List<BranchLookupDto> DestinationBranchOptions =>
+        (_canManageAllBranches || (_canChooseBranches && _newFromId.HasValue)
+            ? _branches
+            : _destinationBranches)
+        .Where(b => b.Id != _newFromId)
+        .ToList();
+    private List<BranchLookupDto> SourceBranchOptions =>
+        (_canManageAllBranches ? _branches : _destinationBranches)
+            .Where(b => b.Id != _newToId)
+            .ToList();
 
     protected override async Task OnInitializedAsync()
     {
         _canCreate = await AuthorizationService.IsGrantedAsync(OperationsPermissions.Transfers.Create);
+        _canApprove = await AuthorizationService.IsGrantedAsync(OperationsPermissions.Transfers.Approve);
+        _canShip = await AuthorizationService.IsGrantedAsync(OperationsPermissions.Transfers.Ship);
+        _canComplete = await AuthorizationService.IsGrantedAsync(OperationsPermissions.Transfers.Complete);
+        _canChooseBranches = await AuthorizationService.IsGrantedAsync(OperationsPermissions.Transfers.ChooseBranches);
         _canManageAllBranches = await AuthorizationService.IsGrantedAsync(InventoryPermissions.BranchInventory.ManageAll);
 
         _statusOptions = StockTransferStatuses.All
@@ -320,27 +514,112 @@
         try
         {
             _branches = await BranchAppService.GetLookupAsync();
+            _accessibleBranchIds = await BranchInventoryAppService.GetAccessibleBranchIdsAsync();
             if (_canManageAllBranches)
             {
                 _destinationBranches = _branches;
             }
             else
             {
-                var accessibleIds = await BranchInventoryAppService.GetAccessibleBranchIdsAsync();
                 _destinationBranches = _branches
-                    .Where(b => accessibleIds.Contains(b.Id))
+                    .Where(b => _accessibleBranchIds.Contains(b.Id))
                     .ToList();
             }
+
+            _summary = await StockTransferAppService.GetActionSummaryAsync();
         }
         catch (Exception ex)
         {
             await HandleErrorAsync(ex);
         }
 
+        // Land on "Needs my action" when something is actually waiting (or when the
+        // notification bell linked here); otherwise show everything.
+        _view = InitialView switch
+        {
+            ViewAction or ViewIncoming or ViewOutgoing => InitialView,
+            _ => _summary is { Total: > 0 } ? ViewAction : null
+        };
+
+        _lastInitialView = InitialView;
+
+        if (!_disposed)
+        {
+            TransferBridge.TransferChanged += OnTransferChanged;
+            _subscribed = true;
+        }
+
         if (OpenNewTransfer)
         {
             OpenCreateDialog(NewTransferToBranchId, NewTransferNotes);
+            if (_createVisible)
+            {
+                if (_canChooseBranches && NewTransferFromBranchId.HasValue
+                    && NewTransferFromBranchId != _newToId)
+                {
+                    _newFromId = NewTransferFromBranchId;
+                }
+                _pendingItemProductId = NewTransferProductId;
+                _pendingItemQty = NewTransferQuantity;
+                _sourceDecisionId = NewTransferDecisionId;
+            }
         }
+    }
+
+    /// <summary>
+    /// The notification bell links here with ?view=action while this page may already
+    /// be rendered — Blazor then only re-runs parameter binding, so apply the view here.
+    /// </summary>
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_lastInitialView == InitialView)
+        {
+            return;
+        }
+
+        _lastInitialView = InitialView;
+        if (InitialView is ViewAction or ViewIncoming or ViewOutgoing)
+        {
+            await SetViewAsync(InitialView);
+        }
+    }
+
+    private string TabClass(string? view) =>
+        _view == view ? "sts-tab sts-tab-active" : "sts-tab";
+
+    private async Task SetViewAsync(string? view)
+    {
+        if (_view == view) return;
+        _view = view;
+        if (_grid != null)
+        {
+            _grid.CurrentPage = 0;
+        }
+        await ReloadAsync();
+    }
+
+    private (string Label, bool Mine) NextStep(StockTransferDto t)
+    {
+        var managesFrom = t.FromBranchId.HasValue && _accessibleBranchIds.Contains(t.FromBranchId.Value);
+        var managesTo = _accessibleBranchIds.Contains(t.ToBranchId);
+
+        return t.Status switch
+        {
+            StockTransferStatuses.Draft => _canCreate && (managesTo || managesFrom)
+                ? (OpsL["NextStep:Submit"].Value, true)
+                : (OpsL["NextStep:WaitingDraft"].Value, false),
+            StockTransferStatuses.Pending => _canApprove
+                ? (OpsL["NextStep:Approve"].Value, true)
+                : (OpsL["NextStep:WaitingApproval"].Value, false),
+            StockTransferStatuses.Approved => _canShip && managesFrom
+                ? (OpsL["NextStep:Ship"].Value, true)
+                : (string.Format(OpsL["NextStep:WaitingShipment"], t.FromBranchName), false),
+            StockTransferStatuses.InTransit => _canComplete && managesTo
+                ? (OpsL["NextStep:Receive"].Value, true)
+                : (string.Format(OpsL["NextStep:WaitingReceipt"], t.ToBranchName), false),
+            StockTransferStatuses.Completed => (OpsL["NextStep:Done"].Value, false),
+            _ => ("—", false)
+        };
     }
 
     private async Task<GridData<StockTransferDto>> LoadServerData(GridState<StockTransferDto> state, CancellationToken cancellationToken)
@@ -361,6 +640,7 @@
                 Status = _statusFilter,
                 FromBranchId = _fromFilter,
                 ToBranchId = _toFilter,
+                View = _view,
                 SkipCount = state.Page * state.PageSize,
                 MaxResultCount = state.PageSize,
                 Sorting = sorting
@@ -389,7 +669,32 @@
 
     private async Task ReloadAsync()
     {
+        try
+        {
+            _summary = await StockTransferAppService.GetActionSummaryAsync();
+        }
+        catch
+        {
+            // Keep the stale counts if the summary refresh fails.
+        }
         if (_grid != null) await _grid.ReloadServerData();
+    }
+
+    /// <summary>Another circuit moved a transfer along — refresh counts and rows live.</summary>
+    private void OnTransferChanged(TransferNotification notification)
+    {
+        _ = InvokeAsync(async () =>
+        {
+            try
+            {
+                await ReloadAsync();
+                StateHasChanged();
+            }
+            catch
+            {
+                // The circuit may be tearing down — ignore.
+            }
+        });
     }
 
     private void OnRowClick(DataGridRowClickEventArgs<StockTransferDto> args) => OpenDetail(args.Item.Id);
@@ -415,8 +720,12 @@
         }
 
         _newToId = UseFixedReceivingBranch ? _destinationBranches[0].Id : toBranchId;
+        _newFromId = null;
         _newRequestedDate = DateTime.Today;
         _newNotes = notes;
+        _pendingItemProductId = null;
+        _pendingItemQty = null;
+        _sourceDecisionId = null;
         _createVisible = true;
     }
 
@@ -434,18 +743,61 @@
             Snackbar.Add(L["ThisFieldIsRequired", OpsL["RequestedDate"]], Severity.Warning);
             return;
         }
+        if (_newFromId.HasValue && _newFromId == _newToId)
+        {
+            Snackbar.Add(OpsL["SameBranchWarning"], Severity.Warning);
+            return;
+        }
+        if (!_canManageAllBranches && !_newFromId.HasValue
+            && !_destinationBranches.Any(b => b.Id == _newToId.Value))
+        {
+            Snackbar.Add(OpsL["SourceRequiredForOtherBranch"], Severity.Warning);
+            return;
+        }
 
         _saving = true;
         try
         {
             var created = await StockTransferAppService.CreateAsync(new CreateStockTransferDto
             {
-                FromBranchId = null,
+                FromBranchId = _canChooseBranches ? _newFromId : null,
                 ToBranchId = _newToId.Value,
                 RequestedDate = _newRequestedDate.Value,
                 Notes = _newNotes
             });
-            Snackbar.Add($"Transfer {created.Reference} created — add items below to continue.", Severity.Success);
+
+            // Handoff from the Decision Log: pre-add the suggested line and mark
+            // the alert as executed, linked to this transfer.
+            if (_pendingItemProductId is Guid pendingProductId && _pendingItemQty is > 0)
+            {
+                await StockTransferAppService.AddItemAsync(created.Id, new AddStockTransferItemDto
+                {
+                    ProductId = pendingProductId,
+                    RequestedQuantity = _pendingItemQty.Value
+                });
+            }
+
+            if (_sourceDecisionId is Guid decisionId)
+            {
+                try
+                {
+                    await DecisionLogAppService.ExecuteAsync(decisionId, new ExecuteDecisionLogInput
+                    {
+                        ActionType = DecisionActionTypes.StockTransfer,
+                        ActionId = created.Id
+                    });
+                }
+                catch
+                {
+                    // The transfer exists either way — worst case the alert stays pending.
+                }
+            }
+
+            _pendingItemProductId = null;
+            _pendingItemQty = null;
+            _sourceDecisionId = null;
+
+            Snackbar.Add($"Transfer {created.Reference} created — review the items and submit.", Severity.Success);
             _createVisible = false;
             _detailId = created.Id;
             await ReloadAsync();
@@ -460,6 +812,16 @@
         }
     }
 
+    public void Dispose()
+    {
+        _disposed = true;
+        if (_subscribed)
+        {
+            TransferBridge.TransferChanged -= OnTransferChanged;
+            _subscribed = false;
+        }
+    }
+
     private static string StatusIcon(string status) => status switch
     {
         StockTransferStatuses.Draft => Icons.Material.Filled.EditNote,
@@ -468,6 +830,7 @@
         StockTransferStatuses.InTransit => Icons.Material.Filled.LocalShipping,
         StockTransferStatuses.Completed => Icons.Material.Filled.TaskAlt,
         StockTransferStatuses.Cancelled => Icons.Material.Filled.Cancel,
+        StockTransferStatuses.Rejected => Icons.Material.Filled.Block,
         _ => Icons.Material.Filled.HelpOutline
     };
 }

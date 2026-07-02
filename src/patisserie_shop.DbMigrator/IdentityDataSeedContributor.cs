@@ -391,8 +391,9 @@ public class IdentityDataSeedContributor : IDataSeedContributor, ITransientDepen
     /// can view + acknowledge decision logs; can view all cashier shifts and
     /// create / assign cashiers for the branches they manage (branch-scoped in
     /// the host CashierAssignmentAppService). Cannot manage the catalogue,
-    /// cannot approve POs, cannot delete sales, cannot
-    /// approve/complete/cancel transfers, cannot see the rules engine.
+    /// cannot approve POs, cannot delete sales, cannot approve transfers
+    /// (can request, ship, receive and withdraw their own branch's requests),
+    /// cannot see the rules engine.
     ///
     /// NOTE: The spec mentioned "Sales.Confirm" and a "PurchaseOrders.Manage"
     /// umbrella — those exact constants don't exist on OperationsPermissions.
@@ -421,6 +422,9 @@ public class IdentityDataSeedContributor : IDataSeedContributor, ITransientDepen
         OperationsPermissions.Transfers.Create,
         OperationsPermissions.Transfers.Ship,
         OperationsPermissions.Transfers.Complete,
+        // Cancel is branch-scoped server-side: a manager can only withdraw
+        // requests destined to a branch they manage.
+        OperationsPermissions.Transfers.Cancel,
 
         // Operations — cashier oversight: view all shifts + create/assign cashiers
         // (host CashierAssignmentAppService scopes both to the branches they manage)
@@ -486,6 +490,7 @@ public class IdentityDataSeedContributor : IDataSeedContributor, ITransientDepen
             OperationsPermissions.Transfers.Approve,
             OperationsPermissions.Transfers.Ship,
             OperationsPermissions.Transfers.Complete,
+            OperationsPermissions.Transfers.Cancel,
 
             // Intelligence — kitchen-scoped decision logs in the page + top notification bell
             IntelligencePermissions.DecisionLogs.Default,

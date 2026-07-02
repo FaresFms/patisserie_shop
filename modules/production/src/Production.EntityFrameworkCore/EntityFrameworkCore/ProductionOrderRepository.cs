@@ -428,8 +428,8 @@ public class ProductionOrderRepository
             {
                 Type = "UnfulfilledBranchRequest",
                 Severity = "Danger",
-                Title = "طلبات فروع مستحقة اليوم لم تُغلق بعد",
-                Detail = "راجع لوحة الصرف وحوّل الكميات الجاهزة للفروع قبل نهاية اليوم.",
+                Title = "Branch requests due today, not yet dispatched",
+                Detail = "Open the Dispatch board and send the ready quantities to the branches before end of day.",
                 Url = "/production/dispatch",
                 Count = dashboard.UnfulfilledDueToday
             });
@@ -441,8 +441,8 @@ public class ProductionOrderRepository
             {
                 Type = "IngredientShortage",
                 Severity = "Warning",
-                Title = "أوامر طبخ تنتظر خامات",
-                Detail = "افتح شاشة الطبخ وأنشئ طلبات شراء خامات للأوامر الناقصة.",
+                Title = "Cook orders waiting for ingredients",
+                Detail = "Open the Cook screen and create ingredient purchase orders for the blocked orders.",
                 Url = "/production/cook",
                 Count = dashboard.WaitingForIngredients
             });
@@ -454,8 +454,8 @@ public class ProductionOrderRepository
             {
                 Type = "ReadyToCook",
                 Severity = "Success",
-                Title = "أوامر جاهزة للطبخ",
-                Detail = "الخامات متوفرة. ابدأ بالأولويات العاجلة ثم العادية.",
+                Title = "Orders ready to cook",
+                Detail = "Ingredients are in stock. Start with urgent priorities, then normal ones.",
                 Url = "/production/cook",
                 Count = dashboard.ReadyToCook
             });
@@ -467,8 +467,8 @@ public class ProductionOrderRepository
             {
                 Type = "LateProductionRisk",
                 Severity = "Info",
-                Title = "أوامر تحت الطبخ",
-                Detail = "تابع أوقات التشغيل وسجّل الناتج المقبول والمرفوض عند الانتهاء.",
+                Title = "Orders in the oven",
+                Detail = "Track batch times and record accepted/rejected output when each finishes.",
                 Url = "/production/cook",
                 Count = dashboard.InProduction
             });
@@ -480,8 +480,8 @@ public class ProductionOrderRepository
             {
                 Type = "HighKitchenWaste",
                 Severity = dashboard.YieldPercentToday < 90m ? "Warning" : "Info",
-                Title = "هدر مطبخ مسجّل اليوم",
-                Detail = "افتح سجل الهدر لمعرفة السبب والمنتجات الأكثر تأثرًا.",
+                Title = "Kitchen waste recorded today",
+                Detail = "Open the waste log to see the cause and the most affected products.",
                 Url = "/production/waste",
                 Count = dashboard.RejectedToday
             });
@@ -493,8 +493,8 @@ public class ProductionOrderRepository
             {
                 Type = "PendingRequests",
                 Severity = "Info",
-                Title = "طلبات فروع بانتظار القرار",
-                Detail = "راجع الكميات المطلوبة واعتمد ما يمكن إنتاجه.",
+                Title = "Branch requests waiting for a decision",
+                Detail = "Review the requested quantities and approve what can be produced.",
                 Url = "/production/branch-requests",
                 Count = dashboard.PendingRequests
             });

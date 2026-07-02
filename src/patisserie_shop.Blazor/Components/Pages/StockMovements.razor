@@ -406,14 +406,11 @@
 
     protected override async Task OnInitializedAsync()
     {
-        _typeOptions = new List<MoveTypeOption>
-        {
-            new(StockMovementTypes.Purchase, InvL["MovementType:Purchase"]),
-            new(StockMovementTypes.Sale, InvL["MovementType:Sale"]),
-            new(StockMovementTypes.TransferIn, InvL["MovementType:TransferIn"]),
-            new(StockMovementTypes.TransferOut, InvL["MovementType:TransferOut"]),
-            new(StockMovementTypes.ManualAdjustment, InvL["MovementType:ManualAdjustment"]),
-        };
+        // Build from the canonical list so every ledger type (write-offs, sale
+        // returns, production movements) is filterable — not just the original five.
+        _typeOptions = StockMovementTypes.All
+            .Select(t => new MoveTypeOption(t, InvL[$"MovementType:{t}"]))
+            .ToList();
 
         ApplyRange(_activeRange);
 
@@ -442,12 +439,10 @@
 
             var input = BuildInput(state.Page * state.PageSize, state.PageSize, sorting);
 
-            var listTask = MovementAppService.GetListAsync(input);
-            var summaryTask = MovementAppService.GetSummaryAsync(input);
-            await Task.WhenAll(listTask, summaryTask);
-
-            _summary = summaryTask.Result;
-            var result = listTask.Result;
+            // Sequential on purpose: both calls share this circuit's scoped DbContext,
+            // and EF Core forbids two concurrent operations on one context.
+            var result = await MovementAppService.GetListAsync(input);
+            _summary = await MovementAppService.GetSummaryAsync(input);
 
             return new GridData<StockMovementDto>
             {
@@ -524,11 +519,9 @@
 
     private bool _detailVisible;
     private StockMovementDto? _detailRow;
-    private bool _detailLoading;
 
     private async Task OpenDetailAsync(StockMovementDto row)
     {
-        _detailLoading = true;
         try
         {
             _detailRow = await MovementAppService.GetAsync(row.Id);
@@ -537,10 +530,6 @@
         catch (Exception ex)
         {
             await HandleErrorAsync(ex);
-        }
-        finally
-        {
-            _detailLoading = false;
         }
     }
 

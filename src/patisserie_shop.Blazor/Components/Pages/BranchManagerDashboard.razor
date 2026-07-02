@@ -144,7 +144,7 @@
                     </div>
                 </div>
 
-                <div class="bm-kpi-card bm-clickable" @onclick='() => Nav.NavigateTo("/operations/stock-transfers")'>
+                <div class="bm-kpi-card bm-clickable" @onclick='() => Nav.NavigateTo("/operations/stock-transfers?view=incoming")'>
                     <div class="bm-kpi-icon bm-kpi-icon--info">
                         <SoftIcon Icon="@Icons.Material.Filled.LocalShipping" />
                     </div>
@@ -396,7 +396,7 @@
                                 @foreach (var t in _data.IncomingTransfers)
                                 {
                                     <div class="bm-transfer bm-transfer-@(t.Status.ToLowerInvariant())"
-                                         @onclick='() => Nav.NavigateTo("/operations/stock-transfers")'>
+                                         @onclick='() => Nav.NavigateTo("/operations/stock-transfers?view=incoming")'>
                                         <div class="bm-transfer-icon">
                                             @if (t.Status == "InTransit")
                                             {

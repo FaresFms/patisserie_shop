@@ -34,8 +34,8 @@ public class ProductionDecisionScannerService : ITransientDependency
                 DecisionTypes.IngredientShortage,
                 productId,
                 kitchenBranchId,
-                $"يوجد {dashboard.WaitingForIngredients} أمر طبخ ينتظر خامات. هذا يعني أن الإنتاج لا يستطيع البدء قبل تأمين المواد الناقصة.",
-                "افتح شاشة الطبخ وأنشئ طلبات شراء خامات للأوامر الناقصة.");
+                $"{dashboard.WaitingForIngredients} cook order(s) are waiting for ingredients — production cannot start until the missing materials are secured.",
+                "Open the Cook screen and create ingredient purchase orders for the blocked orders.");
         }
 
         if (dashboard.UnfulfilledDueToday > 0)
@@ -44,8 +44,8 @@ public class ProductionDecisionScannerService : ITransientDependency
                 DecisionTypes.UnfulfilledBranchRequest,
                 productId,
                 kitchenBranchId,
-                $"يوجد {dashboard.UnfulfilledDueToday} طلب فرع مستحق اليوم ولم تُغلق كمياته بعد.",
-                "راجع لوحة الصرف وحوّل الإنتاج الجاهز للفروع حسب الأولوية.");
+                $"{dashboard.UnfulfilledDueToday} branch request(s) are due today and their quantities are not fully dispatched yet.",
+                "Review the Dispatch board and send the finished goods to branches by priority.");
         }
 
         if (dashboard.InProduction > 0)
@@ -54,8 +54,8 @@ public class ProductionDecisionScannerService : ITransientDependency
                 DecisionTypes.LateProductionRisk,
                 productId,
                 kitchenBranchId,
-                $"يوجد {dashboard.InProduction} أمر تحت الطبخ الآن. استمرارها دون إغلاق قد يؤخر صرف طلبات الفروع.",
-                "تابع أوامر الطبخ المفتوحة وسجّل الناتج المقبول والمرفوض فور انتهاء التشغيل.");
+                $"{dashboard.InProduction} order(s) are cooking right now. Leaving them open too long can delay dispatching branch requests.",
+                "Follow up the open cook orders and record accepted/rejected output as soon as each batch finishes.");
         }
 
         if (dashboard.RejectedToday > 0 && dashboard.YieldPercentToday < 90m)
@@ -64,8 +64,8 @@ public class ProductionDecisionScannerService : ITransientDependency
                 DecisionTypes.HighKitchenWaste,
                 productId,
                 kitchenBranchId,
-                $"نسبة العائد اليوم {dashboard.YieldPercentToday:0.##}% فقط، مع {dashboard.RejectedToday} وحدة مرفوضة. هذا يشير إلى هدر مطبخ أعلى من المقبول.",
-                "راجع سجل الهدر وحدد السبب المتكرر قبل تشغيل دفعات جديدة.");
+                $"Today's yield is only {dashboard.YieldPercentToday:0.##}%, with {dashboard.RejectedToday} rejected unit(s) — kitchen waste is higher than acceptable.",
+                "Review the waste log and find the recurring cause before starting new batches.");
         }
     }
 
@@ -80,8 +80,8 @@ public class ProductionDecisionScannerService : ITransientDependency
                 DecisionTypes.ProductionShortageRisk,
                 productId,
                 kitchenBranchId,
-                $"نسبة تلبية طلبات الفروع خلال آخر {analytics.Days} يوم هي {analytics.FulfillmentPercent:0.##}% فقط. الكمية المعتمدة {analytics.ApprovedRequestQuantity} والمنفذة {analytics.FulfilledRequestQuantity}.",
-                "راجع خطة الإنتاج القادمة وزد الكميات للمنتجات ذات الطلب غير المغلق.");
+                $"Branch-request fulfillment over the last {analytics.Days} day(s) is only {analytics.FulfillmentPercent:0.##}%. Approved quantity {analytics.ApprovedRequestQuantity}, fulfilled {analytics.FulfilledRequestQuantity}.",
+                "Review the next production plan and increase quantities for products with unmet demand.");
         }
 
         if (analytics.CostVariance > 0m && analytics.CostVariancePercent > 15m)
@@ -90,8 +90,8 @@ public class ProductionDecisionScannerService : ITransientDependency
                 DecisionTypes.ProductionCostVariance,
                 productId,
                 kitchenBranchId,
-                $"تكلفة الإنتاج الفعلية أعلى من المخططة بنسبة {analytics.CostVariancePercent:0.##}% خلال آخر {analytics.Days} يوم.",
-                "راجع تكلفة الخامات والهدر والعمالة قبل اعتماد تشغيل دفعات جديدة.");
+                $"Actual production cost is {analytics.CostVariancePercent:0.##}% above plan over the last {analytics.Days} day(s).",
+                "Review ingredient, waste and labour costs before approving new batches.");
         }
 
         if (analytics.WastePercent > 10m && analytics.RejectedQuantity > 0)
@@ -100,8 +100,8 @@ public class ProductionDecisionScannerService : ITransientDependency
                 DecisionTypes.HighKitchenWaste,
                 productId,
                 kitchenBranchId,
-                $"نسبة الهدر خلال آخر {analytics.Days} يوم وصلت إلى {analytics.WastePercent:0.##}% بإجمالي {analytics.RejectedQuantity} وحدة مرفوضة.",
-                "افتح تحليلات الهدر وحدد السبب الأعلى ثم عدّل وصفة التشغيل أو الفحص.");
+                $"Waste over the last {analytics.Days} day(s) reached {analytics.WastePercent:0.##}%, with {analytics.RejectedQuantity} rejected unit(s) in total.",
+                "Open waste analytics, find the top cause, then adjust the recipe or the quality check.");
         }
     }
 

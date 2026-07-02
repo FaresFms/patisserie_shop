@@ -1,0 +1,18 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "blazor",
+      "runtimeExecutable": "dotnet",
+      "runtimeArgs": [
+        "run",
+        "--project", "src/patisserie_shop.Blazor/patisserie_shop.Blazor.csproj",
+        "--no-build",
+        "--",
+        "--urls", "https://localhost:44387",
+        "--environment", "Development"
+      ],
+      "port": 44387
+    }
+  ]
+}

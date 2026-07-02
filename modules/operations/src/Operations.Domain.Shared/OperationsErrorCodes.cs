@@ -41,4 +41,6 @@ public static class OperationsErrorCodes
     public const string InsufficientStockAtSource = "Operations:Transfers:InsufficientStock";
     public const string TransferInvalidQuantity = "Operations:Transfers:InvalidQuantity";
     public const string CannotApproveTransferItem = "Operations:Transfers:CannotApproveItem";
+    public const string TransferRejectionReasonRequired = "Operations:Transfers:RejectionReasonRequired";
+    public const string TransferReceivedExceedsShipped = "Operations:Transfers:ReceivedExceedsShipped";
 }
