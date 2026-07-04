@@ -14,6 +14,8 @@ public interface IBranchInventoryAppService : IApplicationService
 
     Task<BranchInventoryStatsDto> GetStatsAsync(Guid branchId);
 
+    Task<List<ProductBranchStockDto>> GetProductStockAcrossBranchesAsync(Guid productId);
+
     Task<List<Guid>> GetAccessibleBranchIdsAsync();
 
     Task<BranchInventoryDto> InitializeAsync(InitializeBranchInventoryDto input);

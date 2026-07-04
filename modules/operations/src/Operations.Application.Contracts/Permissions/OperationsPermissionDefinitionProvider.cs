@@ -18,6 +18,7 @@ public class OperationsPermissionDefinitionProvider : PermissionDefinitionProvid
         po.AddChild(OperationsPermissions.PurchaseOrders.Cancel, L("Permission:PurchaseOrders.Cancel"));
         po.AddChild(OperationsPermissions.PurchaseOrders.Receive, L("Permission:PurchaseOrders.Receive"));
         po.AddChild(OperationsPermissions.PurchaseOrders.Delete, L("Permission:PurchaseOrders.Delete"));
+        po.AddChild(OperationsPermissions.PurchaseOrders.ManageAll, L("Permission:PurchaseOrders.ManageAll"));
 
         var sales = group.AddPermission(OperationsPermissions.Sales.Default, L("Permission:Sales"));
         sales.AddChild(OperationsPermissions.Sales.Manage, L("Permission:Sales.Manage"));

@@ -1,13 +1,16 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
+using System.Globalization;
 using System.Linq;
 using System.Threading.Tasks;
 using MudBlazor;
 using patisserie_shop.Blazor.Shared.Components.SoftComponents;
 using patisserie_shop.Localization;
+using patisserie_shop.Settings;
 using Microsoft.AspNetCore.Components;
 using Volo.Abp.AspNetCore.Components;
+using Volo.Abp.Settings;
 using Volo.Abp.Validation;
 
 namespace patisserie_shop.Blazor;
@@ -15,6 +18,9 @@ namespace patisserie_shop.Blazor;
 public abstract class patisserie_shopComponentBase : AbpComponentBase
 {
     [Inject] protected IDialogService DialogService { get; set; } = null!;
+    [Inject] protected ISettingProvider AppSettingProvider { get; set; } = null!;
+
+    protected string ShopCurrency { get; private set; } = "USD";
 
     protected patisserie_shopComponentBase()
     {
@@ -30,6 +36,21 @@ public abstract class patisserie_shopComponentBase : AbpComponentBase
         }
 
         await base.HandleErrorAsync(ex);
+    }
+
+    protected async Task LoadShopCurrencyAsync()
+    {
+        var currency = await AppSettingProvider.GetOrNullAsync(patisserie_shopSettings.DefaultCurrency);
+        ShopCurrency = NormalizeCurrency(currency);
+    }
+
+    protected string FormatShopMoney(decimal value, int decimals = 2)
+        => $"{value.ToString($"N{decimals}", CultureInfo.CurrentCulture)} {ShopCurrency}";
+
+    private static string NormalizeCurrency(string? currency)
+    {
+        currency = currency?.Trim().ToUpperInvariant();
+        return currency?.Length == 3 ? currency : "USD";
     }
 
     protected async Task ShowValidationErrorsAsync(IReadOnlyList<ValidationErrorDialog.ValidationErrorItem> errors)

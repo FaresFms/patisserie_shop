@@ -156,7 +156,7 @@
                             </div>
                             <div>
                                 <div class="stat-label">@ProdL["PlannedUnitCost"]</div>
-                                <div class="stat-value">@_detail.UnitProductionCost.ToString("0.00")</div>
+                                <div class="stat-value">@FormatShopMoney(_detail.UnitProductionCost, 2)</div>
                             </div>
                         </div>
 
@@ -195,7 +195,7 @@
                                 <MudTd>@context.IngredientSku - @context.IngredientName</MudTd>
                                 <MudTd>@context.RequiredQuantity @context.Unit</MudTd>
                                 <MudTd>@context.ConsumedQuantity @context.Unit</MudTd>
-                                <MudTd>@context.TotalCost.ToString("0.00")</MudTd>
+                                <MudTd>@FormatShopMoney(context.TotalCost, 2)</MudTd>
                             </RowTemplate>
                         </SoftTable>
 
@@ -355,6 +355,7 @@
 
     protected override async Task OnInitializedAsync()
     {
+        await LoadShopCurrencyAsync();
         _canStart = await Authz.IsGrantedAsync(ProductionPermissions.Orders.Start);
         _canComplete = await Authz.IsGrantedAsync(ProductionPermissions.Orders.Complete);
         _canCancel = await Authz.IsGrantedAsync(ProductionPermissions.Orders.Cancel);

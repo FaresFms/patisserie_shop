@@ -112,6 +112,29 @@ public class BranchInventoryRepository
         ).ToListAsync(GetCancellationToken(cancellationToken));
     }
 
+    public async Task<List<ProductBranchStockRow>> GetByProductAsync(
+        Guid productId,
+        IReadOnlyCollection<Guid>? branchIdScope = null,
+        CancellationToken cancellationToken = default)
+    {
+        var dbContext = await GetDbContextAsync();
+
+        var query =
+            from inv in dbContext.Set<AppBranchInventory>()
+            join b in dbContext.Set<AppBranch>() on inv.BranchId equals b.Id
+            where inv.ProductId == productId
+            select new ProductBranchStockRow { Inventory = inv, Branch = b };
+
+        if (branchIdScope != null)
+        {
+            query = query.Where(x => branchIdScope.Contains(x.Inventory.BranchId));
+        }
+
+        return await query
+            .OrderBy(x => x.Branch.Name)
+            .ToListAsync(GetCancellationToken(cancellationToken));
+    }
+
     public async Task<List<InventoryStockRow>> GetActiveStockRowsAsync(
         IReadOnlyCollection<Guid>? branchIdScope,
         CancellationToken cancellationToken = default)

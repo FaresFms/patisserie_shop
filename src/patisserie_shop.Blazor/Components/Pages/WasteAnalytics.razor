@@ -398,6 +398,7 @@
     {
         try
         {
+            await LoadShopCurrencyAsync();
             var allBranches = await BranchAppService.GetLookupAsync();
             var accessibleIds = await BranchInventoryAppService.GetAccessibleBranchIdsAsync();
             var set = accessibleIds.ToHashSet();
@@ -450,9 +451,9 @@
     private string WeekLabel(DateTime weekStart)
         => string.Format(InvL["WasteAnalytics:WeekOf"], weekStart.ToString("MMM d"));
 
-    private static string FormatMoney(decimal v)
-        => v.ToString("C0", System.Globalization.CultureInfo.GetCultureInfo("en-US"));
+    private string FormatMoney(decimal v)
+        => FormatShopMoney(v, 0);
 
-    private static string FormatMoneyExact(decimal v)
-        => v.ToString("C2", System.Globalization.CultureInfo.GetCultureInfo("en-US"));
+    private string FormatMoneyExact(decimal v)
+        => FormatShopMoney(v, 2);
 }

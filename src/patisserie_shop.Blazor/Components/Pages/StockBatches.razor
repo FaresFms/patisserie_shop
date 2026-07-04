@@ -23,7 +23,11 @@
     PageLayout.Title = InvL["StockBatches"];
 }
 
-<SoftCard Elevation="2" Class="pa-2 page-flat">
+<SoftStack Spacing="3">
+
+    <StockSubNav Active="batches" />
+
+    <SoftCard Elevation="2" Class="pa-2 page-flat">
     <div class="page-head">
         <div>
             <h1 class="page-title">@InvL["StockBatches"]</h1>
@@ -133,7 +137,9 @@
             </PagerContent>
         </SoftDataGrid>
     </SoftCardContent>
-</SoftCard>
+    </SoftCard>
+
+</SoftStack>
 
 @code {
     private SoftDataGrid<StockBatchDto> _grid = null!;

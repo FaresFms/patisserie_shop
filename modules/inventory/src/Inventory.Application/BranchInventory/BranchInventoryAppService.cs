@@ -83,6 +83,27 @@ public class BranchInventoryAppService : InventoryAppService, IBranchInventoryAp
         return stats;
     }
 
+    public async Task<List<ProductBranchStockDto>> GetProductStockAcrossBranchesAsync(Guid productId)
+    {
+        var product = await _productRepository.GetAsync(productId);
+
+        // Branch isolation: a ManageAll caller (admin) sees every branch (null scope);
+        // a branch manager only sees the branches they manage. Matches the scoping
+        // every other read method on this service applies.
+        var scope = await _branchAccess.GetScopedBranchIdsAsync(InventoryPermissions.BranchInventory.ManageAll);
+        var rows = await _inventoryRepository.GetByProductAsync(productId, scope);
+
+        return [.. rows.Select(row => new ProductBranchStockDto
+        {
+            BranchId = row.Inventory.BranchId,
+            BranchName = row.Branch.Name,
+            QuantityOnHand = row.Inventory.QuantityOnHand,
+            MinimumStock = row.Inventory.MinimumStock,
+            MaximumStock = row.Inventory.MaximumStock,
+            ProductUnit = product.Unit
+        })];
+    }
+
     public Task<List<Guid>> GetAccessibleBranchIdsAsync()
         => _branchAccess.GetAccessibleBranchIdsAsync();
 

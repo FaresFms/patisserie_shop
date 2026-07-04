@@ -13,6 +13,8 @@
     "Permission:PurchaseOrders.Cancel": "Cancel",
     "Permission:PurchaseOrders.Receive": "Receive",
     "Permission:PurchaseOrders.Delete": "Delete",
+    "Permission:PurchaseOrders.ManageAll": "Manage all branches' orders",
+    "Operations:PurchaseOrders:BranchAccessDenied": "You can only act on purchase orders for a branch you manage.",
     "Permission:Sales": "Sales",
     "Permission:Sales.Manage": "Create / record",
     "Permission:Sales.Delete": "Delete",

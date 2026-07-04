@@ -13,3 +13,9 @@ public class StockSnapshot
     public int QuantityOnHand { get; set; }
     public int MinimumStock { get; set; }
 }
+
+public class ProductBranchStockRow
+{
+    public AppBranchInventory Inventory { get; set; } = null!;
+    public AppBranch Branch { get; set; } = null!;
+}

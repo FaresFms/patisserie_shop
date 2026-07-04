@@ -43,6 +43,17 @@ public interface IBranchInventoryRepository : IRepository<AppBranchInventory, Gu
         Guid branchId,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Inventory rows for a single product across branches, joined with the branch
+    /// so the caller can render a cross-branch stock view. Ordered by branch name.
+    /// When <paramref name="branchIdScope"/> is non-null, restricts to those branches
+    /// (branch-isolation for managers); null returns every branch (ManageAll callers).
+    /// </summary>
+    Task<List<ProductBranchStockRow>> GetByProductAsync(
+        Guid productId,
+        IReadOnlyCollection<Guid>? branchIdScope = null,
+        CancellationToken cancellationToken = default);
+
     Task<List<InventoryStockRow>> GetActiveStockRowsAsync(
         IReadOnlyCollection<Guid>? branchIdScope,
         CancellationToken cancellationToken = default);

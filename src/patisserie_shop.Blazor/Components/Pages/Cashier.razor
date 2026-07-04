@@ -5,6 +5,7 @@
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.JSInterop
 @using Volo.Abp.AspNetCore.Components.Web.Theming.Layout
+@using Volo.Abp.Settings
 @using Operations.Cashier
 @using Operations.Permissions
 @using patisserie_shop.Cashier
@@ -17,6 +18,7 @@
 @inject ISnackbar Snackbar
 @inject IJSRuntime JS
 @inject PageLayout PageLayout
+@inject Volo.Abp.Settings.ISettingProvider SettingProvider
 
 @{
     PageLayout.Title = L["Cashier:Title"];
@@ -320,7 +322,19 @@
                 <div class="pos-print-area">
                     <div class="pos-receipt">
                         <div class="pos-receipt-head">
-                            <div class="pos-receipt-shop">@(_shift?.BranchName ?? L["AppName"])</div>
+                            <div class="pos-receipt-shop">@_shopName</div>
+                            @if (!string.IsNullOrWhiteSpace(_shift?.BranchName))
+                            {
+                                <div class="pos-receipt-branch">@_shift!.BranchName</div>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(_shopAddress))
+                            {
+                                <div class="pos-receipt-addr">@_shopAddress</div>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(_shopPhone))
+                            {
+                                <div class="pos-receipt-addr">@_shopPhone</div>
+                            }
                             <div class="pos-receipt-inv">@L["Cashier:Invoice"] @_receipt.InvoiceNumber</div>
                             <div class="pos-receipt-date">@_receipt.SaleDate.ToLocalTime().ToString("g", CultureInfo.CurrentCulture)</div>
                         </div>
@@ -351,6 +365,10 @@
                                 </div>
                             }
                         </div>
+                        @if (!string.IsNullOrWhiteSpace(_receiptFooter))
+                        {
+                            <div class="pos-receipt-thanks">@_receiptFooter</div>
+                        }
                     </div>
                 </div>
                 <SoftDivider />
@@ -501,12 +519,34 @@
     private decimal? _receiptTendered;
     private CashierProductDto? _infoProduct;
 
+    // Shop branding for the printed receipt — loaded from shop settings.
+    private string _shopName = "Patisserie Shop";
+    private string? _shopAddress;
+    private string? _shopPhone;
+    private string? _receiptFooter;
+    private string _currency = "USD";
+
     private Guid BranchId => _shift?.BranchId ?? _myBranch?.Id ?? Guid.Empty;
     private decimal CartTotal => _cart.Sum(l => l.Subtotal);
     private decimal ChangeDue => _tendered - CartTotal;
 
     protected override async Task OnInitializedAsync()
     {
+        // Receipt branding from shop settings. Defensive so a settings read
+        // failure never blocks the cashier from opening a shift or selling.
+        try
+        {
+            _shopName = await SettingProvider.GetOrNullAsync("patisserie_shop.Shop.Name") ?? "Patisserie Shop";
+            _shopAddress = await SettingProvider.GetOrNullAsync("patisserie_shop.Shop.Address");
+            _shopPhone = await SettingProvider.GetOrNullAsync("patisserie_shop.Shop.Phone");
+            _receiptFooter = await SettingProvider.GetOrNullAsync("patisserie_shop.Shop.ReceiptFooterMessage");
+            _currency = (await SettingProvider.GetOrNullAsync("patisserie_shop.Operations.DefaultCurrency") ?? "USD").Trim().ToUpperInvariant();
+        }
+        catch
+        {
+            _shopName = "Patisserie Shop";
+        }
+
         try
         {
             // The cashier operates their single assigned branch — no picker.
@@ -1005,7 +1045,9 @@
     };
 
     // ─── formatting ───
-    private static string FormatMoney(decimal v) => $"{v.ToString("N2", CultureInfo.CurrentCulture)} SYP";
+    // Currency comes from the shop's DefaultCurrency setting (loaded in OnInitializedAsync),
+    // so the till and printed receipt match the rest of the system instead of a baked-in code.
+    private string FormatMoney(decimal v) => $"{v.ToString("N2", CultureInfo.CurrentCulture)} {_currency}";
 
     private static string Initial(string name)
         => string.IsNullOrWhiteSpace(name) ? "?" : name.Trim()[0].ToString().ToUpperInvariant();
@@ -1900,6 +1942,26 @@
     .pos-receipt-inv, .pos-receipt-date {
         font-size: 0.78rem;
         color: var(--fg-3);
+    }
+
+    .pos-receipt-branch {
+        font-size: 0.82rem;
+        font-weight: 600;
+        color: var(--fg-2);
+        margin-top: 2px;
+    }
+
+    .pos-receipt-addr {
+        font-size: 0.74rem;
+        color: var(--fg-3);
+    }
+
+    .pos-receipt-thanks {
+        text-align: center;
+        font-style: italic;
+        font-size: 0.8rem;
+        color: var(--fg-3);
+        margin-top: 10px;
     }
 
     .pos-receipt-lines {

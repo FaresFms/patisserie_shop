@@ -479,6 +479,7 @@
     {
         try
         {
+            await LoadShopCurrencyAsync();
             var allBranches = await BranchAppService.GetLookupAsync();
             var accessibleIds = await SaleAppService.GetAccessibleBranchIdsAsync();
             var set = accessibleIds.ToHashSet();
@@ -528,9 +529,9 @@
         await LoadAsync();
     }
 
-    private static string FormatMoney(decimal v)
-        => v.ToString("C0", System.Globalization.CultureInfo.GetCultureInfo("en-US"));
+    private string FormatMoney(decimal v)
+        => FormatShopMoney(v, 0);
 
-    private static string FormatMoneyExact(decimal v)
-        => v.ToString("C2", System.Globalization.CultureInfo.GetCultureInfo("en-US"));
+    private string FormatMoneyExact(decimal v)
+        => FormatShopMoney(v, 2);
 }

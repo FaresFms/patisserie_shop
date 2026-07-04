@@ -100,10 +100,10 @@
                 }
                 else if (_recent.Count > 0)
                 {
-                    @if (TransferRows.Count > 0)
-                    {
-                        <div class="notif-section-head">@IntL["DecisionLog"]</div>
-                    }
+                    @* Always label the decision list so it reads as its own section,
+                       matching the Transfers/Production sections (previously the header
+                       only showed when transfer rows were also present). *@
+                    <div class="notif-section-head">@IntL["DecisionLog"]</div>
                     <div class="notif-list">
                         @foreach (var item in _recent)
                         {

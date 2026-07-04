@@ -6,6 +6,7 @@
 @using Microsoft.JSInterop
 @using Volo.Abp.Application.Dtos
 @using Volo.Abp.AspNetCore.Components.Web.Theming.Layout
+@using Volo.Abp.Settings
 @using Inventory
 @using Inventory.Branches
 @using Inventory.BranchInventory
@@ -28,12 +29,15 @@
 @inject PageLayout PageLayout
 @inject ISnackbar Snackbar
 @inject IStringLocalizer<InventoryResource> InvL
+@inject Volo.Abp.Settings.ISettingProvider SettingProvider
 
 @{
     PageLayout.Title = InvL["BranchInventory"];
 }
 
 <SoftStack Spacing="3">
+
+    <StockSubNav Active="levels" />
 
     @* ── 1. Compact header (unchanged) ─────────────────────────────────── *@
     <div class="bi-head">
@@ -742,6 +746,9 @@
     private int _initMin = 5;
     private int? _initMax;
 
+    // Shop-wide default minimum-stock level pre-filled on Initialize, from settings.
+    private int _defaultMinStock = 5;
+
     private bool _limitsVisible;
     private BranchInventoryDto? _limitsTarget;
     private int _limitsMin;
@@ -796,6 +803,16 @@
             new(StockMovementTypes.TransferOut, InvL["MovementType:TransferOut"]),
             new(StockMovementTypes.ManualAdjustment, InvL["MovementType:ManualAdjustment"]),
         };
+
+        // Shop-wide default minimum-stock level for the Initialize dialog (falls back to 5).
+        try
+        {
+            _defaultMinStock = await SettingProvider.GetAsync<int>("patisserie_shop.Operations.DefaultMinimumStock", 5);
+        }
+        catch
+        {
+            _defaultMinStock = 5;
+        }
 
         try
         {
@@ -1072,7 +1089,7 @@
     {
         _initProductId = null;
         _initQty = 0;
-        _initMin = 5;
+        _initMin = _defaultMinStock;
         _initMax = null;
         try
         {

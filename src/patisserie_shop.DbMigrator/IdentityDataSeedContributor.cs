@@ -12,6 +12,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Logging;
 using Operations;
 using Operations.Permissions;
+using patisserie_shop.Permissions;
 using Production.Permissions;
 using Volo.Abp.Data;
 using Volo.Abp.DependencyInjection;
@@ -374,6 +375,11 @@ public class IdentityDataSeedContributor : IDataSeedContributor, ITransientDepen
         permissions.AddRange(OperationsPermissions.GetAll());
         permissions.AddRange(IntelligencePermissions.GetAll());
         permissions.AddRange(ProductionPermissions.GetAll());
+
+        // Host-level shop settings live in the host permission provider (not a
+        // module GetAll()), so add them explicitly. Only the admin gets them.
+        permissions.Add(patisserie_shopPermissions.Settings.Default);
+        permissions.Add(patisserie_shopPermissions.Settings.Manage);
 
         // Strip the group-name root entries ABP's reflection walk picks up —
         // they aren't real permissions (just the group key).

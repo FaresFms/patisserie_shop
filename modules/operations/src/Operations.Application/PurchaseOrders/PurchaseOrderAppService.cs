@@ -228,6 +228,7 @@ public class PurchaseOrderAppService : OperationsAppService, IPurchaseOrderAppSe
     public async Task<PurchaseOrderDto> ApproveAsync(Guid id)
     {
         var po = await LoadWithItemsAsync(id);
+        await EnsureBranchAccessAsync(po.DestBranchId);
         po.Approve();
         await _poRepository.UpdateAsync(po, autoSave: true);
         return await ProjectAsync(po);
@@ -237,6 +238,7 @@ public class PurchaseOrderAppService : OperationsAppService, IPurchaseOrderAppSe
     public async Task<PurchaseOrderDto> CancelAsync(Guid id)
     {
         var po = await LoadWithItemsAsync(id);
+        await EnsureBranchAccessAsync(po.DestBranchId);
         po.Cancel();
         await _poRepository.UpdateAsync(po, autoSave: true);
         return await ProjectAsync(po);
@@ -246,6 +248,7 @@ public class PurchaseOrderAppService : OperationsAppService, IPurchaseOrderAppSe
     public async Task<PurchaseOrderDto> ReceiveAsync(Guid id, ReceiveItemsDto input)
     {
         var po = await LoadWithItemsAsync(id);
+        await EnsureBranchAccessAsync(po.DestBranchId);
         var receipts = input.Lines
             .Where(l => l.ReceivedQuantity > 0)
             .Select(l => (l.ItemId, l.ReceivedQuantity));
@@ -361,5 +364,28 @@ public class PurchaseOrderAppService : OperationsAppService, IPurchaseOrderAppSe
         if (s.StartsWith("DestBranchName", StringComparison.OrdinalIgnoreCase))
             return s.Replace("DestBranchName", nameof(AppPurchaseOrder.DestBranchId), StringComparison.OrdinalIgnoreCase);
         return s;
+    }
+
+    /// <summary>
+    /// Branch isolation for state-changing PO operations. A caller with
+    /// PurchaseOrders.ManageAll (admin) may act on any branch's POs; otherwise the
+    /// PO's destination branch must be one the caller manages. Receiving a PO writes
+    /// stock into DestBranchId, so this prevents a manager receiving goods into a
+    /// branch they don't run.
+    /// </summary>
+    private async Task EnsureBranchAccessAsync(Guid destBranchId)
+    {
+        if (await AuthorizationService.IsGrantedAsync(OperationsPermissions.PurchaseOrders.ManageAll))
+        {
+            return;
+        }
+
+        var userId = CurrentUser.Id;
+        if (userId == null ||
+            !await _branchRepository.AnyAsync(b => b.Id == destBranchId && b.ManagerUserId == userId))
+        {
+            throw new BusinessException("Operations:PurchaseOrders:BranchAccessDenied")
+                .WithData("BranchId", destBranchId);
+        }
     }
 }

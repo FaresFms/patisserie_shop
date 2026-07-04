@@ -1015,6 +1015,7 @@
 
     protected override async Task OnInitializedAsync()
     {
+        await LoadShopCurrencyAsync();
         await LoadAsync();
     }
 
@@ -1040,7 +1041,7 @@
         }
     }
 
-    private static string FormatMoney(decimal v) => v.ToString("C0", System.Globalization.CultureInfo.CurrentCulture);
+    private string FormatMoney(decimal v) => FormatShopMoney(v, 0);
 
     private void ToggleBranch(Guid branchId)
         => _expandedBranch = _expandedBranch == branchId ? null : branchId;

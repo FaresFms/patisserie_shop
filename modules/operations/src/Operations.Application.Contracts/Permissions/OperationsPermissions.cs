@@ -16,6 +16,12 @@ public class OperationsPermissions
         public const string Cancel = Default + ".Cancel";
         public const string Receive = Default + ".Receive";
         public const string Delete = Default + ".Delete";
+
+        /// <summary>
+        /// Act on purchase orders for ANY branch. Without it, a manager is
+        /// restricted to POs whose destination branch they manage. Admin-only.
+        /// </summary>
+        public const string ManageAll = Default + ".ManageAll";
     }
 
     public static class Sales

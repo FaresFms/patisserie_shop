@@ -1,0 +1,53 @@
+@using Microsoft.Extensions.Localization
+@inject NavigationManager Nav
+@inject IStringLocalizer<Inventory.Localization.InventoryResource> InvL
+
+<div class="stk-tabs" role="tablist">
+    <button type="button" class="@TabClass("levels")" @onclick='() => Go("/inventory/branch-inventory")'>
+        @InvL["Stock:Levels"]
+    </button>
+    <button type="button" class="@TabClass("batches")" @onclick='() => Go("/inventory/stock-batches")'>
+        @InvL["Stock:Batches"]
+    </button>
+    <button type="button" class="@TabClass("history")" @onclick='() => Go("/inventory/stock-movements")'>
+        @InvL["Stock:History"]
+    </button>
+</div>
+
+@code {
+    [Parameter] public string Active { get; set; } = "levels";
+
+    private string TabClass(string key) => key == Active ? "stk-tab stk-tab-active" : "stk-tab";
+
+    private void Go(string url) => Nav.NavigateTo(url);
+}
+
+<style>
+    .stk-tabs {
+        display: inline-flex;
+        gap: 4px;
+        padding: 4px;
+        border: 1px solid var(--bd-2);
+        border-radius: 999px;
+        background: var(--surface-2);
+    }
+    .stk-tab {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        padding: 6px 16px;
+        border: none;
+        border-radius: 999px;
+        background: transparent;
+        color: var(--fg-2);
+        font: 600 0.82rem var(--font-sans);
+        cursor: pointer;
+        transition: background .15s ease, color .15s ease;
+    }
+    .stk-tab:hover { background: var(--hover); color: var(--fg-1); }
+    .stk-tab-active,
+    .stk-tab-active:hover {
+        background: var(--accent);
+        color: var(--accent-fg);
+    }
+</style>

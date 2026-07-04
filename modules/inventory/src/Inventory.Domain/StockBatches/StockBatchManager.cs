@@ -157,15 +157,18 @@ public class StockBatchManager : DomainService
         var prefix = $"B-{Clock.Now:yyyyMMdd}-";
 
         var queryable = await _batchRepository.GetQueryableAsync();
-        var lastNumber = await AsyncExecuter.MaxAsync(
-            queryable.Where(b => b.BatchNumber.StartsWith(prefix)).Select(b => (string?)b.BatchNumber),
-            x => x);
+
+        // Max by PARSED numeric tail, not a lexical string Max: past 9999 the wider
+        // tail sorts before the narrower one lexically and would reissue a duplicate
+        // batch number for the day. Integer max over the day's suffixes is correct at
+        // any width (the daily count is tiny for a patisserie).
+        var numbers = await AsyncExecuter.ToListAsync(
+            queryable.Where(b => b.BatchNumber.StartsWith(prefix)).Select(b => b.BatchNumber));
 
         var nextSeq = 1;
-        if (!string.IsNullOrEmpty(lastNumber))
+        foreach (var number in numbers)
         {
-            var tail = lastNumber.Substring(prefix.Length);
-            if (int.TryParse(tail, out var n))
+            if (int.TryParse(number.Substring(prefix.Length), out var n) && n >= nextSeq)
             {
                 nextSeq = n + 1;
             }
