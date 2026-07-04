@@ -14,6 +14,7 @@ using Production.Waste;
 using Volo.Abp;
 using Volo.Abp.Application.Dtos;
 using Volo.Abp.Domain.Repositories;
+using Volo.Abp.Settings;
 
 namespace Production.Orders;
 
@@ -32,6 +33,7 @@ public class ProductionOrderAppService : ProductionAppService, IProductionOrderA
     private readonly IPurchaseOrderAppService _purchaseOrderAppService;
     private readonly ProductionWasteManager _wasteManager;
     private readonly IProductionWasteRepository _wasteRepository;
+    private readonly ISettingProvider _settingProvider;
 
     public ProductionOrderAppService(
         IProductionOrderRepository orderRepository,
@@ -43,7 +45,8 @@ public class ProductionOrderAppService : ProductionAppService, IProductionOrderA
         IRepository<AppProduct, Guid> productRepository,
         IPurchaseOrderAppService purchaseOrderAppService,
         ProductionWasteManager wasteManager,
-        IProductionWasteRepository wasteRepository)
+        IProductionWasteRepository wasteRepository,
+        ISettingProvider settingProvider)
     {
         _orderRepository = orderRepository;
         _orderManager = orderManager;
@@ -55,6 +58,7 @@ public class ProductionOrderAppService : ProductionAppService, IProductionOrderA
         _purchaseOrderAppService = purchaseOrderAppService;
         _wasteManager = wasteManager;
         _wasteRepository = wasteRepository;
+        _settingProvider = settingProvider;
     }
 
     public async Task<ProductionOrderDto> GetAsync(Guid id)
@@ -159,6 +163,8 @@ public class ProductionOrderAppService : ProductionAppService, IProductionOrderA
             }
         }
 
+        var currency = await GetDefaultCurrencyAsync();
+
         foreach (var group in shortages.GroupBy(s => productById[s.IngredientProductId].DefaultSupplierId!.Value))
         {
             var po = await _purchaseOrderAppService.CreateAsync(new CreatePurchaseOrderDto
@@ -167,8 +173,8 @@ public class ProductionOrderAppService : ProductionAppService, IProductionOrderA
                 DestBranchId = order.KitchenBranchId,
                 OrderDate = Clock.Now.Date,
                 ExpectedDeliveryDate = Clock.Now.Date.AddDays(1),
-                Currency = "USD",
-                Notes = $"طلب شراء خامات تلقائي لأمر الطبخ {order.OrderNumber}. يبقى مسودة حتى يراجعه مدير المطبخ."
+                Currency = currency,
+                Notes = $"Automatic ingredient purchase order for cook order {order.OrderNumber}. Stays in draft until the kitchen manager reviews it."
             });
 
             foreach (var shortage in group)
@@ -285,7 +291,7 @@ public class ProductionOrderAppService : ProductionAppService, IProductionOrderA
                 : order.UnitProductionCost;
             var wasteNotes = string.IsNullOrWhiteSpace(input.WasteReason) || ProductionWasteReasons.IsValid(input.WasteReason)
                 ? input.Notes
-                : $"{input.Notes} | سبب الهدر الأصلي: {input.WasteReason}".Trim(' ', '|');
+                : $"{input.Notes} | Original waste reason: {input.WasteReason}".Trim(' ', '|');
 
             var waste = await _wasteManager.CreateAsync(
                 productionOrderId: order.Id,
@@ -434,5 +440,14 @@ public class ProductionOrderAppService : ProductionAppService, IProductionOrderA
         }
 
         return dto;
+    }
+
+    private async Task<string> GetDefaultCurrencyAsync()
+    {
+        var currency = (await _settingProvider.GetOrNullAsync("patisserie_shop.Operations.DefaultCurrency"))
+            ?.Trim()
+            .ToUpperInvariant();
+
+        return currency?.Length == 3 ? currency : "USD";
     }
 }

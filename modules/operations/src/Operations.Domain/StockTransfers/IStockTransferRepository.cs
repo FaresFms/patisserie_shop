@@ -23,6 +23,8 @@ public interface IStockTransferRepository : IRepository<AppStockTransfer, Guid>
         Guid? fromBranchId,
         Guid? toBranchId,
         string? filter,
+        List<Guid>? fromBranchIdIn = null,
+        List<Guid>? toBranchIdIn = null,
         CancellationToken cancellationToken = default);
 
     Task<List<StockTransferListRow>> GetFilteredListAsync(
@@ -33,6 +35,33 @@ public interface IStockTransferRepository : IRepository<AppStockTransfer, Guid>
         string sorting,
         int skipCount,
         int maxResultCount,
+        List<Guid>? fromBranchIdIn = null,
+        List<Guid>? toBranchIdIn = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Transfers currently waiting for the given user's action (see <see cref="StockTransferActionSpec"/>).</summary>
+    Task<long> CountActionRequiredAsync(
+        StockTransferActionSpec spec,
+        string? status,
+        Guid? fromBranchId,
+        Guid? toBranchId,
+        string? filter,
+        CancellationToken cancellationToken = default);
+
+    Task<List<StockTransferListRow>> GetActionRequiredListAsync(
+        StockTransferActionSpec spec,
+        string? status,
+        Guid? fromBranchId,
+        Guid? toBranchId,
+        string? filter,
+        string sorting,
+        int skipCount,
+        int maxResultCount,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Per-bucket counts of transfers waiting for the given user's action.</summary>
+    Task<StockTransferActionCounts> GetActionCountsAsync(
+        StockTransferActionSpec spec,
         CancellationToken cancellationToken = default);
 
     /// <summary>

@@ -46,19 +46,23 @@ public class PurchaseOrderManager : DomainService
     {
         var prefix = $"PO-{year:D4}-";
         var queryable = await _poRepository.GetQueryableAsync();
-        var lastNumber = await AsyncExecuter.MaxAsync(
-            queryable.Where(p => p.PONumber.StartsWith(prefix)).Select(p => (string?)p.PONumber),
-            x => x);
 
-        var nextSeq = 1;
-        if (!string.IsNullOrEmpty(lastNumber))
+        // Take the max by the PARSED numeric tail, not a lexical string Max: once the
+        // sequence passes 9999 the tail widens and "PO-2026-10000" sorts BEFORE
+        // "PO-2026-9999" lexically, which would reissue a duplicate number. Pulling the
+        // year's numbers and maxing the integer suffix is correct at any width; the
+        // per-year, per-branch volume for a patisserie keeps this list tiny.
+        var numbers = await AsyncExecuter.ToListAsync(
+            queryable.Where(p => p.PONumber.StartsWith(prefix)).Select(p => p.PONumber));
+
+        var maxSeq = 0;
+        foreach (var number in numbers)
         {
-            var tail = lastNumber.Substring(prefix.Length);
-            if (int.TryParse(tail, out var n))
+            if (int.TryParse(number.Substring(prefix.Length), out var n) && n > maxSeq)
             {
-                nextSeq = n + 1;
+                maxSeq = n;
             }
         }
-        return $"{prefix}{nextSeq:D4}";
+        return $"{prefix}{maxSeq + 1:D4}";
     }
 }

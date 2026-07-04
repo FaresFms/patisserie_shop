@@ -5,7 +5,12 @@
       "Read(//tmp/**)",
       "Bash(find \"c:\\\\\\\\Users\\\\\\\\fares\\\\\\\\OneDrive\\\\\\\\Documents\\\\\\\\Projects\\\\\\\\patisserie_shop\\\\\\\\modules\\\\\\\\inventory\\\\\\\\src\" -name \"*.cs\" -type f ! -path \"*/obj/*\" ! -name \"*AssemblyInfo*\" ! -name \"*AssemblyAttributes*\")",
       "Bash(git -C . status --short src/patisserie_shop.EntityFrameworkCore/Migrations/)",
-      "Bash(dotnet ef *)"
+      "Bash(dotnet ef *)",
+      "Bash(xargs grep -l \"transfer\" -i)",
+      "Bash(grep -E \"\\\\.\\(razor|cs\\)$\")",
+      "Bash(xargs grep -l \"BranchManager\\\\|RolePermission\\\\|GrantPermissionAsync\")",
+      "Bash(echo \"EXIT:$?\")",
+      "Bash(dotnet test *)"
     ],
     "additionalDirectories": [
       "\\tmp"

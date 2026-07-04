@@ -276,8 +276,8 @@ public class DecisionActionAppService : patisserie_shopAppService, IDecisionActi
             OrderDate = DateTime.Today,
             Currency = members[0].Product.Currency,
             Notes = TruncateNotes(
-                $"أُنشئ تلقائيًا من {members.Count} قرار مخزون بتاريخ {DateTime.Today:yyyy-MM-dd}.\n" +
-                "تم دمج الأصناف المتشابهة في أمر شراء واحد لتسهيل المتابعة.")
+                $"Created automatically from {members.Count} stock decision(s) on {DateTime.Today:yyyy-MM-dd}.\n" +
+                "Similar lines were consolidated into one purchase order for easier follow-up.")
         });
 
         foreach (var line in lines.Values)
@@ -346,7 +346,7 @@ public class DecisionActionAppService : patisserie_shopAppService, IDecisionActi
             DestBranchId = branchId,
             OrderDate = DateTime.Today,
             Currency = product.Currency,
-            Notes = TruncateNotes($"أُنشئ تلقائيًا من قرار المخزون:\n{decision.Id}\n{explanation}")
+            Notes = TruncateNotes($"Created automatically from stock decision:\n{decision.Id}\n{explanation}")
         });
 
         await _purchaseOrderAppService.AddItemAsync(po.Id, new AddPurchaseOrderItemDto
@@ -392,6 +392,10 @@ public class DecisionActionAppService : patisserie_shopAppService, IDecisionActi
             SupplierName = supplier.Name,
             Quantity = quantity,
             Notes = explanation,
+            ProductId = product.Id,
+            BranchId = decision.BranchId,
+            SupplierId = product.DefaultSupplierId,
+            UnitPrice = product.CostPrice,
             Lines =
             {
                 new DecisionActionPreviewLineDto
@@ -489,7 +493,10 @@ public class DecisionActionAppService : patisserie_shopAppService, IDecisionActi
             SourceBranchName = decision.SourceBranchName,
             TargetBranchName = decision.TargetBranchName,
             Quantity = plan.Quantity,
-            Notes = $"الكمية المقترحة للتحويل: {plan.Quantity}. العجز في الفرع المستلم {plan.TargetDeficit}، والفائض المتاح في الفرع المصدر {plan.SourceSurplus}.",
+            ProductId = plan.Product.Id,
+            SourceBranchId = decision.SourceBranchId,
+            TargetBranchId = decision.TargetBranchId,
+            Notes = $"Suggested transfer quantity: {plan.Quantity}. The receiving branch is short {plan.TargetDeficit}; the source branch has a surplus of {plan.SourceSurplus}.",
             Lines =
             {
                 new DecisionActionPreviewLineDto
@@ -612,7 +619,7 @@ public class DecisionActionAppService : patisserie_shopAppService, IDecisionActi
                 ActionType = DecisionActionTypes.StockAdjustment,
                 ProductName = product.Name,
                 BranchName = decision.BranchName,
-                Notes = "لا توجد كمية منتهية الصلاحية الآن. سيُغلق القرار دون تسجيل حركة شطب."
+                Notes = "No expired quantity right now. The decision will be closed without recording a write-off."
             };
         }
 
@@ -629,7 +636,7 @@ public class DecisionActionAppService : patisserie_shopAppService, IDecisionActi
                 ActionType = DecisionActionTypes.StockAdjustment,
                 ProductName = product.Name,
                 BranchName = decision.BranchName,
-                Notes = "لا توجد كمية متاحة للشطب الآن. سيُغلق القرار دون تسجيل حركة شطب."
+                Notes = "No stock available to write off right now. The decision will be closed without recording a write-off."
             };
         }
 
@@ -640,7 +647,7 @@ public class DecisionActionAppService : patisserie_shopAppService, IDecisionActi
             ProductName = product.Name,
             BranchName = decision.BranchName,
             Quantity = writeOffQty,
-            Notes = $"سيتم شطب {writeOffQty} وحدة من المخزون المنتهي الصلاحية وتسجيل حركة مخزون مباشرة.",
+            Notes = $"{writeOffQty} unit(s) of expired stock will be written off and a stock movement recorded immediately.",
             Lines =
             {
                 new DecisionActionPreviewLineDto
@@ -705,10 +712,10 @@ public class DecisionActionAppService : patisserie_shopAppService, IDecisionActi
         {
             var measuredDays = Math.Max((int)Math.Round(measured, MidpointRounding.AwayFromZero), 0);
             return (measuredDays,
-                $"مدة التوريد المحسوبة من آخر {row.LeadTimeSampleSize} أوامر: {measured:0.#} يوم");
+                $"Lead time measured from the last {row.LeadTimeSampleSize} order(s): {measured:0.#} day(s)");
         }
 
-        return (configuredLeadTimeDays, $"مدة التوريد المعتمدة من إعدادات المورد: {configuredLeadTimeDays} يوم");
+        return (configuredLeadTimeDays, $"Lead time from supplier settings: {configuredLeadTimeDays} day(s)");
     }
 
     /// <summary>
@@ -745,14 +752,14 @@ public class DecisionActionAppService : patisserie_shopAppService, IDecisionActi
             }
 
             var explanation =
-                $"سبب الطلب:\n" +
-                $"- متوسط البيع اليومي خلال 30 يومًا: {avg:0.##}\n" +
-                $"- التغطية المطلوبة: {leadTimeDays} يوم توريد + 7 أيام تشغيل\n" +
-                $"- مخزون الأمان: {safety}\n" +
-                $"- الكمية المستهدفة: {targetQty}، والمتوفر حاليًا: {currentQty}\n" +
-                $"- الكمية المقترحة للطلب: {quantity}\n" +
+                $"Why this order:\n" +
+                $"- Average daily sales over 30 days: {avg:0.##}\n" +
+                $"- Cover needed: {leadTimeDays} supply day(s) + 7 operating days\n" +
+                $"- Safety stock: {safety}\n" +
+                $"- Target quantity: {targetQty}; currently on hand: {currentQty}\n" +
+                $"- Suggested order quantity: {quantity}\n" +
                 $"- {leadTimeDescriptor}" +
-                (capped ? $"\n- تم تخفيض الكمية بسبب حد المخزون الأعلى: {maximumStock!.Value}." : ".");
+                (capped ? $"\n- Quantity was capped by the maximum stock limit: {maximumStock!.Value}." : ".");
 
             return (quantity, explanation);
         }
@@ -764,13 +771,13 @@ public class DecisionActionAppService : patisserie_shopAppService, IDecisionActi
         fallbackQty = Math.Max(fallbackQty, 1);
 
         var fallbackExplanation =
-            $"سبب الطلب:\n" +
-            "- لا يوجد متوسط بيع كافٍ لحساب الطلب حسب سرعة البيع.\n" +
-            $"- المتوفر حاليًا: {currentQty}\n" +
-            $"- الكمية المقترحة للطلب: {fallbackQty}\n" +
+            $"Why this order:\n" +
+            "- Not enough sales history to size the order from sales velocity.\n" +
+            $"- Currently on hand: {currentQty}\n" +
+            $"- Suggested order quantity: {fallbackQty}\n" +
             (maximumStock != null
-                ? $"- الهدف هو الوصول إلى حد المخزون الأعلى: {maximumStock.Value}."
-                : $"- تم استخدام حد إعادة الطلب: {reorderLevel}.");
+                ? $"- Goal: refill up to the maximum stock limit: {maximumStock.Value}."
+                : $"- Based on the reorder level: {reorderLevel}.");
 
         return (fallbackQty, fallbackExplanation);
     }

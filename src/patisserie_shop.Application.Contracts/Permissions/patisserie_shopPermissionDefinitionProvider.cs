@@ -9,10 +9,10 @@ public class patisserie_shopPermissionDefinitionProvider : PermissionDefinitionP
 {
     public override void Define(IPermissionDefinitionContext context)
     {
-        var myGroup = context.AddGroup(patisserie_shopPermissions.GroupName);
+        var myGroup = context.AddGroup(patisserie_shopPermissions.GroupName, L("Permission:ShopGroup"));
 
-        //Define your own permissions here. Example:
-        //myGroup.AddPermission(patisserie_shopPermissions.MyPermission1, L("Permission:MyPermission1"));
+        var settings = myGroup.AddPermission(patisserie_shopPermissions.Settings.Default, L("Permission:Settings"));
+        settings.AddChild(patisserie_shopPermissions.Settings.Manage, L("Permission:Settings.Manage"));
     }
 
     private static LocalizableString L(string name)

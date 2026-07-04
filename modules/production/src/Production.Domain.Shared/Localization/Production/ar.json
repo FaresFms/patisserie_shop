@@ -275,6 +275,18 @@
     "DispatchTransferNote": "صرف إنتاج من أمر الطبخ {0}.",
     "DispatchTransferCreated": "تم إنشاء التحويل {0} وإرساله.",
     "DispatchTransferCompleted": "تم تحويل الإنتاج إلى الفرع بنجاح. رقم التحويل: {0}. الكمية التي أغلقت طلبات الفروع: {1}.",
+    "Notif:RequestsToApprove": "{0} طلب فرع بانتظار اعتمادك",
+
+    "CookHint:WaitingForIngredients": "الخامات ناقصة — استلم أو حوّل مواد خام أولًا، ثم ابدأ الطبخ.",
+    "CookHint:ReadyToCook": "كل شيء متوفر في المخزون. اضغط بدء عند الشروع في الطبخ — عندها تُخصم الخامات.",
+    "CookHint:InProduction": "عند اكتمال الدفعة، اضغط إكمال وأدخل الكميات المقبولة والمرفوضة.",
+    "CookHint:Completed": "انتهى — أرسل المنتجات الجاهزة إلى فرع من شاشة الصرف.",
+
+    "RequestHint:ApproverSubmitted": "راجع البنود، ثم اعتمد لإنشاء أمر طبخ — أو ارفض بسبب سيراه الفرع.",
+    "RequestHint:RequesterSubmitted": "أُرسل — بانتظار اعتماد المطبخ.",
+    "RequestHint:RequesterDraft": "ما زال مسودة — اضغط إرسال لإرساله إلى المطبخ.",
+    "RequestHint:Approved": "معتمد — المطبخ يقوم بإنتاجه. ستستلم تحويل مخزون عند شحنه.",
+
     "EnoughStock": "كافٍ",
     "ShortStock": "ناقص",
     "StartedSuccessfully": "تم بدء الطبخ.",

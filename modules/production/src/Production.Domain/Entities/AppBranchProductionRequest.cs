@@ -192,7 +192,10 @@ public class AppBranchProductionRequest : FullAuditedAggregateRoot<Guid>
         var item = FindItem(itemId);
         item.AddFulfilledQuantity(quantity);
 
-        Status = _items.All(i => i.ApprovedQuantity > 0 && i.FulfilledQuantity >= i.ApprovedQuantity)
+        // A line approved at 0 (a single rejected product) is trivially satisfied —
+        // FulfilledQuantity (0) >= ApprovedQuantity (0) — so it must not block the
+        // whole request from reaching Fulfilled once every other line is delivered.
+        Status = _items.All(i => i.FulfilledQuantity >= i.ApprovedQuantity)
             ? BranchProductionRequestStatuses.Fulfilled
             : BranchProductionRequestStatuses.PartiallyFulfilled;
     }

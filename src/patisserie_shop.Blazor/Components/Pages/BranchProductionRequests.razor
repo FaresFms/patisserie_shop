@@ -270,6 +270,13 @@
                             <SoftAlert Severity="Severity.Error">@_detail.RejectionReason</SoftAlert>
                         }
 
+                        @if (DetailHint() is { Length: > 0 } detailHint)
+                        {
+                            <SoftAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+                                @detailHint
+                            </SoftAlert>
+                        }
+
                         <SoftTable T="BranchProductionRequestItemDto" Items="_detail.Items" Dense="true" Hover="true">
                             <HeaderContent>
                                 <MudTh>@ProdL["Product"]</MudTh>
@@ -642,6 +649,27 @@
         ProductionPriorities.Urgent => ProdL["Priority:Urgent"],
         _ => ProdL["Priority:Normal"]
     };
+
+    /// <summary>Plain-language "what happens next" line for the detail modal, per status and role.</summary>
+    private string? DetailHint()
+    {
+        if (_detail == null) return null;
+
+        return _detail.Status switch
+        {
+            BranchProductionRequestStatuses.Draft when !_canApprove
+                => ProdL["RequestHint:RequesterDraft"].Value,
+            BranchProductionRequestStatuses.Submitted when _canApprove
+                => ProdL["RequestHint:ApproverSubmitted"].Value,
+            BranchProductionRequestStatuses.Submitted
+                => ProdL["RequestHint:RequesterSubmitted"].Value,
+            BranchProductionRequestStatuses.Approved
+                or BranchProductionRequestStatuses.PartiallyPlanned
+                or BranchProductionRequestStatuses.Planned
+                => ProdL["RequestHint:Approved"].Value,
+            _ => null
+        };
+    }
 
     private Color PriorityColor(string priority) => priority switch
     {

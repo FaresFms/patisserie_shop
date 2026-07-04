@@ -234,7 +234,7 @@
                                                   ValueChanged="OnLaborCostChangedAsync"
                                                   Variant="Variant.Outlined"
                                                   Min="0"
-                                                  AdornmentText="$"
+                                                  AdornmentText="@ShopCurrency"
                                                   Adornment="Adornment.Start"
                                                   HideSpinButtons="true" />
                                 <SoftNumericField T="decimal"
@@ -243,7 +243,7 @@
                                                   ValueChanged="OnOverheadCostChangedAsync"
                                                   Variant="Variant.Outlined"
                                                   Min="0"
-                                                  AdornmentText="$"
+                                                  AdornmentText="@ShopCurrency"
                                                   Adornment="Adornment.Start"
                                                   HideSpinButtons="true" />
                                 <SoftNumericField T="int"
@@ -363,24 +363,24 @@
                                     </SoftStack>
                                     <SoftStack Row="true" Justify="Justify.SpaceBetween">
                                         <SoftText Typo="Typo.body2" Color="Color.Default">@ProdL["PlannedIngredientCost"]</SoftText>
-                                        <SoftText Typo="Typo.body2">$@_cost.PlannedIngredientCost.ToString("0.00")</SoftText>
+                                        <SoftText Typo="Typo.body2">@FormatShopMoney(_cost.PlannedIngredientCost, 2)</SoftText>
                                     </SoftStack>
                                     <SoftStack Row="true" Justify="Justify.SpaceBetween">
                                         <SoftText Typo="Typo.body2" Color="Color.Default">@ProdL["PlannedLaborCost"]</SoftText>
-                                        <SoftText Typo="Typo.body2">$@_cost.LaborCost.ToString("0.00")</SoftText>
+                                        <SoftText Typo="Typo.body2">@FormatShopMoney(_cost.LaborCost, 2)</SoftText>
                                     </SoftStack>
                                     <SoftStack Row="true" Justify="Justify.SpaceBetween">
                                         <SoftText Typo="Typo.body2" Color="Color.Default">@ProdL["PlannedOverheadCost"]</SoftText>
-                                        <SoftText Typo="Typo.body2">$@_cost.OverheadCost.ToString("0.00")</SoftText>
+                                        <SoftText Typo="Typo.body2">@FormatShopMoney(_cost.OverheadCost, 2)</SoftText>
                                     </SoftStack>
                                     <SoftDivider />
                                     <SoftStack Row="true" Justify="Justify.SpaceBetween">
                                         <SoftText Typo="Typo.subtitle2">@ProdL["PlannedTotalCost"]</SoftText>
-                                        <SoftText Typo="Typo.subtitle2">$@_cost.PlannedTotalCost.ToString("0.00")</SoftText>
+                                        <SoftText Typo="Typo.subtitle2">@FormatShopMoney(_cost.PlannedTotalCost, 2)</SoftText>
                                     </SoftStack>
                                     <SoftStack Row="true" Justify="Justify.SpaceBetween">
                                         <SoftText Typo="Typo.subtitle2" Color="Color.Primary">@ProdL["PlannedUnitCost"]</SoftText>
-                                        <SoftText Typo="Typo.subtitle2" Color="Color.Primary">$@_cost.PlannedUnitCost.ToString("0.0000")</SoftText>
+                                        <SoftText Typo="Typo.subtitle2" Color="Color.Primary">@FormatShopMoney(_cost.PlannedUnitCost, 4)</SoftText>
                                     </SoftStack>
                                 </SoftStack>
                             }
@@ -488,6 +488,7 @@
 
     protected override async Task OnInitializedAsync()
     {
+        await LoadShopCurrencyAsync();
         _canManage = await AuthorizationService.IsGrantedAsync(ProductionPermissions.Formulas.Manage);
 
         _activeOptions = new List<ActiveOption>

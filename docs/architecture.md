@@ -117,6 +117,7 @@ Key event types (ETOs):
 | `SaleRecordedEto` | `AppSale` aggregate | operations-side bookkeeping |
 | `PurchaseReceivedEto` | `AppPurchaseOrder` aggregate | stock receipt bookkeeping |
 | `TransferCompletedEto` | `AppStockTransfer` aggregate | transfer stock movement bookkeeping |
+| `TransferStatusChangedEto` | `AppStockTransfer` aggregate (every workflow transition) | `TransferStatusChangedEventHandler` (UI bell bridge — "needs my action" refresh + hand-off toasts) |
 | `DecisionMadeEto` | `AppDecisionLog` constructor | `DecisionMadeEventHandler` (UI bell bridge) and `DecisionAutopilotHandler` (autopilot) |
 
 Events are **always published from aggregate methods**, never from application services.

@@ -170,6 +170,7 @@
     {
         try
         {
+            await LoadShopCurrencyAsync();
             _branches = await CashierAppService.GetSellableBranchesAsync();
         }
         catch (Exception ex)
@@ -231,7 +232,7 @@
         }
     }
 
-    private static string FormatMoney(decimal v) => v.ToString("C2", CultureInfo.CurrentCulture);
+    private string FormatMoney(decimal v) => FormatShopMoney(v, 2);
 
     // Green when balanced or over (>= 0), red when the drawer is short (< 0).
     private static string VarianceColor(decimal variance)

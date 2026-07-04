@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 
 namespace patisserie_shop.Decisions;
@@ -19,6 +20,15 @@ public class DecisionActionPreviewDto
     public string? TargetBranchName { get; set; }
     public int? Quantity { get; set; }
     public string? Notes { get; set; }
+
+    // Ids so the UI can open the real creation form pre-filled instead of
+    // silently creating the document server-side.
+    public Guid? ProductId { get; set; }
+    public Guid? BranchId { get; set; }
+    public Guid? SupplierId { get; set; }
+    public Guid? SourceBranchId { get; set; }
+    public Guid? TargetBranchId { get; set; }
+    public decimal? UnitPrice { get; set; }
 
     public List<DecisionActionPreviewLineDto> Lines { get; set; } = new();
 }

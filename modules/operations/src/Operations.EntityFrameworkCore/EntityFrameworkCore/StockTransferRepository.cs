@@ -43,9 +43,11 @@ public class StockTransferRepository
         Guid? fromBranchId,
         Guid? toBranchId,
         string? filter,
+        List<Guid>? fromBranchIdIn = null,
+        List<Guid>? toBranchIdIn = null,
         CancellationToken cancellationToken = default)
     {
-        var query = await BuildFilteredQueryAsync(status, fromBranchId, toBranchId, filter);
+        var query = await BuildFilteredQueryAsync(status, fromBranchId, toBranchId, filter, fromBranchIdIn, toBranchIdIn);
         return await query.LongCountAsync(GetCancellationToken(cancellationToken));
     }
 
@@ -57,9 +59,11 @@ public class StockTransferRepository
         string sorting,
         int skipCount,
         int maxResultCount,
+        List<Guid>? fromBranchIdIn = null,
+        List<Guid>? toBranchIdIn = null,
         CancellationToken cancellationToken = default)
     {
-        var query = await BuildFilteredQueryAsync(status, fromBranchId, toBranchId, filter);
+        var query = await BuildFilteredQueryAsync(status, fromBranchId, toBranchId, filter, fromBranchIdIn, toBranchIdIn);
 
         var rows = query
             .OrderBy(ResolveSorting(sorting))
@@ -68,6 +72,71 @@ public class StockTransferRepository
             .Select(t => new StockTransferListRow { Transfer = t, ItemCount = t.Items.Count });
 
         return await rows.ToListAsync(GetCancellationToken(cancellationToken));
+    }
+
+    public async Task<long> CountActionRequiredAsync(
+        StockTransferActionSpec spec,
+        string? status,
+        Guid? fromBranchId,
+        Guid? toBranchId,
+        string? filter,
+        CancellationToken cancellationToken = default)
+    {
+        var query = await BuildFilteredQueryAsync(status, fromBranchId, toBranchId, filter);
+        return await ApplyActionFilter(query, spec)
+            .LongCountAsync(GetCancellationToken(cancellationToken));
+    }
+
+    public async Task<List<StockTransferListRow>> GetActionRequiredListAsync(
+        StockTransferActionSpec spec,
+        string? status,
+        Guid? fromBranchId,
+        Guid? toBranchId,
+        string? filter,
+        string sorting,
+        int skipCount,
+        int maxResultCount,
+        CancellationToken cancellationToken = default)
+    {
+        var query = await BuildFilteredQueryAsync(status, fromBranchId, toBranchId, filter);
+
+        var rows = ApplyActionFilter(query, spec)
+            .OrderBy(ResolveSorting(sorting))
+            .Skip(skipCount)
+            .Take(maxResultCount)
+            .Select(t => new StockTransferListRow { Transfer = t, ItemCount = t.Items.Count });
+
+        return await rows.ToListAsync(GetCancellationToken(cancellationToken));
+    }
+
+    public async Task<StockTransferActionCounts> GetActionCountsAsync(
+        StockTransferActionSpec spec,
+        CancellationToken cancellationToken = default)
+    {
+        var query = await GetQueryableAsync();
+        var token = GetCancellationToken(cancellationToken);
+        var managed = spec.ManagedBranchIds ?? new List<Guid>();
+
+        return new StockTransferActionCounts
+        {
+            DraftsToSubmit = await query.CountAsync(t =>
+                t.Status == StockTransferStatuses.Draft
+                && ((spec.UserId != null && t.RequestedByUserId == spec.UserId)
+                    || (!spec.ManageAllBranches && managed.Contains(t.ToBranchId))), token),
+
+            PendingToApprove = spec.CanApprove
+                ? await query.CountAsync(t => t.Status == StockTransferStatuses.Pending, token)
+                : 0,
+
+            ApprovedToShip = await query.CountAsync(t =>
+                t.Status == StockTransferStatuses.Approved
+                && t.FromBranchId.HasValue
+                && (spec.ManageAllBranches || managed.Contains(t.FromBranchId.Value)), token),
+
+            InTransitToReceive = await query.CountAsync(t =>
+                t.Status == StockTransferStatuses.InTransit
+                && (spec.ManageAllBranches || managed.Contains(t.ToBranchId)), token)
+        };
     }
 
     public async Task<List<StockTransferListRow>> GetActiveIncomingAsync(
@@ -96,7 +165,9 @@ public class StockTransferRepository
         string? status,
         Guid? fromBranchId,
         Guid? toBranchId,
-        string? filter)
+        string? filter,
+        List<Guid>? fromBranchIdIn = null,
+        List<Guid>? toBranchIdIn = null)
     {
         var query = await GetQueryableAsync();
 
@@ -115,6 +186,16 @@ public class StockTransferRepository
             query = query.Where(t => t.ToBranchId == toBranchId.Value);
         }
 
+        if (fromBranchIdIn != null)
+        {
+            query = query.Where(t => t.FromBranchId.HasValue && fromBranchIdIn.Contains(t.FromBranchId.Value));
+        }
+
+        if (toBranchIdIn != null)
+        {
+            query = query.Where(t => toBranchIdIn.Contains(t.ToBranchId));
+        }
+
         if (!string.IsNullOrWhiteSpace(filter))
         {
             var f = filter.Trim().ToLower();
@@ -124,18 +205,53 @@ public class StockTransferRepository
         return query;
     }
 
+    private static IQueryable<AppStockTransfer> ApplyActionFilter(
+        IQueryable<AppStockTransfer> query,
+        StockTransferActionSpec spec)
+    {
+        var managed = spec.ManagedBranchIds ?? new List<Guid>();
+
+        return query.Where(t =>
+            (t.Status == StockTransferStatuses.Draft
+                && ((spec.UserId != null && t.RequestedByUserId == spec.UserId)
+                    || (!spec.ManageAllBranches && managed.Contains(t.ToBranchId))))
+            || (spec.CanApprove && t.Status == StockTransferStatuses.Pending)
+            || (t.Status == StockTransferStatuses.Approved
+                && t.FromBranchId.HasValue
+                && (spec.ManageAllBranches || managed.Contains(t.FromBranchId.Value)))
+            || (t.Status == StockTransferStatuses.InTransit
+                && (spec.ManageAllBranches || managed.Contains(t.ToBranchId))));
+    }
+
+    private static readonly string[] SortableColumns =
+    {
+        nameof(AppStockTransfer.RequestedDate),
+        nameof(AppStockTransfer.ApprovedDate),
+        nameof(AppStockTransfer.ShippedDate),
+        nameof(AppStockTransfer.CompletedDate),
+        nameof(AppStockTransfer.Status),
+        nameof(AppStockTransfer.CreationTime),
+        nameof(AppStockTransfer.FromBranchId),
+        nameof(AppStockTransfer.ToBranchId)
+    };
+
     private static string ResolveSorting(string? sorting)
     {
+        const string fallback = $"{nameof(AppStockTransfer.RequestedDate)} desc";
         if (string.IsNullOrWhiteSpace(sorting))
-            return $"{nameof(AppStockTransfer.RequestedDate)} desc";
+            return fallback;
 
         var s = sorting.Trim();
         // Display-name columns can't be sorted at the DB level (different DbContexts) —
         // fall back to the corresponding FK column so the grid stays usable.
         if (s.StartsWith("FromBranchName", StringComparison.OrdinalIgnoreCase))
-            return s.Replace("FromBranchName", nameof(AppStockTransfer.FromBranchId), StringComparison.OrdinalIgnoreCase);
+            s = s.Replace("FromBranchName", nameof(AppStockTransfer.FromBranchId), StringComparison.OrdinalIgnoreCase);
         if (s.StartsWith("ToBranchName", StringComparison.OrdinalIgnoreCase))
-            return s.Replace("ToBranchName", nameof(AppStockTransfer.ToBranchId), StringComparison.OrdinalIgnoreCase);
-        return s;
+            s = s.Replace("ToBranchName", nameof(AppStockTransfer.ToBranchId), StringComparison.OrdinalIgnoreCase);
+
+        // Whitelist the column name — MudBlazor template columns (and any tampered
+        // client input) send strings Dynamic LINQ would otherwise throw on.
+        var column = s.Split(' ')[0];
+        return SortableColumns.Contains(column, StringComparer.OrdinalIgnoreCase) ? s : fallback;
     }
 }

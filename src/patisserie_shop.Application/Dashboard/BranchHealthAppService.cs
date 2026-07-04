@@ -13,6 +13,7 @@ using Inventory.StockMovements;
 using Microsoft.AspNetCore.Authorization;
 using Operations.Sales;
 using Volo.Abp.Domain.Repositories;
+using Volo.Abp.Settings;
 
 namespace patisserie_shop.Dashboard;
 
@@ -59,6 +60,7 @@ public class BranchHealthAppService : patisserie_shopAppService, IBranchHealthAp
     private readonly IStockBatchRepository _batchRepository;
     private readonly ISaleRepository _saleRepository;
     private readonly BranchAccessChecker _branchAccess;
+    private readonly ISettingProvider _settingProvider;
 
     public BranchHealthAppService(
         IRepository<AppBranch, Guid> branchRepository,
@@ -67,7 +69,8 @@ public class BranchHealthAppService : patisserie_shopAppService, IBranchHealthAp
         IStockMovementRepository movementRepository,
         IStockBatchRepository batchRepository,
         ISaleRepository saleRepository,
-        BranchAccessChecker branchAccess)
+        BranchAccessChecker branchAccess,
+        ISettingProvider settingProvider)
     {
         _branchRepository = branchRepository;
         _inventoryRepository = inventoryRepository;
@@ -76,6 +79,7 @@ public class BranchHealthAppService : patisserie_shopAppService, IBranchHealthAp
         _batchRepository = batchRepository;
         _saleRepository = saleRepository;
         _branchAccess = branchAccess;
+        _settingProvider = settingProvider;
     }
 
     public async Task<List<BranchHealthDto>> GetBranchHealthAsync()
@@ -137,6 +141,7 @@ public class BranchHealthAppService : patisserie_shopAppService, IBranchHealthAp
             .ToDictionary(g => g.Key, g => g.Count());
 
         // ── Score each branch from the loaded lists ──────────────────────────
+        var currency = await GetDefaultCurrencyAsync();
         var results = new List<BranchHealthDto>(branches.Count);
         foreach (var branch in branches)
         {
@@ -151,7 +156,7 @@ public class BranchHealthAppService : patisserie_shopAppService, IBranchHealthAp
                 ScoreStockHealth(rows),
                 ScoreStockout(rows),
                 ScorePendingLoad(branchDecisions),
-                ScoreWasteRatio(wasteCost, salesRevenue),
+                ScoreWasteRatio(wasteCost, salesRevenue, currency),
                 ScoreExpiryRisk(expiringCount),
                 ScoreResponsiveness(branchDecisions, nowUtc),
             };
@@ -240,7 +245,7 @@ public class BranchHealthAppService : patisserie_shopAppService, IBranchHealthAp
     /// ratio = wasteCost / max(sales, 1); points = round(15 × (1 − min(ratio×10, 1))).
     /// 0% waste → 15 pts; ≥10% waste → 0 pts. No waste recorded → full 15.
     /// </summary>
-    private static HealthComponentDto ScoreWasteRatio(decimal wasteCost, decimal salesRevenue)
+    private static HealthComponentDto ScoreWasteRatio(decimal wasteCost, decimal salesRevenue, string currency)
     {
         if (wasteCost <= 0)
         {
@@ -253,7 +258,7 @@ public class BranchHealthAppService : patisserie_shopAppService, IBranchHealthAp
         var points = (int)Math.Round(WasteRatioMax * (1.0 - scaled), MidpointRounding.AwayFromZero);
 
         var detail = $"{Pct(ratio)} waste-to-sales over 30 days " +
-                     $"({Money(wasteCost)} waste vs {Money(salesRevenue)} sales)";
+                     $"({Money(wasteCost, currency)} waste vs {Money(salesRevenue, currency)} sales)";
 
         return Component("WasteRatio", points, WasteRatioMax, detail);
     }
@@ -312,6 +317,15 @@ public class BranchHealthAppService : patisserie_shopAppService, IBranchHealthAp
     private static string Pct(double fraction)
         => Math.Round(fraction * 100).ToString("0", CultureInfo.InvariantCulture) + "%";
 
-    private static string Money(decimal value)
-        => value.ToString("C0", CultureInfo.GetCultureInfo("en-US"));
+    private static string Money(decimal value, string currency)
+        => $"{value.ToString("N0", CultureInfo.CurrentCulture)} {currency}";
+
+    private async Task<string> GetDefaultCurrencyAsync()
+    {
+        var currency = (await _settingProvider.GetOrNullAsync("patisserie_shop.Operations.DefaultCurrency"))
+            ?.Trim()
+            .ToUpperInvariant();
+
+        return currency?.Length == 3 ? currency : "USD";
+    }
 }

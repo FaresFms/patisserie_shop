@@ -110,6 +110,19 @@ public class CashierAppService : OperationsAppService, ICashierAppService
     {
         var shift = await _shiftRepository.GetAsync(input.ShiftId);
 
+        // A supervisor (ViewAllShifts) may close any drawer to reconcile a branch;
+        // an ordinary cashier may only close their OWN shift at their assigned branch.
+        var canManageAnyShift = await AuthorizationService.IsGrantedAsync(OperationsPermissions.Cashier.ViewAllShifts);
+        if (!canManageAnyShift)
+        {
+            EnsureBranchAllowed(shift.BranchId);
+            if (shift.CashierUserId != CurrentUser.GetId())
+            {
+                throw new BusinessException(OperationsErrorCodes.BranchNotAssignedToCashier)
+                    .WithData("ShiftId", shift.Id);
+            }
+        }
+
         var totals = await _shiftRepository.GetShiftSalesTotalsAsync(shift.Id);
         var expectedCash = shift.OpeningFloat + totals.NonVoidedTotal;
 
@@ -341,6 +354,20 @@ public class CashierAppService : OperationsAppService, ICashierAppService
     {
         var sale = await _saleRepository.GetWithItemsAsync(input.SaleId);
 
+        // Branch isolation: a cashier may only void sales at their assigned branch.
+        // Managers with Sales.ManageAll (no branch claim) are unaffected.
+        EnsureBranchAllowed(sale.BranchId);
+
+        // Ownership: a non-manager may only void their own sale. Managers with
+        // Sales.ManageAll may void any sale at an allowed branch. Mirrors the
+        // access rule GetSaleDetailsAsync already enforces.
+        var canManageAnySale = await AuthorizationService.IsGrantedAsync(OperationsPermissions.Sales.ManageAll);
+        if (!canManageAnySale && sale.CreatorId != CurrentUser.GetId())
+        {
+            throw new BusinessException(OperationsErrorCodes.CashierSaleAccessDenied)
+                .WithData("SaleId", sale.Id);
+        }
+
         if (sale.IsVoided)
         {
             throw new BusinessException(OperationsErrorCodes.SaleAlreadyVoided)
@@ -350,7 +377,7 @@ public class CashierAppService : OperationsAppService, ICashierAppService
         var now = Clock.Now;
 
         // Managers (Sales.ManageAll) may void anytime; otherwise enforce the 60-min window.
-        var canVoidAnytime = await AuthorizationService.IsGrantedAsync(OperationsPermissions.Sales.ManageAll);
+        var canVoidAnytime = canManageAnySale;
         if (!canVoidAnytime && sale.SaleDate < now.AddMinutes(-VoidWindowMinutes))
         {
             throw new BusinessException(OperationsErrorCodes.VoidWindowExpired)

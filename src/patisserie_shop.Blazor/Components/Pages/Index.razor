@@ -88,11 +88,14 @@ else
 
             Nav.NavigateTo("/cashier", forceLoad: false, replace: true);
         }
-        else if (await AuthorizationService.IsGrantedAsync(ProductionPermissions.Dashboard.Default)
-                 || await AuthorizationService.IsGrantedAsync(ProductionPermissions.Formulas.Default))
+        else if (await AuthorizationService.IsGrantedAsync(ProductionPermissions.Dashboard.Default))
         {
-            // Kitchen managers (production-only, not admin/manager/cashier) land on the
-            // formulas list for now — the real production dashboard arrives in a later wave.
+            // Kitchen managers land on their production dashboard — today's KPIs
+            // plus the action queue of what needs them right now.
+            Nav.NavigateTo("/production/dashboard", forceLoad: false, replace: true);
+        }
+        else if (await AuthorizationService.IsGrantedAsync(ProductionPermissions.Formulas.Default))
+        {
             Nav.NavigateTo("/production/formulas", forceLoad: false, replace: true);
         }
         else

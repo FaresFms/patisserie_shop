@@ -15,11 +15,16 @@ public class StockTransferDto : EntityDto<Guid>
     public string ToBranchName { get; set; } = null!;
     public DateTime RequestedDate { get; set; }
     public DateTime? ApprovedDate { get; set; }
+    public DateTime? ShippedDate { get; set; }
     public DateTime? CompletedDate { get; set; }
     public Guid? RequestedByUserId { get; set; }
     public string? RequestedByUserName { get; set; }
     public Guid? ApprovedByUserId { get; set; }
     public string? ApprovedByUserName { get; set; }
+    /// <summary>Who rejected or cancelled the transfer.</summary>
+    public string? ClosedByUserName { get; set; }
+    /// <summary>Why the transfer was rejected or cancelled.</summary>
+    public string? ClosureReason { get; set; }
     public string? Notes { get; set; }
     public DateTime CreationTime { get; set; }
     public int ItemCount { get; set; }

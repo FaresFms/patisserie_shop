@@ -32,6 +32,9 @@ public class patisserie_shopMenus
     public const string ProductVelocity = Intelligence + ".ProductVelocity";
     public const string ReorderCalendar = Intelligence + ".ReorderCalendar";
 
+    public const string Setup = Prefix + ".Setup";
+    public const string ShopSettings = Setup + ".ShopSettings";
+
     public const string Production = Prefix + ".Production";
     public const string ProductionDashboard = Production + ".Dashboard";
     public const string ProductionFormulas = Production + ".Formulas";

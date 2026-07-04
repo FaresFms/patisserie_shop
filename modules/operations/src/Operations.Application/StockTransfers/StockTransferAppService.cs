@@ -57,12 +57,39 @@ public class StockTransferAppService : OperationsAppService, IStockTransferAppSe
 
     public async Task<PagedResultDto<StockTransferDto>> GetListAsync(GetStockTransfersInput input)
     {
-        var totalCount = await _transferRepository.CountFilteredAsync(
-            input.Status, input.FromBranchId, input.ToBranchId, input.Filter);
+        long totalCount;
+        List<StockTransferListRow> rows;
 
-        var rows = await _transferRepository.GetFilteredListAsync(
-            input.Status, input.FromBranchId, input.ToBranchId, input.Filter,
-            input.Sorting ?? string.Empty, input.SkipCount, input.MaxResultCount);
+        if (input.View == StockTransferViews.NeedsMyAction)
+        {
+            var spec = await BuildActionSpecAsync();
+            totalCount = await _transferRepository.CountActionRequiredAsync(
+                spec, input.Status, input.FromBranchId, input.ToBranchId, input.Filter);
+            rows = await _transferRepository.GetActionRequiredListAsync(
+                spec, input.Status, input.FromBranchId, input.ToBranchId, input.Filter,
+                input.Sorting ?? string.Empty, input.SkipCount, input.MaxResultCount);
+        }
+        else
+        {
+            // Incoming/outgoing views scope to the user's managed branches;
+            // admins (ManageAll) see everything either way.
+            List<Guid>? fromIn = null, toIn = null;
+            if (input.View == StockTransferViews.Incoming || input.View == StockTransferViews.Outgoing)
+            {
+                var managed = await GetManagedBranchIdsAsync();
+                if (managed != null)
+                {
+                    if (input.View == StockTransferViews.Incoming) toIn = managed;
+                    else fromIn = managed;
+                }
+            }
+
+            totalCount = await _transferRepository.CountFilteredAsync(
+                input.Status, input.FromBranchId, input.ToBranchId, input.Filter, fromIn, toIn);
+            rows = await _transferRepository.GetFilteredListAsync(
+                input.Status, input.FromBranchId, input.ToBranchId, input.Filter,
+                input.Sorting ?? string.Empty, input.SkipCount, input.MaxResultCount, fromIn, toIn);
+        }
 
         // Resolve denormalised display names (branches + users live in other contexts).
         var branchIds = new HashSet<Guid>();
@@ -93,7 +120,9 @@ public class StockTransferAppService : OperationsAppService, IStockTransferAppSe
             ToBranchName = branchNames.GetValueOrDefault(r.Transfer.ToBranchId, "-"),
             RequestedDate = r.Transfer.RequestedDate,
             ApprovedDate = r.Transfer.ApprovedDate,
+            ShippedDate = r.Transfer.ShippedDate,
             CompletedDate = r.Transfer.CompletedDate,
+            ClosureReason = r.Transfer.ClosureReason,
             RequestedByUserId = r.Transfer.RequestedByUserId,
             RequestedByUserName = r.Transfer.RequestedByUserId.HasValue
                 ? userNames.GetValueOrDefault(r.Transfer.RequestedByUserId.Value)
@@ -154,21 +183,17 @@ public class StockTransferAppService : OperationsAppService, IStockTransferAppSe
             throw new BusinessException(OperationsErrorCodes.SameSourceAndDestination);
         }
 
-        if (await IsManageAllBranchesAsync())
+        if (input.FromBranchId.HasValue)
         {
-            if (input.FromBranchId.HasValue)
-            {
-                await AuthorizationService.CheckAsync(OperationsPermissions.Transfers.ChooseBranches);
-            }
+            // Push transfer (source chosen up front) — e.g. the kitchen dispatching
+            // finished goods. Needs ChooseBranches; non-admins may only push from
+            // a branch they manage (destination can be any branch).
+            await AuthorizationService.CheckAsync(OperationsPermissions.Transfers.ChooseBranches);
+            await EnsureManagedBranchAsync(input.FromBranchId.Value);
         }
         else
         {
-            if (input.FromBranchId.HasValue)
-            {
-                throw new BusinessException(InventoryErrorCodes.BranchAccessDenied)
-                    .WithData("BranchId", input.FromBranchId.Value);
-            }
-
+            // Pull request (no source yet) — requester must manage the receiving branch.
             await EnsureManagedBranchAsync(input.ToBranchId);
         }
 
@@ -250,33 +275,93 @@ public class StockTransferAppService : OperationsAppService, IStockTransferAppSe
         return await ProjectAsync(transfer);
     }
 
+    [Authorize(OperationsPermissions.Transfers.Approve)]
+    public async Task<StockTransferDto> RejectAsync(Guid id, RejectStockTransferDto input)
+    {
+        var transfer = await _transferRepository.GetWithItemsAsync(id);
+        transfer.Reject(CurrentUser.Id, input.Reason);
+        await _transferRepository.UpdateAsync(transfer, autoSave: true);
+        return await ProjectAsync(transfer);
+    }
+
+    /// <summary>
+    /// Marks the transfer in transit and decrements the source branch (TransferOut)
+    /// in the same unit of work — stock leaves the shelf the moment it is shipped,
+    /// so any shortage surfaces here, in front of the person packing the goods.
+    /// The consumed expiry batches are recorded per item and replayed on receive.
+    /// </summary>
     [Authorize(OperationsPermissions.Transfers.Ship)]
     public async Task<StockTransferDto> ShipAsync(Guid id)
     {
         var transfer = await _transferRepository.GetWithItemsAsync(id);
         var sourceBranchId = EnsureSourceAssigned(transfer);
         await EnsureManagedBranchAsync(sourceBranchId);
-        await EnsureSourceStockAvailableAsync(transfer, sourceBranchId);
-        transfer.Ship();
+        var sourceByProduct = await EnsureSourceStockAvailableAsync(transfer, sourceBranchId);
+
+        var lines = transfer.Ship(CurrentUser.Id);
+        var reference = BuildReference(transfer.Id);
+
+        foreach (var line in lines)
+        {
+            var srcInv = sourceByProduct[line.ProductId];
+            var adjustment = await _inventoryManager.AdjustStockDetailedAsync(
+                srcInv,
+                srcInv.QuantityOnHand - line.Quantity,
+                StockMovementTypes.TransferOut,
+                notes: reference,
+                referenceId: transfer.Id,
+                referenceType: TransferReferenceType);
+            await _branchInventoryRepository.UpdateAsync(srcInv);
+
+            transfer.RecordItemShippedBatches(
+                line.ItemId,
+                StockTransferBatchBreakdown.Format(
+                    adjustment.ConsumedBatches.Select(
+                        b => new StockTransferBatchBreakdown.Line(b.ExpiryDate, b.Quantity))));
+        }
+
         await _transferRepository.UpdateAsync(transfer, autoSave: true);
         return await ProjectAsync(transfer);
     }
 
     [Authorize(OperationsPermissions.Transfers.Cancel)]
-    public async Task<StockTransferDto> CancelAsync(Guid id)
+    public async Task<StockTransferDto> CancelAsync(Guid id, CancelStockTransferDto input)
     {
         var transfer = await _transferRepository.GetWithItemsAsync(id);
-        transfer.Cancel();
+
+        // A requester may withdraw their own request (destination manager on pull
+        // requests, source manager on push transfers); approvers and admins may
+        // cancel any transfer.
+        if (!await AuthorizationService.IsGrantedAsync(OperationsPermissions.Transfers.Approve))
+        {
+            await EnsureCanEditRequestAsync(transfer);
+        }
+
+        transfer.Cancel(CurrentUser.Id, input?.Reason);
         await _transferRepository.UpdateAsync(transfer, autoSave: true);
         return await ProjectAsync(transfer);
     }
 
+    public async Task<StockTransferActionSummaryDto> GetActionSummaryAsync()
+    {
+        var counts = await _transferRepository.GetActionCountsAsync(await BuildActionSpecAsync());
+        return new StockTransferActionSummaryDto
+        {
+            DraftsToSubmit = counts.DraftsToSubmit,
+            PendingToApprove = counts.PendingToApprove,
+            ApprovedToShip = counts.ApprovedToShip,
+            InTransitToReceive = counts.InTransitToReceive
+        };
+    }
+
     /// <summary>
-    /// Completes an InTransit transfer in one Unit of Work: validates source stock,
-    /// records transferred quantities (domain raises TransferCompletedEto), then
-    /// decrements the source branch (TransferOut) and increments the destination
-    /// branch (TransferIn) — both via BranchInventoryManager so each fires
-    /// StockChangedEto and writes an immutable AppStockMovement row.
+    /// Completes an InTransit transfer in one Unit of Work: records received
+    /// quantities (domain raises TransferCompletedEto) and increments the destination
+    /// branch (TransferIn) via BranchInventoryManager so each item fires StockChangedEto
+    /// and writes an immutable AppStockMovement row. The source branch was already
+    /// decremented at ship time; expiry batches recorded then are replayed here so the
+    /// received stock keeps its real expiry dates. Anything received short of the
+    /// shipped quantity is transit loss — it is simply never added back.
     /// </summary>
     [Authorize(OperationsPermissions.Transfers.Complete)]
     public async Task<StockTransferDto> CompleteAsync(Guid id, CompleteStockTransferDto input)
@@ -291,24 +376,45 @@ public class StockTransferAppService : OperationsAppService, IStockTransferAppSe
             transferredByItem[line.ItemId] = line.TransferredQuantity;
         }
 
-        var sourceByProduct = await EnsureSourceStockAvailableAsync(transfer, sourceBranchId, transferredByItem);
+        var breakdownByItem = new Dictionary<Guid, string?>();
+        foreach (var item in transfer.Items)
+        {
+            breakdownByItem[item.Id] = item.ShippedBatchBreakdown;
+        }
 
-        // Domain records transferred quantities, flips status, raises TransferCompletedEto.
-        var lines = transfer.Complete(transferredByItem);
+        // Transfers shipped before ship-time deduction existed (ShippedDate is null)
+        // still hold their stock at the source — apply the legacy TransferOut here so
+        // completing an old in-flight transfer never creates stock out of nothing.
+        var legacyShipment = transfer.ShippedDate == null;
+        var legacySourceByProduct = legacyShipment
+            ? await EnsureSourceStockAvailableAsync(transfer, sourceBranchId, transferredByItem)
+            : null;
+
+        // Domain validates received ≤ shipped, records the quantities,
+        // flips status and raises TransferCompletedEto.
+        var lines = transfer.Complete(transferredByItem, CurrentUser.Id);
 
         var reference = BuildReference(transfer.Id);
         foreach (var line in lines)
         {
-            // Source branch — decrement (TransferOut).
-            var srcInv = sourceByProduct[line.ProductId];
-            var sourceAdjustment = await _inventoryManager.AdjustStockDetailedAsync(
-                srcInv,
-                srcInv.QuantityOnHand - line.Quantity,
-                StockMovementTypes.TransferOut,
-                notes: reference,
-                referenceId: transfer.Id,
-                referenceType: TransferReferenceType);
-            await _branchInventoryRepository.UpdateAsync(srcInv);
+            var batches = StockTransferBatchBreakdown.Parse(breakdownByItem.GetValueOrDefault(line.ItemId));
+
+            if (legacySourceByProduct != null)
+            {
+                var srcInv = legacySourceByProduct[line.ProductId];
+                var sourceAdjustment = await _inventoryManager.AdjustStockDetailedAsync(
+                    srcInv,
+                    srcInv.QuantityOnHand - line.Quantity,
+                    StockMovementTypes.TransferOut,
+                    notes: reference,
+                    referenceId: transfer.Id,
+                    referenceType: TransferReferenceType);
+                await _branchInventoryRepository.UpdateAsync(srcInv);
+
+                batches = sourceAdjustment.ConsumedBatches
+                    .Select(b => new StockTransferBatchBreakdown.Line(b.ExpiryDate, b.Quantity))
+                    .ToList();
+            }
 
             // Destination branch — load or create, then increment (TransferIn).
             var dstInv = await _branchInventoryRepository.FirstOrDefaultAsync(
@@ -319,28 +425,32 @@ public class StockTransferAppService : OperationsAppService, IStockTransferAppSe
                 await _branchInventoryRepository.InsertAsync(dstInv);
             }
 
-            var transferredBatchQuantity = 0;
-            foreach (var batchLine in sourceAdjustment.ConsumedBatches
-                         .GroupBy(x => x.ExpiryDate.Date)
-                         .Select(g => new { ExpiryDate = g.Key, Quantity = g.Sum(x => x.Quantity) }))
+            // Replay the batches consumed at ship time, FEFO, capped at what was received.
+            var remaining = line.Quantity;
+            foreach (var batch in batches)
             {
-                transferredBatchQuantity += batchLine.Quantity;
+                if (remaining <= 0)
+                {
+                    break;
+                }
+
+                var qty = Math.Min(batch.Quantity, remaining);
+                remaining -= qty;
                 await _inventoryManager.AdjustStockAsync(
                     dstInv,
-                    dstInv.QuantityOnHand + batchLine.Quantity,
+                    dstInv.QuantityOnHand + qty,
                     StockMovementTypes.TransferIn,
                     notes: reference,
                     referenceId: transfer.Id,
                     referenceType: TransferReferenceType,
-                    batchExpiryDate: batchLine.ExpiryDate);
+                    batchExpiryDate: batch.ExpiryDate);
             }
 
-            var untrackedQuantity = line.Quantity - transferredBatchQuantity;
-            if (untrackedQuantity > 0)
+            if (remaining > 0)
             {
                 await _inventoryManager.AdjustStockAsync(
                     dstInv,
-                    dstInv.QuantityOnHand + untrackedQuantity,
+                    dstInv.QuantityOnHand + remaining,
                     StockMovementTypes.TransferIn,
                     notes: reference,
                     referenceId: transfer.Id,
@@ -369,6 +479,9 @@ public class StockTransferAppService : OperationsAppService, IStockTransferAppSe
         var approvedBy = transfer.ApprovedByUserId.HasValue
             ? (await _userRepository.FindAsync(transfer.ApprovedByUserId.Value))?.UserName
             : null;
+        var closedBy = transfer.ClosedByUserId.HasValue
+            ? (await _userRepository.FindAsync(transfer.ClosedByUserId.Value))?.UserName
+            : null;
 
         var productIds = transfer.Items.Select(i => i.ProductId).Distinct().ToList();
         var products = await _productRepository.GetListAsync(p => productIds.Contains(p.Id));
@@ -385,11 +498,14 @@ public class StockTransferAppService : OperationsAppService, IStockTransferAppSe
             ToBranchName = toBranch.Name,
             RequestedDate = transfer.RequestedDate,
             ApprovedDate = transfer.ApprovedDate,
+            ShippedDate = transfer.ShippedDate,
             CompletedDate = transfer.CompletedDate,
             RequestedByUserId = transfer.RequestedByUserId,
             RequestedByUserName = requestedBy,
             ApprovedByUserId = transfer.ApprovedByUserId,
             ApprovedByUserName = approvedBy,
+            ClosedByUserName = closedBy,
+            ClosureReason = transfer.ClosureReason,
             Notes = transfer.Notes,
             CreationTime = transfer.CreationTime,
             ItemCount = transfer.Items.Count,
@@ -436,6 +552,36 @@ public class StockTransferAppService : OperationsAppService, IStockTransferAppSe
     private Task<bool> IsManageAllBranchesAsync()
         => AuthorizationService.IsGrantedAsync(InventoryPermissions.BranchInventory.ManageAll);
 
+    /// <summary>Branch ids managed by the current user, or null when they manage all branches.</summary>
+    private async Task<List<Guid>?> GetManagedBranchIdsAsync()
+    {
+        if (await IsManageAllBranchesAsync())
+        {
+            return null;
+        }
+
+        var userId = CurrentUser.Id;
+        if (userId == null)
+        {
+            return new List<Guid>();
+        }
+
+        var branches = await _branchRepository.GetListAsync(b => b.ManagerUserId == userId);
+        return branches.ConvertAll(b => b.Id);
+    }
+
+    private async Task<StockTransferActionSpec> BuildActionSpecAsync()
+    {
+        var managed = await GetManagedBranchIdsAsync();
+        return new StockTransferActionSpec
+        {
+            UserId = CurrentUser.Id,
+            CanApprove = await AuthorizationService.IsGrantedAsync(OperationsPermissions.Transfers.Approve),
+            ManageAllBranches = managed == null,
+            ManagedBranchIds = managed ?? new List<Guid>()
+        };
+    }
+
     private async Task EnsureCanEditRequestAsync(AppStockTransfer transfer)
     {
         if (await IsManageAllBranchesAsync())
@@ -443,7 +589,22 @@ public class StockTransferAppService : OperationsAppService, IStockTransferAppSe
             return;
         }
 
+        // Pull requests are edited by the receiving branch's manager; push transfers
+        // (source chosen at creation) are edited by the sending branch's manager.
+        if (transfer.FromBranchId is Guid fromBranchId
+            && await IsManagerOfBranchAsync(fromBranchId))
+        {
+            return;
+        }
+
         await EnsureManagedBranchAsync(transfer.ToBranchId);
+    }
+
+    private async Task<bool> IsManagerOfBranchAsync(Guid branchId)
+    {
+        var userId = CurrentUser.Id;
+        return userId != null
+            && await _branchRepository.AnyAsync(b => b.Id == branchId && b.ManagerUserId == userId);
     }
 
     private async Task EnsureManagedBranchAsync(Guid branchId)

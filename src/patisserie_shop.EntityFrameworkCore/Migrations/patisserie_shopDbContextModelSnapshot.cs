@@ -1222,6 +1222,16 @@ namespace patisserie_shop.Migrations
                     b.Property<DateTime?>("ApprovedDate")
                         .HasColumnType("timestamp without time zone");
 
+                    b.Property<Guid?>("ClosedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ClosureReason")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<Guid?>("CompletedByUserId")
+                        .HasColumnType("uuid");
+
                     b.Property<DateTime?>("CompletedDate")
                         .HasColumnType("timestamp without time zone");
 
@@ -1280,6 +1290,12 @@ namespace patisserie_shop.Migrations
                     b.Property<DateTime>("RequestedDate")
                         .HasColumnType("timestamp without time zone");
 
+                    b.Property<Guid?>("ShippedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("ShippedDate")
+                        .HasColumnType("timestamp without time zone");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(32)
@@ -1289,6 +1305,8 @@ namespace patisserie_shop.Migrations
                         .HasColumnType("uuid");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("Status");
 
                     b.ToTable("OperationsStockTransfers", (string)null);
                 });
@@ -1307,6 +1325,10 @@ namespace patisserie_shop.Migrations
 
                     b.Property<int>("RequestedQuantity")
                         .HasColumnType("integer");
+
+                    b.Property<string>("ShippedBatchBreakdown")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
 
                     b.Property<Guid>("StockTransferId")
                         .HasColumnType("uuid");

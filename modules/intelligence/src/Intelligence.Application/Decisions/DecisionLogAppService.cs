@@ -65,12 +65,13 @@ public class DecisionLogAppService : IntelligenceAppService, IDecisionLogAppServ
 
         var totalCount = await _decisionLogRepository.CountFilteredAsync(
             input.Filter, input.DecisionType, input.Status, input.BranchId, input.ProductId,
-            input.FromDate, input.ToDate, scope);
+            input.FromDate, input.ToDate, scope, input.Statuses, input.DecisionTypes);
 
         var items = await _decisionLogRepository.GetFilteredListAsync(
             input.Filter, input.DecisionType, input.Status, input.BranchId, input.ProductId,
             input.FromDate, input.ToDate, scope,
-            input.Sorting ?? string.Empty, input.SkipCount, input.MaxResultCount);
+            input.Sorting ?? string.Empty, input.SkipCount, input.MaxResultCount,
+            input.Statuses, input.DecisionTypes);
 
         var dtos = items.ConvertAll(BuildDto);
         await ResolveLookupNamesAsync(dtos);

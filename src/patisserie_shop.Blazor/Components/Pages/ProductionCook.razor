@@ -156,7 +156,7 @@
                             </div>
                             <div>
                                 <div class="stat-label">@ProdL["PlannedUnitCost"]</div>
-                                <div class="stat-value">@_detail.UnitProductionCost.ToString("0.00")</div>
+                                <div class="stat-value">@FormatShopMoney(_detail.UnitProductionCost, 2)</div>
                             </div>
                         </div>
 
@@ -195,7 +195,7 @@
                                 <MudTd>@context.IngredientSku - @context.IngredientName</MudTd>
                                 <MudTd>@context.RequiredQuantity @context.Unit</MudTd>
                                 <MudTd>@context.ConsumedQuantity @context.Unit</MudTd>
-                                <MudTd>@context.TotalCost.ToString("0.00")</MudTd>
+                                <MudTd>@FormatShopMoney(context.TotalCost, 2)</MudTd>
                             </RowTemplate>
                         </SoftTable>
 
@@ -248,6 +248,12 @@
                                                    Lines="2" />
                                 </SoftGridItem>
                             </SoftGrid>
+                        }
+                        @if (CookHint() is { Length: > 0 } cookHint)
+                        {
+                            <SoftAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+                                @cookHint
+                            </SoftAlert>
                         }
                     </SoftStack>
                 </SoftCardContent>
@@ -349,6 +355,7 @@
 
     protected override async Task OnInitializedAsync()
     {
+        await LoadShopCurrencyAsync();
         _canStart = await Authz.IsGrantedAsync(ProductionPermissions.Orders.Start);
         _canComplete = await Authz.IsGrantedAsync(ProductionPermissions.Orders.Complete);
         _canCancel = await Authz.IsGrantedAsync(ProductionPermissions.Orders.Cancel);
@@ -583,6 +590,16 @@
         ProductionOrderStatuses.Completed => ProdL["Status:Completed"],
         ProductionOrderStatuses.Cancelled => ProdL["Status:Cancelled"],
         _ => status
+    };
+
+    /// <summary>Plain-language "what happens next" line for the detail modal, per status.</summary>
+    private string? CookHint() => _detail?.Status switch
+    {
+        ProductionOrderStatuses.WaitingForIngredients => ProdL["CookHint:WaitingForIngredients"].Value,
+        ProductionOrderStatuses.ReadyToCook => ProdL["CookHint:ReadyToCook"].Value,
+        ProductionOrderStatuses.InProduction => ProdL["CookHint:InProduction"].Value,
+        ProductionOrderStatuses.Completed => ProdL["CookHint:Completed"].Value,
+        _ => null
     };
 
     private sealed record StatusOption(string Value, string Label);

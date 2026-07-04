@@ -394,6 +394,7 @@
 
     protected override async Task OnInitializedAsync()
     {
+        await LoadShopCurrencyAsync();
         _branches = await BranchAppService.GetLookupAsync();
         await LoadAsync();
     }
@@ -436,6 +437,6 @@
 
     private string FormatReason(string reason) => ProdL[$"Reason:{reason}"].Value;
     private static string FormatPercent(decimal value) => $"{value:0.#}%";
-    private static string FormatMoney(decimal value) => value.ToString("C0", CultureInfo.GetCultureInfo("en-US"));
-    private static string FormatMoneyExact(decimal value) => value.ToString("C2", CultureInfo.GetCultureInfo("en-US"));
+    private string FormatMoney(decimal value) => FormatShopMoney(value, 0);
+    private string FormatMoneyExact(decimal value) => FormatShopMoney(value, 2);
 }

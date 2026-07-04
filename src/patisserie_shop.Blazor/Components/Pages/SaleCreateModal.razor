@@ -1,6 +1,7 @@
 @using System.Threading
 @using System.Threading.Tasks
 @using Microsoft.AspNetCore.Components
+@using Volo.Abp.Settings
 @using Operations.Sales
 @using Operations.Localization
 @using Inventory.Branches
@@ -12,6 +13,7 @@
 @inject ISaleAppService SaleAppService
 @inject ISnackbar Snackbar
 @inject IStringLocalizer<OperationsResource> OpsL
+@inject Volo.Abp.Settings.ISettingProvider SettingProvider
 
 <div class="soft-modal-backdrop" @onclick="CloseAsync">
     <div class="soft-modal-container soft-modal-container--xl" @onclick:stopPropagation="true">
@@ -207,6 +209,7 @@
     private Guid? _branchId;
     private DateTime? _saleDate = DateTime.Today;
     private string _currency = "USD";
+    private string _defaultCurrency = "USD";
     private string? _notes;
 
     private List<SaleProductLookupDto> _availableProducts = new();
@@ -232,6 +235,17 @@
 
     protected override async Task OnInitializedAsync()
     {
+        // Shop-wide default currency for new sales (falls back to USD).
+        try
+        {
+            _defaultCurrency = (await SettingProvider.GetOrNullAsync("patisserie_shop.Operations.DefaultCurrency") ?? "USD").ToUpperInvariant();
+        }
+        catch
+        {
+            _defaultCurrency = "USD";
+        }
+        _currency = _defaultCurrency;
+
         // Single accessible branch (branch manager) — preselect it. Awaited so the
         // available-products load completes before first render, otherwise the
         // "Add row" button stays disabled until an unrelated re-render fires.

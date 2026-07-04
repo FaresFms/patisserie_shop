@@ -47,20 +47,23 @@ public class SaleManager : DomainService
     {
         var prefix = $"INV-{year:D4}-";
         var queryable = await _saleRepository.GetQueryableAsync();
-        var lastNumber = await AsyncExecuter.MaxAsync(
-            queryable.Where(s => s.InvoiceNumber.StartsWith(prefix)).Select(s => (string?)s.InvoiceNumber),
-            x => x);
 
-        var nextSeq = 1;
-        if (!string.IsNullOrEmpty(lastNumber))
+        // Max by PARSED numeric tail, not a lexical string Max: past 9999 the wider
+        // tail ("INV-2026-10000") sorts before "INV-2026-9999" lexically and would
+        // reissue a duplicate. Integer max over the year's suffixes is correct at any
+        // width; uniqueness is also enforced by the DB unique index on InvoiceNumber.
+        var numbers = await AsyncExecuter.ToListAsync(
+            queryable.Where(s => s.InvoiceNumber.StartsWith(prefix)).Select(s => s.InvoiceNumber));
+
+        var maxSeq = 0;
+        foreach (var number in numbers)
         {
-            var tail = lastNumber.Substring(prefix.Length);
-            if (int.TryParse(tail, out var n))
+            if (int.TryParse(number.Substring(prefix.Length), out var n) && n > maxSeq)
             {
-                nextSeq = n + 1;
+                maxSeq = n;
             }
         }
-        return $"{prefix}{nextSeq:D4}";
+        return $"{prefix}{maxSeq + 1:D4}";
     }
 
     private async Task EnsureInvoiceNumberIsUniqueAsync(string invoiceNumber)

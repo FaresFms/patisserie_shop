@@ -7,6 +7,7 @@
 @using System.Globalization
 @using Microsoft.Extensions.Localization
 @using Microsoft.JSInterop
+@using Volo.Abp.Settings
 @using patisserie_shop.Localization
 @inherits Volo.Abp.AspNetCore.Components.Web.LeptonXLiteTheme.Themes.LeptonXLite.MainLayout
 @attribute [ExposeServices(typeof(Volo.Abp.AspNetCore.Components.Web.LeptonXLiteTheme.Themes.LeptonXLite.MainLayout))]
@@ -16,6 +17,7 @@
 @inject NavigationManager Navigation
 @inject PageLayout PageLayout
 @inject IJSRuntime JS
+@inject ISettingProvider SettingProvider
 
 
 <MudThemeProvider Theme="_theme" IsDarkMode="_isDarkMode" />
@@ -31,7 +33,7 @@
                        Edge="Edge.Start"
                        OnClick="ToggleDrawer" />
 
-        <SoftText Typo="Typo.h6" Class="ml-2">Patisserie Shop</SoftText>
+        <SoftText Typo="Typo.h6" Class="ml-2">@_shopName</SoftText>
 
         @if (CurrentUser.IsAuthenticated && _branchContextBadgeType is not null)
         {
@@ -210,11 +212,27 @@
     private bool _drawerOpen = true;
     private bool _isDarkMode = false;
     private bool _isArabic = false;
+    private string _shopName = "Patisserie Shop";
     private List<ApplicationMenuItem> _menuItems = new();
 
     protected override async Task OnInitializedAsync()
     {
+        await base.OnInitializedAsync();
+
         _isArabic = CultureInfo.CurrentCulture.Name.StartsWith("ar", StringComparison.OrdinalIgnoreCase);
+
+        // Shop-name branding comes from the shop settings. Kept defensive: this is
+        // a shared layout that renders on every page, so any read failure falls
+        // back to the literal default rather than breaking the whole shell.
+        try
+        {
+            _shopName = await SettingProvider.GetOrNullAsync("patisserie_shop.Shop.Name") ?? "Patisserie Shop";
+        }
+        catch
+        {
+            _shopName = "Patisserie Shop";
+        }
+
         var menu = await MenuManager.GetAsync(StandardMenus.Main);
         _menuItems = menu.Items.ToList();
         SanitizeMenuUrls(_menuItems);

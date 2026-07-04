@@ -6,12 +6,14 @@
 @using Microsoft.AspNetCore.Components
 @using Volo.Abp.Application.Dtos
 @using Volo.Abp.AspNetCore.Components.Web.Theming.Layout
+@using Volo.Abp.Settings
 @using Operations
 @using Operations.PurchaseOrders
 @using Operations.Permissions
 @using Operations.Localization
 @using Inventory.Branches
 @using Inventory.Suppliers
+@using Intelligence.Decisions
 @using Color = MudBlazor.Color
 @using Variant = MudBlazor.Variant
 @using Size = MudBlazor.Size
@@ -20,9 +22,11 @@
 @inject IPurchaseOrderAppService PurchaseOrderAppService
 @inject IBranchAppService BranchAppService
 @inject ISupplierAppService SupplierAppService
+@inject IDecisionLogAppService DecisionLogAppService
 @inject PageLayout PageLayout
 @inject ISnackbar Snackbar
 @inject IStringLocalizer<OperationsResource> OpsL
+@inject Volo.Abp.Settings.ISettingProvider SettingProvider
 
 @{
     PageLayout.Title = OpsL["PurchaseOrders"];
@@ -216,9 +220,10 @@
                                         Variant="Variant.Outlined"
                                         Required="true"
                                         Style="max-width: 160px;">
-                                <MudSelectItem T="string" Value="@("USD")">USD — $</MudSelectItem>
-                                <MudSelectItem T="string" Value="@("EUR")">EUR — €</MudSelectItem>
-                                <MudSelectItem T="string" Value="@("GBP")">GBP — £</MudSelectItem>
+                                @foreach (var ccode in _currencyOptions)
+                                {
+                                    <MudSelectItem T="string" Value="@ccode">@CurrencyLabel(ccode)</MudSelectItem>
+                                }
                             </SoftSelect>
                         </SoftStack>
                         <SoftTextField T="string"
@@ -258,15 +263,19 @@
         padding: 3px 10px; border-radius: 999px;
         font-size: 0.78rem; font-weight: 600;
         border: 1px solid transparent;
-        backdrop-filter: var(--glass-blur);
-        -webkit-backdrop-filter: var(--glass-blur);
     }
-    .po-status-draft           { background: rgba(255,255,255, 0.10); border-color: rgba(255,255,255, 0.20); color: var(--glass-text-secondary); }
-    .po-status-submitted       { background: rgba( 59,130,246, 0.20); border-color: rgba( 59,130,246, 0.40); color: #93c5fd; }
-    .po-status-approved        { background: rgba( 34,197, 94, 0.20); border-color: rgba( 34,197, 94, 0.40); color: #86efac; }
-    .po-status-partialreceived { background: rgba(251,191, 36, 0.20); border-color: rgba(251,191, 36, 0.40); color: #fde68a; }
-    .po-status-received        { background: rgba( 20,184,166, 0.20); border-color: rgba( 20,184,166, 0.40); color: #5eead4; }
-    .po-status-cancelled       { background: rgba(239, 68, 68, 0.20); border-color: rgba(239, 68, 68, 0.40); color: #fca5a5; }
+    .po-status-draft           { background: var(--hover); border-color: var(--bd-2); color: var(--fg-2); }
+    .po-status-submitted       { background: rgba( 59,130,246, 0.20); border-color: rgba( 59,130,246, 0.40); color: #1565c0; }
+    .po-status-approved        { background: rgba( 34,197, 94, 0.20); border-color: rgba( 34,197, 94, 0.40); color: #2e7d32; }
+    .po-status-partialreceived { background: rgba(251,191, 36, 0.20); border-color: rgba(251,191, 36, 0.40); color: #b26a00; }
+    .po-status-received        { background: rgba( 20,184,166, 0.20); border-color: rgba( 20,184,166, 0.40); color: #00695c; }
+    .po-status-cancelled       { background: rgba(239, 68, 68, 0.20); border-color: rgba(239, 68, 68, 0.40); color: #c62828; }
+
+    html[data-theme="dark"] .po-status-submitted       { color: #93c5fd; }
+    html[data-theme="dark"] .po-status-approved        { color: #86efac; }
+    html[data-theme="dark"] .po-status-partialreceived { color: #fde68a; }
+    html[data-theme="dark"] .po-status-received        { color: #5eead4; }
+    html[data-theme="dark"] .po-status-cancelled       { color: #fca5a5; }
 </style>
 
 @code {
@@ -294,6 +303,55 @@
     private string _newCurrency = "USD";
     private string? _newNotes;
 
+    // Shop-wide default currency for new purchase orders, from settings.
+    private string _defaultCurrency = "USD";
+
+    // Currency codes offered by the New PO dialog's select. The shop's configured
+    // default is inserted at load time if it isn't already one of these.
+    private readonly List<string> _currencyOptions = new() { "USD", "EUR", "GBP" };
+
+    // Friendly label with a symbol for the codes we know; bare code otherwise.
+    private static string CurrencyLabel(string code) => code switch
+    {
+        "USD" => "USD — $",
+        "EUR" => "EUR — €",
+        "GBP" => "GBP — £",
+        "SAR" => "SAR — ﷼",
+        "AED" => "AED — د.إ",
+        _ => code
+    };
+
+    // Pre-fill handoff from the Decision Log's "Take action" button: the first
+    // line to add after the header is created, and the decision to mark executed.
+    private Guid? _pendingItemProductId;
+    private int? _pendingItemQty;
+    private decimal? _pendingItemPrice;
+    private Guid? _sourceDecisionId;
+
+    [Parameter, SupplyParameterFromQuery(Name = "new")]
+    public bool OpenNew { get; set; }
+
+    [Parameter, SupplyParameterFromQuery(Name = "supplierId")]
+    public Guid? NewPoSupplierId { get; set; }
+
+    [Parameter, SupplyParameterFromQuery(Name = "branchId")]
+    public Guid? NewPoBranchId { get; set; }
+
+    [Parameter, SupplyParameterFromQuery(Name = "productId")]
+    public Guid? NewPoProductId { get; set; }
+
+    [Parameter, SupplyParameterFromQuery(Name = "qty")]
+    public int? NewPoQuantity { get; set; }
+
+    [Parameter, SupplyParameterFromQuery(Name = "price")]
+    public decimal? NewPoUnitPrice { get; set; }
+
+    [Parameter, SupplyParameterFromQuery(Name = "notes")]
+    public string? NewPoNotes { get; set; }
+
+    [Parameter, SupplyParameterFromQuery(Name = "decisionId")]
+    public Guid? NewPoDecisionId { get; set; }
+
     public record StatusOption(string Value, string Label);
 
     protected override async Task OnInitializedAsync()
@@ -319,6 +377,44 @@
         {
             await HandleErrorAsync(ex);
         }
+
+        // Shop-wide default currency for new orders (falls back to USD).
+        try
+        {
+            _defaultCurrency = (await SettingProvider.GetOrNullAsync("patisserie_shop.Operations.DefaultCurrency") ?? "USD").ToUpperInvariant();
+        }
+        catch
+        {
+            _defaultCurrency = "USD";
+        }
+        // The select offers the common codes; make sure the shop's configured
+        // default is always present so it never renders as an empty box.
+        if (!_currencyOptions.Contains(_defaultCurrency))
+        {
+            _currencyOptions.Insert(0, _defaultCurrency);
+        }
+        _newCurrency = _defaultCurrency;
+
+        if (OpenNew && _canCreate)
+        {
+            OpenCreateDialogPrefilled();
+        }
+    }
+
+    /// <summary>Opens the New PO dialog pre-filled from Decision Log query parameters.</summary>
+    private void OpenCreateDialogPrefilled()
+    {
+        _newSupplierId = NewPoSupplierId;
+        _newBranchId = NewPoBranchId;
+        _newOrderDate = DateTime.Today;
+        _newExpectedDate = null;
+        _newCurrency = _defaultCurrency;
+        _newNotes = NewPoNotes;
+        _pendingItemProductId = NewPoProductId;
+        _pendingItemQty = NewPoQuantity;
+        _pendingItemPrice = NewPoUnitPrice;
+        _sourceDecisionId = NewPoDecisionId;
+        _createVisible = true;
     }
 
     private async Task<GridData<PurchaseOrderDto>> LoadServerData(GridState<PurchaseOrderDto> state, CancellationToken cancellationToken)
@@ -397,8 +493,12 @@
         _newBranchId = null;
         _newOrderDate = DateTime.Today;
         _newExpectedDate = null;
-        _newCurrency = "USD";
+        _newCurrency = _defaultCurrency;
         _newNotes = null;
+        _pendingItemProductId = null;
+        _pendingItemQty = null;
+        _pendingItemPrice = null;
+        _sourceDecisionId = null;
         _createVisible = true;
     }
 
@@ -434,7 +534,41 @@
                 Currency = (_newCurrency ?? "USD").ToUpper(),
                 Notes = _newNotes
             });
-            Snackbar.Add($"PO {created.PONumber} created — add items below to continue.", Severity.Success);
+
+            // Handoff from the Decision Log: pre-add the suggested line and mark
+            // the alert as executed, linked to this PO.
+            if (_pendingItemProductId is Guid pendingProductId && _pendingItemQty is > 0)
+            {
+                await PurchaseOrderAppService.AddItemAsync(created.Id, new AddPurchaseOrderItemDto
+                {
+                    ProductId = pendingProductId,
+                    OrderedQuantity = _pendingItemQty.Value,
+                    UnitPrice = _pendingItemPrice ?? 0
+                });
+            }
+
+            if (_sourceDecisionId is Guid decisionId)
+            {
+                try
+                {
+                    await DecisionLogAppService.ExecuteAsync(decisionId, new ExecuteDecisionLogInput
+                    {
+                        ActionType = DecisionActionTypes.PurchaseOrder,
+                        ActionId = created.Id
+                    });
+                }
+                catch
+                {
+                    // The PO exists either way — worst case the alert stays pending.
+                }
+            }
+
+            _pendingItemProductId = null;
+            _pendingItemQty = null;
+            _pendingItemPrice = null;
+            _sourceDecisionId = null;
+
+            Snackbar.Add($"PO {created.PONumber} created — review the items and submit.", Severity.Success);
             _createVisible = false;
             _detailId = created.Id;
             await ReloadAsync();

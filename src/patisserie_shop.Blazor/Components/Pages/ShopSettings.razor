@@ -1,0 +1,198 @@
+@page "/setup/shop-settings"
+@attribute [Authorize(patisserie_shopPermissions.Settings.Manage)]
+@using System.Threading.Tasks
+@using Microsoft.AspNetCore.Authorization
+@using Volo.Abp.AspNetCore.Components.Web.Theming.Layout
+@using patisserie_shop.Settings
+@using patisserie_shop.Permissions
+@using Color = MudBlazor.Color
+@using Variant = MudBlazor.Variant
+@using Size = MudBlazor.Size
+@using Margin = MudBlazor.Margin
+@inherits patisserie_shopComponentBase
+@inject IShopSettingsAppService ShopSettingsAppService
+@inject ISnackbar Snackbar
+@inject PageLayout PageLayout
+
+@{
+    PageLayout.Title = L["ShopSettings:Title"];
+}
+
+<SoftCard Elevation="2" Class="pa-2 page-flat">
+    <div class="page-head">
+        <div>
+            <h1 class="page-title">@L["ShopSettings:Title"]</h1>
+            <div class="page-sub">@L["ShopSettings:Subtitle"]</div>
+        </div>
+        <div class="page-head-actions">
+            <SoftButton Variant="Variant.Filled"
+                        Color="Color.Primary"
+                        StartIcon="@Icons.Material.Filled.Save"
+                        Disabled="_saving"
+                        OnClick="SaveAsync">
+                @L["Save"]
+            </SoftButton>
+        </div>
+    </div>
+
+    <SoftCardContent>
+        <div class="d-flex" style="gap: 32px; flex-wrap: wrap; align-items: flex-start;">
+
+            @* ── Form column ─────────────────────────────────────────── *@
+            <div style="flex: 1 1 420px; min-width: 320px;">
+                <SoftStack Spacing="4">
+
+                    @* 1. Identity *@
+                    <section>
+                        <h2 class="page-title" style="font-size:1.05rem">@L["ShopSettings:Section:Identity"]</h2>
+                        <SoftStack Spacing="3" Class="mt-2">
+                            <SoftTextField T="string"
+                                           Label="@L["Setting:ShopName"]"
+                                           @bind-Value="_model.ShopName"
+                                           HelperText="@L["Setting:ShopName:Desc"]"
+                                           Variant="Variant.Outlined"
+                                           MaxLength="128"
+                                           Required="true"
+                                           Immediate="true" />
+                        </SoftStack>
+                    </section>
+
+                    @* 2. Receipt *@
+                    <section>
+                        <h2 class="page-title" style="font-size:1.05rem">@L["ShopSettings:Section:Receipt"]</h2>
+                        <SoftStack Spacing="3" Class="mt-2">
+                            <SoftTextField T="string"
+                                           Label="@L["Setting:ShopAddress"]"
+                                           @bind-Value="_model.ShopAddress"
+                                           HelperText="@L["Setting:ShopAddress:Desc"]"
+                                           Variant="Variant.Outlined"
+                                           Lines="2"
+                                           MaxLength="256"
+                                           Immediate="true" />
+                            <SoftTextField T="string"
+                                           Label="@L["Setting:ShopPhone"]"
+                                           @bind-Value="_model.ShopPhone"
+                                           HelperText="@L["Setting:ShopPhone:Desc"]"
+                                           Variant="Variant.Outlined"
+                                           MaxLength="64"
+                                           Immediate="true" />
+                            <SoftTextField T="string"
+                                           Label="@L["Setting:ReceiptFooterMessage"]"
+                                           @bind-Value="_model.ReceiptFooterMessage"
+                                           HelperText="@L["Setting:ReceiptFooterMessage:Desc"]"
+                                           Variant="Variant.Outlined"
+                                           Lines="2"
+                                           MaxLength="256"
+                                           Immediate="true" />
+                        </SoftStack>
+                    </section>
+
+                    @* 3. Defaults *@
+                    <section>
+                        <h2 class="page-title" style="font-size:1.05rem">@L["ShopSettings:Section:Defaults"]</h2>
+                        <SoftStack Spacing="3" Class="mt-2">
+                            <SoftTextField T="string"
+                                           Label="@L["Setting:DefaultCurrency"]"
+                                           @bind-Value="_model.DefaultCurrency"
+                                           HelperText="@L["ShopSettings:CurrencyHint"]"
+                                           Variant="Variant.Outlined"
+                                           MaxLength="3"
+                                           Immediate="true" />
+                            <SoftNumericField T="int"
+                                              Label="@L["Setting:DefaultMinimumStock"]"
+                                              @bind-Value="_model.DefaultMinimumStock"
+                                              HelperText="@L["Setting:DefaultMinimumStock:Desc"]"
+                                              Variant="Variant.Outlined"
+                                              Min="0" />
+                            <div>
+                                <SoftCheckBox T="bool"
+                                              @bind-Value="_model.AutopilotEnabled"
+                                              Label="@L["Setting:AutopilotEnabled"]"
+                                              Color="Color.Primary" />
+                                <div class="page-sub" style="margin-left: 32px;">@L["Setting:AutopilotEnabled:Desc"]</div>
+                            </div>
+                        </SoftStack>
+                    </section>
+
+                </SoftStack>
+            </div>
+
+            @* ── Live receipt preview ────────────────────────────────── *@
+            <div style="flex: 0 0 auto;">
+                <div class="page-sub" style="margin-bottom: 8px; text-transform: uppercase; letter-spacing: .04em; font-size: 11px;">
+                    @L["ShopSettings:ReceiptPreview"]
+                </div>
+                <div style="width: 260px; background: var(--surface); border: 1px solid var(--bd-1); border-radius: var(--r-md); box-shadow: var(--shadow-sm); padding: 20px 18px; font-family: var(--font-mono); font-size: 12px; color: var(--fg-1); text-align: center;">
+                    <div style="font-weight: 700; font-size: 14px; margin-bottom: 4px;">
+                        @(string.IsNullOrWhiteSpace(_model.ShopName) ? "—" : _model.ShopName)
+                    </div>
+                    @if (!string.IsNullOrWhiteSpace(_model.ShopAddress))
+                    {
+                        <div style="color: var(--fg-2); white-space: pre-line;">@_model.ShopAddress</div>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(_model.ShopPhone))
+                    {
+                        <div style="color: var(--fg-2);">@_model.ShopPhone</div>
+                    }
+
+                    <div style="border-top: 1px dashed var(--bd-3); margin: 12px 0;"></div>
+
+                    <div style="display: flex; justify-content: space-between; color: var(--fg-1);">
+                        <span>1× Croissant</span>
+                        <span>3.50 @_model.DefaultCurrency</span>
+                    </div>
+
+                    <div style="border-top: 1px dashed var(--bd-3); margin: 12px 0;"></div>
+
+                    @if (!string.IsNullOrWhiteSpace(_model.ReceiptFooterMessage))
+                    {
+                        <div style="font-style: italic; color: var(--fg-2); white-space: pre-line;">@_model.ReceiptFooterMessage</div>
+                    }
+                </div>
+            </div>
+
+        </div>
+    </SoftCardContent>
+</SoftCard>
+
+@code {
+    private ShopSettingsDto _model = new();
+    private bool _saving;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _model = await ShopSettingsAppService.GetAsync();
+        }
+        catch (Exception ex)
+        {
+            // Keep the page usable with default values rather than blanking out.
+            await HandleErrorAsync(ex);
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_saving)
+        {
+            return;
+        }
+
+        _saving = true;
+        try
+        {
+            await ShopSettingsAppService.UpdateAsync(_model);
+            Snackbar.Add(L["ShopSettings:Saved"], Severity.Success);
+            _model = await ShopSettingsAppService.GetAsync();
+        }
+        catch (Exception ex)
+        {
+            await HandleErrorAsync(ex);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}

@@ -95,7 +95,7 @@
                 <PropertyColumn T="ProductionPlanListItemDto" TProperty="int" Property="x => x.SuggestedTotalQuantity" Title="@ProdL["SuggestedQuantity"]" />
                 <PropertyColumn T="ProductionPlanListItemDto" TProperty="int" Property="x => x.PlannedTotalQuantity" Title="@ProdL["PlannedQuantity"]" />
                 <TemplateColumn T="ProductionPlanListItemDto" Title="@ProdL["EstimatedTotalCost"]" SortBy="x => x.EstimatedTotalCost">
-                    <CellTemplate>@context.Item.EstimatedTotalCost.ToString("0.00")</CellTemplate>
+                    <CellTemplate>@FormatShopMoney(context.Item.EstimatedTotalCost, 2)</CellTemplate>
                 </TemplateColumn>
                 <TemplateColumn T="ProductionPlanListItemDto" Title="@ProdL["Actions"]" Sortable="false">
                     <CellTemplate>
@@ -231,7 +231,7 @@
                                         <span>@context.PlannedQuantity @context.ProductUnit</span>
                                     }
                                 </MudTd>
-                                <MudTd>@context.EstimatedTotalCost.ToString("0.00")</MudTd>
+                                <MudTd>@FormatShopMoney(context.EstimatedTotalCost, 2)</MudTd>
                                 <MudTd>
                                     @if (_canManage && _detail.Status == ProductionPlanStatuses.Draft)
                                     {
@@ -287,6 +287,7 @@
 
     protected override async Task OnInitializedAsync()
     {
+        await LoadShopCurrencyAsync();
         _canManage = await Authz.IsGrantedAsync(ProductionPermissions.Plans.Manage);
         _branches = await BranchAppService.GetLookupAsync();
         _statusOptions =

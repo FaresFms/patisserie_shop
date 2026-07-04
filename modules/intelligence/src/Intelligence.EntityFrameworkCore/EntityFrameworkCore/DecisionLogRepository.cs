@@ -30,10 +30,12 @@ public class DecisionLogRepository
         DateTime? fromDate,
         DateTime? toDate,
         IReadOnlyCollection<Guid>? scopedBranchIds,
+        IReadOnlyCollection<string>? statusIn = null,
+        IReadOnlyCollection<string>? decisionTypeIn = null,
         CancellationToken cancellationToken = default)
     {
         var query = await BuildFilteredQueryAsync(filter, decisionType, status, branchId, productId,
-            fromDate, toDate, scopedBranchIds);
+            fromDate, toDate, scopedBranchIds, statusIn, decisionTypeIn);
         return await query.LongCountAsync(GetCancellationToken(cancellationToken));
     }
 
@@ -49,10 +51,12 @@ public class DecisionLogRepository
         string sorting,
         int skipCount,
         int maxResultCount,
+        IReadOnlyCollection<string>? statusIn = null,
+        IReadOnlyCollection<string>? decisionTypeIn = null,
         CancellationToken cancellationToken = default)
     {
         var query = await BuildFilteredQueryAsync(filter, decisionType, status, branchId, productId,
-            fromDate, toDate, scopedBranchIds);
+            fromDate, toDate, scopedBranchIds, statusIn, decisionTypeIn);
 
         var ordered = query
             .OrderBy(ResolveSorting(sorting))
@@ -174,10 +178,22 @@ public class DecisionLogRepository
         Guid? productId,
         DateTime? fromDate,
         DateTime? toDate,
-        IReadOnlyCollection<Guid>? scopedBranchIds)
+        IReadOnlyCollection<Guid>? scopedBranchIds,
+        IReadOnlyCollection<string>? statusIn = null,
+        IReadOnlyCollection<string>? decisionTypeIn = null)
     {
         var query = await GetQueryableAsync();
         query = ApplyBranchScope(query, scopedBranchIds);
+
+        if (statusIn is { Count: > 0 })
+        {
+            query = query.Where(l => statusIn.Contains(l.Status));
+        }
+
+        if (decisionTypeIn is { Count: > 0 })
+        {
+            query = query.Where(l => decisionTypeIn.Contains(l.DecisionType));
+        }
 
         if (!string.IsNullOrWhiteSpace(filter))
         {

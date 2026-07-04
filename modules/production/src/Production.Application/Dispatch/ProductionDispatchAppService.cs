@@ -51,7 +51,7 @@ public class ProductionDispatchAppService : ProductionAppService, IProductionDis
                 .WithData("AcceptedQuantity", order.AcceptedQuantity);
         }
 
-        var notes = $"صرف إنتاج من أمر الطبخ {order.OrderNumber}.";
+        var notes = $"Production dispatch from cook order {order.OrderNumber}.";
         if (!string.IsNullOrWhiteSpace(input.Notes))
         {
             notes = $"{notes} {input.Notes.Trim()}";
@@ -71,17 +71,14 @@ public class ProductionDispatchAppService : ProductionAppService, IProductionDis
             RequestedQuantity = input.Quantity
         });
 
+        // Ship, don't complete: stock leaves the kitchen here (TransferOut) and the
+        // transfer rides the normal workflow — the DESTINATION branch confirms what
+        // actually arrived. Completing from the kitchen would both bypass that
+        // receipt check and fail authorization for a real kitchen manager, who
+        // doesn't manage the destination branch.
         transfer = await _stockTransferAppService.SubmitAsync(transfer.Id);
         transfer = await _stockTransferAppService.ApproveAsync(transfer.Id);
         transfer = await _stockTransferAppService.ShipAsync(transfer.Id);
-        transfer = await _stockTransferAppService.CompleteAsync(transfer.Id, new CompleteStockTransferDto
-        {
-            Lines = transfer.Items.Select(i => new CompleteTransferLineDto
-            {
-                ItemId = i.Id,
-                TransferredQuantity = input.Quantity
-            }).ToList()
-        });
 
         var fulfilledQuantity = await ApplyRequestFulfillmentAsync(
             input.DestinationBranchId,

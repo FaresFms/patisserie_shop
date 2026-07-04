@@ -102,6 +102,13 @@
                         </div>
                     }
 
+                    @if (StatusHint() is { Length: > 0 } statusHint)
+                    {
+                        <SoftAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+                            @statusHint
+                        </SoftAlert>
+                    }
+
                     <!-- Items -->
                     <div>
                         <SoftStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
@@ -417,6 +424,24 @@
     private bool _canApprove;
     private bool _canCancel;
     private bool _canReceive;
+
+    /// <summary>Plain-language "what happens next" line, per status and role.</summary>
+    private string? StatusHint()
+    {
+        if (_po == null) return null;
+
+        return _po.Status switch
+        {
+            PurchaseOrderStatuses.Draft when _canEdit => OpsL["POHint:DraftMine"].Value,
+            PurchaseOrderStatuses.Draft => OpsL["POHint:Draft"].Value,
+            PurchaseOrderStatuses.Submitted when _canApprove => OpsL["POHint:SubmittedApprover"].Value,
+            PurchaseOrderStatuses.Submitted => OpsL["POHint:Submitted"].Value,
+            PurchaseOrderStatuses.Approved when _canReceive => OpsL["POHint:ApprovedReceiver"].Value,
+            PurchaseOrderStatuses.Approved => OpsL["POHint:Approved"].Value,
+            PurchaseOrderStatuses.PartialReceived when _canReceive => OpsL["POHint:Partial"].Value,
+            _ => null
+        };
+    }
 
     private bool _addItemVisible;
     private List<ProductLookupDto> _availableProducts = new();

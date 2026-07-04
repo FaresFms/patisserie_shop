@@ -12,6 +12,7 @@ using Volo.Abp.Domain.Entities;
 using Volo.Abp.EventBus.Distributed;
 using Volo.Abp.Identity;
 using Volo.Abp.Security.Claims;
+using Volo.Abp.Settings;
 
 namespace patisserie_shop.Decisions;
 
@@ -58,6 +59,7 @@ public class DecisionAutopilotHandler : IDistributedEventHandler<DecisionMadeEto
     private readonly IStockTransferAppService _stockTransferAppService;
     private readonly IIdentityUserRepository _identityUserRepository;
     private readonly ICurrentPrincipalAccessor _currentPrincipalAccessor;
+    private readonly ISettingProvider _settingProvider;
     private readonly ILogger<DecisionAutopilotHandler> _logger;
 
     public DecisionAutopilotHandler(
@@ -68,6 +70,7 @@ public class DecisionAutopilotHandler : IDistributedEventHandler<DecisionMadeEto
         IStockTransferAppService stockTransferAppService,
         IIdentityUserRepository identityUserRepository,
         ICurrentPrincipalAccessor currentPrincipalAccessor,
+        ISettingProvider settingProvider,
         ILogger<DecisionAutopilotHandler> logger)
     {
         _decisionLogAppService = decisionLogAppService;
@@ -77,6 +80,7 @@ public class DecisionAutopilotHandler : IDistributedEventHandler<DecisionMadeEto
         _stockTransferAppService = stockTransferAppService;
         _identityUserRepository = identityUserRepository;
         _currentPrincipalAccessor = currentPrincipalAccessor;
+        _settingProvider = settingProvider;
         _logger = logger;
     }
 
@@ -112,6 +116,17 @@ public class DecisionAutopilotHandler : IDistributedEventHandler<DecisionMadeEto
 
     private async Task RunAutopilotAsync(DecisionMadeEto eventData)
     {
+        // Shop-wide master switch (Setup → Shop settings → "Let the system prepare
+        // orders automatically"). When off, every decision stays Pending as a plain
+        // suggestion regardless of the per-rule ActionMode — the owner reviews and
+        // acts by hand. Defaults to true so out-of-the-box behavior is unchanged.
+        var autopilotEnabled = await _settingProvider.GetAsync(
+            patisserie_shop.Settings.patisserie_shopSettings.AutopilotEnabled, defaultValue: true);
+        if (!autopilotEnabled)
+        {
+            return;
+        }
+
         var decision = await _decisionLogAppService.GetAsync(eventData.DecisionLogId);
 
         InventoryRuleDto rule;

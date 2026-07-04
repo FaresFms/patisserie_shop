@@ -223,7 +223,8 @@ AppDecisionLog constructor fires DecisionMadeEto
 | ETO | Published By | Handled By | Module |
 |-----|-------------|------------|--------|
 | StockChangedEto | AppBranchInventory.UpdateStock() | StockChangedEventHandler → DecisionMakerService | Inventory → Intelligence |
-| TransferCompletedEto | AppStockTransfer | StockMovementService | Operations |
+| TransferCompletedEto | AppStockTransfer.Complete() | transfer bookkeeping | Operations |
+| TransferStatusChangedEto | AppStockTransfer (every transition: Submit/Approve/Ship/Complete/Reject/Cancel) | TransferStatusChangedEventHandler → NotificationBell action counters | Operations → Blazor host |
 | PurchaseReceivedEto | AppPurchaseOrder | StockMovementService | Operations |
 | SaleRecordedEto | AppSale | InventoryService | Operations |
 | DecisionMadeEto | AppDecisionLog constructor | SignalR Hub | Intelligence |

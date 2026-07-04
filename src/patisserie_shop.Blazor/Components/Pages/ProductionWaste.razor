@@ -414,6 +414,7 @@
 
     protected override async Task OnInitializedAsync()
     {
+        await LoadShopCurrencyAsync();
         _canWriteOff = await Authz.IsGrantedAsync(ProductionPermissions.Waste.WriteOff);
         _branches = await BranchAppService.GetLookupAsync();
         _wasteTypeOptions =
@@ -598,8 +599,8 @@
     private string FormatWasteType(string type) => ProdL[$"WasteType:{type}"].Value;
     private string FormatReason(string reason) => ProdL[$"Reason:{reason}"].Value;
     private string FormatMaybeReason(string? reason) => string.IsNullOrWhiteSpace(reason) ? "-" : FormatReason(reason);
-    private static string FormatMoney(decimal value) => value.ToString("C0", CultureInfo.GetCultureInfo("en-US"));
-    private static string FormatMoneyExact(decimal value) => value.ToString("C2", CultureInfo.GetCultureInfo("en-US"));
+    private string FormatMoney(decimal value) => FormatShopMoney(value, 0);
+    private string FormatMoneyExact(decimal value) => FormatShopMoney(value, 2);
 
     private sealed record Option(string Value, string Label);
 }
