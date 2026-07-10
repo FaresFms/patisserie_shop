@@ -71,7 +71,8 @@ public class BranchInventoryManager : DomainService
         string? notes = null,
         Guid? referenceId = null,
         string? referenceType = null,
-        DateTime? batchExpiryDate = null)
+        DateTime? batchExpiryDate = null,
+        DateTime? batchProductionDate = null)
     {
         var result = await AdjustStockDetailedAsync(
             inventory,
@@ -80,7 +81,8 @@ public class BranchInventoryManager : DomainService
             notes,
             referenceId,
             referenceType,
-            batchExpiryDate);
+            batchExpiryDate,
+            batchProductionDate);
 
         return result.Movement;
     }
@@ -92,7 +94,8 @@ public class BranchInventoryManager : DomainService
         string? notes = null,
         Guid? referenceId = null,
         string? referenceType = null,
-        DateTime? batchExpiryDate = null)
+        DateTime? batchExpiryDate = null,
+        DateTime? batchProductionDate = null)
     {
         Check.NotNull(inventory, nameof(inventory));
 
@@ -145,7 +148,8 @@ public class BranchInventoryManager : DomainService
             delta,
             movementType,
             referenceId,
-            batchExpiryDate);
+            batchExpiryDate,
+            batchProductionDate);
 
         return new StockAdjustmentResult(movement, consumedBatches);
     }
@@ -156,7 +160,8 @@ public class BranchInventoryManager : DomainService
     ///                (non-expired earliest-expiry first, then expired oldest first);
     ///   delta &gt; 0 → if the product is perishable (ShelfLifeDays set), create ONE
     ///                batch of |delta| using the explicit expiry date when supplied,
-    ///                otherwise expiring at utcToday + ShelfLifeDays.
+    ///                else expiring at productionDate + ShelfLifeDays when the caller
+    ///                knows when the goods were made, else utcToday + ShelfLifeDays.
     /// The whole block is try/catch-logged: batch bookkeeping is best-effort and a
     /// failure here must never roll back the stock operation.
     /// </summary>
@@ -165,7 +170,8 @@ public class BranchInventoryManager : DomainService
         int delta,
         string movementType,
         Guid? referenceId,
-        DateTime? batchExpiryDate)
+        DateTime? batchExpiryDate,
+        DateTime? batchProductionDate)
     {
         try
         {
@@ -185,6 +191,7 @@ public class BranchInventoryManager : DomainService
                 var product = await _productRepository.FindAsync(inventory.ProductId);
                 if (product?.ShelfLifeDays is int shelfLifeDays)
                 {
+                    batchExpiryDate ??= batchProductionDate?.Date.AddDays(shelfLifeDays);
                     if (batchExpiryDate.HasValue)
                     {
                         await _stockBatchManager.CreateAsync(

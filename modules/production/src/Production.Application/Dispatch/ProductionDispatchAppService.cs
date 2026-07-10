@@ -78,7 +78,8 @@ public class ProductionDispatchAppService : ProductionAppService, IProductionDis
         // doesn't manage the destination branch.
         transfer = await _stockTransferAppService.SubmitAsync(transfer.Id);
         transfer = await _stockTransferAppService.ApproveAsync(transfer.Id);
-        transfer = await _stockTransferAppService.ShipAsync(transfer.Id);
+        // Empty Lines → ship every item at its approved quantity (the full dispatch).
+        transfer = await _stockTransferAppService.ShipAsync(transfer.Id, new ShipStockTransferDto());
 
         var fulfilledQuantity = await ApplyRequestFulfillmentAsync(
             input.DestinationBranchId,

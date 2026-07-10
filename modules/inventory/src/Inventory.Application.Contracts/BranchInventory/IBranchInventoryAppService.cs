@@ -22,6 +22,13 @@ public interface IBranchInventoryAppService : IApplicationService
 
     Task<BranchInventoryDto> AdjustStockAsync(Guid id, AdjustStockDto input);
 
+    /// <summary>
+    /// One-click write-off of every expired unit currently on hand for this
+    /// product+branch. The quantity is recomputed server-side (never trusted from the
+    /// client) and removed via a WriteOff movement, which clears expired batches first.
+    /// </summary>
+    Task<BranchInventoryDto> WriteOffExpiredAsync(Guid id);
+
     Task<BranchInventoryDto> UpdateLimitsAsync(Guid id, UpdateStockLimitsDto input);
 
     Task DeleteAsync(Guid id);

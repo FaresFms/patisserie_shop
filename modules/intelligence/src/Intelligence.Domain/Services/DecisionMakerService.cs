@@ -39,8 +39,17 @@ public class DecisionMakerService : DomainService
         _localizer = localizer;
     }
 
-    public async Task EvaluateAsync(StockChangedEto eto)
+    /// <summary>
+    /// Evaluates the real-time rules for a stock change. <paramref name="expiredQuantity"/>
+    /// is the number of on-hand units sitting in already-expired batches (advisory,
+    /// from the best-effort batch ledger): LowStock and DaysOfCover judge the SELLABLE
+    /// quantity (on hand minus expired) so a shelf full of expired goods still raises
+    /// alerts, while ExcessStock keeps judging total on-hand.
+    /// </summary>
+    public async Task EvaluateAsync(StockChangedEto eto, int expiredQuantity = 0)
     {
+        var sellableQty = Math.Max(0, eto.NewQty - Math.Max(0, expiredQuantity));
+
         var queryable = (await _rulesRepo.GetQueryableAsync())
             .Where(r => r.IsActive
                 && (r.ProductId == null || r.ProductId == eto.ProductId)
@@ -63,11 +72,11 @@ public class DecisionMakerService : DomainService
         {
             if (rule.RuleType == "LowStock" && rule.ThresholdValue.HasValue)
             {
-                if (eto.NewQty < rule.ThresholdValue.Value)
+                if (sellableQty < rule.ThresholdValue.Value)
                 {
                     await TryCreateLogAsync(raisedTypes, rule, eto.ProductId, eto.BranchId, "LowStockAlert",
-                        _localizer["DecisionReasoning:LowStock", eto.NewQty, rule.ThresholdValue, rule.RuleName],
-                        stockAtEval: eto.NewQty);
+                        _localizer["DecisionReasoning:LowStock", sellableQty, rule.ThresholdValue, rule.RuleName],
+                        stockAtEval: sellableQty);
                 }
             }
             else if (rule.RuleType == "ExcessStock" && rule.ThresholdValue.HasValue)
@@ -101,17 +110,17 @@ public class DecisionMakerService : DomainService
                     if (ForecastWalker.IsFlat(indices))
                     {
                         // No weekday pattern → plain division, exactly as before.
-                        var daysOfCover = eto.NewQty / avgDailySales30;
+                        var daysOfCover = sellableQty / avgDailySales30;
                         if (daysOfCover < rule.ThresholdValue.Value)
                         {
                             await TryCreateLogAsync(raisedTypes, rule, eto.ProductId, eto.BranchId, DecisionTypes.StockoutRisk,
                                 _localizer[
                                     "DecisionReasoning:StockoutRisk:Flat",
-                                    eto.NewQty,
+                                    sellableQty,
                                     Math.Round(daysOfCover, 1),
                                     rule.ThresholdValue,
                                     rule.RuleName],
-                                stockAtEval: eto.NewQty);
+                                stockAtEval: sellableQty);
                         }
                     }
                     else
@@ -120,18 +129,18 @@ public class DecisionMakerService : DomainService
                         // the nightly StockoutRisk sweep (30-day horizon cap).
                         var tomorrow = Clock.Now.ToUniversalTime().Date.AddDays(1).DayOfWeek;
                         var daysUntilStockout = ForecastWalker.DaysUntilDepletion(
-                            eto.NewQty, avgDailySales30, indices, tomorrow, ForecastHorizonDays);
+                            sellableQty, avgDailySales30, indices, tomorrow, ForecastHorizonDays);
 
                         if (daysUntilStockout is int depletionDay && depletionDay < rule.ThresholdValue.Value)
                         {
                             await TryCreateLogAsync(raisedTypes, rule, eto.ProductId, eto.BranchId, DecisionTypes.StockoutRisk,
                                 _localizer[
                                     "DecisionReasoning:StockoutRisk",
-                                    eto.NewQty,
+                                    sellableQty,
                                     depletionDay,
                                     rule.ThresholdValue,
                                     rule.RuleName],
-                                stockAtEval: eto.NewQty);
+                                stockAtEval: sellableQty);
                         }
                     }
                 }

@@ -30,5 +30,5 @@ public class ShopSettingsDto
     [Range(0, 100000)]
     public int DefaultMinimumStock { get; set; } = 5;
 
-    public bool AutopilotEnabled { get; set; } = true;
+    public bool AutopilotEnabled { get; set; } = false;
 }

@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Inventory;
 using Inventory.BranchInventory;
 using Inventory.Entities;
+using Inventory.StockBatches;
 using Microsoft.AspNetCore.Authorization;
 using Operations.Cashiers;
 using Operations.Entities;
@@ -13,6 +14,7 @@ using Operations.Sales;
 using Volo.Abp;
 using Volo.Abp.Domain.Repositories;
 using Volo.Abp.Identity;
+using Volo.Abp.Settings;
 using Volo.Abp.Users;
 
 namespace Operations.Cashier;
@@ -38,6 +40,8 @@ public class CashierAppService : OperationsAppService, ICashierAppService
     private readonly IRepository<AppProduct, Guid> _productRepository;
     private readonly IRepository<AppBranch, Guid> _branchRepository;
     private readonly IRepository<IdentityUser, Guid> _userRepository;
+    private readonly ISettingProvider _settingProvider;
+    private readonly IStockBatchRepository _stockBatchRepository;
 
     public CashierAppService(
         ISaleRepository saleRepository,
@@ -48,7 +52,9 @@ public class CashierAppService : OperationsAppService, ICashierAppService
         IBranchInventoryRepository branchInventoryRepository,
         IRepository<AppProduct, Guid> productRepository,
         IRepository<AppBranch, Guid> branchRepository,
-        IRepository<IdentityUser, Guid> userRepository)
+        IRepository<IdentityUser, Guid> userRepository,
+        ISettingProvider settingProvider,
+        IStockBatchRepository stockBatchRepository)
     {
         _saleRepository = saleRepository;
         _shiftRepository = shiftRepository;
@@ -59,6 +65,8 @@ public class CashierAppService : OperationsAppService, ICashierAppService
         _productRepository = productRepository;
         _branchRepository = branchRepository;
         _userRepository = userRepository;
+        _settingProvider = settingProvider;
+        _stockBatchRepository = stockBatchRepository;
     }
 
     // ─── Shifts ───
@@ -253,7 +261,7 @@ public class CashierAppService : OperationsAppService, ICashierAppService
             input.BranchId,
             invoiceNumber: null,
             saleDate: Clock.Now,
-            currency: "USD",
+            currency: await GetDefaultCurrencyAsync(),
             notes: null);
 
         // 2) Materialise items — unit price is ALWAYS the product's SalePrice (server-set).
@@ -271,6 +279,36 @@ public class CashierAppService : OperationsAppService, ICashierAppService
             x => x.BranchId == sale.BranchId && productIds.Contains(x.ProductId));
         var invByProduct = inventories.ToDictionary(x => x.ProductId);
         var stockSnapshot = invByProduct.ToDictionary(kv => kv.Key, kv => kv.Value.QuantityOnHand);
+
+        // 3b) Expired-stock guard: FEFO sells fresh batches first, so only warn when the
+        //     requested quantity MUST dip into expired units (qty > on hand − expired).
+        //     The cashier can confirm and retry with AcknowledgeExpiredStock (e.g. when
+        //     clearing old stock at a discount) — the sale is warned, never hard-blocked.
+        if (!input.AcknowledgeExpiredStock)
+        {
+            var todayUtc = Clock.Now.ToUniversalTime().Date;
+            var expiredProductNames = new List<string>();
+            foreach (var item in sale.Items)
+            {
+                if (!invByProduct.TryGetValue(item.ProductId, out var itemInv))
+                {
+                    continue; // Missing inventory row is reported by sale.Record below.
+                }
+
+                var expired = await _stockBatchRepository.GetExpiredQuantityAsync(
+                    sale.BranchId, item.ProductId, todayUtc);
+                if (expired > 0 && item.Quantity > itemInv.QuantityOnHand - expired)
+                {
+                    expiredProductNames.Add(receiptNames.GetValueOrDefault(item.ProductId, "-"));
+                }
+            }
+
+            if (expiredProductNames.Count > 0)
+            {
+                throw new BusinessException(OperationsErrorCodes.SaleIncludesExpiredStock)
+                    .WithData("Products", string.Join(", ", expiredProductNames));
+            }
+        }
 
         // 4) Domain validates stock and raises SaleRecordedEto.
         sale.Record(stockSnapshot);
@@ -413,6 +451,16 @@ public class CashierAppService : OperationsAppService, ICashierAppService
     }
 
     // ─── Helpers ───
+
+    /// <summary>
+    /// The shop's configured currency. The setting is defined in the host project, so the
+    /// key is referenced by its literal name (same pattern as ProductionOrderAppService).
+    /// </summary>
+    private async Task<string> GetDefaultCurrencyAsync()
+    {
+        var currency = await _settingProvider.GetOrNullAsync("patisserie_shop.Operations.DefaultCurrency");
+        return string.IsNullOrWhiteSpace(currency) ? "USD" : currency.Trim().ToUpperInvariant();
+    }
 
     /// <summary>
     /// The branch a cashier is assigned to, parsed from their persistent

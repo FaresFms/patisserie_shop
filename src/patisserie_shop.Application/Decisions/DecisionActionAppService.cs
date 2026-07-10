@@ -96,7 +96,10 @@ public class DecisionActionAppService : patisserie_shopAppService, IDecisionActi
         _purchaseOrderRepository = purchaseOrderRepository;
     }
 
-    public async Task<DecisionActionResultDto> ExecuteDecisionAsync(Guid decisionLogId)
+    /// <summary>Notes prefix marking a document the rule autopilot created (not a human).</summary>
+    private const string AutopilotNotesTag = "[Auto] ";
+
+    public async Task<DecisionActionResultDto> ExecuteDecisionAsync(Guid decisionLogId, bool createdByAutopilot = false)
     {
         var decision = await _decisionLogAppService.GetAsync(decisionLogId);
 
@@ -105,9 +108,9 @@ public class DecisionActionAppService : patisserie_shopAppService, IDecisionActi
         var result = decision.DecisionType switch
         {
             DecisionTypes.LowStockAlert or DecisionTypes.ReorderSuggestion or DecisionTypes.StockoutRisk
-                => await CreateDraftPurchaseOrderAsync(decision),
+                => await CreateDraftPurchaseOrderAsync(decision, createdByAutopilot),
             DecisionTypes.TransferSuggestion
-                => await CreateDraftStockTransferAsync(decision),
+                => await CreateDraftStockTransferAsync(decision, createdByAutopilot),
             DecisionTypes.WasteWriteOff
                 => await ExecuteWasteWriteOffAsync(decision),
             _ => new DecisionActionResultDto { ActionCreated = false }
@@ -275,9 +278,7 @@ public class DecisionActionAppService : patisserie_shopAppService, IDecisionActi
             DestBranchId = branchId,
             OrderDate = DateTime.Today,
             Currency = members[0].Product.Currency,
-            Notes = TruncateNotes(
-                $"Created automatically from {members.Count} stock decision(s) on {DateTime.Today:yyyy-MM-dd}.\n" +
-                "Similar lines were consolidated into one purchase order for easier follow-up.")
+            Notes = TruncateNotes(L["AutoNote:Consolidated", members.Count, DateTime.Today.ToString("yyyy-MM-dd")])
         });
 
         foreach (var line in lines.Values)
@@ -321,7 +322,8 @@ public class DecisionActionAppService : patisserie_shopAppService, IDecisionActi
     /// back to the Phase 1 refill: MaximumStock − current when a ceiling is set,
     /// otherwise max(reorderLevel × 2 − current, reorderLevel); always at least 1.
     /// </summary>
-    private async Task<DecisionActionResultDto> CreateDraftPurchaseOrderAsync(DecisionLogDto decision)
+    private async Task<DecisionActionResultDto> CreateDraftPurchaseOrderAsync(
+        DecisionLogDto decision, bool createdByAutopilot)
     {
         if (!decision.BranchId.HasValue)
         {
@@ -346,7 +348,10 @@ public class DecisionActionAppService : patisserie_shopAppService, IDecisionActi
             DestBranchId = branchId,
             OrderDate = DateTime.Today,
             Currency = product.Currency,
-            Notes = TruncateNotes($"Created automatically from stock decision:\n{decision.Id}\n{explanation}")
+            Notes = TruncateNotes(
+                Tag(createdByAutopilot)
+                + L["AutoNote:FromStockAlert", DateTime.Today.ToString("yyyy-MM-dd")] + "\n"
+                + explanation)
         });
 
         await _purchaseOrderAppService.AddItemAsync(po.Id, new AddPurchaseOrderItemDto
@@ -452,7 +457,8 @@ public class DecisionActionAppService : patisserie_shopAppService, IDecisionActi
     /// floored at 1 — surplus is stock above the source's own reorder level, so the
     /// source is never drained below it.
     /// </summary>
-    private async Task<DecisionActionResultDto> CreateDraftStockTransferAsync(DecisionLogDto decision)
+    private async Task<DecisionActionResultDto> CreateDraftStockTransferAsync(
+        DecisionLogDto decision, bool createdByAutopilot)
     {
         var plan = await ComputeStockTransferPlanAsync(decision);
 
@@ -461,9 +467,8 @@ public class DecisionActionAppService : patisserie_shopAppService, IDecisionActi
             FromBranchId = decision.SourceBranchId!.Value,
             ToBranchId = decision.TargetBranchId!.Value,
             RequestedDate = DateTime.Today,
-            Notes = $"Auto-created from decision {decision.Id}. " +
-                    $"Suggested qty {plan.Quantity} = min(max(target deficit {plan.TargetDeficit}, " +
-                    $"half source surplus {plan.SourceSurplus / 2}), source surplus {plan.SourceSurplus})."
+            Notes = Tag(createdByAutopilot)
+                    + L["AutoNote:TransferSuggested", plan.Quantity, plan.TargetDeficit, plan.SourceSurplus]
         });
 
         await _stockTransferAppService.AddItemAsync(transfer.Id, new AddStockTransferItemDto
@@ -496,7 +501,7 @@ public class DecisionActionAppService : patisserie_shopAppService, IDecisionActi
             ProductId = plan.Product.Id,
             SourceBranchId = decision.SourceBranchId,
             TargetBranchId = decision.TargetBranchId,
-            Notes = $"Suggested transfer quantity: {plan.Quantity}. The receiving branch is short {plan.TargetDeficit}; the source branch has a surplus of {plan.SourceSurplus}.",
+            Notes = L["AutoNote:TransferSuggested", plan.Quantity, plan.TargetDeficit, plan.SourceSurplus],
             Lines =
             {
                 new DecisionActionPreviewLineDto
@@ -585,7 +590,7 @@ public class DecisionActionAppService : patisserie_shopAppService, IDecisionActi
         {
             NewQuantity = inventory.QuantityOnHand - writeOffQty,
             MovementType = StockMovementTypes.WriteOff,
-            Notes = $"Waste write-off from decision {decision.Id}: {writeOffQty} expired unit(s) removed.",
+            Notes = L["AutoNote:WasteWriteOff", writeOffQty],
             ConcurrencyStamp = inventory.ConcurrencyStamp
         });
 
@@ -619,7 +624,7 @@ public class DecisionActionAppService : patisserie_shopAppService, IDecisionActi
                 ActionType = DecisionActionTypes.StockAdjustment,
                 ProductName = product.Name,
                 BranchName = decision.BranchName,
-                Notes = "No expired quantity right now. The decision will be closed without recording a write-off."
+                Notes = L["WriteOffPreview:NothingExpired"]
             };
         }
 
@@ -636,7 +641,7 @@ public class DecisionActionAppService : patisserie_shopAppService, IDecisionActi
                 ActionType = DecisionActionTypes.StockAdjustment,
                 ProductName = product.Name,
                 BranchName = decision.BranchName,
-                Notes = "No stock available to write off right now. The decision will be closed without recording a write-off."
+                Notes = L["WriteOffPreview:NoStock"]
             };
         }
 
@@ -647,7 +652,7 @@ public class DecisionActionAppService : patisserie_shopAppService, IDecisionActi
             ProductName = product.Name,
             BranchName = decision.BranchName,
             Quantity = writeOffQty,
-            Notes = $"{writeOffQty} unit(s) of expired stock will be written off and a stock movement recorded immediately.",
+            Notes = L["WriteOffPreview:Confirm", writeOffQty],
             Lines =
             {
                 new DecisionActionPreviewLineDto
@@ -712,10 +717,10 @@ public class DecisionActionAppService : patisserie_shopAppService, IDecisionActi
         {
             var measuredDays = Math.Max((int)Math.Round(measured, MidpointRounding.AwayFromZero), 0);
             return (measuredDays,
-                $"Lead time measured from the last {row.LeadTimeSampleSize} order(s): {measured:0.#} day(s)");
+                L["ReorderWhy:LeadMeasured", row.LeadTimeSampleSize, measured.ToString("0.#")]);
         }
 
-        return (configuredLeadTimeDays, $"Lead time from supplier settings: {configuredLeadTimeDays} day(s)");
+        return (configuredLeadTimeDays, L["ReorderWhy:LeadConfigured", configuredLeadTimeDays]);
     }
 
     /// <summary>
@@ -726,9 +731,10 @@ public class DecisionActionAppService : patisserie_shopAppService, IDecisionActi
     /// Without velocity (no row or zero avg) it keeps the Phase 1 refill formula.
     /// <paramref name="leadTimeDescriptor"/> labels which lead time (measured vs
     /// configured) drove the cover days, for the human-readable PO notes.
-    /// Returns the quantity plus that explanation.
+    /// Returns the quantity plus a plain-language, conclusion-first explanation —
+    /// the reader is a shop manager, not a supply-chain analyst.
     /// </summary>
-    private static (int Quantity, string Explanation) ComputeReorderQuantity(
+    private (int Quantity, string Explanation) ComputeReorderQuantity(
         decimal? avgDailySales30,
         int leadTimeDays,
         string leadTimeDescriptor,
@@ -751,15 +757,11 @@ public class DecisionActionAppService : patisserie_shopAppService, IDecisionActi
                 capped = true;
             }
 
+            // Conclusion first, detail after.
             var explanation =
-                $"Why this order:\n" +
-                $"- Average daily sales over 30 days: {avg:0.##}\n" +
-                $"- Cover needed: {leadTimeDays} supply day(s) + 7 operating days\n" +
-                $"- Safety stock: {safety}\n" +
-                $"- Target quantity: {targetQty}; currently on hand: {currentQty}\n" +
-                $"- Suggested order quantity: {quantity}\n" +
-                $"- {leadTimeDescriptor}" +
-                (capped ? $"\n- Quantity was capped by the maximum stock limit: {maximumStock!.Value}." : ".");
+                L["ReorderWhy:Velocity", quantity, coverDays, avg.ToString("0.##"), currentQty, targetQty]
+                + "\n" + leadTimeDescriptor
+                + (capped ? "\n" + L["ReorderWhy:Capped", maximumStock!.Value] : "");
 
             return (quantity, explanation);
         }
@@ -770,17 +772,15 @@ public class DecisionActionAppService : patisserie_shopAppService, IDecisionActi
             : Math.Max(reorderLevel * 2 - currentQty, reorderLevel);
         fallbackQty = Math.Max(fallbackQty, 1);
 
-        var fallbackExplanation =
-            $"Why this order:\n" +
-            "- Not enough sales history to size the order from sales velocity.\n" +
-            $"- Currently on hand: {currentQty}\n" +
-            $"- Suggested order quantity: {fallbackQty}\n" +
-            (maximumStock != null
-                ? $"- Goal: refill up to the maximum stock limit: {maximumStock.Value}."
-                : $"- Based on the reorder level: {reorderLevel}.");
+        var fallbackExplanation = maximumStock != null
+            ? L["ReorderWhy:FallbackToMax", fallbackQty, currentQty, maximumStock.Value].Value
+            : L["ReorderWhy:FallbackToReorderLevel", fallbackQty, currentQty, reorderLevel].Value;
 
         return (fallbackQty, fallbackExplanation);
     }
+
+    /// <summary>Autopilot marker for document notes; empty for human-initiated actions.</summary>
+    private static string Tag(bool createdByAutopilot) => createdByAutopilot ? AutopilotNotesTag : string.Empty;
 
     /// <summary>Keeps auto-generated notes inside the PO Notes column limit.</summary>
     private static string TruncateNotes(string notes)

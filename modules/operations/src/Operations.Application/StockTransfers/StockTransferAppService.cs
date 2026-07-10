@@ -291,14 +291,20 @@ public class StockTransferAppService : OperationsAppService, IStockTransferAppSe
     /// The consumed expiry batches are recorded per item and replayed on receive.
     /// </summary>
     [Authorize(OperationsPermissions.Transfers.Ship)]
-    public async Task<StockTransferDto> ShipAsync(Guid id)
+    public async Task<StockTransferDto> ShipAsync(Guid id, ShipStockTransferDto input)
     {
         var transfer = await _transferRepository.GetWithItemsAsync(id);
         var sourceBranchId = EnsureSourceAssigned(transfer);
         await EnsureManagedBranchAsync(sourceBranchId);
-        var sourceByProduct = await EnsureSourceStockAvailableAsync(transfer, sourceBranchId);
 
-        var lines = transfer.Ship(CurrentUser.Id);
+        // Per-item quantities the packer chose to ship (may be short). Missing → approved.
+        var shippedByItem = input.Lines.ToDictionary(l => l.ItemId, l => l.ShippedQuantity);
+
+        // Validate the source can cover exactly what's being shipped — not the approved
+        // figure — so a short shipment of what's on hand is allowed.
+        var sourceByProduct = await EnsureSourceStockAvailableAsync(transfer, sourceBranchId, shippedByItem);
+
+        var lines = transfer.Ship(shippedByItem, CurrentUser.Id);
         var reference = BuildReference(transfer.Id);
 
         foreach (var line in lines)
@@ -530,6 +536,7 @@ public class StockTransferAppService : OperationsAppService, IStockTransferAppSe
         ProductUnit = product?.Unit ?? "-",
         RequestedQuantity = item.RequestedQuantity,
         ApprovedQuantity = item.ApprovedQuantity,
+        ShippedQuantity = item.ShippedQuantity,
         TransferredQuantity = item.TransferredQuantity
     };
 
@@ -640,9 +647,12 @@ public class StockTransferAppService : OperationsAppService, IStockTransferAppSe
 
         foreach (var item in transfer.Items)
         {
+            var approved = item.ApprovedQuantity ?? item.RequestedQuantity;
+            // Match the domain's clamp so validation checks the amount that will really
+            // ship — a client sending more than approved can't demand more source stock.
             var qty = quantitiesByItem != null && quantitiesByItem.TryGetValue(item.Id, out var supplied)
-                ? supplied
-                : (item.ApprovedQuantity ?? item.RequestedQuantity);
+                ? Math.Clamp(supplied, 0, approved)
+                : approved;
             if (qty <= 0)
             {
                 continue;

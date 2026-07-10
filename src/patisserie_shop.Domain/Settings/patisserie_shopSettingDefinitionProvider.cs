@@ -59,7 +59,10 @@ public class patisserie_shopSettingDefinitionProvider : SettingDefinitionProvide
 
             new SettingDefinition(
                 patisserie_shopSettings.AutopilotEnabled,
-                defaultValue: "true",
+                // Off by default: automation that creates and submits orders as the admin
+                // is opt-in. The owner turns it on in Setup → Shop settings after they
+                // trust the suggestions.
+                defaultValue: "false",
                 displayName: L("Setting:AutopilotEnabled"),
                 description: L("Setting:AutopilotEnabled:Desc"),
                 isVisibleToClients: true)

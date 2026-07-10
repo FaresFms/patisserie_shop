@@ -250,7 +250,7 @@ public class ProductionOrderAppService : ProductionAppService, IProductionOrderA
     {
         var order = await _orderRepository.GetWithDetailsAsync(id);
         var finishedProduct = await _productRepository.GetAsync(order.FinishedProductId);
-        var expiryDate = ResolveExpiryDate(input.ExpiryDate, finishedProduct);
+        var expiryDate = ResolveExpiryDate(input.ExpiryDate, finishedProduct, order);
 
         var output = order.Complete(
             input.ActualOutputQuantity,
@@ -322,7 +322,7 @@ public class ProductionOrderAppService : ProductionAppService, IProductionOrderA
         return await MapToDtoAsync(order);
     }
 
-    private DateTime ResolveExpiryDate(DateTime? requestedExpiryDate, AppProduct product)
+    private DateTime ResolveExpiryDate(DateTime? requestedExpiryDate, AppProduct product, AppProductionOrder order)
     {
         if (requestedExpiryDate.HasValue)
         {
@@ -331,7 +331,11 @@ public class ProductionOrderAppService : ProductionAppService, IProductionOrderA
 
         if (product.ShelfLifeDays.HasValue)
         {
-            return Clock.Now.Date.AddDays(product.ShelfLifeDays.Value);
+            // Shelf life counts from when cooking actually started, not from when
+            // the completion was recorded — completing an order the next morning
+            // must not stretch the product's life by a day.
+            var cookedDate = order.ActualStartTime?.Date ?? Clock.Now.Date;
+            return cookedDate.AddDays(product.ShelfLifeDays.Value);
         }
 
         throw new BusinessException(ProductionErrorCodes.ProductionExpiryDateRequired)

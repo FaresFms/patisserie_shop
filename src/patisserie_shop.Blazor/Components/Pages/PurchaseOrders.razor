@@ -36,7 +36,7 @@
     <div class="page-head">
         <div>
             <h1 class="page-title">@OpsL["PurchaseOrders"]</h1>
-            <div class="page-sub">Incoming stock orders from suppliers.</div>
+            <div class="page-sub">@OpsL["PurchaseOrders:Subtitle"]</div>
         </div>
         <div class="page-head-actions">
             @if (_canCreate)
@@ -132,6 +132,22 @@
                         </div>
                     </CellTemplate>
                 </TemplateColumn>
+                <TemplateColumn T="PurchaseOrderDto" Title="@OpsL["NextStep"]" Sortable="false">
+                    <CellTemplate>
+                        @{ var step = NextStep(context.Item); }
+                        @if (step.Mine)
+                        {
+                            <span class="po-next po-next-mine">
+                                <MudIcon Icon="@Icons.Material.Filled.TouchApp" Size="Size.Small" />
+                                @step.Label
+                            </span>
+                        }
+                        else
+                        {
+                            <span class="po-next">@step.Label</span>
+                        }
+                    </CellTemplate>
+                </TemplateColumn>
                 <TemplateColumn T="PurchaseOrderDto" Title="@OpsL["OrderDate"]" SortBy="x => x.OrderDate">
                     <CellTemplate>
                         <SoftText Typo="Typo.body2">@context.Item.OrderDate.ToString("MMM d, yyyy")</SoftText>
@@ -192,7 +208,7 @@
                 <SoftCardContent Class="pa-4">
                     <SoftStack Spacing="3">
                         <SoftAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
-                            Step 1 of 2 — set up the order header. You'll add products in the next step.
+                            @OpsL["PurchaseOrders:NewIntro"]
                         </SoftAlert>
                         <SoftLookupSelect TItem="SupplierDto" TValue="Guid?"
                                           Items="_suppliers"
@@ -241,7 +257,7 @@
                                 EndIcon="@Icons.Material.Filled.ArrowForward"
                                 OnClick="ConfirmCreateAsync"
                                 Disabled="_saving">
-                        Save & add items
+                        @OpsL["SaveAndAddItems"]
                     </SoftButton>
                 </div>
             </SoftCard>
@@ -276,6 +292,15 @@
     html[data-theme="dark"] .po-status-partialreceived { color: #fde68a; }
     html[data-theme="dark"] .po-status-received        { color: #5eead4; }
     html[data-theme="dark"] .po-status-cancelled       { color: #fca5a5; }
+
+    .po-next {
+        display: inline-flex; align-items: center; gap: 4px;
+        font-size: 0.82rem; color: var(--fg-3);
+    }
+    .po-next-mine {
+        color: var(--accent);
+        font-weight: 600;
+    }
 </style>
 
 @code {
@@ -283,6 +308,9 @@
     private bool _loading;
     private bool _saving;
     private bool _canCreate;
+    private bool _canSubmit;
+    private bool _canApprove;
+    private bool _canReceive;
 
     private string? _filter;
     private string? _statusFilter;
@@ -357,6 +385,9 @@
     protected override async Task OnInitializedAsync()
     {
         _canCreate = await AuthorizationService.IsGrantedAsync(OperationsPermissions.PurchaseOrders.Create);
+        _canSubmit = await AuthorizationService.IsGrantedAsync(OperationsPermissions.PurchaseOrders.Submit);
+        _canApprove = await AuthorizationService.IsGrantedAsync(OperationsPermissions.PurchaseOrders.Approve);
+        _canReceive = await AuthorizationService.IsGrantedAsync(OperationsPermissions.PurchaseOrders.Receive);
 
         _statusOptions = PurchaseOrderStatuses.All
             .Select(s => new StatusOption(s, OpsL[$"Status:{s}"]))
@@ -568,7 +599,7 @@
             _pendingItemPrice = null;
             _sourceDecisionId = null;
 
-            Snackbar.Add($"PO {created.PONumber} created — review the items and submit.", Severity.Success);
+            Snackbar.Add(string.Format(OpsL["PurchaseOrderCreatedToast"], created.PONumber), Severity.Success);
             _createVisible = false;
             _detailId = created.Id;
             await ReloadAsync();
@@ -582,6 +613,25 @@
             _saving = false;
         }
     }
+
+    private (string Label, bool Mine) NextStep(PurchaseOrderDto po) => po.Status switch
+    {
+        PurchaseOrderStatuses.Draft => _canSubmit
+            ? (OpsL["PONextStep:Submit"].Value, true)
+            : (OpsL["PONextStep:WaitingDraft"].Value, false),
+        PurchaseOrderStatuses.Submitted => _canApprove
+            ? (OpsL["PONextStep:Approve"].Value, true)
+            : (OpsL["PONextStep:WaitingApproval"].Value, false),
+        PurchaseOrderStatuses.Approved => _canReceive
+            ? (OpsL["PONextStep:Receive"].Value, true)
+            : (OpsL["PONextStep:WaitingDelivery"].Value, false),
+        PurchaseOrderStatuses.PartialReceived => _canReceive
+            ? (OpsL["PONextStep:ReceiveRest"].Value, true)
+            : (OpsL["PONextStep:WaitingDelivery"].Value, false),
+        PurchaseOrderStatuses.Received => (OpsL["PONextStep:Done"].Value, false),
+        PurchaseOrderStatuses.Cancelled => ("—", false),
+        _ => ("—", false)
+    };
 
     private static string StatusIcon(string status) => status switch
     {

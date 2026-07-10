@@ -17,6 +17,14 @@ public class BranchInventoryDto : EntityDto<Guid>
     public DateTime? LastRestockedDate { get; set; }
     public DateTime? LastSoldDate { get; set; }
     public string ConcurrencyStamp { get; set; } = null!;
+
+    /// <summary>
+    /// On-hand units sitting in already-expired batches (advisory, from the best-effort
+    /// batch ledger). These are not sellable — the write-off action clears them.
+    /// </summary>
+    public int ExpiredQuantity { get; set; }
+
+    public bool HasExpiredStock => ExpiredQuantity > 0;
     public bool IsLowStock => QuantityOnHand <= MinimumStock;
     public bool IsOutOfStock => QuantityOnHand <= 0;
 }

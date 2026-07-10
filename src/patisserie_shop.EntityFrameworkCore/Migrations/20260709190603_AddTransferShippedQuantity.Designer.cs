@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Volo.Abp.EntityFrameworkCore;
@@ -12,9 +13,11 @@ using patisserie_shop.EntityFrameworkCore;
 namespace patisserie_shop.Migrations
 {
     [DbContext(typeof(patisserie_shopDbContext))]
-    partial class patisserie_shopDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260709190603_AddTransferShippedQuantity")]
+    partial class AddTransferShippedQuantity
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

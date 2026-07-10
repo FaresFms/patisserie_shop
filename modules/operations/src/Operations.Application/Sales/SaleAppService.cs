@@ -192,8 +192,37 @@ public class SaleAppService : OperationsAppService, ISaleAppService
     [Authorize(OperationsPermissions.Sales.Delete)]
     public async Task DeleteAsync(Guid id)
     {
-        var sale = await _saleRepository.GetAsync(id);
-        // Soft delete via FullAuditedAggregateRoot; stock is not restored — admin decision.
+        var sale = await _saleRepository.GetWithItemsAsync(id);
+        await EnsureBranchAccessAsync(sale.BranchId);
+
+        // Deleting a mistaken sale means "this sale never happened" — put the goods
+        // back on the shelf, exactly like a void. A voided sale already restored its
+        // stock, so it is only soft-deleted.
+        if (!sale.IsVoided)
+        {
+            var productIds = sale.Items.Select(i => i.ProductId).Distinct().ToList();
+            var inventories = await _branchInventoryRepository.GetListAsync(
+                x => x.BranchId == sale.BranchId && productIds.Contains(x.ProductId));
+            var invByProduct = inventories.ToDictionary(x => x.ProductId);
+
+            foreach (var item in sale.Items)
+            {
+                if (!invByProduct.TryGetValue(item.ProductId, out var inv))
+                {
+                    continue; // No inventory row to restore into (product removed); skip safely.
+                }
+
+                await _inventoryManager.AdjustStockAsync(
+                    inv,
+                    inv.QuantityOnHand + item.Quantity,
+                    StockMovementTypes.SaleReturn,
+                    notes: sale.InvoiceNumber,
+                    referenceId: sale.Id,
+                    referenceType: nameof(AppSale));
+                await _branchInventoryRepository.UpdateAsync(inv);
+            }
+        }
+
         await _saleRepository.DeleteAsync(sale);
     }
 

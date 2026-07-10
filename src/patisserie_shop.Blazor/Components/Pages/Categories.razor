@@ -26,7 +26,7 @@
     <div class="page-head">
         <div>
             <h1 class="page-title">@InvL["Categories"]</h1>
-            <div class="page-sub">Organize products into groups.</div>
+            <div class="page-sub">@InvL["Categories:Subtitle"]</div>
         </div>
         <div class="page-head-actions">
             @if (_canManage)
@@ -176,13 +176,13 @@
                     <CardHeaderContent>
                         <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
                             <SoftIcon Icon="@Icons.Material.Filled.Warning" Color="Color.Error" Size="Size.Medium" />
-                            <SoftText Typo="Typo.h6">@L["AreYouSure"]</SoftText>
+                            <SoftText Typo="Typo.h6">@InvL["Categories:DeleteTitle"]</SoftText>
                         </SoftStack>
                     </CardHeaderContent>
                 </SoftCardHeader>
                 <SoftDivider />
                 <SoftCardContent Class="pa-4">
-                    <SoftText>@L["AreYouSureToDelete"]</SoftText>
+                    <SoftText>@InvL["Categories:DeleteConfirm", _pendingDelete?.Name ?? ""]</SoftText>
                 </SoftCardContent>
                 <SoftDivider />
                 <div class="pa-3 d-flex justify-end" style="gap: 8px;">
@@ -191,7 +191,7 @@
                                 Color="Color.Error"
                                 StartIcon="@Icons.Material.Filled.Delete"
                                 OnClick="ConfirmDeleteAsync">
-                        @L["Yes"]
+                        @InvL["DeleteAction"]
                     </SoftButton>
                 </div>
             </SoftCard>

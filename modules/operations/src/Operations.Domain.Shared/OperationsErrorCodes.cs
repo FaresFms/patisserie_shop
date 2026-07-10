@@ -18,6 +18,7 @@ public static class OperationsErrorCodes
     public const string DuplicateProductInSale = "Operations:Sales:DuplicateProduct";
     public const string InsufficientStock = "Operations:Sales:InsufficientStock";
     public const string NoInventoryRow = "Operations:Sales:NoInventoryRow";
+    public const string SaleIncludesExpiredStock = "Operations:Sales:IncludesExpiredStock";
 
     // Cashier / cash drawer
     public const string NoOpenShift = "Operations:Cashier:NoOpenShift";
@@ -43,4 +44,5 @@ public static class OperationsErrorCodes
     public const string CannotApproveTransferItem = "Operations:Transfers:CannotApproveItem";
     public const string TransferRejectionReasonRequired = "Operations:Transfers:RejectionReasonRequired";
     public const string TransferReceivedExceedsShipped = "Operations:Transfers:ReceivedExceedsShipped";
+    public const string CannotShipNothing = "Operations:Transfers:CannotShipNothing";
 }

@@ -165,7 +165,7 @@
                                 <h2 class="bm-section-title">@L["MgrDash:MyStockHealth"]</h2>
                                 <div class="bm-section-sub">@L["MgrDash:StockHealthSub"]</div>
                             </div>
-                            <a class="bm-section-link" href="@($"/inventory/branch-inventory?branchId={_data.BranchId}")">@L["MgrDash:ViewAll"]</a>
+                            <a class="bm-section-link" href="@($"/inventory/branch-inventory?branchId={_data.BranchId}&low=true")">@L["MgrDash:ViewAll"]</a>
                         </header>
 
                         @if (_data.StockItems.Count == 0)
@@ -238,9 +238,10 @@
                                         <div class="bm-stock-action">
                                             @if (s.StockStatus == "Low")
                                             {
+                                                var item = s;
                                                 <SoftButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary"
                                                             StartIcon="@Icons.Material.Filled.AddShoppingCart"
-                                                            OnClick='() => Nav.NavigateTo("/operations/purchase-orders")'>
+                                                            OnClick="() => GoToReorder(item)">
                                                     @L["MgrDash:Reorder"]
                                                 </SoftButton>
                                             }
@@ -395,8 +396,9 @@
                             <div class="bm-transfers">
                                 @foreach (var t in _data.IncomingTransfers)
                                 {
+                                    var transferRow = t;
                                     <div class="bm-transfer bm-transfer-@(t.Status.ToLowerInvariant())"
-                                         @onclick='() => Nav.NavigateTo("/operations/stock-transfers?view=incoming")'>
+                                         @onclick='() => Nav.NavigateTo($"/operations/stock-transfers?view=incoming&detailId={transferRow.TransferId}")'>
                                         <div class="bm-transfer-icon">
                                             @if (t.Status == "InTransit")
                                             {
@@ -965,6 +967,20 @@
         {
             Nav.NavigateTo("/intelligence/decision-log");
         }
+    }
+
+    /// <summary>
+    /// Opens the New Purchase Order dialog pre-filled with this product, the manager's
+    /// branch and a suggested refill quantity — no context is lost on the way.
+    /// </summary>
+    private void GoToReorder(StockItemDto item)
+    {
+        var suggestedQty = Math.Max(
+            (item.MaximumStock ?? item.MinimumStock * 2) - item.QuantityOnHand, 1);
+
+        Nav.NavigateTo(
+            $"/operations/purchase-orders?new=true&branchId={_data!.BranchId}" +
+            $"&productId={item.ProductId}&qty={suggestedQty}");
     }
 
     private Task AcknowledgeAsync(Guid id) => RunActionAsync(id, DecisionLogAppService.AcknowledgeAsync);

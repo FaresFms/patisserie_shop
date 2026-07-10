@@ -1,3 +1,4 @@
+using System;
 using FluentValidation;
 using Inventory.BranchInventory;
 
@@ -17,6 +18,11 @@ public class AdjustStockDtoValidator : AbstractValidator<AdjustStockDto>
 
         RuleFor(x => x.Notes)
             .MaximumLength(512).WithMessage("Notes must not exceed 512 characters.");
+
+        RuleFor(x => x.ProductionDate)
+            // One-day slack absorbs the local-time vs UTC gap for shops ahead of UTC.
+            .Must(d => !d.HasValue || d.Value.Date <= DateTime.UtcNow.Date.AddDays(1))
+            .WithMessage("Production date cannot be in the future.");
     }
 }
 

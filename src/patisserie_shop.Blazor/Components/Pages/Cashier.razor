@@ -1,6 +1,7 @@
 @page "/cashier"
 @attribute [Authorize(OperationsPermissions.Cashier.Default)]
 @using System.Globalization
+@using System.Text.Json
 @using System.Threading.Tasks
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.JSInterop
@@ -55,7 +56,8 @@
                 <div class="pos-branch-fixed">@_myBranch.Name</div>
 
                 <div class="pos-field-label">@L["Cashier:OpeningFloat"]</div>
-                <div class="pos-amount-display">@FormatMoney(_floatEntry)</div>
+                <div class="pos-amount-display" tabindex="0"
+                     @onkeydown="@(e => HandleAmountKey(e, EditFloatDigit, EditFloatBackspace, EditFloatClear))">@FormatMoney(_floatEntry)</div>
 
                 @KeypadFor(EditFloatDigit, EditFloatBackspace, EditFloatClear)
 
@@ -226,7 +228,8 @@
                 <div class="pos-pay">
                     <div class="pos-pay-row">
                         <span class="pos-pay-label">@L["Cashier:CashTendered"]</span>
-                        <span class="pos-pay-value">@FormatMoney(_tendered)</span>
+                        <span class="pos-pay-value" tabindex="0"
+                              @onkeydown="@(e => HandleAmountKey(e, EditTenderedDigit, EditTenderedBackspace, EditTenderedClear))">@FormatMoney(_tendered)</span>
                     </div>
                     <div class="pos-pay-row">
                         <span class="pos-pay-label">@L["Cashier:ChangeDue"]</span>
@@ -305,7 +308,42 @@
                                 StartIcon="@Icons.Material.Filled.AddShoppingCart"
                                 Disabled="@(infoRemaining <= 0)"
                                 OnClick="AddInfoProductToCart">
-                        Add to cart
+                        @L["Cashier:AddToCart"]
+                    </SoftButton>
+                </div>
+            </SoftCard>
+        </div>
+    </div>
+}
+
+@* ─────────── EXPIRED-STOCK CONFIRM ─────────── *@
+@if (_expiredConfirmProducts is not null)
+{
+    <div class="glass-modal-backdrop" @onclick="CancelExpiredCharge">
+        <div class="glass-modal-container glass-modal-container--sm" @onclick:stopPropagation="true">
+            <SoftCard Elevation="24" Class="glass-modal">
+                <SoftCardHeader Class="pa-4">
+                    <CardHeaderContent>
+                        <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <SoftIcon Icon="@Icons.Material.Filled.EventBusy" Color="Color.Warning" Size="Size.Medium" />
+                            <SoftText Typo="Typo.h6">@L["Cashier:ExpiredWarnTitle"]</SoftText>
+                        </SoftStack>
+                    </CardHeaderContent>
+                </SoftCardHeader>
+                <SoftDivider />
+                <SoftCardContent Class="pa-4">
+                    <SoftStack Spacing="2">
+                        <SoftText Typo="Typo.body2">@L["Cashier:ExpiredWarnText"]</SoftText>
+                        <SoftText Typo="Typo.body2" Style="font-weight:600;">@_expiredConfirmProducts</SoftText>
+                    </SoftStack>
+                </SoftCardContent>
+                <SoftDivider />
+                <div class="pa-3 d-flex justify-end" style="gap:8px;">
+                    <SoftButton Variant="Variant.Text" OnClick="CancelExpiredCharge">@L["Cancel"]</SoftButton>
+                    <SoftButton Variant="Variant.Filled" Color="Color.Warning"
+                                StartIcon="@Icons.Material.Filled.CheckCircle"
+                                OnClick="ConfirmExpiredChargeAsync" Disabled="_busy">
+                        @L["Cashier:SellAnyway"]
                     </SoftButton>
                 </div>
             </SoftCard>
@@ -452,36 +490,32 @@
                 </SoftCardHeader>
                 <SoftDivider />
                 <SoftCardContent Class="pa-4">
-                    @if (_closedShift is null)
+                    <div class="pos-gate-sub mb-2">@L["Cashier:CloseShiftSub"]</div>
+                    <div class="pos-field-label">@L["Cashier:CountedCash"]</div>
+                    <div class="pos-amount-display" tabindex="0"
+                         @onkeydown="@(e => HandleAmountKey(e, EditCountedDigit, EditCountedBackspace, EditCountedClear))">@FormatMoney(_countedEntry)</div>
+                    @KeypadFor(EditCountedDigit, EditCountedBackspace, EditCountedClear)
+
+                    @* Live reconciliation preview — the cashier sees the variance BEFORE
+                       committing, so closing is a single confirmed step. *@
+                    @if (_shift is not null)
                     {
-                        <div class="pos-gate-sub mb-2">@L["Cashier:CloseShiftSub"]</div>
-                        <div class="pos-field-label">@L["Cashier:CountedCash"]</div>
-                        <div class="pos-amount-display">@FormatMoney(_countedEntry)</div>
-                        @KeypadFor(EditCountedDigit, EditCountedBackspace, EditCountedClear)
-                        <button type="button" class="pos-primary-btn pos-gate-btn mt-3"
-                                disabled="@_busy" @onclick="CloseShiftAsync">
-                            <SoftIcon Icon="@Icons.Material.Filled.Check" Class="mr-2" />
-                            @L["Cashier:CloseShift"]
-                        </button>
-                    }
-                    else
-                    {
-                        <div class="pos-recon">
+                        var previewVariance = _countedEntry - _shift.ExpectedCash;
+                        <div class="pos-recon mt-3">
                             <div class="pos-recon-row">
-                                <span>@L["Cashier:Expected"]</span><span>@FormatMoney(_closedShift.ExpectedCash)</span>
+                                <span>@L["Cashier:Expected"]</span><span>@FormatMoney(_shift.ExpectedCash)</span>
                             </div>
-                            <div class="pos-recon-row">
-                                <span>@L["Cashier:Counted"]</span><span>@FormatMoney(_closedShift.CountedCash ?? 0)</span>
-                            </div>
-                            <div class="pos-recon-row pos-recon-variance @VarianceClass(_closedShift.Variance)">
+                            <div class="pos-recon-row pos-recon-variance @VarianceClass(previewVariance)">
                                 <span>@L["Cashier:Variance"]</span>
-                                <span>@FormatMoney(_closedShift.Variance ?? 0) · @VarianceLabel(_closedShift.Variance)</span>
+                                <span>@FormatMoney(previewVariance) · @VarianceLabel(previewVariance)</span>
                             </div>
                         </div>
-                        <button type="button" class="pos-primary-btn pos-gate-btn mt-3" @onclick="FinishClose">
-                            @L["Cashier:Done"]
-                        </button>
                     }
+                    <button type="button" class="pos-primary-btn pos-gate-btn mt-3"
+                            disabled="@_busy" @onclick="CloseShiftAsync">
+                        <SoftIcon Icon="@Icons.Material.Filled.Check" Class="mr-2" />
+                        @L["Cashier:CloseShift"]
+                    </button>
                 </SoftCardContent>
             </SoftCard>
         </div>
@@ -513,10 +547,12 @@
     private bool _heldVisible;
 
     private bool _closeVisible;
-    private CashierShiftDto? _closedShift;
 
     private CashierSaleResultDto? _receipt;
     private decimal? _receiptTendered;
+
+    /// <summary>Product names from the expired-stock warning; non-null shows the confirm dialog.</summary>
+    private string? _expiredConfirmProducts;
     private CashierProductDto? _infoProduct;
 
     // Shop branding for the printed receipt — loaded from shop settings.
@@ -558,7 +594,7 @@
         }
         catch (Exception ex)
         {
-            Snackbar.Add($"{L["Cashier:LoadFailed"]} {ex.Message}", Severity.Error);
+            Snackbar.Add(L["Cashier:LoadFailed"], Severity.Error);
         }
         finally
         {
@@ -595,7 +631,7 @@
         }
         catch (Exception ex)
         {
-            Snackbar.Add($"{L["Cashier:OpenShiftFailed"]} {ex.Message}", Severity.Error);
+            Snackbar.Add(L["Cashier:OpenShiftFailed"], Severity.Error);
         }
         finally
         {
@@ -615,7 +651,7 @@
         }
         catch (Exception ex)
         {
-            Snackbar.Add($"{L["Cashier:LoadFailed"]} {ex.Message}", Severity.Error);
+            Snackbar.Add(L["Cashier:LoadFailed"], Severity.Error);
         }
         finally
         {
@@ -679,7 +715,7 @@
         }
         catch (Exception ex)
         {
-            Snackbar.Add($"{L["Cashier:ReportFailed"]} {ex.Message}", Severity.Error);
+            Snackbar.Add(L["Cashier:ReportFailed"], Severity.Error);
         }
     }
 
@@ -835,7 +871,17 @@
     }
 
     // ─── charge ───
-    private async Task ChargeAsync()
+    private Task ChargeAsync() => ChargeCoreAsync(acknowledgeExpired: false);
+
+    private async Task ConfirmExpiredChargeAsync()
+    {
+        _expiredConfirmProducts = null;
+        await ChargeCoreAsync(acknowledgeExpired: true);
+    }
+
+    private void CancelExpiredCharge() => _expiredConfirmProducts = null;
+
+    private async Task ChargeCoreAsync(bool acknowledgeExpired)
     {
         if (_busy || _cart.Count == 0 || _shift is null) return;
         _busy = true;
@@ -851,6 +897,7 @@
             {
                 BranchId = _shift.BranchId,
                 CashTendered = tendered,
+                AcknowledgeExpiredStock = acknowledgeExpired,
                 Lines = _cart.Select(l => new RecordCashierSaleLineDto
                 {
                     ProductId = l.ProductId,
@@ -867,15 +914,31 @@
             _shift = await CashierAppService.GetCurrentShiftAsync(_shift.BranchId) ?? _shift;
             await LoadTilesAsync();
         }
+        catch (Exception ex) when (FindBusinessException(ex)?.Code == "Operations:Sales:IncludesExpiredStock")
+        {
+            // The cart needs more units than the fresh (non-expired) stock covers —
+            // ask the cashier to confirm instead of failing the sale.
+            _expiredConfirmProducts = FindBusinessException(ex)?.Data["Products"]?.ToString() ?? "-";
+        }
         catch (Exception ex)
         {
-            Snackbar.Add($"{L["Cashier:SaleFailed"]} {ex.Message}", Severity.Error);
+            Snackbar.Add(L["Cashier:SaleFailed"], Severity.Error);
             await RefreshCartAvailabilityAsync();
         }
         finally
         {
             _busy = false;
         }
+    }
+
+    private static Volo.Abp.BusinessException? FindBusinessException(Exception? ex)
+    {
+        while (ex != null)
+        {
+            if (ex is Volo.Abp.BusinessException business) return business;
+            ex = ex.InnerException;
+        }
+        return null;
     }
 
     private void NewSale()
@@ -939,7 +1002,6 @@
     private void OpenCloseShiftDialog()
     {
         _countedEntry = 0;
-        _closedShift = null;
         _closeVisible = true;
     }
 
@@ -949,15 +1011,24 @@
         _busy = true;
         try
         {
-            _closedShift = await CashierAppService.CloseShiftAsync(new CloseShiftDto
+            var closed = await CashierAppService.CloseShiftAsync(new CloseShiftDto
             {
                 ShiftId = _shift.Id,
                 CountedCash = _countedEntry
             });
+
+            // One step: the variance was previewed before confirming, so summarize in
+            // a toast and return straight to the shift gate — no extra "Done" tap.
+            Snackbar.Add(
+                string.Format(L["Cashier:ShiftClosedToast"],
+                    FormatMoney(closed.Variance ?? 0), VarianceLabel(closed.Variance)),
+                (closed.Variance ?? 0) == 0 ? Severity.Success : Severity.Warning);
+
+            await FinishCloseAsync();
         }
         catch (Exception ex)
         {
-            Snackbar.Add($"{L["Cashier:CloseShiftFailed"]} {ex.Message}", Severity.Error);
+            Snackbar.Add(L["Cashier:CloseShiftFailed"], Severity.Error);
         }
         finally
         {
@@ -965,12 +1036,13 @@
         }
     }
 
-    private void FinishClose()
+    private async Task FinishCloseAsync()
     {
+        await ClearPersistedCartAsync();
         _closeVisible = false;
-        _closedShift = null;
         _shift = null;       // back to the shift gate
         _cart.Clear();
+        _heldCarts.Clear();
         _tiles.Clear();
         _tendered = 0;
         _floatEntry = 0;
@@ -1004,6 +1076,132 @@
     private void EditTenderedDigit(int d) => _tendered = AppendDigit(_tendered, d);
     private void EditTenderedBackspace() => _tendered = Backspace(_tendered);
     private void EditTenderedClear() => _tendered = 0;
+
+    /// <summary>
+    /// Physical-keyboard path for the money amounts: click/tab onto the amount and type
+    /// digits (Backspace deletes, Delete/Escape clears). The on-screen keypad stays for
+    /// touch tills — both drive the same digit buffer.
+    /// </summary>
+    private static void HandleAmountKey(KeyboardEventArgs e, Action<int> onDigit, Action onBack, Action onClear)
+    {
+        if (e.Key.Length == 1 && e.Key[0] is >= '0' and <= '9')
+        {
+            onDigit(e.Key[0] - '0');
+        }
+        else if (e.Key == "Backspace")
+        {
+            onBack();
+        }
+        else if (e.Key is "Delete" or "Escape")
+        {
+            onClear();
+        }
+    }
+
+    // ─── cart persistence (survives refresh / reconnect) ───
+
+    /// <summary>Serialized cart + held carts + tendered, keyed per shift in localStorage.</summary>
+    private sealed class PosCartState
+    {
+        public List<CartLine> Cart { get; set; } = new();
+        public List<HeldCart> Held { get; set; } = new();
+        public decimal Tendered { get; set; }
+    }
+
+    private bool _cartRestored;
+    private string? _lastPersistedState;
+
+    private string CartStorageKey => $"pos-cart-{_shift?.Id}";
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_shift is null)
+        {
+            return;
+        }
+
+        // Rehydrate once as soon as a shift is on screen (JS interop is unavailable
+        // earlier during the initial server render).
+        if (!_cartRestored)
+        {
+            _cartRestored = true;
+            if (await RestoreCartStateAsync())
+            {
+                StateHasChanged();
+                return;
+            }
+        }
+
+        await PersistCartStateAsync();
+    }
+
+    private async Task PersistCartStateAsync()
+    {
+        try
+        {
+            var json = JsonSerializer.Serialize(new PosCartState
+            {
+                Cart = _cart.ToList(),
+                Held = _heldCarts.ToList(),
+                Tendered = _tendered
+            });
+
+            if (json == _lastPersistedState)
+            {
+                return;
+            }
+
+            _lastPersistedState = json;
+            await JS.InvokeVoidAsync("localStorage.setItem", CartStorageKey, json);
+        }
+        catch
+        {
+            // Persistence is best-effort — never let it disturb a sale.
+        }
+    }
+
+    private async Task<bool> RestoreCartStateAsync()
+    {
+        try
+        {
+            var json = await JS.InvokeAsync<string?>("localStorage.getItem", CartStorageKey);
+            if (string.IsNullOrEmpty(json))
+            {
+                return false;
+            }
+
+            var state = JsonSerializer.Deserialize<PosCartState>(json);
+            if (state is null || (state.Cart.Count == 0 && state.Held.Count == 0))
+            {
+                return false;
+            }
+
+            _cart.Clear();
+            _cart.AddRange(state.Cart);
+            _heldCarts.Clear();
+            _heldCarts.AddRange(state.Held);
+            _tendered = state.Tendered;
+            _lastPersistedState = json;
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private async Task ClearPersistedCartAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("localStorage.removeItem", CartStorageKey);
+            _lastPersistedState = null;
+        }
+        catch
+        {
+            // Best-effort.
+        }
+    }
 
     // Renders a reusable 0-9 keypad. `exact` adds an "exact cash" shortcut that
     // sets the tendered amount to the cart total.
@@ -1060,27 +1258,27 @@
 
     private string ProductDescription(CashierProductDto product)
         => string.IsNullOrWhiteSpace(product.Description)
-            ? "No description was added for this item yet."
+            ? L["Cashier:NoDescription"]
             : product.Description.Trim();
 
     private string StockInfoText(CashierProductDto product, int remaining)
     {
         if (product.IsOutOfStock || remaining <= 0)
         {
-            return "Out of stock right now.";
+            return L["Cashier:StockInfo:Out"];
         }
 
         if (remaining <= 2)
         {
-            return $"Only {remaining} exist. Check with the customer before promising more.";
+            return L["Cashier:StockInfo:Tight", remaining];
         }
 
         if (product.IsLowStock)
         {
-            return $"{remaining} available. Running low.";
+            return L["Cashier:StockInfo:Low", remaining];
         }
 
-        return $"{remaining} available for this shift.";
+        return L["Cashier:StockInfo:Ok", remaining];
     }
 
     private static string StockInfoClass(CashierProductDto product, int remaining)

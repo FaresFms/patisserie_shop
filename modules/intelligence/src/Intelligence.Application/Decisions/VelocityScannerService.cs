@@ -8,6 +8,7 @@ using Intelligence.Rules;
 using Intelligence.Velocity;
 using Inventory.BranchInventory;
 using Inventory.Entities;
+using Inventory.StockBatches;
 using Microsoft.Extensions.Localization;
 using Microsoft.Extensions.Logging;
 using Operations.Sales;
@@ -45,6 +46,7 @@ public class VelocityScannerService : ITransientDependency
     private readonly ISaleRepository _saleRepository;
     private readonly IRepository<AppProductVelocity, Guid> _velocityRepository;
     private readonly IBranchInventoryRepository _inventoryRepository;
+    private readonly IStockBatchRepository _batchRepository;
     private readonly IRepository<AppInventoryRule, Guid> _ruleRepository;
     private readonly IRepository<AppDecisionLog, Guid> _logRepository;
     private readonly IRepository<AppBranch, Guid> _branchRepository;
@@ -57,6 +59,7 @@ public class VelocityScannerService : ITransientDependency
         ISaleRepository saleRepository,
         IRepository<AppProductVelocity, Guid> velocityRepository,
         IBranchInventoryRepository inventoryRepository,
+        IStockBatchRepository batchRepository,
         IRepository<AppInventoryRule, Guid> ruleRepository,
         IRepository<AppDecisionLog, Guid> logRepository,
         IRepository<AppBranch, Guid> branchRepository,
@@ -68,6 +71,7 @@ public class VelocityScannerService : ITransientDependency
         _saleRepository = saleRepository;
         _velocityRepository = velocityRepository;
         _inventoryRepository = inventoryRepository;
+        _batchRepository = batchRepository;
         _ruleRepository = ruleRepository;
         _logRepository = logRepository;
         _branchRepository = branchRepository;
@@ -294,6 +298,11 @@ public class VelocityScannerService : ITransientDependency
         var branches = await _branchRepository.GetListAsync();
         var branchById = branches.ToDictionary(b => b.Id);
 
+        // Expired units per (product, branch) — subtracted from on-hand so the forecast
+        // walks the SELLABLE quantity. Best-effort ledger; a missing pair means "none
+        // expired." One query, mirrors the real-time DecisionMakerService path.
+        var expiredByKey = await _batchRepository.GetExpiredQuantitiesByProductBranchAsync(nowUtc);
+
         // Existing Pending StockoutRisk (Product, Branch) pairs — skip duplicates
         // without a per-row query, exactly like the other scanners.
         var pending = DecisionLogStatuses.Pending;
@@ -333,6 +342,11 @@ public class VelocityScannerService : ITransientDependency
                 continue; // no demand → dead stock is another scanner's job
             }
 
+            // Expired units aren't sellable — walk the fresh quantity so a shelf of
+            // expired stock still surfaces a stockout risk.
+            var expired = expiredByKey.GetValueOrDefault((inventory.ProductId, inventory.BranchId), 0);
+            var sellableQty = Math.Max(0, inventory.QuantityOnHand - expired);
+
             // Forecast-walk days of cover. Flat indices (no weekday pattern) fall
             // back to plain division so the reasoning stays honest about its math.
             var indices = velocity.GetWeekdayIndices();
@@ -340,7 +354,7 @@ public class VelocityScannerService : ITransientDependency
 
             if (ForecastWalker.IsFlat(indices))
             {
-                var daysOfCover = inventory.QuantityOnHand / velocity.AvgDailySales30;
+                var daysOfCover = sellableQty / velocity.AvgDailySales30;
                 if (daysOfCover >= thresholdDays)
                 {
                     continue;
@@ -350,7 +364,7 @@ public class VelocityScannerService : ITransientDependency
                     "DecisionReasoning:StockoutRisk:FlatWithProduct",
                     product.Name,
                     branch.Name,
-                    inventory.QuantityOnHand,
+                    sellableQty,
                     Math.Round(daysOfCover, 1),
                     thresholdDays,
                     rule.RuleName,
@@ -359,7 +373,7 @@ public class VelocityScannerService : ITransientDependency
             else
             {
                 var daysUntilStockout = ForecastWalker.DaysUntilDepletion(
-                    inventory.QuantityOnHand, velocity.AvgDailySales30, indices, tomorrow, ForecastHorizonDays);
+                    sellableQty, velocity.AvgDailySales30, indices, tomorrow, ForecastHorizonDays);
 
                 // Stock survives the whole horizon → no alert.
                 if (daysUntilStockout is not int depletionDay || depletionDay >= thresholdDays)
@@ -371,7 +385,7 @@ public class VelocityScannerService : ITransientDependency
                     "DecisionReasoning:StockoutRisk:WithProduct",
                     product.Name,
                     branch.Name,
-                    inventory.QuantityOnHand,
+                    sellableQty,
                     depletionDay,
                     thresholdDays,
                     rule.RuleName,
@@ -392,7 +406,7 @@ public class VelocityScannerService : ITransientDependency
                 decisionType: DecisionTypes.StockoutRisk,
                 reasoning: reasoning,
                 suggestedAction: rule.SuggestedAction,
-                stockAtEvaluation: inventory.QuantityOnHand,
+                stockAtEvaluation: sellableQty,
                 daysWithoutSale: null);
 
             await _logRepository.InsertAsync(log, autoSave: false);

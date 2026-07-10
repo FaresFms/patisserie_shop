@@ -150,6 +150,7 @@ public class PurchaseOrderAppService : OperationsAppService, IPurchaseOrderAppSe
     {
         await _supplierRepository.GetAsync(input.SupplierId);
         await _branchRepository.GetAsync(input.DestBranchId);
+        await EnsureBranchAccessAsync(input.DestBranchId);
 
         var po = await _manager.CreateDraftAsync(
             input.SupplierId,
@@ -170,6 +171,13 @@ public class PurchaseOrderAppService : OperationsAppService, IPurchaseOrderAppSe
         await _branchRepository.GetAsync(input.DestBranchId);
 
         var po = await LoadWithItemsAsync(id);
+        // Both sides of a branch change must be managed by the caller — the current
+        // branch (it's their PO) and the new one (they'd be redirecting stock into it).
+        await EnsureBranchAccessAsync(po.DestBranchId);
+        if (input.DestBranchId != po.DestBranchId)
+        {
+            await EnsureBranchAccessAsync(input.DestBranchId);
+        }
         po.EditHeader(input.SupplierId, input.DestBranchId, input.OrderDate, input.ExpectedDeliveryDate, input.Notes);
         await _poRepository.UpdateAsync(po, autoSave: true);
         return await ProjectAsync(po);
@@ -179,6 +187,7 @@ public class PurchaseOrderAppService : OperationsAppService, IPurchaseOrderAppSe
     public async Task DeleteAsync(Guid id)
     {
         var po = await LoadWithItemsAsync(id);
+        await EnsureBranchAccessAsync(po.DestBranchId);
         if (po.Status != PurchaseOrderStatuses.Draft && po.Status != PurchaseOrderStatuses.Cancelled)
         {
             throw new BusinessException(OperationsErrorCodes.CannotModifyAfterDraft)
@@ -192,6 +201,7 @@ public class PurchaseOrderAppService : OperationsAppService, IPurchaseOrderAppSe
     {
         await _productRepository.GetAsync(input.ProductId);
         var po = await LoadWithItemsAsync(id);
+        await EnsureBranchAccessAsync(po.DestBranchId);
         var item = po.AddItem(GuidGenerator.Create(), input.ProductId, input.OrderedQuantity, input.UnitPrice);
         await _poRepository.UpdateAsync(po, autoSave: true);
         return await ProjectItemAsync(item);
@@ -201,6 +211,7 @@ public class PurchaseOrderAppService : OperationsAppService, IPurchaseOrderAppSe
     public async Task<PurchaseOrderItemDto> UpdateItemAsync(Guid id, Guid itemId, UpdatePurchaseOrderItemDto input)
     {
         var po = await LoadWithItemsAsync(id);
+        await EnsureBranchAccessAsync(po.DestBranchId);
         po.UpdateItem(itemId, input.OrderedQuantity, input.UnitPrice);
         await _poRepository.UpdateAsync(po, autoSave: true);
         var item = po.Items.First(i => i.Id == itemId);
@@ -211,6 +222,7 @@ public class PurchaseOrderAppService : OperationsAppService, IPurchaseOrderAppSe
     public async Task RemoveItemAsync(Guid id, Guid itemId)
     {
         var po = await LoadWithItemsAsync(id);
+        await EnsureBranchAccessAsync(po.DestBranchId);
         po.RemoveItem(itemId);
         await _poRepository.UpdateAsync(po, autoSave: true);
     }
@@ -219,6 +231,7 @@ public class PurchaseOrderAppService : OperationsAppService, IPurchaseOrderAppSe
     public async Task<PurchaseOrderDto> SubmitAsync(Guid id)
     {
         var po = await LoadWithItemsAsync(id);
+        await EnsureBranchAccessAsync(po.DestBranchId);
         po.Submit();
         await _poRepository.UpdateAsync(po, autoSave: true);
         return await ProjectAsync(po);

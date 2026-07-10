@@ -94,7 +94,7 @@
                             }
                             <SoftStack Spacing="1">
                                 <SoftStack Row="true" Justify="Justify.SpaceBetween">
-                                    <SoftText Typo="Typo.body2">@totalReceived / @totalOrdered units received</SoftText>
+                                    <SoftText Typo="Typo.body2">@string.Format(OpsL["UnitsReceivedProgress"], totalReceived, totalOrdered)</SoftText>
                                     <SoftText Typo="Typo.body2" Style="font-weight:600;">@pct%</SoftText>
                                 </SoftStack>
                                 <MudProgressLinear Color="Color.Success" Value="@pct" Class="po-progress" />
@@ -126,7 +126,7 @@
                         {
                             <SoftStack AlignItems="AlignItems.Center" Spacing="1" Class="pa-4">
                                 <SoftIcon Icon="@Icons.Material.Outlined.Inbox" Style="font-size:42px; opacity:0.4;" />
-                                <SoftText Typo="Typo.body2" Color="Color.Default">No items yet</SoftText>
+                                <SoftText Typo="Typo.body2" Color="Color.Default">@OpsL["NoItemsYet"]</SoftText>
                             </SoftStack>
                         }
                         else
@@ -288,7 +288,7 @@
                             <div>
                                 <SoftText Typo="Typo.h6">@OpsL["ReceiveItems"]</SoftText>
                                 <SoftText Typo="Typo.caption" Color="Color.Default">
-                                    Enter quantity received now for each item. Leave at 0 if nothing arrived for that line.
+                                    @OpsL["ReceiveDialogHint"]
                                 </SoftText>
                             </div>
                         </SoftStack>
@@ -305,7 +305,7 @@
                             <MudTh Style="text-align:right;">@OpsL["OrderedQuantity"]</MudTh>
                             <MudTh Style="text-align:right;">@OpsL["ReceivedQuantity"]</MudTh>
                             <MudTh Style="text-align:right;">@OpsL["Remaining"]</MudTh>
-                            <MudTh Style="text-align:center; min-width: 140px;">Receive now</MudTh>
+                            <MudTh Style="text-align:center; min-width: 140px;">@OpsL["ReceiveNow"]</MudTh>
                         </HeaderContent>
                         <RowTemplate Context="row">
                             <MudTd>
@@ -341,7 +341,7 @@
                 <div class="pa-3 d-flex justify-end" style="gap: 8px;">
                     <SoftButton Variant="Variant.Text" OnClick="CloseReceive">@L["Cancel"]</SoftButton>
                     <SoftButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="ReceiveAllRemaining">
-                        Receive all remaining
+                        @OpsL["ReceiveAllRemaining"]
                     </SoftButton>
                     <SoftButton Variant="Variant.Filled" Color="Color.Tertiary"
                                 StartIcon="@Icons.Material.Filled.CheckCircle"
@@ -582,7 +582,7 @@
         try
         {
             var updated = await PurchaseOrderAppService.SubmitAsync(PurchaseOrderId);
-            Snackbar.Add($"PO {updated.PONumber} submitted for approval.", Severity.Success);
+            Snackbar.Add(string.Format(OpsL["PurchaseOrderSubmittedToast"], updated.PONumber), Severity.Success);
             await NotifyChanged();
             await CloseAsync();
         }
@@ -596,7 +596,7 @@
         try
         {
             var updated = await PurchaseOrderAppService.ApproveAsync(PurchaseOrderId);
-            Snackbar.Add($"PO {updated.PONumber} approved.", Severity.Success);
+            Snackbar.Add(string.Format(OpsL["PurchaseOrderApprovedToast"], updated.PONumber), Severity.Success);
             await NotifyChanged();
             await CloseAsync();
         }
@@ -610,7 +610,7 @@
         try
         {
             var updated = await PurchaseOrderAppService.CancelAsync(PurchaseOrderId);
-            Snackbar.Add($"PO {updated.PONumber} cancelled.", Severity.Warning);
+            Snackbar.Add(string.Format(OpsL["PurchaseOrderCancelledToast"], updated.PONumber), Severity.Warning);
             await NotifyChanged();
             await CloseAsync();
         }
@@ -622,10 +622,12 @@
 
     private void OpenReceiveDialog()
     {
+        // Default each line to its remaining quantity — a full delivery (the common case)
+        // is one click to confirm; the manager reduces lines only for partial deliveries.
         _receiveRows = _po!.Items.Select(i => new ReceiveRow
         {
             Item = i,
-            ReceiveNow = 0
+            ReceiveNow = i.OrderedQuantity - i.ReceivedQuantity
         }).ToList();
         _receiveVisible = true;
     }
@@ -649,7 +651,7 @@
 
         if (lines.Count == 0)
         {
-            Snackbar.Add("Enter at least one receive quantity.", Severity.Warning);
+            Snackbar.Add(OpsL["ReceiveAtLeastOne"], Severity.Warning);
             return;
         }
 
@@ -659,8 +661,8 @@
             var updated = await PurchaseOrderAppService.ReceiveAsync(PurchaseOrderId, new ReceiveItemsDto { Lines = lines });
             _receiveVisible = false;
             var msg = updated.Status == PurchaseOrderStatuses.Received
-                ? $"PO {updated.PONumber} fully received."
-                : $"PO {updated.PONumber} partially received.";
+                ? string.Format(OpsL["PurchaseOrderFullyReceivedToast"], updated.PONumber)
+                : string.Format(OpsL["PurchaseOrderPartiallyReceivedToast"], updated.PONumber);
             Snackbar.Add(msg, Severity.Success);
             await NotifyChanged();
             await CloseAsync();

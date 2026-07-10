@@ -148,7 +148,7 @@
         }
         catch (Exception ex)
         {
-            Snackbar.Add($"{L["CashierAssign:LoadFailed"]} {ex.Message}", Severity.Error);
+            Snackbar.Add(L["CashierAssign:LoadFailed"], Severity.Error);
         }
         finally
         {
@@ -197,7 +197,7 @@
         }
         catch (Exception ex)
         {
-            Snackbar.Add($"{L["CashierAssign:SaveFailed"]} {ex.Message}", Severity.Error);
+            Snackbar.Add(L["CashierAssign:SaveFailed"], Severity.Error);
         }
         finally
         {
