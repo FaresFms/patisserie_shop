@@ -71,6 +71,7 @@ public class BranchProductionRequestRepository
                 ItemCount = r.Items.Count,
                 RequestedTotalQuantity = r.Items.Sum(i => i.RequestedQuantity),
                 ApprovedTotalQuantity = r.Items.Sum(i => i.ApprovedQuantity),
+                PlannedTotalQuantity = r.Items.Sum(i => i.PlannedQuantity),
                 FulfilledTotalQuantity = r.Items.Sum(i => i.FulfilledQuantity)
             })
             .ToListAsync(ct);
@@ -99,6 +100,7 @@ public class BranchProductionRequestRepository
                 ItemCount = h.ItemCount,
                 RequestedTotalQuantity = h.RequestedTotalQuantity,
                 ApprovedTotalQuantity = h.ApprovedTotalQuantity,
+                PlannedTotalQuantity = h.PlannedTotalQuantity,
                 FulfilledTotalQuantity = h.FulfilledTotalQuantity
             };
         });
@@ -124,9 +126,14 @@ public class BranchProductionRequestRepository
         };
 
         var dbContext = await GetDbContextAsync();
-        return await dbContext.BranchProductionRequests
+        var requests = await dbContext.BranchProductionRequests
             .Include(r => r.Items)
-            .Where(r => r.BranchId == branchId && demandStatuses.Contains(r.Status))
+            .Where(r => r.BranchId == branchId
+                && demandStatuses.Contains(r.Status)
+                && r.Items.Any(i => i.ProductId == productId && i.ApprovedQuantity > i.FulfilledQuantity))
+            .ToListAsync(ct);
+
+        return requests
             .SelectMany(r => r.Items
                 .Where(i => i.ProductId == productId && i.ApprovedQuantity > i.FulfilledQuantity)
                 .Select(i => new BranchProductionRequestFulfillmentTarget
@@ -140,7 +147,53 @@ public class BranchProductionRequestRepository
                 }))
             .OrderBy(x => x.NeededByDate)
             .ThenBy(x => x.RequestId)
+            .ToList();
+    }
+
+    public async Task<List<BranchProductionRequestPlanningTarget>> GetPlanningTargetsAsync(
+        IReadOnlyCollection<Guid> productIds,
+        DateTime neededBefore,
+        CancellationToken cancellationToken = default)
+    {
+        var ct = GetCancellationToken(cancellationToken);
+        var ids = productIds.Distinct().ToList();
+        if (ids.Count == 0)
+        {
+            return new List<BranchProductionRequestPlanningTarget>();
+        }
+
+        var demandStatuses = new[]
+        {
+            BranchProductionRequestStatuses.Approved,
+            BranchProductionRequestStatuses.PartiallyPlanned,
+            BranchProductionRequestStatuses.Planned,
+            BranchProductionRequestStatuses.PartiallyFulfilled
+        };
+
+        var dbContext = await GetDbContextAsync();
+        var requests = await dbContext.BranchProductionRequests
+            .Include(r => r.Items)
+            .Where(r => demandStatuses.Contains(r.Status)
+                && r.NeededByDate < neededBefore
+                && r.Items.Any(i => ids.Contains(i.ProductId) && i.ApprovedQuantity > i.PlannedQuantity))
             .ToListAsync(ct);
+
+        return requests
+            .SelectMany(r => r.Items
+                .Where(i => ids.Contains(i.ProductId) && i.ApprovedQuantity > i.PlannedQuantity)
+                .Select(i => new BranchProductionRequestPlanningTarget
+                {
+                    RequestId = r.Id,
+                    RequestItemId = i.Id,
+                    BranchId = r.BranchId,
+                    ProductId = i.ProductId,
+                    NeededByDate = r.NeededByDate,
+                    RemainingUnplannedQuantity = i.ApprovedQuantity - i.PlannedQuantity
+                }))
+            .OrderBy(x => x.NeededByDate)
+            .ThenBy(x => x.RequestId)
+            .ThenBy(x => x.RequestItemId)
+            .ToList();
     }
 
     private async Task<IQueryable<AppBranchProductionRequest>> BuildFilteredQueryAsync(
@@ -218,6 +271,7 @@ public class BranchProductionRequestRepository
         public int ItemCount { get; set; }
         public int RequestedTotalQuantity { get; set; }
         public int ApprovedTotalQuantity { get; set; }
+        public int PlannedTotalQuantity { get; set; }
         public int FulfilledTotalQuantity { get; set; }
     }
 }

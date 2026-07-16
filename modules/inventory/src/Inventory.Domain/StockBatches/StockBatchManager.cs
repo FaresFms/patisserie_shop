@@ -9,11 +9,10 @@ using Volo.Abp.Domain.Services;
 namespace Inventory.StockBatches;
 
 /// <summary>
-/// Factory + FEFO bookkeeping for the best-effort <see cref="AppStockBatch"/> ledger.
+/// Factory + FEFO bookkeeping for the <see cref="AppStockBatch"/> expiry ledger.
 /// The entity constructor is internal, so batches are only ever created through here.
-/// IMPORTANT: this ledger is advisory — AppBranchInventory.QuantityOnHand remains the
-/// single source of truth for stock decisions; callers must treat any batch drift as
-/// acceptable (see BranchInventoryManager.TrackBatchLedgerBestEffortAsync).
+/// AppBranchInventory.QuantityOnHand remains the total stock figure, while perishable
+/// sale/production/transfer availability is capped by live non-expired batches.
 /// </summary>
 public class StockBatchManager : DomainService
 {
@@ -30,6 +29,25 @@ public class StockBatchManager : DomainService
     public StockBatchManager(IStockBatchRepository batchRepository)
     {
         _batchRepository = batchRepository;
+    }
+
+    /// <summary>
+    /// Non-perishable products use the authoritative stock row. Perishable products
+    /// may only use units backed by a live, non-expired batch; any ledger drift is
+    /// quarantined instead of being treated as fresh stock.
+    /// </summary>
+    public static int GetUsableQuantity(
+        AppProduct product,
+        AppBranchInventory inventory,
+        IReadOnlyDictionary<Guid, int> nonExpiredByProduct)
+    {
+        if (!product.ShelfLifeDays.HasValue)
+        {
+            return inventory.QuantityOnHand;
+        }
+
+        var tracked = nonExpiredByProduct.GetValueOrDefault(product.Id);
+        return Math.Min(inventory.QuantityOnHand, tracked);
     }
 
     /// <summary>
@@ -79,8 +97,7 @@ public class StockBatchManager : DomainService
 
     /// <summary>
     /// FEFO consumption: walks the product+branch's live batches — non-expired ones
-    /// first (earliest expiry first), then expired ones (oldest first, so dead stock
-    /// is cleared from the ledger too) — consuming up to <paramref name="quantity"/>.
+    /// first (earliest expiry first), optionally followed by expired ones.
     /// When <paramref name="expiredFirst"/> is true (waste write-offs) the order is
     /// inverted: EXPIRED batches first (oldest expiry first), then the normal FEFO
     /// order — a write-off must clear the dead stock before touching sellable lots.
@@ -89,9 +106,15 @@ public class StockBatchManager : DomainService
     /// a shortfall, because the authoritative stock mutation must not be blocked by
     /// ledger drift.
     /// </summary>
-    public async Task<int> ConsumeFefoAsync(Guid branchId, Guid productId, int quantity, bool expiredFirst = false)
+    public async Task<int> ConsumeFefoAsync(
+        Guid branchId,
+        Guid productId,
+        int quantity,
+        bool expiredFirst = false,
+        bool includeExpiredFallback = true)
     {
-        var consumed = await ConsumeFefoWithBreakdownAsync(branchId, productId, quantity, expiredFirst);
+        var consumed = await ConsumeFefoWithBreakdownAsync(
+            branchId, productId, quantity, expiredFirst, includeExpiredFallback);
         return consumed.Sum(x => x.Quantity);
     }
 
@@ -104,7 +127,8 @@ public class StockBatchManager : DomainService
         Guid branchId,
         Guid productId,
         int quantity,
-        bool expiredFirst = false)
+        bool expiredFirst = false,
+        bool includeExpiredFallback = true)
     {
         if (quantity <= 0)
         {
@@ -120,9 +144,13 @@ public class StockBatchManager : DomainService
         // GetOpenBatchesAsync already orders by ExpiryDate ascending, so both
         // partitions below keep "oldest expiry first" within themselves.
         var today = Clock.Now.Date;
+        var usable = batches.Where(b => !b.IsExpired(today));
+        var expired = batches.Where(b => b.IsExpired(today));
         var fefoOrder = expiredFirst
-            ? batches.Where(b => b.IsExpired(today)).Concat(batches.Where(b => !b.IsExpired(today)))
-            : batches.Where(b => !b.IsExpired(today)).Concat(batches.Where(b => b.IsExpired(today)));
+            ? expired.Concat(usable)
+            : includeExpiredFallback
+                ? usable.Concat(expired)
+                : usable;
 
         var remaining = quantity;
         var consumed = new List<ConsumedStockBatchLine>();

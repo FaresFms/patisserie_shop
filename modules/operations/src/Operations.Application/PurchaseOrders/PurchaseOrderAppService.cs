@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Linq.Dynamic.Core;
 using System.Threading.Tasks;
 using Inventory;
 using Inventory.BranchInventory;
@@ -11,7 +10,6 @@ using Operations.Entities;
 using Operations.Permissions;
 using Volo.Abp;
 using Volo.Abp.Application.Dtos;
-using Volo.Abp.Domain.Entities;
 using Volo.Abp.Domain.Repositories;
 using Volo.Abp.Identity;
 
@@ -20,7 +18,7 @@ namespace Operations.PurchaseOrders;
 [Authorize(OperationsPermissions.PurchaseOrders.Default)]
 public class PurchaseOrderAppService : OperationsAppService, IPurchaseOrderAppService
 {
-    private readonly IRepository<AppPurchaseOrder, Guid> _poRepository;
+    private readonly IPurchaseOrderRepository _poRepository;
     private readonly IRepository<AppSupplier, Guid> _supplierRepository;
     private readonly IRepository<AppBranch, Guid> _branchRepository;
     private readonly IRepository<AppProduct, Guid> _productRepository;
@@ -30,7 +28,7 @@ public class PurchaseOrderAppService : OperationsAppService, IPurchaseOrderAppSe
     private readonly IRepository<IdentityUser, Guid> _userRepository;
 
     public PurchaseOrderAppService(
-        IRepository<AppPurchaseOrder, Guid> poRepository,
+        IPurchaseOrderRepository poRepository,
         IRepository<AppSupplier, Guid> supplierRepository,
         IRepository<AppBranch, Guid> branchRepository,
         IRepository<AppProduct, Guid> productRepository,
@@ -52,33 +50,20 @@ public class PurchaseOrderAppService : OperationsAppService, IPurchaseOrderAppSe
     public async Task<PurchaseOrderDto> GetAsync(Guid id)
     {
         var po = await LoadWithItemsAsync(id);
+        await EnsureBranchAccessAsync(po.DestBranchId);
         return await ProjectAsync(po);
     }
 
     public async Task<PagedResultDto<PurchaseOrderDto>> GetListAsync(GetPurchaseOrdersInput input)
     {
-        // 1) Query the Operations context alone — cross-DbContext joins are not supported.
-        var poQ = await _poRepository.GetQueryableAsync();
-
-        if (!string.IsNullOrWhiteSpace(input.Status) && PurchaseOrderStatuses.All.Contains(input.Status))
-        {
-            var s = input.Status;
-            poQ = poQ.Where(p => p.Status == s);
-        }
-        if (input.SupplierId.HasValue) poQ = poQ.Where(p => p.SupplierId == input.SupplierId.Value);
-        if (input.DestBranchId.HasValue) poQ = poQ.Where(p => p.DestBranchId == input.DestBranchId.Value);
-        if (input.FromDate.HasValue) { var f = input.FromDate.Value; poQ = poQ.Where(p => p.OrderDate >= f); }
-        if (input.ToDate.HasValue) { var t = input.ToDate.Value; poQ = poQ.Where(p => p.OrderDate <= t); }
-        if (!string.IsNullOrWhiteSpace(input.Filter))
-        {
-            var f = input.Filter.Trim().ToLower();
-            poQ = poQ.Where(p => p.PONumber.ToLower().Contains(f) || (p.Notes != null && p.Notes.ToLower().Contains(f)));
-        }
-
-        var totalCount = await AsyncExecuter.CountAsync(poQ);
-
-        var sorting = ResolveSorting(input.Sorting);
-        var pos = await AsyncExecuter.ToListAsync(poQ.OrderBy(sorting).Skip(input.SkipCount).Take(input.MaxResultCount));
+        var visibleBranchIds = await GetVisibleBranchIdsAsync();
+        var totalCount = await _poRepository.CountFilteredAsync(
+            input.Filter, input.Status, input.SupplierId, input.DestBranchId,
+            input.FromDate, input.ToDate, visibleBranchIds);
+        var pos = await _poRepository.GetFilteredListAsync(
+            input.Filter, input.Status, input.SupplierId, input.DestBranchId,
+            input.FromDate, input.ToDate, visibleBranchIds,
+            input.Sorting ?? string.Empty, input.SkipCount, input.MaxResultCount);
 
         // 2) Resolve display names from the Inventory context + Identity in separate queries.
         var supplierIds = pos.Select(p => p.SupplierId).Distinct().ToList();
@@ -119,15 +104,7 @@ public class PurchaseOrderAppService : OperationsAppService, IPurchaseOrderAppSe
     /// that operate on the in-memory _items field.
     /// </summary>
     private async Task<AppPurchaseOrder> LoadWithItemsAsync(Guid id)
-    {
-        var query = await _poRepository.WithDetailsAsync(p => p.Items);
-        var po = await AsyncExecuter.FirstOrDefaultAsync(query.Where(p => p.Id == id));
-        if (po == null)
-        {
-            throw new EntityNotFoundException(typeof(AppPurchaseOrder), id);
-        }
-        return po;
-    }
+        => await _poRepository.GetWithItemsAsync(id);
 
     private async Task<Dictionary<Guid, string>> GetSupplierNamesAsync(List<Guid> ids)
     {
@@ -262,9 +239,37 @@ public class PurchaseOrderAppService : OperationsAppService, IPurchaseOrderAppSe
     {
         var po = await LoadWithItemsAsync(id);
         await EnsureBranchAccessAsync(po.DestBranchId);
-        var receipts = input.Lines
-            .Where(l => l.ReceivedQuantity > 0)
-            .Select(l => (l.ItemId, l.ReceivedQuantity));
+        var receiveLines = input.Lines.Where(l => l.ReceivedQuantity > 0).ToList();
+        var inputByItem = new Dictionary<Guid, ReceiveLineDto>();
+        foreach (var line in receiveLines)
+        {
+            inputByItem[line.ItemId] = line;
+        }
+
+        var productIds = po.Items.Select(i => i.ProductId).Distinct().ToList();
+        var products = await _productRepository.GetListAsync(p => productIds.Contains(p.Id));
+        var productById = products.ToDictionary(p => p.Id);
+        var itemById = po.Items.ToDictionary(i => i.Id);
+        var today = Clock.Now.ToUniversalTime().Date;
+
+        foreach (var line in receiveLines)
+        {
+            if (!itemById.TryGetValue(line.ItemId, out var item))
+            {
+                throw new BusinessException(OperationsErrorCodes.PurchaseOrderItemNotFound)
+                    .WithData("ItemId", line.ItemId);
+            }
+
+            var product = productById[item.ProductId];
+            _manager.EnsureReceiptExpiryIsUsable(
+                product.ShelfLifeDays.HasValue,
+                product.Id,
+                product.Name,
+                line.ExpiryDate,
+                today);
+        }
+
+        var receipts = receiveLines.Select(l => (l.ItemId, l.ReceivedQuantity));
 
         var applied = po.RecordReceipt(receipts);
 
@@ -285,7 +290,8 @@ public class PurchaseOrderAppService : OperationsAppService, IPurchaseOrderAppSe
                 StockMovementTypes.Purchase,
                 notes: $"PO {po.PONumber}",
                 referenceId: po.Id,
-                referenceType: nameof(AppPurchaseOrder));
+                referenceType: nameof(AppPurchaseOrder),
+                batchExpiryDate: inputByItem[line.ItemId].ExpiryDate?.Date);
 
             await _branchInventoryRepository.UpdateAsync(inv);
         }
@@ -354,7 +360,8 @@ public class PurchaseOrderAppService : OperationsAppService, IPurchaseOrderAppSe
             OrderedQuantity = item.OrderedQuantity,
             ReceivedQuantity = item.ReceivedQuantity,
             UnitPrice = item.UnitPrice,
-            Subtotal = item.Subtotal
+            Subtotal = item.Subtotal,
+            TracksExpiry = product?.ShelfLifeDays.HasValue == true
         };
     }
 
@@ -364,19 +371,6 @@ public class PurchaseOrderAppService : OperationsAppService, IPurchaseOrderAppSe
         var q = await _userRepository.GetQueryableAsync();
         var users = await AsyncExecuter.ToListAsync(q.Where(u => userIds.Contains(u.Id)));
         return users.ToDictionary(u => u.Id, u => u.UserName);
-    }
-
-    private static string ResolveSorting(string? sorting)
-    {
-        if (string.IsNullOrWhiteSpace(sorting)) return $"{nameof(AppPurchaseOrder.OrderDate)} desc";
-        var s = sorting.Trim();
-        // Display-name columns can't be sorted at the DB level (different DbContexts) —
-        // fall back to the corresponding FK column so the grid stays usable.
-        if (s.StartsWith("SupplierName", StringComparison.OrdinalIgnoreCase))
-            return s.Replace("SupplierName", nameof(AppPurchaseOrder.SupplierId), StringComparison.OrdinalIgnoreCase);
-        if (s.StartsWith("DestBranchName", StringComparison.OrdinalIgnoreCase))
-            return s.Replace("DestBranchName", nameof(AppPurchaseOrder.DestBranchId), StringComparison.OrdinalIgnoreCase);
-        return s;
     }
 
     /// <summary>
@@ -397,8 +391,24 @@ public class PurchaseOrderAppService : OperationsAppService, IPurchaseOrderAppSe
         if (userId == null ||
             !await _branchRepository.AnyAsync(b => b.Id == destBranchId && b.ManagerUserId == userId))
         {
-            throw new BusinessException("Operations:PurchaseOrders:BranchAccessDenied")
+            throw new BusinessException(InventoryErrorCodes.BranchAccessDenied)
                 .WithData("BranchId", destBranchId);
         }
+    }
+
+    private async Task<List<Guid>?> GetVisibleBranchIdsAsync()
+    {
+        if (await AuthorizationService.IsGrantedAsync(OperationsPermissions.PurchaseOrders.ManageAll))
+        {
+            return null;
+        }
+
+        if (CurrentUser.Id is not Guid userId)
+        {
+            return new List<Guid>();
+        }
+
+        var branches = await _branchRepository.GetListAsync(b => b.ManagerUserId == userId);
+        return branches.ConvertAll(b => b.Id);
     }
 }

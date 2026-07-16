@@ -580,7 +580,7 @@
 
             _sales = await CashierAppService.GetRecentSalesAsync(_branch.Id, 60);
         }
-        catch (Exception ex)
+        catch (Exception)
         {
             Snackbar.Add(L["CashierShifts:LoadFailed"], Severity.Error);
         }
@@ -614,7 +614,7 @@
         {
             _detailSale = await CashierAppService.GetSaleDetailsAsync(saleId);
         }
-        catch (Exception ex)
+        catch (Exception)
         {
             Snackbar.Add(L["Recent:ViewFailed"], Severity.Error);
         }
@@ -655,7 +655,7 @@
             _reason = null;
             await RefreshAsync();
         }
-        catch (Exception ex)
+        catch (Exception)
         {
             Snackbar.Add(L["Recent:VoidFailed"], Severity.Error);
         }

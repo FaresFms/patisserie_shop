@@ -44,6 +44,20 @@ public class AppProductionOrder : FullAuditedAggregateRoot<Guid>
     private readonly List<AppProductionOrderAllocation> _allocations = new();
     public IReadOnlyCollection<AppProductionOrderAllocation> Allocations => new ReadOnlyCollection<AppProductionOrderAllocation>(_allocations);
 
+    private readonly List<AppProductionOrderDispatch> _dispatches = new();
+    public IReadOnlyCollection<AppProductionOrderDispatch> Dispatches => new ReadOnlyCollection<AppProductionOrderDispatch>(_dispatches);
+
+    public int ReservedQuantity => _allocations.Sum(x => x.AllocatedQuantity);
+    public int DispatchedQuantity => _allocations.Sum(x => x.DispatchedQuantity);
+    public int ReceivedQuantity => _allocations.Sum(x => x.ReceivedQuantity);
+    public int LostQuantity => _allocations.Sum(x => x.LostQuantity);
+    public int InTransitQuantity => _allocations.Sum(x => x.InTransitQuantity);
+    public int RemainingToDispatch => Math.Max(0, ReservedQuantity - DispatchedQuantity);
+
+    public int GetRemainingToDispatch(Guid destinationBranchId) => _allocations
+        .Where(x => x.BranchId == destinationBranchId)
+        .Sum(x => x.RemainingToDispatch);
+
     protected AppProductionOrder() { }
 
     internal AppProductionOrder(
@@ -113,10 +127,13 @@ public class AppProductionOrder : FullAuditedAggregateRoot<Guid>
     public AppProductionOrderAllocation AddAllocation(
         Guid allocationId,
         Guid branchId,
+        Guid? branchProductionRequestId,
         Guid? branchProductionRequestItemId,
         int allocatedQuantity)
     {
-        if (Status != ProductionOrderStatuses.Draft)
+        if (Status != ProductionOrderStatuses.Draft
+            && Status != ProductionOrderStatuses.ReadyToCook
+            && Status != ProductionOrderStatuses.WaitingForIngredients)
         {
             throw InvalidTransition(ProductionOrderStatuses.Draft);
         }
@@ -125,6 +142,7 @@ public class AppProductionOrder : FullAuditedAggregateRoot<Guid>
             allocationId,
             Id,
             branchId,
+            branchProductionRequestId,
             branchProductionRequestItemId,
             allocatedQuantity);
         _allocations.Add(allocation);
@@ -180,7 +198,7 @@ public class AppProductionOrder : FullAuditedAggregateRoot<Guid>
         return lines;
     }
 
-    public OutputLine Complete(
+    public CompletionResult Complete(
         int actualOutputQuantity,
         int acceptedQuantity,
         int rejectedQuantity,
@@ -209,6 +227,12 @@ public class AppProductionOrder : FullAuditedAggregateRoot<Guid>
         {
             throw new BusinessException(ProductionErrorCodes.WasteReasonRequired);
         }
+        if (expiryDate.Date < (ActualStartTime?.Date ?? DateTime.UtcNow.Date))
+        {
+            throw new BusinessException(ProductionErrorCodes.ProductionExpiryDateInPast)
+                .WithData("ExpiryDate", expiryDate.Date)
+                .WithData("ProductionDate", ActualStartTime?.Date ?? DateTime.UtcNow.Date);
+        }
 
         ActualOutputQuantity = actualOutputQuantity;
         AcceptedQuantity = acceptedQuantity;
@@ -221,17 +245,122 @@ public class AppProductionOrder : FullAuditedAggregateRoot<Guid>
         UnitProductionCost = TotalProductionCost / AcceptedQuantity;
         Status = ProductionOrderStatuses.Completed;
 
-        return new OutputLine(FinishedProductId, AcceptedQuantity, UnitProductionCost, ExpiryDate.Value);
+        var releases = ReleaseAllocationExcess(AcceptedQuantity);
+        return new CompletionResult(
+            new OutputLine(FinishedProductId, AcceptedQuantity, UnitProductionCost, ExpiryDate.Value),
+            releases);
     }
 
-    public void Cancel()
+    public IReadOnlyList<AllocationReleaseLine> Cancel()
     {
         if (!ProductionOrderStatuses.CanCancel(Status))
         {
             throw InvalidTransition(ProductionOrderStatuses.Cancelled);
         }
 
+        var releases = ReleaseAllocationExcess(0);
         Status = ProductionOrderStatuses.Cancelled;
+        return releases;
+    }
+
+    public AppProductionOrderDispatch CreateDispatch(
+        Guid dispatchId,
+        Guid stockTransferId,
+        Guid destinationBranchId,
+        int quantity,
+        DateTime dispatchedAt,
+        Func<Guid> lineIdFactory)
+    {
+        if (Status != ProductionOrderStatuses.Completed)
+        {
+            throw InvalidTransition(ProductionOrderStatuses.Completed);
+        }
+        if (quantity <= 0 || quantity > RemainingToDispatch)
+        {
+            throw new BusinessException(ProductionErrorCodes.DispatchQuantityExceedsRemaining)
+                .WithData("RequestedQuantity", quantity)
+                .WithData("RemainingToDispatch", RemainingToDispatch);
+        }
+        if (_dispatches.Any(x => x.StockTransferId == stockTransferId))
+        {
+            throw new BusinessException(ProductionErrorCodes.ProductionDispatchAlreadyExists)
+                .WithData("StockTransferId", stockTransferId);
+        }
+
+        var candidates = _allocations
+            .Where(x => x.BranchId == destinationBranchId && x.RemainingToDispatch > 0)
+            .ToList();
+        var destinationRemaining = candidates.Sum(x => x.RemainingToDispatch);
+        if (quantity > destinationRemaining)
+        {
+            throw new BusinessException(ProductionErrorCodes.DispatchDestinationHasNoAllocation)
+                .WithData("DestinationBranchId", destinationBranchId)
+                .WithData("RequestedQuantity", quantity)
+                .WithData("DestinationRemaining", destinationRemaining);
+        }
+
+        var dispatch = new AppProductionOrderDispatch(
+            dispatchId,
+            Id,
+            stockTransferId,
+            destinationBranchId,
+            quantity,
+            dispatchedAt);
+
+        var remaining = quantity;
+        foreach (var allocation in candidates)
+        {
+            if (remaining <= 0)
+            {
+                break;
+            }
+
+            var allocated = Math.Min(remaining, allocation.RemainingToDispatch);
+            allocation.MarkDispatched(allocated);
+            dispatch.AddLine(
+                lineIdFactory(),
+                allocation.Id,
+                allocation.BranchProductionRequestId,
+                allocation.BranchProductionRequestItemId,
+                allocated);
+            remaining -= allocated;
+        }
+
+        _dispatches.Add(dispatch);
+        return dispatch;
+    }
+
+    public IReadOnlyList<DispatchResultLine> CompleteDispatch(
+        Guid stockTransferId,
+        int receivedQuantity,
+        DateTime completedAt)
+    {
+        var dispatch = _dispatches.FirstOrDefault(x => x.StockTransferId == stockTransferId)
+            ?? throw new BusinessException(ProductionErrorCodes.ProductionDispatchNotFound)
+                .WithData("StockTransferId", stockTransferId);
+
+        var receiptLines = dispatch.Complete(receivedQuantity, completedAt);
+        if (receiptLines.Count == 0)
+        {
+            return Array.Empty<DispatchResultLine>();
+        }
+
+        var results = new List<DispatchResultLine>(receiptLines.Count);
+        foreach (var receipt in receiptLines)
+        {
+            var allocation = _allocations.FirstOrDefault(x => x.Id == receipt.ProductionOrderAllocationId)
+                ?? throw new BusinessException(ProductionErrorCodes.ProductionDispatchAllocationNotFound)
+                    .WithData("ProductionOrderAllocationId", receipt.ProductionOrderAllocationId);
+
+            allocation.RecordTransferResult(receipt.ReceivedQuantity, receipt.LostQuantity);
+            results.Add(new DispatchResultLine(
+                allocation.BranchProductionRequestId,
+                receipt.BranchProductionRequestItemId,
+                receipt.ReceivedQuantity,
+                receipt.LostQuantity));
+        }
+
+        return results;
     }
 
     private void SetPlannedOutputQuantity(int plannedOutputQuantity)
@@ -243,6 +372,45 @@ public class AppProductionOrder : FullAuditedAggregateRoot<Guid>
         }
 
         PlannedOutputQuantity = plannedOutputQuantity;
+    }
+
+    private IReadOnlyList<AllocationReleaseLine> ReleaseAllocationExcess(int quantityToKeep)
+    {
+        var excess = Math.Max(0, ReservedQuantity - quantityToKeep);
+        if (excess == 0)
+        {
+            return Array.Empty<AllocationReleaseLine>();
+        }
+
+        var releases = new List<AllocationReleaseLine>();
+        for (var index = _allocations.Count - 1; index >= 0 && excess > 0; index--)
+        {
+            var allocation = _allocations[index];
+            var release = Math.Min(excess, allocation.RemainingToDispatch);
+            if (release <= 0)
+            {
+                continue;
+            }
+
+            allocation.ReleaseUnshippedQuantity(release);
+            excess -= release;
+            if (allocation.BranchProductionRequestId.HasValue
+                && allocation.BranchProductionRequestItemId.HasValue)
+            {
+                releases.Add(new AllocationReleaseLine(
+                    allocation.BranchProductionRequestId.Value,
+                    allocation.BranchProductionRequestItemId.Value,
+                    release));
+            }
+        }
+
+        if (excess > 0)
+        {
+            throw new BusinessException(ProductionErrorCodes.InvalidOrderQuantity)
+                .WithData("UnreleasedQuantity", excess);
+        }
+
+        return releases;
     }
 
     private BusinessException InvalidTransition(string targetStatus) =>
@@ -258,4 +426,14 @@ public class AppProductionOrder : FullAuditedAggregateRoot<Guid>
         decimal TotalCost);
 
     public record OutputLine(Guid ProductId, int AcceptedQuantity, decimal UnitCost, DateTime ExpiryDate);
+    public record CompletionResult(OutputLine Output, IReadOnlyList<AllocationReleaseLine> ReleasedAllocations);
+    public record AllocationReleaseLine(
+        Guid BranchProductionRequestId,
+        Guid BranchProductionRequestItemId,
+        int Quantity);
+    public record DispatchResultLine(
+        Guid? BranchProductionRequestId,
+        Guid? BranchProductionRequestItemId,
+        int ReceivedQuantity,
+        int LostQuantity);
 }

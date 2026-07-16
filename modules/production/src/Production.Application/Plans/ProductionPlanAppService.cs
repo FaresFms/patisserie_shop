@@ -108,7 +108,7 @@ public class ProductionPlanAppService : ProductionAppService, IProductionPlanApp
     public async Task<ProductionPlanDto> CancelAsync(Guid id)
     {
         var plan = await _planRepository.GetWithLinesAsync(id);
-        plan.Cancel();
+        await _planManager.CancelAsync(plan);
         await _planRepository.UpdateAsync(plan, autoSave: true);
         return await MapToDtoAsync(plan);
     }

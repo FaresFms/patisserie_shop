@@ -8,14 +8,11 @@ public class RecordCashierSaleDto
     public Guid BranchId { get; set; }
     public List<RecordCashierSaleLineDto> Lines { get; set; } = new();
 
-    /// <summary>Cash handed over by the customer; null when not captured. Used to compute change.</summary>
+    /// <summary>Cash handed over by the customer. Cash-only sales require the full amount.</summary>
     public decimal? CashTendered { get; set; }
 
-    /// <summary>
-    /// Set after the cashier confirms the expired-stock warning: the sale needs more
-    /// units than the branch's non-expired stock covers, and the cashier chose to
-    /// sell anyway (e.g. clearing old stock at a discount).
-    /// </summary>
+    /// <summary>Legacy compatibility flag. Expired stock can no longer be sold.</summary>
+    [Obsolete("Expired stock sales are blocked and cannot be acknowledged.")]
     public bool AcknowledgeExpiredStock { get; set; }
 }
 

@@ -1197,6 +1197,10 @@ namespace patisserie_shop.Migrations
                     b.Property<Guid>("SaleId")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("SoldBatchBreakdown")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
                     b.Property<decimal>("Subtotal")
                         .HasColumnType("numeric");
 
@@ -1463,6 +1467,9 @@ namespace patisserie_shop.Migrations
                     b.Property<string>("Notes")
                         .HasMaxLength(512)
                         .HasColumnType("character varying(512)");
+
+                    b.Property<int>("PlannedQuantity")
+                        .HasColumnType("integer");
 
                     b.Property<Guid>("ProductId")
                         .HasColumnType("uuid");
@@ -1785,14 +1792,24 @@ namespace patisserie_shop.Migrations
                     b.Property<Guid>("BranchId")
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("BranchProductionRequestId")
+                        .HasColumnType("uuid");
+
                     b.Property<Guid?>("BranchProductionRequestItemId")
                         .HasColumnType("uuid");
 
-                    b.Property<int>("FulfilledQuantity")
+                    b.Property<int>("DispatchedQuantity")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("LostQuantity")
                         .HasColumnType("integer");
 
                     b.Property<Guid>("ProductionOrderId")
                         .HasColumnType("uuid");
+
+                    b.Property<int>("ReceivedQuantity")
+                        .HasColumnType("integer")
+                        .HasColumnName("FulfilledQuantity");
 
                     b.HasKey("Id");
 
@@ -1806,6 +1823,92 @@ namespace patisserie_shop.Migrations
                         .HasDatabaseName("IX_ProductionOrderAllocations_Order");
 
                     b.ToTable("ProductionOrderAllocations", (string)null);
+                });
+
+            modelBuilder.Entity("Production.Entities.AppProductionOrderDispatch", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<Guid>("DestinationBranchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("DispatchedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<int>("LostQuantity")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("ProductionOrderId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("ReceivedQuantity")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ShippedQuantity")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("StockTransferId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProductionOrderId")
+                        .HasDatabaseName("IX_ProductionOrderDispatches_Order");
+
+                    b.HasIndex("StockTransferId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_ProductionOrderDispatches_Transfer");
+
+                    b.HasIndex("DestinationBranchId", "CompletedAt")
+                        .HasDatabaseName("IX_ProductionOrderDispatches_BranchCompleted");
+
+                    b.ToTable("ProductionOrderDispatches", (string)null);
+                });
+
+            modelBuilder.Entity("Production.Entities.AppProductionOrderDispatchLine", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("BranchProductionRequestId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("BranchProductionRequestItemId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("LostQuantity")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("ProductionOrderAllocationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ProductionOrderDispatchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("ReceivedQuantity")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ShippedQuantity")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BranchProductionRequestItemId")
+                        .HasDatabaseName("IX_ProductionOrderDispatchLines_RequestItem");
+
+                    b.HasIndex("ProductionOrderAllocationId")
+                        .HasDatabaseName("IX_ProductionOrderDispatchLines_Allocation");
+
+                    b.HasIndex("ProductionOrderDispatchId")
+                        .HasDatabaseName("IX_ProductionOrderDispatchLines_Dispatch");
+
+                    b.ToTable("ProductionOrderDispatchLines", (string)null);
                 });
 
             modelBuilder.Entity("Production.Entities.AppProductionOrderIngredient", b =>
@@ -3991,6 +4094,24 @@ namespace patisserie_shop.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Production.Entities.AppProductionOrderDispatch", b =>
+                {
+                    b.HasOne("Production.Entities.AppProductionOrder", null)
+                        .WithMany("Dispatches")
+                        .HasForeignKey("ProductionOrderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Production.Entities.AppProductionOrderDispatchLine", b =>
+                {
+                    b.HasOne("Production.Entities.AppProductionOrderDispatch", null)
+                        .WithMany("Lines")
+                        .HasForeignKey("ProductionOrderDispatchId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Production.Entities.AppProductionOrderIngredient", b =>
                 {
                     b.HasOne("Production.Entities.AppProductionOrder", null)
@@ -4236,7 +4357,14 @@ namespace patisserie_shop.Migrations
                 {
                     b.Navigation("Allocations");
 
+                    b.Navigation("Dispatches");
+
                     b.Navigation("Ingredients");
+                });
+
+            modelBuilder.Entity("Production.Entities.AppProductionOrderDispatch", b =>
+                {
+                    b.Navigation("Lines");
                 });
 
             modelBuilder.Entity("Production.Entities.AppProductionPlan", b =>

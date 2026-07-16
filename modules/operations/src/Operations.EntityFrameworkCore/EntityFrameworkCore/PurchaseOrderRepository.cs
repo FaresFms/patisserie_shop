@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
+using System.Linq.Dynamic.Core;
 using Operations.Entities;
 using Operations.PurchaseOrders;
 using Volo.Abp.Domain.Repositories.EntityFrameworkCore;
@@ -18,6 +19,102 @@ public class PurchaseOrderRepository
     public PurchaseOrderRepository(IDbContextProvider<OperationsDbContext> dbContextProvider)
         : base(dbContextProvider)
     {
+    }
+
+    public async Task<AppPurchaseOrder> GetWithItemsAsync(
+        Guid id,
+        CancellationToken cancellationToken = default)
+    {
+        var query = await WithDetailsAsync(p => p.Items);
+        return await query.FirstOrDefaultAsync(p => p.Id == id, GetCancellationToken(cancellationToken))
+            ?? throw new Volo.Abp.Domain.Entities.EntityNotFoundException(typeof(AppPurchaseOrder), id);
+    }
+
+    public async Task<long> CountFilteredAsync(
+        string? filter,
+        string? status,
+        Guid? supplierId,
+        Guid? destBranchId,
+        DateTime? fromDate,
+        DateTime? toDate,
+        List<Guid>? visibleBranchIds,
+        CancellationToken cancellationToken = default)
+    {
+        var query = await BuildFilteredQueryAsync(
+            filter, status, supplierId, destBranchId, fromDate, toDate, visibleBranchIds);
+        return await query.LongCountAsync(GetCancellationToken(cancellationToken));
+    }
+
+    public async Task<List<AppPurchaseOrder>> GetFilteredListAsync(
+        string? filter,
+        string? status,
+        Guid? supplierId,
+        Guid? destBranchId,
+        DateTime? fromDate,
+        DateTime? toDate,
+        List<Guid>? visibleBranchIds,
+        string sorting,
+        int skipCount,
+        int maxResultCount,
+        CancellationToken cancellationToken = default)
+    {
+        var query = await BuildFilteredQueryAsync(
+            filter, status, supplierId, destBranchId, fromDate, toDate, visibleBranchIds);
+        return await query
+            .Include(p => p.Items)
+            .OrderBy(ResolveSorting(sorting))
+            .Skip(skipCount)
+            .Take(maxResultCount)
+            .ToListAsync(GetCancellationToken(cancellationToken));
+    }
+
+    private async Task<IQueryable<AppPurchaseOrder>> BuildFilteredQueryAsync(
+        string? filter,
+        string? status,
+        Guid? supplierId,
+        Guid? destBranchId,
+        DateTime? fromDate,
+        DateTime? toDate,
+        List<Guid>? visibleBranchIds)
+    {
+        var query = await GetQueryableAsync();
+
+        if (!string.IsNullOrWhiteSpace(status) && PurchaseOrderStatuses.All.Contains(status))
+            query = query.Where(p => p.Status == status);
+        if (supplierId.HasValue) query = query.Where(p => p.SupplierId == supplierId.Value);
+        if (destBranchId.HasValue) query = query.Where(p => p.DestBranchId == destBranchId.Value);
+        if (fromDate.HasValue) query = query.Where(p => p.OrderDate >= fromDate.Value);
+        if (toDate.HasValue) query = query.Where(p => p.OrderDate <= toDate.Value);
+        if (visibleBranchIds != null) query = query.Where(p => visibleBranchIds.Contains(p.DestBranchId));
+
+        if (!string.IsNullOrWhiteSpace(filter))
+        {
+            var normalized = filter.Trim().ToLower();
+            query = query.Where(p => p.PONumber.ToLower().Contains(normalized)
+                || (p.Notes != null && p.Notes.ToLower().Contains(normalized)));
+        }
+
+        return query;
+    }
+
+    private static string ResolveSorting(string? sorting)
+    {
+        const string fallback = $"{nameof(AppPurchaseOrder.OrderDate)} desc";
+        if (string.IsNullOrWhiteSpace(sorting)) return fallback;
+
+        var value = sorting.Trim()
+            .Replace("SupplierName", nameof(AppPurchaseOrder.SupplierId), StringComparison.OrdinalIgnoreCase)
+            .Replace("DestBranchName", nameof(AppPurchaseOrder.DestBranchId), StringComparison.OrdinalIgnoreCase);
+        var column = value.Split(' ')[0];
+        var allowed = new[]
+        {
+            nameof(AppPurchaseOrder.PONumber), nameof(AppPurchaseOrder.Status),
+            nameof(AppPurchaseOrder.SupplierId), nameof(AppPurchaseOrder.DestBranchId),
+            nameof(AppPurchaseOrder.OrderDate), nameof(AppPurchaseOrder.ExpectedDeliveryDate),
+            nameof(AppPurchaseOrder.ActualDeliveryDate), nameof(AppPurchaseOrder.TotalAmount),
+            nameof(AppPurchaseOrder.CreationTime)
+        };
+        return allowed.Contains(column, StringComparer.OrdinalIgnoreCase) ? value : fallback;
     }
 
     public async Task<List<SupplierScorecardRow>> GetSupplierScorecardsAsync(

@@ -274,10 +274,18 @@
                                                   ToValue="@(o => o.Value)"
                                                   ToLabel="@(o => o.Label)"
                                                   Value="_writeOffReason"
-                                                  ValueChanged="@(v => _writeOffReason = v)"
+                                                  ValueChanged="OnWriteOffReasonChanged"
                                                   Label="@ProdL["WasteReason"]"
                                                   Clearable="false" />
                             </SoftGridItem>
+                            @if (_writeOffReason == ProductionWasteReasons.Other)
+                            {
+                                <SoftGridItem xs="12">
+                                    <SoftTextField T="string" @bind-Value="_writeOffOtherReason"
+                                                   Label="@ProdL["OtherReasonDetails"]"
+                                                   Variant="Variant.Outlined" />
+                                </SoftGridItem>
+                            }
                             <SoftGridItem xs="12">
                                 <SoftTextField T="string" @bind-Value="_writeOffNotes"
                                                Label="@ProdL["Notes"]"
@@ -383,13 +391,15 @@
     private Guid? _writeOffProductId;
     private int _writeOffQuantity = 1;
     private string _writeOffReason = ProductionWasteReasons.Other;
+    private string? _writeOffOtherReason;
     private string? _writeOffNotes;
     private List<BranchInventoryDto> _writeOffProducts = new();
 
     private bool CanSaveWriteOff =>
         _writeOffBranchId.HasValue
         && _writeOffProductId.HasValue
-        && _writeOffQuantity > 0;
+        && _writeOffQuantity > 0
+        && (_writeOffReason != ProductionWasteReasons.Other || !string.IsNullOrWhiteSpace(_writeOffOtherReason));
 
     private readonly ApexChartOptions<ProductionWasteDailyPointDto> _wasteTrendOptions = new()
     {
@@ -514,6 +524,7 @@
         _writeOffProductId = null;
         _writeOffQuantity = 1;
         _writeOffReason = ProductionWasteReasons.Other;
+        _writeOffOtherReason = null;
         _writeOffNotes = null;
         _writeOffVisible = true;
         await LoadWriteOffProductsAsync();
@@ -571,7 +582,7 @@
                 ProductId = _writeOffProductId.Value,
                 Quantity = _writeOffQuantity,
                 Reason = _writeOffReason,
-                Notes = _writeOffNotes
+                Notes = BuildWriteOffNotes()
             });
 
             Snackbar.Add(ProdL["SavedSuccessfully"], Severity.Success);
@@ -586,6 +597,28 @@
         {
             _savingWriteOff = false;
         }
+    }
+
+    private void OnWriteOffReasonChanged(string reason)
+    {
+        _writeOffReason = reason;
+        if (reason != ProductionWasteReasons.Other)
+        {
+            _writeOffOtherReason = null;
+        }
+    }
+
+    private string? BuildWriteOffNotes()
+    {
+        if (_writeOffReason != ProductionWasteReasons.Other || string.IsNullOrWhiteSpace(_writeOffOtherReason))
+        {
+            return _writeOffNotes;
+        }
+
+        var otherNote = ProdL["OriginalWasteReason", _writeOffOtherReason.Trim()].Value;
+        return string.IsNullOrWhiteSpace(_writeOffNotes)
+            ? otherNote
+            : $"{_writeOffNotes.Trim()} | {otherNote}";
     }
 
     private Color WasteTypeColor(string type) => type switch

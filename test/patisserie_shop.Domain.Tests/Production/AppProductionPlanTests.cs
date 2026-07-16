@@ -72,4 +72,33 @@ public class AppProductionPlanTests
         plan.Status.ShouldBe(ProductionPlanStatuses.Confirmed);
         plan.ConfirmedAt.ShouldNotBeNull();
     }
+
+    [Fact]
+    public void Confirmed_plan_moves_through_in_progress_and_closed()
+    {
+        var plan = NewPlan();
+        plan.AddLine(
+            Guid.NewGuid(), Guid.NewGuid(), 5, 0, 0, 5, 5,
+            1m, 1m, 1m, 3m);
+        plan.Confirm(Guid.NewGuid());
+
+        plan.MarkInProgress();
+        plan.Status.ShouldBe(ProductionPlanStatuses.InProgress);
+
+        plan.Close();
+        plan.Status.ShouldBe(ProductionPlanStatuses.Closed);
+    }
+
+    [Fact]
+    public void Confirmed_plan_with_orders_cannot_be_cancelled()
+    {
+        var plan = NewPlan();
+        plan.AddLine(
+            Guid.NewGuid(), Guid.NewGuid(), 5, 0, 0, 5, 5,
+            1m, 1m, 1m, 3m);
+        plan.Confirm(Guid.NewGuid());
+
+        Should.Throw<BusinessException>(() => plan.Cancel(hasProductionOrders: true))
+            .Code.ShouldBe(ProductionErrorCodes.CannotCancelPlanWithOrders);
+    }
 }

@@ -8,4 +8,6 @@ public class ProductionDispatchResultDto
     public string StockTransferReference { get; set; } = null!;
     public int DispatchedQuantity { get; set; }
     public int FulfilledRequestQuantity { get; set; }
+    public int InTransitQuantity { get; set; }
+    public int RemainingToDispatch { get; set; }
 }

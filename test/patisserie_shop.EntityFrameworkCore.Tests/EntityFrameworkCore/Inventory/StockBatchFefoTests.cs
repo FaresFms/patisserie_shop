@@ -17,9 +17,8 @@ using Xunit;
 namespace patisserie_shop.EntityFrameworkCore.Inventory;
 
 /// <summary>
-/// The best-effort FEFO (first-expired-first-out) batch ledger: consumption order,
-/// drift tolerance (a shortfall must never fail the authoritative stock mutation),
-/// and the AppStockBatch consumption invariants.
+/// Safety-critical FEFO coverage: usable expiry lots are required for perishable
+/// sales/transfers, exact sale lots are restorable, and waste drains expired lots first.
 /// </summary>
 [Collection(patisserie_shopTestConsts.CollectionDefinitionName)]
 public class StockBatchFefoTests : IntegrationTestBase
@@ -87,17 +86,57 @@ public class StockBatchFefoTests : IntegrationTestBase
     }
 
     [Fact]
-    public async Task Consumption_Beyond_Batch_Coverage_Never_Fails_The_Sale()
+    public async Task Perishable_Sale_Is_Blocked_When_Usable_Batches_Do_Not_Cover_It()
     {
         // 20 on hand but the batch ledger only knows about 5 → 8 sold = 5 consumed + 3 drift.
         var (branchId, productId) = await ArrangePerishableProductAsync(onHand: 20);
         var only = await CreateBatchAsync(branchId, productId, quantity: 5, expiresInDays: 5);
 
-        await RecordSaleAsync(branchId, productId, quantity: 8); // must NOT throw
+        var exception = await Should.ThrowAsync<BusinessException>(
+            () => RecordSaleAsync(branchId, productId, quantity: 8));
+        exception.Code.ShouldBe(global::Operations.OperationsErrorCodes.SaleIncludesExpiredStock);
 
         var batch = (await LoadBatchesAsync(productId)).Single(b => b.Id == only.Id);
-        batch.QuantityRemaining.ShouldBe(0);
-        batch.IsDepleted.ShouldBeTrue();
+        batch.QuantityRemaining.ShouldBe(5);
+        batch.IsDepleted.ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task Expired_Batch_Cannot_Be_Sold_And_Is_Left_Untouched()
+    {
+        var (branchId, productId) = await ArrangePerishableProductAsync(onHand: 5);
+        var expired = await CreateBatchAsync(branchId, productId, quantity: 5, expiresInDays: -1);
+
+        var exception = await Should.ThrowAsync<BusinessException>(
+            () => RecordSaleAsync(branchId, productId, quantity: 1));
+        exception.Code.ShouldBe(global::Operations.OperationsErrorCodes.SaleIncludesExpiredStock);
+
+        var reloaded = (await LoadBatchesAsync(productId)).Single(b => b.Id == expired.Id);
+        reloaded.QuantityRemaining.ShouldBe(5);
+    }
+
+    [Fact]
+    public async Task Deleting_A_Sale_Restores_The_Exact_Expiry_Lots()
+    {
+        var (branchId, productId) = await ArrangePerishableProductAsync(onHand: 5);
+        var expiry = DateTime.UtcNow.Date.AddDays(4);
+        await CreateBatchAsync(branchId, productId, quantity: 5, expiresInDays: 4);
+        var sales = GetRequiredService<ISaleAppService>();
+
+        var sale = await sales.CreateAsync(new CreateSaleDto
+        {
+            BranchId = branchId,
+            SaleDate = DateTime.UtcNow,
+            Items = new List<CreateSaleItemDto>
+            {
+                new() { ProductId = productId, Quantity = 3, UnitPrice = 5m }
+            }
+        });
+
+        await sales.DeleteAsync(sale.Id);
+
+        var batches = await LoadBatchesAsync(branchId, productId);
+        batches.Where(b => b.ExpiryDate == expiry).Sum(b => b.QuantityRemaining).ShouldBe(5);
     }
 
     [Fact]
@@ -167,7 +206,7 @@ public class StockBatchFefoTests : IntegrationTestBase
 
         await transfers.SubmitAsync(transfer.Id);
         await transfers.ApproveAsync(transfer.Id);
-        await transfers.ShipAsync(transfer.Id);
+        await transfers.ShipAsync(transfer.Id, new ShipStockTransferDto());
         await transfers.CompleteAsync(transfer.Id, new CompleteStockTransferDto
         {
             Lines = new List<CompleteTransferLineDto>
@@ -180,6 +219,36 @@ public class StockBatchFefoTests : IntegrationTestBase
         destinationBatches.Count.ShouldBe(2);
         destinationBatches.Single(b => b.ExpiryDate == earlier.ExpiryDate).QuantityRemaining.ShouldBe(5);
         destinationBatches.Single(b => b.ExpiryDate == later.ExpiryDate).QuantityRemaining.ShouldBe(2);
+    }
+
+    [Fact]
+    public async Task Transfer_Cannot_Ship_Expired_Perishable_Stock()
+    {
+        var (sourceBranchId, productId) = await ArrangePerishableProductAsync(onHand: 5);
+        var destinationBranch = await CreateBranchAsync();
+        var expired = await CreateBatchAsync(sourceBranchId, productId, quantity: 5, expiresInDays: -1);
+        var transfers = GetRequiredService<IStockTransferAppService>();
+
+        var transfer = await transfers.CreateAsync(new CreateStockTransferDto
+        {
+            FromBranchId = sourceBranchId,
+            ToBranchId = destinationBranch.Id,
+            RequestedDate = DateTime.UtcNow
+        });
+        await transfers.AddItemAsync(transfer.Id, new AddStockTransferItemDto
+        {
+            ProductId = productId,
+            RequestedQuantity = 1
+        });
+        await transfers.SubmitAsync(transfer.Id);
+        await transfers.ApproveAsync(transfer.Id);
+
+        var exception = await Should.ThrowAsync<BusinessException>(
+            () => transfers.ShipAsync(transfer.Id, new ShipStockTransferDto()));
+        exception.Code.ShouldBe(global::Operations.OperationsErrorCodes.InsufficientStockAtSource);
+
+        var reloaded = (await LoadBatchesAsync(sourceBranchId, productId)).Single(b => b.Id == expired.Id);
+        reloaded.QuantityRemaining.ShouldBe(5);
     }
 
     [Fact]

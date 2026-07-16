@@ -33,7 +33,11 @@ public class ProductionOrderRepository
 
     public async Task<AppProductionOrder> GetWithDetailsAsync(Guid id, CancellationToken cancellationToken = default)
     {
-        var query = await WithDetailsAsync(o => o.Ingredients, o => o.Allocations);
+        var query = (await GetQueryableAsync())
+            .Include(o => o.Ingredients)
+            .Include(o => o.Allocations)
+            .Include(o => o.Dispatches)
+                .ThenInclude(d => d.Lines);
         return await query.FirstAsync(o => o.Id == id, GetCancellationToken(cancellationToken));
     }
 
@@ -45,6 +49,41 @@ public class ProductionOrderRepository
         return await query.FirstOrDefaultAsync(
             o => o.ProductionPlanLineId == productionPlanLineId,
             GetCancellationToken(cancellationToken));
+    }
+
+    public async Task<AppProductionOrder?> FindByStockTransferIdAsync(
+        Guid stockTransferId,
+        CancellationToken cancellationToken = default)
+    {
+        var query = (await GetQueryableAsync())
+            .Include(o => o.Ingredients)
+            .Include(o => o.Allocations)
+            .Include(o => o.Dispatches)
+                .ThenInclude(d => d.Lines);
+        return await query.FirstOrDefaultAsync(
+            o => o.Dispatches.Any(d => d.StockTransferId == stockTransferId),
+            GetCancellationToken(cancellationToken));
+    }
+
+    public async Task<bool> HasOrdersForPlanAsync(
+        Guid productionPlanId,
+        CancellationToken cancellationToken = default)
+    {
+        var query = await GetQueryableAsync();
+        return await query.AnyAsync(
+            o => o.ProductionPlanId == productionPlanId,
+            GetCancellationToken(cancellationToken));
+    }
+
+    public async Task<List<string>> GetStatusesForPlanAsync(
+        Guid productionPlanId,
+        CancellationToken cancellationToken = default)
+    {
+        var query = await GetQueryableAsync();
+        return await query
+            .Where(o => o.ProductionPlanId == productionPlanId)
+            .Select(o => o.Status)
+            .ToListAsync(GetCancellationToken(cancellationToken));
     }
 
     public async Task<long> CountFilteredAsync(
@@ -80,6 +119,10 @@ public class ProductionOrderRepository
                 Priority = o.Priority,
                 PlannedOutputQuantity = o.PlannedOutputQuantity,
                 AcceptedQuantity = o.AcceptedQuantity,
+                ReservedQuantity = o.Allocations.Sum(a => a.AllocatedQuantity),
+                DispatchedQuantity = o.Allocations.Sum(a => a.DispatchedQuantity),
+                ReceivedQuantity = o.Allocations.Sum(a => a.ReceivedQuantity),
+                LostQuantity = o.Allocations.Sum(a => a.LostQuantity),
                 ActualStartTime = o.ActualStartTime,
                 CompletedAt = o.CompletedAt,
                 TotalProductionCost = o.TotalProductionCost
@@ -119,6 +162,12 @@ public class ProductionOrderRepository
                 Priority = h.Priority,
                 PlannedOutputQuantity = h.PlannedOutputQuantity,
                 AcceptedQuantity = h.AcceptedQuantity,
+                ReservedQuantity = h.ReservedQuantity,
+                DispatchedQuantity = h.DispatchedQuantity,
+                InTransitQuantity = Math.Max(0, h.DispatchedQuantity - h.ReceivedQuantity - h.LostQuantity),
+                ReceivedQuantity = h.ReceivedQuantity,
+                LostQuantity = h.LostQuantity,
+                RemainingToDispatch = Math.Max(0, h.ReservedQuantity - h.DispatchedQuantity),
                 ActualStartTime = h.ActualStartTime,
                 CompletedAt = h.CompletedAt,
                 TotalProductionCost = h.TotalProductionCost
@@ -524,6 +573,10 @@ public class ProductionOrderRepository
         public string Priority { get; set; } = null!;
         public int PlannedOutputQuantity { get; set; }
         public int AcceptedQuantity { get; set; }
+        public int ReservedQuantity { get; set; }
+        public int DispatchedQuantity { get; set; }
+        public int ReceivedQuantity { get; set; }
+        public int LostQuantity { get; set; }
         public DateTime? ActualStartTime { get; set; }
         public DateTime? CompletedAt { get; set; }
         public decimal TotalProductionCost { get; set; }

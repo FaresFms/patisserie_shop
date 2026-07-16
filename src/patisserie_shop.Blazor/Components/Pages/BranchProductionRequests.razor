@@ -106,6 +106,7 @@
                 </TemplateColumn>
                 <PropertyColumn T="BranchProductionRequestListItemDto" TProperty="int" Property="x => x.RequestedTotalQuantity" Title="@ProdL["RequestedTotal"]" />
                 <PropertyColumn T="BranchProductionRequestListItemDto" TProperty="int" Property="x => x.ApprovedTotalQuantity" Title="@ProdL["ApprovedTotal"]" />
+                <PropertyColumn T="BranchProductionRequestListItemDto" TProperty="int" Property="x => x.PlannedTotalQuantity" Title="@ProdL["PlannedTotal"]" />
                 <PropertyColumn T="BranchProductionRequestListItemDto" TProperty="int" Property="x => x.FulfilledTotalQuantity" Title="@ProdL["FulfilledTotal"]" />
                 <TemplateColumn T="BranchProductionRequestListItemDto" Title="@ProdL["Actions"]" Sortable="false">
                     <CellTemplate>
@@ -282,6 +283,7 @@
                                 <MudTh>@ProdL["Product"]</MudTh>
                                 <MudTh>@ProdL["RequestedQuantity"]</MudTh>
                                 <MudTh>@ProdL["ApprovedQuantity"]</MudTh>
+                                <MudTh>@ProdL["PlannedQuantity"]</MudTh>
                                 <MudTh>@ProdL["FulfilledQuantity"]</MudTh>
                             </HeaderContent>
                             <RowTemplate>
@@ -295,13 +297,14 @@
                                                           Variant="Variant.Outlined"
                                                           Min="0"
                                                           HideSpinButtons="true"
-                                                          Style="max-width: 140px;" />
+                                                          Class="soft-qty" />
                                     }
                                     else
                                     {
                                         <span>@context.ApprovedQuantity @context.ProductUnit</span>
                                     }
                                 </MudTd>
+                                <MudTd>@context.PlannedQuantity @context.ProductUnit</MudTd>
                                 <MudTd>@context.FulfilledQuantity @context.ProductUnit</MudTd>
                             </RowTemplate>
                         </SoftTable>
@@ -389,6 +392,10 @@
             new(BranchProductionRequestStatuses.Draft, ProdL["Status:Draft"]),
             new(BranchProductionRequestStatuses.Submitted, ProdL["Status:Submitted"]),
             new(BranchProductionRequestStatuses.Approved, ProdL["Status:Approved"]),
+            new(BranchProductionRequestStatuses.PartiallyPlanned, ProdL["Status:PartiallyPlanned"]),
+            new(BranchProductionRequestStatuses.Planned, ProdL["Status:Planned"]),
+            new(BranchProductionRequestStatuses.PartiallyFulfilled, ProdL["Status:PartiallyFulfilled"]),
+            new(BranchProductionRequestStatuses.Fulfilled, ProdL["Status:Fulfilled"]),
             new(BranchProductionRequestStatuses.Rejected, ProdL["Status:Rejected"]),
             new(BranchProductionRequestStatuses.Cancelled, ProdL["Status:Cancelled"])
         ];
@@ -619,8 +626,10 @@
     {
         var color = status switch
         {
-            BranchProductionRequestStatuses.Approved or BranchProductionRequestStatuses.Fulfilled => Color.Success,
-            BranchProductionRequestStatuses.Submitted or BranchProductionRequestStatuses.PartiallyFulfilled => Color.Warning,
+            BranchProductionRequestStatuses.Approved or BranchProductionRequestStatuses.Planned
+                or BranchProductionRequestStatuses.Fulfilled => Color.Success,
+            BranchProductionRequestStatuses.Submitted or BranchProductionRequestStatuses.PartiallyPlanned
+                or BranchProductionRequestStatuses.PartiallyFulfilled => Color.Warning,
             BranchProductionRequestStatuses.Rejected or BranchProductionRequestStatuses.Cancelled => Color.Error,
             _ => Color.Default
         };
@@ -638,6 +647,10 @@
         BranchProductionRequestStatuses.Draft => ProdL["Status:Draft"],
         BranchProductionRequestStatuses.Submitted => ProdL["Status:Submitted"],
         BranchProductionRequestStatuses.Approved => ProdL["Status:Approved"],
+        BranchProductionRequestStatuses.PartiallyPlanned => ProdL["Status:PartiallyPlanned"],
+        BranchProductionRequestStatuses.Planned => ProdL["Status:Planned"],
+        BranchProductionRequestStatuses.PartiallyFulfilled => ProdL["Status:PartiallyFulfilled"],
+        BranchProductionRequestStatuses.Fulfilled => ProdL["Status:Fulfilled"],
         BranchProductionRequestStatuses.Rejected => ProdL["Status:Rejected"],
         BranchProductionRequestStatuses.Cancelled => ProdL["Status:Cancelled"],
         _ => status

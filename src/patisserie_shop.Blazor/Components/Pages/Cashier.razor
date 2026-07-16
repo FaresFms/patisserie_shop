@@ -235,6 +235,10 @@
                         <span class="pos-pay-label">@L["Cashier:ChangeDue"]</span>
                         <span class="pos-pay-value @(ChangeDue < 0 ? "is-neg" : "")">@FormatMoney(ChangeDue)</span>
                     </div>
+                    @if (_cart.Count > 0 && _tendered < CartTotal)
+                    {
+                        <div class="pos-pay-short">@L["Cashier:CashShort", FormatMoney(CartTotal - _tendered)]</div>
+                    }
 
                     @KeypadFor(EditTenderedDigit, EditTenderedBackspace, EditTenderedClear, exact: true)
 
@@ -245,7 +249,7 @@
                             @L["Cashier:Hold"]
                         </button>
                         <button type="button" class="pos-primary-btn pos-charge-btn"
-                                disabled="@(_cart.Count == 0 || _busy)" @onclick="ChargeAsync">
+                                disabled="@(_cart.Count == 0 || _tendered < CartTotal || _busy)" @onclick="ChargeAsync">
                             <SoftIcon Icon="@Icons.Material.Filled.PointOfSale" Class="mr-2" />
                             @(_busy ? L["Cashier:Charging"] : $"{L["Cashier:Charge"]} · {FormatMoney(CartTotal)}")
                         </button>
@@ -309,41 +313,6 @@
                                 Disabled="@(infoRemaining <= 0)"
                                 OnClick="AddInfoProductToCart">
                         @L["Cashier:AddToCart"]
-                    </SoftButton>
-                </div>
-            </SoftCard>
-        </div>
-    </div>
-}
-
-@* ─────────── EXPIRED-STOCK CONFIRM ─────────── *@
-@if (_expiredConfirmProducts is not null)
-{
-    <div class="glass-modal-backdrop" @onclick="CancelExpiredCharge">
-        <div class="glass-modal-container glass-modal-container--sm" @onclick:stopPropagation="true">
-            <SoftCard Elevation="24" Class="glass-modal">
-                <SoftCardHeader Class="pa-4">
-                    <CardHeaderContent>
-                        <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                            <SoftIcon Icon="@Icons.Material.Filled.EventBusy" Color="Color.Warning" Size="Size.Medium" />
-                            <SoftText Typo="Typo.h6">@L["Cashier:ExpiredWarnTitle"]</SoftText>
-                        </SoftStack>
-                    </CardHeaderContent>
-                </SoftCardHeader>
-                <SoftDivider />
-                <SoftCardContent Class="pa-4">
-                    <SoftStack Spacing="2">
-                        <SoftText Typo="Typo.body2">@L["Cashier:ExpiredWarnText"]</SoftText>
-                        <SoftText Typo="Typo.body2" Style="font-weight:600;">@_expiredConfirmProducts</SoftText>
-                    </SoftStack>
-                </SoftCardContent>
-                <SoftDivider />
-                <div class="pa-3 d-flex justify-end" style="gap:8px;">
-                    <SoftButton Variant="Variant.Text" OnClick="CancelExpiredCharge">@L["Cancel"]</SoftButton>
-                    <SoftButton Variant="Variant.Filled" Color="Color.Warning"
-                                StartIcon="@Icons.Material.Filled.CheckCircle"
-                                OnClick="ConfirmExpiredChargeAsync" Disabled="_busy">
-                        @L["Cashier:SellAnyway"]
                     </SoftButton>
                 </div>
             </SoftCard>
@@ -551,8 +520,6 @@
     private CashierSaleResultDto? _receipt;
     private decimal? _receiptTendered;
 
-    /// <summary>Product names from the expired-stock warning; non-null shows the confirm dialog.</summary>
-    private string? _expiredConfirmProducts;
     private CashierProductDto? _infoProduct;
 
     // Shop branding for the printed receipt — loaded from shop settings.
@@ -592,7 +559,7 @@
                 await TryLoadShiftAsync();
             }
         }
-        catch (Exception ex)
+        catch (Exception)
         {
             Snackbar.Add(L["Cashier:LoadFailed"], Severity.Error);
         }
@@ -629,7 +596,7 @@
             Snackbar.Add(L["Cashier:ShiftOpened"], Severity.Success);
             await LoadTilesAsync();
         }
-        catch (Exception ex)
+        catch (Exception)
         {
             Snackbar.Add(L["Cashier:OpenShiftFailed"], Severity.Error);
         }
@@ -649,7 +616,7 @@
             _tiles = await CashierAppService.GetProductTilesAsync(_shift.BranchId, _filter);
             await LoadPendingReportsAsync();
         }
-        catch (Exception ex)
+        catch (Exception)
         {
             Snackbar.Add(L["Cashier:LoadFailed"], Severity.Error);
         }
@@ -713,7 +680,7 @@
             _pendingReportProductIds.Add(p.ProductId);
             Snackbar.Add(L["Cashier:Reported"], Severity.Info);
         }
-        catch (Exception ex)
+        catch (Exception)
         {
             Snackbar.Add(L["Cashier:ReportFailed"], Severity.Error);
         }
@@ -871,17 +838,7 @@
     }
 
     // ─── charge ───
-    private Task ChargeAsync() => ChargeCoreAsync(acknowledgeExpired: false);
-
-    private async Task ConfirmExpiredChargeAsync()
-    {
-        _expiredConfirmProducts = null;
-        await ChargeCoreAsync(acknowledgeExpired: true);
-    }
-
-    private void CancelExpiredCharge() => _expiredConfirmProducts = null;
-
-    private async Task ChargeCoreAsync(bool acknowledgeExpired)
+    private async Task ChargeAsync()
     {
         if (_busy || _cart.Count == 0 || _shift is null) return;
         _busy = true;
@@ -892,12 +849,11 @@
                 return;
             }
 
-            var tendered = _tendered > 0 ? _tendered : (decimal?)null;
+            var tendered = _tendered;
             var result = await CashierAppService.RecordSaleAsync(new RecordCashierSaleDto
             {
                 BranchId = _shift.BranchId,
                 CashTendered = tendered,
-                AcknowledgeExpiredStock = acknowledgeExpired,
                 Lines = _cart.Select(l => new RecordCashierSaleLineDto
                 {
                     ProductId = l.ProductId,
@@ -914,31 +870,15 @@
             _shift = await CashierAppService.GetCurrentShiftAsync(_shift.BranchId) ?? _shift;
             await LoadTilesAsync();
         }
-        catch (Exception ex) when (FindBusinessException(ex)?.Code == "Operations:Sales:IncludesExpiredStock")
-        {
-            // The cart needs more units than the fresh (non-expired) stock covers —
-            // ask the cashier to confirm instead of failing the sale.
-            _expiredConfirmProducts = FindBusinessException(ex)?.Data["Products"]?.ToString() ?? "-";
-        }
         catch (Exception ex)
         {
-            Snackbar.Add(L["Cashier:SaleFailed"], Severity.Error);
+            await HandleErrorAsync(ex);
             await RefreshCartAvailabilityAsync();
         }
         finally
         {
             _busy = false;
         }
-    }
-
-    private static Volo.Abp.BusinessException? FindBusinessException(Exception? ex)
-    {
-        while (ex != null)
-        {
-            if (ex is Volo.Abp.BusinessException business) return business;
-            ex = ex.InnerException;
-        }
-        return null;
     }
 
     private void NewSale()
@@ -1026,7 +966,7 @@
 
             await FinishCloseAsync();
         }
-        catch (Exception ex)
+        catch (Exception)
         {
             Snackbar.Add(L["Cashier:CloseShiftFailed"], Severity.Error);
         }
@@ -2072,6 +2012,13 @@
     }
 
     .pos-pay-value.is-neg { color: var(--fg-4); }
+
+    .pos-pay-short {
+        color: var(--danger);
+        font-size: 0.8rem;
+        font-weight: 600;
+        text-align: end;
+    }
 
     .pos-pay-actions {
         display: grid;

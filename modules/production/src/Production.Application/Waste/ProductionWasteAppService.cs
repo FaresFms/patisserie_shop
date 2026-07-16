@@ -157,7 +157,7 @@ public class ProductionWasteAppService : ProductionAppService, IProductionWasteA
             inventoryRow.Inventory,
             inventoryRow.Inventory.QuantityOnHand - input.Quantity,
             StockMovementTypes.ProductionWaste,
-            notes: $"Production waste: {FormatReason(reason)}",
+            notes: L["ProductionWasteMovementNote", L[$"Reason:{reason}"].Value],
             referenceId: waste.Id,
             referenceType: nameof(AppProductionWaste));
 
@@ -211,18 +211,4 @@ public class ProductionWasteAppService : ProductionAppService, IProductionWasteA
         _ => ProductionWasteTypes.ManualWriteOff
     };
 
-    private static string FormatReason(string reason) => reason switch
-    {
-        ProductionWasteReasons.Burned => "burned",
-        ProductionWasteReasons.UnderBaked => "under-baked",
-        ProductionWasteReasons.OverBaked => "over-baked",
-        ProductionWasteReasons.ShapeDamaged => "shape damaged",
-        ProductionWasteReasons.Dropped => "dropped during handling",
-        ProductionWasteReasons.Contaminated => "contaminated",
-        ProductionWasteReasons.IngredientSpoilage => "ingredient spoilage",
-        ProductionWasteReasons.PackagingDamage => "packaging damage",
-        ProductionWasteReasons.ExpiredBeforeDispatch => "expired before dispatch",
-        ProductionWasteReasons.TestBatch => "test batch",
-        _ => "other reason"
-    };
 }

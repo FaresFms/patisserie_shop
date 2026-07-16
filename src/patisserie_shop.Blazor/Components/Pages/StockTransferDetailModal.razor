@@ -207,7 +207,7 @@
                                                                   ValueChanged="@(v => _approvedEdits[item.Id] = v)"
                                                                   Variant="Variant.Outlined" Min="0"
                                                                   Margin="Margin.Dense"
-                                                                  Style="max-width: 90px;" />
+                                                                  Class="soft-qty" />
                                                 <SoftIconButton Icon="@Icons.Material.Filled.Check"
                                                                 Color="Color.Success" Size="Size.Small"
                                                                 OnClick="@(() => SaveApprovedAsync(item))" />

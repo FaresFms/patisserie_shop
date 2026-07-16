@@ -189,6 +189,7 @@
     "Inventory:BranchInventory:NoExpiredStockToWriteOff": "There is no expired stock to write off for this product.",
     "Inventory:BranchInventory:BranchIdRequired": "Please select a branch first.",
     "Inventory:BranchInventory:Concurrency": "Stock was modified by another user. Please reload and try again.",
+    "Inventory:BranchInventory:PerishableBatchCoverageRequired": "This quantity cannot be issued because part of it is not backed by a usable expiry batch. Review the batches and expiry dates first.",
     "StockMovements": "Stock movements",
     "AuditLog": "Audit log",
     "AuditLogSubtitle": "Immutable history of every stock change",

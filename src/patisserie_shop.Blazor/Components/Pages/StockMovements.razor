@@ -200,10 +200,11 @@
                     <TemplateColumn T="StockMovementDto" Title="@L["Actions"]" Sortable="false">
                         <CellTemplate>
                             <span class="row-actions">
-                                <SoftIconButton Icon="@Icons.Material.Outlined.Info"
-                                               Size="Size.Small"
-                                               Title="@L["Details"]"
-                                               OnClick="@(() => OpenDetailAsync(context.Item))" />
+                                <SoftTooltip Text="@L["Details"]">
+                                    <SoftIconButton Icon="@Icons.Material.Outlined.Info"
+                                                   Size="Size.Small"
+                                                   OnClick="@(() => OpenDetailAsync(context.Item))" />
+                                </SoftTooltip>
                             </span>
                         </CellTemplate>
                     </TemplateColumn>

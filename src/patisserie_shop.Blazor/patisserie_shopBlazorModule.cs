@@ -343,7 +343,8 @@ public class patisserie_shopBlazorModule : AbpModule
         app.UseAuthentication();
         app.UseAbpOpenIddictValidation();
 
-        if (MultiTenancyConsts.IsEnabled)
+        var isMultiTenancyEnabled = MultiTenancyConsts.IsEnabled;
+        if (isMultiTenancyEnabled)
         {
             app.UseMultiTenancy();
         }

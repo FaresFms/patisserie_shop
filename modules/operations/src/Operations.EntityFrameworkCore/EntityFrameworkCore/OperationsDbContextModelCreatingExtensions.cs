@@ -83,6 +83,7 @@ public static class OperationsDbContextModelCreatingExtensions
         {
             b.ToTable(OperationsDbProperties.DbTablePrefix + "SaleItems", OperationsDbProperties.DbSchema);
             b.ConfigureByConvention();
+            b.Property(x => x.SoldBatchBreakdown).HasMaxLength(1024);
         });
 
         builder.Entity<AppCashierShift>(b =>

@@ -11,6 +11,7 @@ public class BranchProductionRequestItemDto
     public string? ProductUnit { get; set; }
     public int RequestedQuantity { get; set; }
     public int ApprovedQuantity { get; set; }
+    public int PlannedQuantity { get; set; }
     public int FulfilledQuantity { get; set; }
     public string? Notes { get; set; }
 }

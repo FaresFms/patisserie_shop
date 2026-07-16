@@ -45,9 +45,10 @@ public class StockTransferRepository
         string? filter,
         List<Guid>? fromBranchIdIn = null,
         List<Guid>? toBranchIdIn = null,
+        StockTransferVisibilitySpec? visibility = null,
         CancellationToken cancellationToken = default)
     {
-        var query = await BuildFilteredQueryAsync(status, fromBranchId, toBranchId, filter, fromBranchIdIn, toBranchIdIn);
+        var query = await BuildFilteredQueryAsync(status, fromBranchId, toBranchId, filter, fromBranchIdIn, toBranchIdIn, visibility);
         return await query.LongCountAsync(GetCancellationToken(cancellationToken));
     }
 
@@ -61,9 +62,10 @@ public class StockTransferRepository
         int maxResultCount,
         List<Guid>? fromBranchIdIn = null,
         List<Guid>? toBranchIdIn = null,
+        StockTransferVisibilitySpec? visibility = null,
         CancellationToken cancellationToken = default)
     {
-        var query = await BuildFilteredQueryAsync(status, fromBranchId, toBranchId, filter, fromBranchIdIn, toBranchIdIn);
+        var query = await BuildFilteredQueryAsync(status, fromBranchId, toBranchId, filter, fromBranchIdIn, toBranchIdIn, visibility);
 
         var rows = query
             .OrderBy(ResolveSorting(sorting))
@@ -167,7 +169,8 @@ public class StockTransferRepository
         Guid? toBranchId,
         string? filter,
         List<Guid>? fromBranchIdIn = null,
-        List<Guid>? toBranchIdIn = null)
+        List<Guid>? toBranchIdIn = null,
+        StockTransferVisibilitySpec? visibility = null)
     {
         var query = await GetQueryableAsync();
 
@@ -194,6 +197,13 @@ public class StockTransferRepository
         if (toBranchIdIn != null)
         {
             query = query.Where(t => toBranchIdIn.Contains(t.ToBranchId));
+        }
+
+        if (visibility is { CanViewAll: false })
+        {
+            var managed = visibility.ManagedBranchIds;
+            query = query.Where(t => managed.Contains(t.ToBranchId)
+                || (t.FromBranchId.HasValue && managed.Contains(t.FromBranchId.Value)));
         }
 
         if (!string.IsNullOrWhiteSpace(filter))

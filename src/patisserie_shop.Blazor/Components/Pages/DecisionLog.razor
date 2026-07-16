@@ -1061,6 +1061,7 @@
         }
 
         _busyId = item.Id;
+        _preparingExecute = true;
         try
         {
             var preview = await DecisionActionAppService.PrepareDecisionActionAsync(item.Id);
@@ -1088,6 +1089,7 @@
         finally
         {
             _busyId = null;
+            _preparingExecute = false;
         }
     }
 

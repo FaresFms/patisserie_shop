@@ -280,7 +280,16 @@ public class AppStockTransfer : FullAuditedAggregateRoot<Guid>
         {
             TransferId = Id,
             FromBranchId = FromBranchId.Value,
-            ToBranchId = ToBranchId
+            ToBranchId = ToBranchId,
+            Lines = _items.Select(item => new TransferCompletedLineEto
+            {
+                TransferItemId = item.Id,
+                ProductId = item.ProductId,
+                ShippedQuantity = item.ShippedQuantity
+                    ?? item.ApprovedQuantity
+                    ?? item.RequestedQuantity,
+                ReceivedQuantity = item.TransferredQuantity ?? 0
+            }).ToList()
         });
 
         return lines;

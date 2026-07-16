@@ -161,7 +161,7 @@
         {
             _branches = await CashierAssignmentAppService.GetBranchOptionsAsync();
         }
-        catch (Exception ex)
+        catch (Exception)
         {
             Snackbar.Add(L["AddCashier:LoadFailed"], Severity.Error);
         }

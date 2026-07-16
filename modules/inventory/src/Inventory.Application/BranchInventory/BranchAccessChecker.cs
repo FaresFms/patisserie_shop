@@ -32,8 +32,11 @@ public class BranchAccessChecker : ITransientDependency
         => _authorizationService.IsGrantedAsync(InventoryPermissions.BranchInventory.ManageAll);
 
     public async Task EnsureAccessAsync(Guid branchId)
+        => await EnsureAccessAsync(branchId, InventoryPermissions.BranchInventory.ManageAll);
+
+    public async Task EnsureAccessAsync(Guid branchId, string manageAllPermission)
     {
-        if (await IsManageAllAsync()) return;
+        if (await _authorizationService.IsGrantedAsync(manageAllPermission)) return;
 
         var userId = _currentUser.Id;
         if (userId == null ||

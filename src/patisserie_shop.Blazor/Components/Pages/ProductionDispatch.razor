@@ -84,6 +84,15 @@
                 <TemplateColumn T="ProductionOrderListItemDto" Title="@ProdL["AcceptedQuantity"]" SortBy="x => x.AcceptedQuantity">
                     <CellTemplate>@context.Item.AcceptedQuantity @context.Item.Unit</CellTemplate>
                 </TemplateColumn>
+                <TemplateColumn T="ProductionOrderListItemDto" Title="@ProdL["ReservedQuantity"]" SortBy="x => x.ReservedQuantity">
+                    <CellTemplate>@context.Item.ReservedQuantity @context.Item.Unit</CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn T="ProductionOrderListItemDto" Title="@ProdL["InTransitQuantity"]" SortBy="x => x.InTransitQuantity">
+                    <CellTemplate>@context.Item.InTransitQuantity @context.Item.Unit</CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn T="ProductionOrderListItemDto" Title="@ProdL["RemainingToDispatch"]" SortBy="x => x.RemainingToDispatch">
+                    <CellTemplate>@context.Item.RemainingToDispatch @context.Item.Unit</CellTemplate>
+                </TemplateColumn>
                 <TemplateColumn T="ProductionOrderListItemDto" Title="@ProdL["CompletedAt"]" SortBy="x => x.CompletedAt">
                     <CellTemplate>@(context.Item.CompletedAt?.ToString("yyyy-MM-dd") ?? "-")</CellTemplate>
                 </TemplateColumn>
@@ -94,7 +103,7 @@
                                 <SoftIconButton Icon="@Icons.Material.Filled.LocalShipping"
                                                 Color="Color.Primary"
                                                 Size="Size.Small"
-                                                Disabled="!_canCreateTransfer"
+                                                Disabled="!_canCreateTransfer || context.Item.RemainingToDispatch <= 0"
                                                 OnClick="() => OpenDispatchAsync(context.Item)" />
                             </SoftTooltip>
                         </span>
@@ -137,8 +146,20 @@
                                 <div class="stat-value">@_selectedOrder.FinishedProductName</div>
                             </div>
                             <div>
-                                <div class="stat-label">@ProdL["AvailableToDispatch"]</div>
-                                <div class="stat-value">@_selectedOrder.AcceptedQuantity @_selectedOrder.FinishedProductUnit</div>
+                                <div class="stat-label">@ProdL["ReservedQuantity"]</div>
+                                <div class="stat-value">@_selectedOrder.ReservedQuantity @_selectedOrder.FinishedProductUnit</div>
+                            </div>
+                            <div>
+                                <div class="stat-label">@ProdL["InTransitQuantity"]</div>
+                                <div class="stat-value">@_selectedOrder.InTransitQuantity @_selectedOrder.FinishedProductUnit</div>
+                            </div>
+                            <div>
+                                <div class="stat-label">@ProdL["ReceivedQuantity"]</div>
+                                <div class="stat-value">@_selectedOrder.ReceivedQuantity @_selectedOrder.FinishedProductUnit</div>
+                            </div>
+                            <div>
+                                <div class="stat-label">@ProdL["RemainingToDispatch"]</div>
+                                <div class="stat-value">@_selectedOrder.RemainingToDispatch @_selectedOrder.FinishedProductUnit</div>
                             </div>
                         </div>
 
@@ -149,7 +170,7 @@
                                                   ToValue="@(b => (Guid?)b.Id)"
                                                   ToLabel="@(b => b.Name)"
                                                   Value="_destinationBranchId"
-                                                  ValueChanged="@(v => _destinationBranchId = v)"
+                                                  ValueChanged="OnDestinationBranchChanged"
                                                   Label="@ProdL["DestinationBranch"]"
                                                   Margin="Margin.Dense"
                                                   Dense="true"
@@ -160,7 +181,7 @@
                                                   Label="@ProdL["DispatchQuantity"]"
                                                   Variant="Variant.Outlined"
                                                   Min="1"
-                                                  Max="_selectedOrder.AcceptedQuantity"
+                                                  Max="SelectedDestinationRemaining"
                                                   HideSpinButtons="true" />
                             </SoftGridItem>
                             <SoftGridItem xs="12" md="6">
@@ -203,8 +224,19 @@
 
     private List<BranchLookupDto> DispatchBranches =>
         _selectedOrder == null
-            ? _branches
-            : _branches.Where(b => b.Id != _selectedOrder.KitchenBranchId).ToList();
+            ? new List<BranchLookupDto>()
+            : _branches.Where(b =>
+                    b.Id != _selectedOrder.KitchenBranchId
+                    && _selectedOrder.Allocations.Any(a =>
+                        a.BranchId == b.Id && a.RemainingToDispatch > 0))
+                .ToList();
+
+    private int SelectedDestinationRemaining =>
+        _selectedOrder == null || !_destinationBranchId.HasValue
+            ? 0
+            : _selectedOrder.Allocations
+                .Where(a => a.BranchId == _destinationBranchId.Value)
+                .Sum(a => a.RemainingToDispatch);
 
     private bool CanCreateDispatch =>
         _canCreateTransfer
@@ -212,7 +244,8 @@
         && _destinationBranchId.HasValue
         && _destinationBranchId.Value != _selectedOrder.KitchenBranchId
         && _dispatchQuantity > 0
-        && _dispatchQuantity <= _selectedOrder.AcceptedQuantity;
+        && _dispatchQuantity <= SelectedDestinationRemaining
+        && _dispatchQuantity <= _selectedOrder.RemainingToDispatch;
 
     protected override async Task OnInitializedAsync()
     {
@@ -262,9 +295,15 @@
     {
         _selectedOrder = await OrderAppService.GetAsync(row.Id);
         _destinationBranchId = null;
-        _dispatchQuantity = Math.Max(1, _selectedOrder.AcceptedQuantity);
+        _dispatchQuantity = 0;
         _dispatchNotes = null;
         _dispatchVisible = true;
+    }
+
+    private void OnDestinationBranchChanged(Guid? value)
+    {
+        _destinationBranchId = value;
+        _dispatchQuantity = value.HasValue ? SelectedDestinationRemaining : 0;
     }
 
     private void CloseDispatch()
@@ -299,7 +338,7 @@
             });
 
             Snackbar.Add(
-                ProdL["DispatchTransferCompleted", result.StockTransferReference, result.FulfilledRequestQuantity],
+                ProdL["DispatchTransferCompleted", result.StockTransferReference, result.DispatchedQuantity],
                 Severity.Success);
             _dispatchVisible = false;
             _selectedOrder = null;

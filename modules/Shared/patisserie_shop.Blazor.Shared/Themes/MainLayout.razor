@@ -331,11 +331,26 @@
             // Specific mappings for menu items that previously fell through to the bullet/dot fallback
             if (i.Contains("boxes")) return Icons.Material.Filled.Inventory2;          // Inventory group
             if (i.Contains("chart-pie")) return Icons.Material.Filled.SpaceDashboard;  // Dashboard
+            if (i.Contains("user-plus")) return Icons.Material.Filled.PersonAdd;       // Add cashier (before tag/user)
+            if (i.Contains("user-tag")) return Icons.Material.Filled.AssignmentInd;    // Cashier branches (before tag)
             if (i.Contains("tags") || i.Contains("tag")) return Icons.Material.Filled.Category; // Categories
             if (i.Contains("cookie")) return Icons.Material.Filled.Inventory2;         // Products
             if (i.Contains("warehouse")) return Icons.Material.Filled.Warehouse;       // Branch inventory
             if (i.Contains("cash-register")) return Icons.Material.Filled.PointOfSale; // Sales
             if (i.Contains("file-invoice")) return Icons.Material.Filled.ReceiptLong;  // Purchase orders
+
+            // Production module + a few analytics items that fell through to the dot.
+            if (i.Contains("industry")) return Icons.Material.Filled.Factory;              // Production group
+            if (i.Contains("gauge")) return Icons.Material.Filled.Speed;                   // Production dashboard
+            if (i.Contains("tachometer")) return Icons.Material.Filled.Speed;
+            if (i.Contains("inbox")) return Icons.Material.Filled.MoveToInbox;             // Approve branch requests
+            if (i.Contains("calendar-check")) return Icons.Material.Filled.EventAvailable; // Production plans
+            if (i.Contains("calendar")) return Icons.Material.Filled.CalendarMonth;        // Reorder calendar
+            if (i.Contains("fire")) return Icons.Material.Filled.LocalFireDepartment;      // Cook screen
+            if (i.Contains("shipping")) return Icons.Material.Filled.LocalShipping;        // Production dispatch
+            if (i.Contains("flask")) return Icons.Material.Filled.Science;                 // Production formulas
+            if (i.Contains("trash")) return Icons.Material.Filled.DeleteSweep;             // Waste (analytics + production)
+            if (i.Contains("clipboard-check")) return Icons.Material.Filled.FactCheck;
             if (i.Contains("home")) return Icons.Material.Filled.Home;
             if (i.Contains("users")) return Icons.Material.Filled.People;
             if (i.Contains("user-tie")) return Icons.Material.Filled.ManageAccounts;

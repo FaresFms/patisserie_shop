@@ -1,9 +1,7 @@
 using System;
-using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Operations.StockTransfers;
-using Production.BranchRequests;
 using Production.Entities;
 using Production.Orders;
 using Production.Permissions;
@@ -15,16 +13,13 @@ namespace Production.Dispatch;
 public class ProductionDispatchAppService : ProductionAppService, IProductionDispatchAppService
 {
     private readonly IProductionOrderRepository _orderRepository;
-    private readonly IBranchProductionRequestRepository _requestRepository;
     private readonly IStockTransferAppService _stockTransferAppService;
 
     public ProductionDispatchAppService(
         IProductionOrderRepository orderRepository,
-        IBranchProductionRequestRepository requestRepository,
         IStockTransferAppService stockTransferAppService)
     {
         _orderRepository = orderRepository;
-        _requestRepository = requestRepository;
         _stockTransferAppService = stockTransferAppService;
     }
 
@@ -44,14 +39,22 @@ public class ProductionDispatchAppService : ProductionAppService, IProductionDis
                 .WithData("CurrentStatus", order.Status)
                 .WithData("TargetStatus", ProductionOrderStatuses.Completed);
         }
-        if (input.Quantity > order.AcceptedQuantity)
+        var destinationRemaining = order.GetRemainingToDispatch(input.DestinationBranchId);
+        if (input.Quantity > order.RemainingToDispatch)
         {
-            throw new BusinessException(ProductionErrorCodes.InvalidOrderQuantity)
+            throw new BusinessException(ProductionErrorCodes.DispatchQuantityExceedsRemaining)
                 .WithData("Quantity", input.Quantity)
-                .WithData("AcceptedQuantity", order.AcceptedQuantity);
+                .WithData("RemainingToDispatch", order.RemainingToDispatch);
+        }
+        if (input.Quantity > destinationRemaining)
+        {
+            throw new BusinessException(ProductionErrorCodes.DispatchDestinationHasNoAllocation)
+                .WithData("DestinationBranchId", input.DestinationBranchId)
+                .WithData("Quantity", input.Quantity)
+                .WithData("DestinationRemaining", destinationRemaining);
         }
 
-        var notes = $"Production dispatch from cook order {order.OrderNumber}.";
+        var notes = L["DispatchTransferNote", order.OrderNumber].Value;
         if (!string.IsNullOrWhiteSpace(input.Notes))
         {
             notes = $"{notes} {input.Notes.Trim()}";
@@ -81,50 +84,23 @@ public class ProductionDispatchAppService : ProductionAppService, IProductionDis
         // Empty Lines → ship every item at its approved quantity (the full dispatch).
         transfer = await _stockTransferAppService.ShipAsync(transfer.Id, new ShipStockTransferDto());
 
-        var fulfilledQuantity = await ApplyRequestFulfillmentAsync(
+        order.CreateDispatch(
+            GuidGenerator.Create(),
+            transfer.Id,
             input.DestinationBranchId,
-            order.FinishedProductId,
-            input.Quantity);
+            input.Quantity,
+            Clock.Now.ToUniversalTime(),
+            GuidGenerator.Create);
+        await _orderRepository.UpdateAsync(order, autoSave: true);
 
         return new ProductionDispatchResultDto
         {
             StockTransferId = transfer.Id,
             StockTransferReference = transfer.Reference,
             DispatchedQuantity = input.Quantity,
-            FulfilledRequestQuantity = fulfilledQuantity
+            FulfilledRequestQuantity = 0,
+            InTransitQuantity = order.InTransitQuantity,
+            RemainingToDispatch = order.RemainingToDispatch
         };
-    }
-
-    private async Task<int> ApplyRequestFulfillmentAsync(Guid branchId, Guid productId, int dispatchedQuantity)
-    {
-        var remaining = dispatchedQuantity;
-        var fulfilled = 0;
-        var targets = await _requestRepository.GetFulfillmentTargetsAsync(branchId, productId);
-
-        foreach (var targetGroup in targets.GroupBy(t => t.RequestId))
-        {
-            if (remaining <= 0)
-            {
-                break;
-            }
-
-            var request = await _requestRepository.GetWithItemsAsync(targetGroup.Key);
-            foreach (var target in targetGroup)
-            {
-                if (remaining <= 0)
-                {
-                    break;
-                }
-
-                var quantity = Math.Min(remaining, target.RemainingQuantity);
-                request.AddFulfilledQuantity(target.RequestItemId, quantity);
-                remaining -= quantity;
-                fulfilled += quantity;
-            }
-
-            await _requestRepository.UpdateAsync(request);
-        }
-
-        return fulfilled;
     }
 }

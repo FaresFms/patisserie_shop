@@ -16,6 +16,18 @@ public interface IProductionOrderRepository : IRepository<AppProductionOrder, Gu
         Guid productionPlanLineId,
         CancellationToken cancellationToken = default);
 
+    Task<AppProductionOrder?> FindByStockTransferIdAsync(
+        Guid stockTransferId,
+        CancellationToken cancellationToken = default);
+
+    Task<bool> HasOrdersForPlanAsync(
+        Guid productionPlanId,
+        CancellationToken cancellationToken = default);
+
+    Task<List<string>> GetStatusesForPlanAsync(
+        Guid productionPlanId,
+        CancellationToken cancellationToken = default);
+
     Task<long> CountFilteredAsync(
         string? filter,
         string? status,

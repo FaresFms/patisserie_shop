@@ -120,7 +120,7 @@
                                         <SoftNumericField T="int" Value="row.Quantity"
                                                           ValueChanged="@(value => OnRowQuantityChanged(row, value))"
                                                           Variant="Variant.Outlined" Margin="Margin.Dense"
-                                                          Min="1" Max="row.AvailableStock" />
+                                                          Min="1" Max="row.AvailableStock" Class="soft-qty" />
                                         @{ var stock = row.AvailableStock; }
                                         @if (row.ProductId != Guid.Empty && row.Quantity > stock)
                                         {
@@ -133,7 +133,7 @@
                                     <MudTd Style="text-align:right;">
                                         <SoftNumericField T="decimal" @bind-Value="row.UnitPrice"
                                                           Variant="Variant.Outlined" Margin="Margin.Dense"
-                                                          Min="0" />
+                                                          Min="0" Class="soft-qty" />
                                     </MudTd>
                                     <MudTd Style="text-align:right;">
                                         <strong>@($"{(row.Quantity * row.UnitPrice):N2}")</strong>

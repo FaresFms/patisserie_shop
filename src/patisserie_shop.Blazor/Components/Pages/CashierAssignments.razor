@@ -146,7 +146,7 @@
                 _selections[row.UserId] = row.AssignedBranchId;
             }
         }
-        catch (Exception ex)
+        catch (Exception)
         {
             Snackbar.Add(L["CashierAssign:LoadFailed"], Severity.Error);
         }
@@ -195,7 +195,7 @@
             Snackbar.Add(L["CashierAssign:Saved"], Severity.Success);
             await ReloadAsync();
         }
-        catch (Exception ex)
+        catch (Exception)
         {
             Snackbar.Add(L["CashierAssign:SaveFailed"], Severity.Error);
         }

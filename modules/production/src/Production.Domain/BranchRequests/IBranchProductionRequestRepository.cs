@@ -32,4 +32,9 @@ public interface IBranchProductionRequestRepository : IRepository<AppBranchProdu
         Guid branchId,
         Guid productId,
         CancellationToken cancellationToken = default);
+
+    Task<List<BranchProductionRequestPlanningTarget>> GetPlanningTargetsAsync(
+        IReadOnlyCollection<Guid> productIds,
+        DateTime neededBefore,
+        CancellationToken cancellationToken = default);
 }

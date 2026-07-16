@@ -81,6 +81,35 @@
                         }
                     </div>
 
+                    <div>
+                        <SoftText Typo="Typo.overline" Color="Color.Primary">@OpsL["WorkflowTimeline"]</SoftText>
+                        <SoftDivider Class="mb-3" />
+                        <div class="po-stepper">
+                            @for (var i = 0; i < PoStepKeys.Length; i++)
+                            {
+                                var stepIndex = i;
+                                var state = PoStepState(stepIndex);
+                                <div class="@($"po-step po-step-{state}")">
+                                    <div class="po-step-dot">
+                                        @if (state == "done")
+                                        {
+                                            <MudIcon Icon="@Icons.Material.Filled.Check" Size="Size.Small" />
+                                        }
+                                        else
+                                        {
+                                            <MudIcon Icon="@PoStepIcon(stepIndex)" Size="Size.Small" />
+                                        }
+                                    </div>
+                                    <span class="po-step-label">@OpsL[$"POStep:{PoStepKeys[stepIndex]}"]</span>
+                                </div>
+                                @if (stepIndex < PoStepKeys.Length - 1)
+                                {
+                                    <div class="@($"po-step-line {(stepIndex < CurrentPoStepIndex ? "po-step-line-done" : "")}")"></div>
+                                }
+                            }
+                        </div>
+                    </div>
+
                     <!-- Progress (when receiving) -->
                     @if (_po.Status == PurchaseOrderStatuses.PartialReceived || _po.Status == PurchaseOrderStatuses.Received)
                     {
@@ -306,6 +335,7 @@
                             <MudTh Style="text-align:right;">@OpsL["ReceivedQuantity"]</MudTh>
                             <MudTh Style="text-align:right;">@OpsL["Remaining"]</MudTh>
                             <MudTh Style="text-align:center; min-width: 140px;">@OpsL["ReceiveNow"]</MudTh>
+                            <MudTh Style="min-width: 190px;">@OpsL["BatchExpiryDate"]</MudTh>
                         </HeaderContent>
                         <RowTemplate Context="row">
                             <MudTd>
@@ -331,7 +361,22 @@
                                     <SoftNumericField T="int" @bind-Value="row.ReceiveNow"
                                                       Variant="Variant.Outlined" Min="0"
                                                       Max="@(row.Item.OrderedQuantity - row.Item.ReceivedQuantity)"
-                                                      Margin="Margin.Dense" />
+                                                      Margin="Margin.Dense" Class="soft-qty" />
+                                }
+                            </MudTd>
+                            <MudTd>
+                                @if (!row.Item.IsFullyReceived && row.Item.TracksExpiry && row.ReceiveNow > 0)
+                                {
+                                    <SoftDatePicker Date="row.ExpiryDate"
+                                                    DateChanged="@(d => row.ExpiryDate = d)"
+                                                    Label="@OpsL["BatchExpiryDate"]"
+                                                    MinDate="DateTime.Today"
+                                                    Variant="Variant.Outlined"
+                                                    Margin="Margin.Dense" />
+                                }
+                                else
+                                {
+                                    <SoftText Color="Color.Default">—</SoftText>
                                 }
                             </MudTd>
                         </RowTemplate>
@@ -398,6 +443,69 @@
         border-radius: 5px;
     }
 
+    .po-stepper {
+        display: grid;
+        grid-template-columns: auto 1fr auto 1fr auto 1fr auto;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .po-step {
+        display: inline-flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 6px;
+        min-width: 68px;
+        text-align: center;
+    }
+
+    .po-step-dot {
+        width: 32px;
+        height: 32px;
+        border-radius: 999px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid var(--bd-2);
+        background: var(--surface-2);
+        color: var(--fg-3);
+    }
+
+    .po-step-label {
+        font-size: 0.78rem;
+        color: var(--fg-2);
+        white-space: nowrap;
+    }
+
+    .po-step-line {
+        height: 2px;
+        min-width: 28px;
+        border-radius: 999px;
+        background: var(--bd-2);
+    }
+
+    .po-step-current .po-step-dot,
+    .po-step-done .po-step-dot {
+        border-color: var(--accent-line);
+        background: var(--accent-soft);
+        color: var(--accent);
+    }
+
+    .po-step-done .po-step-dot {
+        background: var(--accent);
+        color: var(--accent-fg);
+    }
+
+    .po-step-current .po-step-label,
+    .po-step-done .po-step-label {
+        color: var(--fg-1);
+        font-weight: 600;
+    }
+
+    .po-step-line-done {
+        background: var(--accent);
+    }
+
     .po-status {
         display: inline-flex; align-items: center; gap: 6px;
         padding: 3px 10px; border-radius: 999px;
@@ -424,6 +532,7 @@
     private bool _canApprove;
     private bool _canCancel;
     private bool _canReceive;
+    private static readonly string[] PoStepKeys = { "Draft", "Submit", "Approve", "Receive" };
 
     /// <summary>Plain-language "what happens next" line, per status and role.</summary>
     private string? StatusHint()
@@ -443,6 +552,32 @@
         };
     }
 
+    private int CurrentPoStepIndex => _po?.Status switch
+    {
+        PurchaseOrderStatuses.Draft => 0,
+        PurchaseOrderStatuses.Submitted => 1,
+        PurchaseOrderStatuses.Approved => 2,
+        PurchaseOrderStatuses.PartialReceived => 3,
+        PurchaseOrderStatuses.Received => PoStepKeys.Length,
+        _ => -1
+    };
+
+    private string PoStepState(int index)
+    {
+        if (index < CurrentPoStepIndex) return "done";
+        if (index == CurrentPoStepIndex) return "current";
+        return "upcoming";
+    }
+
+    private static string PoStepIcon(int index) => index switch
+    {
+        0 => Icons.Material.Filled.EditNote,
+        1 => Icons.Material.Filled.Send,
+        2 => Icons.Material.Filled.FactCheck,
+        3 => Icons.Material.Filled.Inventory,
+        _ => Icons.Material.Filled.RadioButtonUnchecked
+    };
+
     private bool _addItemVisible;
     private List<ProductLookupDto> _availableProducts = new();
     private Guid? _newItemProductId;
@@ -456,6 +591,7 @@
     {
         public PurchaseOrderItemDto Item { get; set; } = null!;
         public int ReceiveNow { get; set; }
+        public DateTime? ExpiryDate { get; set; }
     }
 
     protected override async Task OnInitializedAsync()
@@ -646,12 +782,33 @@
     {
         var lines = _receiveRows
             .Where(r => r.ReceiveNow > 0)
-            .Select(r => new ReceiveLineDto { ItemId = r.Item.Id, ReceivedQuantity = r.ReceiveNow })
+            .Select(r => new ReceiveLineDto
+            {
+                ItemId = r.Item.Id,
+                ReceivedQuantity = r.ReceiveNow,
+                ExpiryDate = r.ExpiryDate
+            })
             .ToList();
 
         if (lines.Count == 0)
         {
             Snackbar.Add(OpsL["ReceiveAtLeastOne"], Severity.Warning);
+            return;
+        }
+
+        var missingExpiry = _receiveRows.FirstOrDefault(
+            r => r.ReceiveNow > 0 && r.Item.TracksExpiry && !r.ExpiryDate.HasValue);
+        if (missingExpiry != null)
+        {
+            Snackbar.Add(OpsL["ReceiveExpiryRequired", missingExpiry.Item.ProductName], Severity.Warning);
+            return;
+        }
+
+        var expired = _receiveRows.FirstOrDefault(
+            r => r.ReceiveNow > 0 && r.Item.TracksExpiry && r.ExpiryDate!.Value.Date < DateTime.Today);
+        if (expired != null)
+        {
+            Snackbar.Add(OpsL["ReceiveExpiryInPast", expired.Item.ProductName], Severity.Warning);
             return;
         }
 

@@ -160,6 +160,7 @@
     "Inventory:BranchInventory:NoExpiredStockToWriteOff": "لا يوجد مخزون منتهي الصلاحية لشطبه لهذا المنتج.",
     "Inventory:BranchInventory:BranchIdRequired": "يرجى اختيار فرع أولًا.",
     "Inventory:BranchInventory:Concurrency": "تم تعديل المخزون بواسطة مستخدم آخر. يرجى إعادة التحميل والمحاولة مرة أخرى.",
+    "Inventory:BranchInventory:PerishableBatchCoverageRequired": "لا يمكن صرف هذه الكمية لأن جزءًا منها غير مرتبط بدُفعة صالحة. راجع الدُفعات وتواريخ الصلاحية أولًا.",
     "StockMovements": "حركات المخزون",
     "AuditLog": "سجل التدقيق",
     "AuditLogSubtitle": "سجل غير قابل للتعديل لكل تغيير في المخزون",

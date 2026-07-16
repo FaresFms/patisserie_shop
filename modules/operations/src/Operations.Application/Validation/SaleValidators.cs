@@ -1,42 +1,44 @@
 using FluentValidation;
+using Microsoft.Extensions.Localization;
+using Operations.Localization;
 using Operations.Sales;
 
 namespace Operations.Validation;
 
 public class CreateSaleDtoValidator : AbstractValidator<CreateSaleDto>
 {
-    public CreateSaleDtoValidator()
+    public CreateSaleDtoValidator(IStringLocalizer<OperationsResource> localizer)
     {
         RuleFor(x => x.BranchId)
-            .NotEmpty().WithMessage("Branch is required.");
+            .NotEmpty().WithMessage(_ => localizer["Validation:BranchRequired"]);
 
         RuleFor(x => x.SaleDate)
-            .NotEmpty().WithMessage("Sale date is required.");
+            .NotEmpty().WithMessage(_ => localizer["Validation:SaleDateRequired"]);
 
         RuleFor(x => x.InvoiceNumber)
-            .MaximumLength(64).WithMessage("Invoice number must not exceed 64 characters.");
+            .MaximumLength(64).WithMessage(_ => localizer["Validation:InvoiceNumberMax64"]);
 
         RuleFor(x => x.Currency)
-            .NotEmpty().WithMessage("Currency is required.")
-            .Length(3).WithMessage("Currency must be exactly 3 characters.")
-            .Matches("^[A-Z]{3}$").WithMessage("Currency must be a 3-letter ISO code (uppercase).");
+            .NotEmpty().WithMessage(_ => localizer["Validation:CurrencyRequired"])
+            .Length(3).WithMessage(_ => localizer["Validation:CurrencyLength"])
+            .Matches("^[A-Z]{3}$").WithMessage(_ => localizer["Validation:CurrencyIso"]);
 
         RuleFor(x => x.Notes)
-            .MaximumLength(512).WithMessage("Notes must not exceed 512 characters.");
+            .MaximumLength(512).WithMessage(_ => localizer["Validation:NotesMax512"]);
 
         RuleFor(x => x.Items)
-            .NotEmpty().WithMessage("Add at least one product.");
+            .NotEmpty().WithMessage(_ => localizer["Validation:SaleItemsRequired"]);
 
         RuleForEach(x => x.Items).ChildRules(line =>
         {
             line.RuleFor(l => l.ProductId)
-                .NotEmpty().WithMessage("Product is required.");
+                .NotEmpty().WithMessage(_ => localizer["Validation:ProductRequired"]);
 
             line.RuleFor(l => l.Quantity)
-                .GreaterThan(0).WithMessage("Quantity must be greater than 0.");
+                .GreaterThan(0).WithMessage(_ => localizer["Validation:QuantityPositive"]);
 
             line.RuleFor(l => l.UnitPrice)
-                .GreaterThanOrEqualTo(0).WithMessage("Unit price must be 0 or greater.");
+                .GreaterThanOrEqualTo(0).WithMessage(_ => localizer["Validation:UnitPriceNonNegative"]);
         });
     }
 }

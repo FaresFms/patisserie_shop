@@ -10,6 +10,7 @@ public class AppBranchProductionRequestItem : Entity<Guid>
     public Guid ProductId { get; private set; }
     public int RequestedQuantity { get; private set; }
     public int ApprovedQuantity { get; private set; }
+    public int PlannedQuantity { get; private set; }
     public int FulfilledQuantity { get; private set; }
     public string? Notes { get; private set; }
 
@@ -61,6 +62,41 @@ public class AppBranchProductionRequestItem : Entity<Guid>
                 .WithData("Quantity", quantity);
         }
 
-        FulfilledQuantity = Math.Min(ApprovedQuantity, FulfilledQuantity + quantity);
+        if (FulfilledQuantity + quantity > ApprovedQuantity)
+        {
+            throw new BusinessException(ProductionErrorCodes.RequestFulfilledQuantityExceeded)
+                .WithData("ApprovedQuantity", ApprovedQuantity)
+                .WithData("FulfilledQuantity", FulfilledQuantity)
+                .WithData("ReceivedQuantity", quantity);
+        }
+
+        FulfilledQuantity += quantity;
+        PlannedQuantity = Math.Max(PlannedQuantity, FulfilledQuantity);
+    }
+
+    internal void ReservePlannedQuantity(int quantity)
+    {
+        if (quantity <= 0 || PlannedQuantity + quantity > ApprovedQuantity)
+        {
+            throw new BusinessException(ProductionErrorCodes.RequestPlannedQuantityExceeded)
+                .WithData("ApprovedQuantity", ApprovedQuantity)
+                .WithData("PlannedQuantity", PlannedQuantity)
+                .WithData("RequestedReservation", quantity);
+        }
+
+        PlannedQuantity += quantity;
+    }
+
+    internal void ReleasePlannedQuantity(int quantity)
+    {
+        if (quantity <= 0 || PlannedQuantity - quantity < FulfilledQuantity)
+        {
+            throw new BusinessException(ProductionErrorCodes.RequestPlannedQuantityExceeded)
+                .WithData("PlannedQuantity", PlannedQuantity)
+                .WithData("FulfilledQuantity", FulfilledQuantity)
+                .WithData("RequestedRelease", quantity);
+        }
+
+        PlannedQuantity -= quantity;
     }
 }

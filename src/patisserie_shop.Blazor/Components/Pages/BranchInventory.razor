@@ -162,15 +162,15 @@
                                        Class="toolbar-search"
                                        Style="min-width: 240px; max-width: 320px;" />
 
-                        <SoftCheckBox T="bool" @bind-Value="_onlyLowStock"
+                        <SoftCheckBox T="bool" Value="_onlyLowStock"
                                       Label="@InvL["OnlyLowStock"]"
                                       Color="Color.Warning"
-                                      CheckedChanged="@(async () => await ReloadCurrentViewAsync())" />
+                                      ValueChanged="OnOnlyLowStockChangedAsync" />
 
-                        <SoftCheckBox T="bool" @bind-Value="_includeInactive"
+                        <SoftCheckBox T="bool" Value="_includeInactive"
                                       Label="@InvL["IncludeInactiveProducts"]"
                                       Color="Color.Default"
-                                      CheckedChanged="@(async () => await ReloadCurrentViewAsync())" />
+                                      ValueChanged="OnIncludeInactiveChangedAsync" />
 
                         @if (_viewMode == ViewTable)
                         {
@@ -1098,6 +1098,18 @@
     private async Task OnFilterKeyUpAsync(KeyboardEventArgs e)
     {
         if (e.Key == "Enter") await ReloadCurrentViewAsync();
+    }
+
+    private async Task OnOnlyLowStockChangedAsync(bool value)
+    {
+        _onlyLowStock = value;
+        await ReloadCurrentViewAsync();
+    }
+
+    private async Task OnIncludeInactiveChangedAsync(bool value)
+    {
+        _includeInactive = value;
+        await ReloadCurrentViewAsync();
     }
 
     private async Task SetViewAsync(string mode)

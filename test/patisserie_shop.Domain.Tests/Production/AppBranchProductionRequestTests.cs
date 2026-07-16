@@ -104,4 +104,43 @@ public class AppBranchProductionRequestTests
 
         request.Status.ShouldBe(BranchProductionRequestStatuses.PartiallyFulfilled);
     }
+
+    [Fact]
+    public void Planning_reserves_only_the_approved_quantity_and_release_makes_it_available_again()
+    {
+        var request = NewRequest();
+        var item = request.AddItem(Guid.NewGuid(), Guid.NewGuid(), 20);
+        request.Submit();
+        request.Approve(Guid.NewGuid(), new Dictionary<Guid, int> { [item.Id] = 20 }, null);
+
+        request.ReservePlannedQuantity(item.Id, 12);
+        request.Status.ShouldBe(BranchProductionRequestStatuses.PartiallyPlanned);
+        item.PlannedQuantity.ShouldBe(12);
+
+        request.ReservePlannedQuantity(item.Id, 8);
+        request.Status.ShouldBe(BranchProductionRequestStatuses.Planned);
+        Should.Throw<BusinessException>(() => request.ReservePlannedQuantity(item.Id, 1))
+            .Code.ShouldBe(ProductionErrorCodes.RequestPlannedQuantityExceeded);
+
+        request.ReleasePlannedQuantity(item.Id, 5);
+        request.Status.ShouldBe(BranchProductionRequestStatuses.PartiallyPlanned);
+        item.PlannedQuantity.ShouldBe(15);
+    }
+
+    [Fact]
+    public void Shipping_does_not_fulfill_a_request_but_receipt_does()
+    {
+        var request = NewRequest();
+        var item = request.AddItem(Guid.NewGuid(), Guid.NewGuid(), 10);
+        request.Submit();
+        request.Approve(Guid.NewGuid(), new Dictionary<Guid, int> { [item.Id] = 10 }, null);
+        request.ReservePlannedQuantity(item.Id, 10);
+
+        request.Status.ShouldBe(BranchProductionRequestStatuses.Planned);
+        item.FulfilledQuantity.ShouldBe(0);
+
+        request.AddFulfilledQuantity(item.Id, 7);
+        request.Status.ShouldBe(BranchProductionRequestStatuses.PartiallyFulfilled);
+        item.FulfilledQuantity.ShouldBe(7);
+    }
 }

@@ -295,6 +295,8 @@
             new(string.Empty, ProdL["Status:All"]),
             new(ProductionPlanStatuses.Draft, ProdL["Status:Draft"]),
             new(ProductionPlanStatuses.Confirmed, ProdL["Status:Confirmed"]),
+            new(ProductionPlanStatuses.InProgress, ProdL["Status:InProgress"]),
+            new(ProductionPlanStatuses.Closed, ProdL["Status:Closed"]),
             new(ProductionPlanStatuses.Cancelled, ProdL["Status:Cancelled"])
         ];
     }
@@ -430,6 +432,8 @@
     {
         ProductionPlanStatuses.Draft => ProdL["Status:Draft"],
         ProductionPlanStatuses.Confirmed => ProdL["Status:Confirmed"],
+        ProductionPlanStatuses.InProgress => ProdL["Status:InProgress"],
+        ProductionPlanStatuses.Closed => ProdL["Status:Closed"],
         ProductionPlanStatuses.Cancelled => ProdL["Status:Cancelled"],
         _ => status
     };
