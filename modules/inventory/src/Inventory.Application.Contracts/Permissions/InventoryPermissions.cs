@@ -36,6 +36,7 @@ public class InventoryPermissions
         public const string Adjust = Default + ".Adjust";
         public const string Initialize = Default + ".Initialize";
         public const string SetLimits = Default + ".SetLimits";
+        public const string ReviewStocktakes = Default + ".ReviewStocktakes";
         public const string ManageAll = Default + ".ManageAll";
     }
 

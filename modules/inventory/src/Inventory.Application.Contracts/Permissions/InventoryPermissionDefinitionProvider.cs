@@ -26,6 +26,7 @@ public class InventoryPermissionDefinitionProvider : PermissionDefinitionProvide
         branchInventory.AddChild(InventoryPermissions.BranchInventory.Adjust, L("Permission:BranchInventory.Adjust"));
         branchInventory.AddChild(InventoryPermissions.BranchInventory.Initialize, L("Permission:BranchInventory.Initialize"));
         branchInventory.AddChild(InventoryPermissions.BranchInventory.SetLimits, L("Permission:BranchInventory.SetLimits"));
+        branchInventory.AddChild(InventoryPermissions.BranchInventory.ReviewStocktakes, L("Permission:BranchInventory.ReviewStocktakes"));
         branchInventory.AddChild(InventoryPermissions.BranchInventory.ManageAll, L("Permission:BranchInventory.ManageAll"));
 
         var stockMovements = group.AddPermission(InventoryPermissions.StockMovements.Default, L("Permission:StockMovements"));

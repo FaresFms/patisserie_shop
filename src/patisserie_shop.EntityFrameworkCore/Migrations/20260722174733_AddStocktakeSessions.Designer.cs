@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Volo.Abp.EntityFrameworkCore;
@@ -12,9 +13,11 @@ using patisserie_shop.EntityFrameworkCore;
 namespace patisserie_shop.Migrations
 {
     [DbContext(typeof(patisserie_shopDbContext))]
-    partial class patisserie_shopDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260722174733_AddStocktakeSessions")]
+    partial class AddStocktakeSessions
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -925,47 +928,16 @@ namespace patisserie_shop.Migrations
                     b.Property<int>("OverageQuantity")
                         .HasColumnType("integer");
 
-                    b.Property<string>("ReviewNotes")
-                        .HasMaxLength(300)
-                        .HasColumnType("character varying(300)");
-
-                    b.Property<DateTime?>("ReviewedAt")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<Guid?>("ReviewedBy")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("ReviewedByName")
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
-
                     b.Property<int>("ShortageQuantity")
                         .HasColumnType("integer");
 
                     b.Property<DateTime>("SnapshotAt")
                         .HasColumnType("timestamp without time zone");
 
-                    b.Property<Guid?>("StartedBy")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("StartedByName")
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
-
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)");
-
-                    b.Property<DateTime?>("SubmittedAt")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<Guid?>("SubmittedBy")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("SubmittedByName")
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
 
                     b.Property<int>("TotalLineCount")
                         .HasColumnType("integer");
@@ -977,8 +949,8 @@ namespace patisserie_shop.Migrations
 
                     b.HasIndex("BranchId")
                         .IsUnique()
-                        .HasDatabaseName("UIX_StocktakeSessions_OneOpenPerBranch")
-                        .HasFilter("\"Status\" IN ('Draft', 'PendingReview') AND NOT \"IsDeleted\"");
+                        .HasDatabaseName("UIX_StocktakeSessions_OneDraftPerBranch")
+                        .HasFilter("\"Status\" = 'Draft' AND NOT \"IsDeleted\"");
 
                     b.HasIndex("SnapshotAt")
                         .HasDatabaseName("IX_StocktakeSessions_Snapshot");

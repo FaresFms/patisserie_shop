@@ -109,5 +109,46 @@ public static class InventoryDbContextModelCreatingExtensions
                 .HasDatabaseName("IX_StockBatches_Branch_Product_Expiry");
             b.HasIndex(x => x.ExpiryDate).HasDatabaseName("IX_StockBatches_Expiry");
         });
+
+        builder.Entity<AppStocktakeSession>(b =>
+        {
+            b.ToTable(InventoryDbProperties.DbTablePrefix + "StocktakeSessions", InventoryDbProperties.DbSchema);
+            b.ConfigureByConvention();
+            b.Property(x => x.Status).IsRequired().HasMaxLength(16);
+            b.Property(x => x.Notes).HasMaxLength(300);
+            b.Property(x => x.StartedByName).HasMaxLength(128);
+            b.Property(x => x.SubmittedByName).HasMaxLength(128);
+            b.Property(x => x.ReviewedByName).HasMaxLength(128);
+            b.Property(x => x.ReviewNotes).HasMaxLength(300);
+            b.Property(x => x.ConcurrencyStamp).IsConcurrencyToken();
+            b.HasIndex(x => new { x.BranchId, x.Status })
+                .HasDatabaseName("IX_StocktakeSessions_Branch_Status");
+            b.HasIndex(x => x.SnapshotAt)
+                .HasDatabaseName("IX_StocktakeSessions_Snapshot");
+            b.HasIndex(x => x.BranchId)
+                .IsUnique()
+                .HasFilter("\"Status\" IN ('Draft', 'PendingReview') AND NOT \"IsDeleted\"")
+                .HasDatabaseName("UIX_StocktakeSessions_OneOpenPerBranch");
+            b.HasMany(x => x.Lines)
+                .WithOne()
+                .HasForeignKey(x => x.SessionId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<AppStocktakeLine>(b =>
+        {
+            b.ToTable(InventoryDbProperties.DbTablePrefix + "StocktakeLines", InventoryDbProperties.DbSchema);
+            b.ConfigureByConvention();
+            b.Property(x => x.ProductName).IsRequired().HasMaxLength(128);
+            b.Property(x => x.ProductSku).IsRequired().HasMaxLength(64);
+            b.Property(x => x.ProductUnit).IsRequired().HasMaxLength(32);
+            b.Property(x => x.InventoryConcurrencyStamp).IsRequired().HasMaxLength(40);
+            b.Property(x => x.Reason).HasMaxLength(32);
+            b.Property(x => x.ReasonNotes).HasMaxLength(120);
+            b.Ignore(x => x.Difference);
+            b.HasIndex(x => new { x.SessionId, x.InventoryId })
+                .IsUnique()
+                .HasDatabaseName("UIX_StocktakeLines_Session_Inventory");
+        });
     }
 }

@@ -94,6 +94,23 @@ public class BranchInventoryRepository
         ).FirstOrDefaultAsync(GetCancellationToken(cancellationToken));
     }
 
+    public async Task<List<BranchInventoryWithProduct>> GetStocktakeRowsAsync(
+        Guid branchId,
+        CancellationToken cancellationToken = default)
+    {
+        var query = await BuildJoinedQueryAsync(
+            branchId,
+            filter: null,
+            onlyOutOfStock: false,
+            onlyLowStock: false,
+            includeInactiveProducts: false,
+            onlySellable: true);
+
+        return await query
+            .OrderBy(row => row.Product.Name)
+            .ToListAsync(GetCancellationToken(cancellationToken));
+    }
+
     public async Task<List<StockSnapshot>> GetActiveStockSnapshotsAsync(
         Guid branchId,
         CancellationToken cancellationToken = default)
