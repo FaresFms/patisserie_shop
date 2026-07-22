@@ -32,7 +32,7 @@
 @inject Volo.Abp.Settings.ISettingProvider SettingProvider
 
 @{
-    PageLayout.Title = InvL["BranchInventory"];
+    PageLayout.Title = InvL["Menu:Stock"];
 }
 
 <SoftStack Spacing="3">
@@ -72,6 +72,11 @@
                 <span class="@(_stats.LowStockCount > 0 ? "bi-strip-warn" : "")"><strong>@_stats.LowStockCount</strong> @InvL["Stats:LowStock"]</span>
                 <span class="bi-dot">·</span>
                 <span class="@(_stats.OutOfStockCount > 0 ? "bi-strip-danger" : "")"><strong>@_stats.OutOfStockCount</strong> @InvL["Stats:OutOfStock"]</span>
+                @if (_stats.ExpiredItemCount > 0)
+                {
+                    <span class="bi-dot">·</span>
+                    <span class="bi-strip-danger"><strong>@_stats.ExpiredItemCount</strong> @InvL["ExpiredStat"]</span>
+                }
             </div>
         }
 
@@ -157,10 +162,15 @@
                                        Class="toolbar-search"
                                        Style="min-width: 240px; max-width: 320px;" />
 
-                        <SoftCheckBox T="bool" @bind-Value="_includeInactive"
+                        <SoftCheckBox T="bool" Value="_onlyLowStock"
+                                      Label="@InvL["OnlyLowStock"]"
+                                      Color="Color.Warning"
+                                      ValueChanged="OnOnlyLowStockChangedAsync" />
+
+                        <SoftCheckBox T="bool" Value="_includeInactive"
                                       Label="@InvL["IncludeInactiveProducts"]"
                                       Color="Color.Default"
-                                      CheckedChanged="@(async () => await ReloadCurrentViewAsync())" />
+                                      ValueChanged="OnIncludeInactiveChangedAsync" />
 
                         @if (_viewMode == ViewTable)
                         {
@@ -200,6 +210,13 @@
                                             else if (context.Item.IsLowStock)
                                             {
                                                 <SoftChip T="string" Color="Color.Warning" Size="Size.Small" Variant="Variant.Filled">@InvL["LowStock"]</SoftChip>
+                                            }
+                                            @if (context.Item.HasExpiredStock)
+                                            {
+                                                <SoftTooltip Text="@string.Format(InvL["ExpiredUnits"], context.Item.ExpiredQuantity)">
+                                                    <SoftChip T="string" Color="Color.Error" Size="Size.Small" Variant="Variant.Outlined"
+                                                              Icon="@Icons.Material.Filled.EventBusy">@string.Format(InvL["ExpiredUnits"], context.Item.ExpiredQuantity)</SoftChip>
+                                                </SoftTooltip>
                                             }
                                         </SoftStack>
                                     </CellTemplate>
@@ -361,6 +378,17 @@
                                           ValueChanged="@(v => _adjustMovementType = v ?? StockMovementTypes.ManualAdjustment)"
                                           Label="@InvL["MovementType"]" />
 
+                        @if (delta > 0)
+                        {
+                            <SoftDatePicker Label="@InvL["ProductionDate"]"
+                                            Date="_adjustProductionDate"
+                                            DateChanged="@(d => _adjustProductionDate = d)"
+                                            MaxDate="DateTime.Today"
+                                            Variant="Variant.Outlined"
+                                            Margin="Margin.Dense"
+                                            HelperText="@InvL["ProductionDateHint"]" />
+                        }
+
                         <SoftTextField T="string"
                                        Label="@InvL["Notes"]"
                                        @bind-Value="_adjustNotes"
@@ -378,6 +406,39 @@
                                 OnClick="ConfirmAdjustAsync"
                                 Disabled="_saving">
                         @L["Save"]
+                    </SoftButton>
+                </div>
+            </SoftCard>
+        </div>
+    </div>
+}
+
+@if (_writeOffTarget != null)
+{
+    <div class="glass-modal-backdrop" @onclick="CancelWriteOffExpired">
+        <div class="glass-modal-container glass-modal-container--sm" @onclick:stopPropagation="true">
+            <SoftCard Elevation="24" Class="glass-modal">
+                <SoftCardHeader Class="pa-4">
+                    <CardHeaderContent>
+                        <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <SoftIcon Icon="@Icons.Material.Filled.EventBusy" Color="Color.Error" Size="Size.Medium" />
+                            <SoftText Typo="Typo.h6">@InvL["WriteOffExpired"]</SoftText>
+                        </SoftStack>
+                    </CardHeaderContent>
+                </SoftCardHeader>
+                <SoftDivider />
+                <SoftCardContent Class="pa-4">
+                    <SoftText Typo="Typo.body2">
+                        @string.Format(InvL["WriteOffExpiredConfirm"], _writeOffTarget.ExpiredQuantity, _writeOffTarget.ProductName)
+                    </SoftText>
+                </SoftCardContent>
+                <SoftDivider />
+                <div class="pa-3 d-flex justify-end" style="gap: 8px;">
+                    <SoftButton Variant="Variant.Text" OnClick="CancelWriteOffExpired">@L["Cancel"]</SoftButton>
+                    <SoftButton Variant="Variant.Filled" Color="Color.Error"
+                                StartIcon="@Icons.Material.Filled.DeleteSweep"
+                                OnClick="ConfirmWriteOffExpiredAsync" Disabled="_saving">
+                        @InvL["WriteOffExpired"]
                     </SoftButton>
                 </div>
             </SoftCard>
@@ -719,6 +780,7 @@
 
     private string? _filter;
     private bool _includeInactive;
+    private bool _onlyLowStock;
     private bool _showLimits;
 
     private string _viewMode = ViewTable;
@@ -738,6 +800,10 @@
     private int _adjustNewQty;
     private string _adjustMovementType = StockMovementTypes.ManualAdjustment;
     private string? _adjustNotes;
+    private DateTime? _adjustProductionDate;
+
+    /// <summary>Non-null shows the "write off expired" confirm dialog for this row.</summary>
+    private BranchInventoryDto? _writeOffTarget;
 
     private bool _initVisible;
     private List<ProductLookupDto> _availableProducts = new();
@@ -770,6 +836,13 @@
                 <SoftMenuItem Icon="@Icons.Material.Filled.SwapVert" OnClick="() => OpenAdjustDialog(item)">
                     @InvL["AdjustStock"]
                 </SoftMenuItem>
+                @if (item.HasExpiredStock)
+                {
+                    <SoftMenuItem Icon="@Icons.Material.Filled.EventBusy"
+                                  OnClick="() => AskWriteOffExpired(item)">
+                        @InvL["WriteOffExpired"]
+                    </SoftMenuItem>
+                }
             }
             @if (_canSetLimits)
             {
@@ -788,8 +861,17 @@
             </SoftMenuItem>
         </SoftMenu>;
 
+    /// <summary>Deep-link (e.g. from the manager dashboard): pre-select this branch.</summary>
+    [Parameter, SupplyParameterFromQuery(Name = "branchId")]
+    public Guid? BranchIdParam { get; set; }
+
+    /// <summary>Deep-link: open the page pre-filtered to low-stock rows.</summary>
+    [Parameter, SupplyParameterFromQuery(Name = "low")]
+    public bool LowStockParam { get; set; }
+
     protected override async Task OnInitializedAsync()
     {
+        _onlyLowStock = LowStockParam;
         _canAdjust = await AuthorizationService.IsGrantedAsync(InventoryPermissions.BranchInventory.Adjust);
         _canInitialize = await AuthorizationService.IsGrantedAsync(InventoryPermissions.BranchInventory.Initialize);
         _canSetLimits = await AuthorizationService.IsGrantedAsync(InventoryPermissions.BranchInventory.SetLimits);
@@ -822,8 +904,13 @@
                 var all = await BranchAppService.GetLookupAsync();
                 _accessibleBranches = all.Where(b => ids.Contains(b.Id)).ToList();
 
-                // Branch managers normally have exactly one branch — auto-select it.
-                if (_accessibleBranches.Count > 0)
+                // Deep-linked branch wins when accessible; otherwise branch managers
+                // normally have exactly one branch — auto-select it.
+                if (BranchIdParam is Guid linked && _accessibleBranches.Any(b => b.Id == linked))
+                {
+                    await SelectBranchAsync(linked);
+                }
+                else if (_accessibleBranches.Count > 0)
                 {
                     await SelectBranchAsync(_accessibleBranches[0].Id);
                 }
@@ -936,6 +1023,7 @@
             {
                 BranchId = _branchId.Value,
                 Filter = _filter,
+                OnlyLowStock = _onlyLowStock ? true : (bool?)null,
                 IncludeInactiveProducts = _includeInactive ? true : (bool?)null,
                 SkipCount = state.Page * state.PageSize,
                 MaxResultCount = state.PageSize,
@@ -964,6 +1052,7 @@
             {
                 BranchId = _branchId.Value,
                 Filter = _filter,
+                OnlyLowStock = _onlyLowStock ? true : (bool?)null,
                 IncludeInactiveProducts = _includeInactive ? true : (bool?)null,
                 SkipCount = 0,
                 MaxResultCount = CardFetchLimit,
@@ -1011,6 +1100,18 @@
         if (e.Key == "Enter") await ReloadCurrentViewAsync();
     }
 
+    private async Task OnOnlyLowStockChangedAsync(bool value)
+    {
+        _onlyLowStock = value;
+        await ReloadCurrentViewAsync();
+    }
+
+    private async Task OnIncludeInactiveChangedAsync(bool value)
+    {
+        _includeInactive = value;
+        await ReloadCurrentViewAsync();
+    }
+
     private async Task SetViewAsync(string mode)
     {
         if (_viewMode == mode) return;
@@ -1053,6 +1154,7 @@
         _adjustNewQty = row.QuantityOnHand;
         _adjustMovementType = StockMovementTypes.ManualAdjustment;
         _adjustNotes = null;
+        _adjustProductionDate = DateTime.Today;
         _adjustVisible = true;
     }
 
@@ -1069,10 +1171,39 @@
                 NewQuantity = _adjustNewQty,
                 MovementType = _adjustMovementType,
                 Notes = _adjustNotes,
+                ProductionDate = _adjustNewQty > _adjustTarget.QuantityOnHand ? _adjustProductionDate : null,
                 ConcurrencyStamp = _adjustTarget.ConcurrencyStamp
             });
             Snackbar.Add(L["SuccessfullySaved"], Severity.Success);
             _adjustVisible = false;
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            await HandleErrorAsync(ex);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private void AskWriteOffExpired(BranchInventoryDto row)
+    {
+        _writeOffTarget = row;
+    }
+
+    private void CancelWriteOffExpired() => _writeOffTarget = null;
+
+    private async Task ConfirmWriteOffExpiredAsync()
+    {
+        if (_writeOffTarget == null) return;
+        _saving = true;
+        try
+        {
+            await InventoryAppService.WriteOffExpiredAsync(_writeOffTarget.Id);
+            Snackbar.Add(InvL["WriteOffExpiredDone"], Severity.Success);
+            _writeOffTarget = null;
             await ReloadAsync();
         }
         catch (Exception ex)

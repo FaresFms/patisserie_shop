@@ -11,6 +11,11 @@ public class AppSaleItem : Entity<Guid>
     public int Quantity { get; private set; }
     public decimal UnitPrice { get; private set; }
     public decimal Subtotal { get; private set; }
+    /// <summary>
+    /// Expiry lots consumed by this sale line, serialized with
+    /// <see cref="StockTransferBatchBreakdown"/>. Used to restore the exact lots on void.
+    /// </summary>
+    public string? SoldBatchBreakdown { get; private set; }
 
     protected AppSaleItem() { }
 
@@ -27,5 +32,10 @@ public class AppSaleItem : Entity<Guid>
         Quantity = quantity;
         UnitPrice = unitPrice;
         Subtotal = quantity * unitPrice;
+    }
+
+    internal void SetSoldBatchBreakdown(string? breakdown)
+    {
+        SoldBatchBreakdown = breakdown;
     }
 }

@@ -26,6 +26,7 @@ public class ProductionOrderAppService : ProductionAppService, IProductionOrderA
     private readonly IProductionOrderRepository _orderRepository;
     private readonly ProductionOrderManager _orderManager;
     private readonly IProductionPlanRepository _planRepository;
+    private readonly ProductionPlanManager _planManager;
     private readonly IBranchInventoryRepository _branchInventoryRepository;
     private readonly BranchInventoryManager _inventoryManager;
     private readonly IRepository<AppBranch, Guid> _branchRepository;
@@ -39,6 +40,7 @@ public class ProductionOrderAppService : ProductionAppService, IProductionOrderA
         IProductionOrderRepository orderRepository,
         ProductionOrderManager orderManager,
         IProductionPlanRepository planRepository,
+        ProductionPlanManager planManager,
         IBranchInventoryRepository branchInventoryRepository,
         BranchInventoryManager inventoryManager,
         IRepository<AppBranch, Guid> branchRepository,
@@ -51,6 +53,7 @@ public class ProductionOrderAppService : ProductionAppService, IProductionOrderA
         _orderRepository = orderRepository;
         _orderManager = orderManager;
         _planRepository = planRepository;
+        _planManager = planManager;
         _branchInventoryRepository = branchInventoryRepository;
         _inventoryManager = inventoryManager;
         _branchRepository = branchRepository;
@@ -97,6 +100,12 @@ public class ProductionOrderAppService : ProductionAppService, IProductionOrderA
                 Priority = item.Priority,
                 PlannedOutputQuantity = item.PlannedOutputQuantity,
                 AcceptedQuantity = item.AcceptedQuantity,
+                ReservedQuantity = item.ReservedQuantity,
+                DispatchedQuantity = item.DispatchedQuantity,
+                InTransitQuantity = item.InTransitQuantity,
+                ReceivedQuantity = item.ReceivedQuantity,
+                LostQuantity = item.LostQuantity,
+                RemainingToDispatch = item.RemainingToDispatch,
                 ActualStartTime = item.ActualStartTime,
                 CompletedAt = item.CompletedAt,
                 TotalProductionCost = item.TotalProductionCost
@@ -174,7 +183,7 @@ public class ProductionOrderAppService : ProductionAppService, IProductionOrderA
                 OrderDate = Clock.Now.Date,
                 ExpectedDeliveryDate = Clock.Now.Date.AddDays(1),
                 Currency = currency,
-                Notes = $"Automatic ingredient purchase order for cook order {order.OrderNumber}. Stays in draft until the kitchen manager reviews it."
+                Notes = L["IngredientPurchaseOrderNote", order.OrderNumber]
             });
 
             foreach (var shortage in group)
@@ -242,6 +251,7 @@ public class ProductionOrderAppService : ProductionAppService, IProductionOrderA
         }
 
         await _orderRepository.UpdateAsync(order, autoSave: true);
+        await RefreshPlanLifecycleAsync(order.ProductionPlanId);
         return await MapToDtoAsync(order);
     }
 
@@ -250,9 +260,9 @@ public class ProductionOrderAppService : ProductionAppService, IProductionOrderA
     {
         var order = await _orderRepository.GetWithDetailsAsync(id);
         var finishedProduct = await _productRepository.GetAsync(order.FinishedProductId);
-        var expiryDate = ResolveExpiryDate(input.ExpiryDate, finishedProduct);
+        var expiryDate = ResolveExpiryDate(input.ExpiryDate, finishedProduct, order);
 
-        var output = order.Complete(
+        var completion = order.Complete(
             input.ActualOutputQuantity,
             input.AcceptedQuantity,
             input.RejectedQuantity,
@@ -260,6 +270,8 @@ public class ProductionOrderAppService : ProductionAppService, IProductionOrderA
             input.WasteReason,
             CurrentUser.Id,
             input.Notes);
+        var output = completion.Output;
+        await _orderManager.ApplyAllocationReleasesAsync(completion.ReleasedAllocations);
 
         var inventory = await _branchInventoryRepository.FindByBranchAndProductAsync(
             order.KitchenBranchId,
@@ -291,7 +303,7 @@ public class ProductionOrderAppService : ProductionAppService, IProductionOrderA
                 : order.UnitProductionCost;
             var wasteNotes = string.IsNullOrWhiteSpace(input.WasteReason) || ProductionWasteReasons.IsValid(input.WasteReason)
                 ? input.Notes
-                : $"{input.Notes} | Original waste reason: {input.WasteReason}".Trim(' ', '|');
+                : AppendNote(input.Notes, L["OriginalWasteReason", input.WasteReason.Trim()]);
 
             var waste = await _wasteManager.CreateAsync(
                 productionOrderId: order.Id,
@@ -309,6 +321,7 @@ public class ProductionOrderAppService : ProductionAppService, IProductionOrderA
         }
 
         await _orderRepository.UpdateAsync(order, autoSave: true);
+        await RefreshPlanLifecycleAsync(order.ProductionPlanId);
 
         return await MapToDtoAsync(order);
     }
@@ -317,12 +330,14 @@ public class ProductionOrderAppService : ProductionAppService, IProductionOrderA
     public async Task<ProductionOrderDto> CancelAsync(Guid id)
     {
         var order = await _orderRepository.GetWithDetailsAsync(id);
-        order.Cancel();
+        var releases = order.Cancel();
+        await _orderManager.ApplyAllocationReleasesAsync(releases);
         await _orderRepository.UpdateAsync(order, autoSave: true);
+        await RefreshPlanLifecycleAsync(order.ProductionPlanId);
         return await MapToDtoAsync(order);
     }
 
-    private DateTime ResolveExpiryDate(DateTime? requestedExpiryDate, AppProduct product)
+    private DateTime ResolveExpiryDate(DateTime? requestedExpiryDate, AppProduct product, AppProductionOrder order)
     {
         if (requestedExpiryDate.HasValue)
         {
@@ -331,7 +346,11 @@ public class ProductionOrderAppService : ProductionAppService, IProductionOrderA
 
         if (product.ShelfLifeDays.HasValue)
         {
-            return Clock.Now.Date.AddDays(product.ShelfLifeDays.Value);
+            // Shelf life counts from when cooking actually started, not from when
+            // the completion was recorded — completing an order the next morning
+            // must not stretch the product's life by a day.
+            var cookedDate = order.ActualStartTime?.Date ?? Clock.Now.Date;
+            return cookedDate.AddDays(product.ShelfLifeDays.Value);
         }
 
         throw new BusinessException(ProductionErrorCodes.ProductionExpiryDateRequired)
@@ -369,6 +388,12 @@ public class ProductionOrderAppService : ProductionAppService, IProductionOrderA
             ActualOutputQuantity = order.ActualOutputQuantity,
             AcceptedQuantity = order.AcceptedQuantity,
             RejectedQuantity = order.RejectedQuantity,
+            ReservedQuantity = order.ReservedQuantity,
+            DispatchedQuantity = order.DispatchedQuantity,
+            InTransitQuantity = order.InTransitQuantity,
+            ReceivedQuantity = order.ReceivedQuantity,
+            LostQuantity = order.LostQuantity,
+            RemainingToDispatch = order.RemainingToDispatch,
             PlannedStartTime = order.PlannedStartTime,
             ActualStartTime = order.ActualStartTime,
             CompletedAt = order.CompletedAt,
@@ -390,6 +415,23 @@ public class ProductionOrderAppService : ProductionAppService, IProductionOrderA
         foreach (var ingredient in order.Ingredients)
         {
             productIds.Add(ingredient.IngredientProductId);
+        }
+
+        foreach (var allocation in order.Allocations)
+        {
+            dto.Allocations.Add(new ProductionOrderAllocationDto
+            {
+                Id = allocation.Id,
+                BranchId = allocation.BranchId,
+                BranchProductionRequestId = allocation.BranchProductionRequestId,
+                BranchProductionRequestItemId = allocation.BranchProductionRequestItemId,
+                AllocatedQuantity = allocation.AllocatedQuantity,
+                DispatchedQuantity = allocation.DispatchedQuantity,
+                InTransitQuantity = allocation.InTransitQuantity,
+                ReceivedQuantity = allocation.ReceivedQuantity,
+                LostQuantity = allocation.LostQuantity,
+                RemainingToDispatch = allocation.RemainingToDispatch
+            });
         }
 
         var products = await _productRepository.GetListAsync(p => productIds.Contains(p.Id));
@@ -449,5 +491,27 @@ public class ProductionOrderAppService : ProductionAppService, IProductionOrderA
             .ToUpperInvariant();
 
         return currency?.Length == 3 ? currency : "USD";
+    }
+
+    private async Task RefreshPlanLifecycleAsync(Guid? productionPlanId)
+    {
+        if (!productionPlanId.HasValue)
+        {
+            return;
+        }
+
+        var plan = await _planRepository.GetWithLinesAsync(productionPlanId.Value);
+        await _planManager.RefreshLifecycleAsync(plan);
+        await _planRepository.UpdateAsync(plan, autoSave: true);
+    }
+
+    private static string AppendNote(string? notes, string extra)
+    {
+        if (string.IsNullOrWhiteSpace(notes))
+        {
+            return extra;
+        }
+
+        return $"{notes.Trim()} | {extra}";
     }
 }

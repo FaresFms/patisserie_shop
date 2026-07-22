@@ -107,17 +107,17 @@
                     <div class="notif-list">
                         @foreach (var item in _recent)
                         {
-                            <div class="notif-item" @onclick="() => GoToDecisionLog()">
+                            <div class="notif-item" @onclick="() => GoToDecisionLog(item.BranchId)">
                                 <span class="notif-dot" style="background:@TypeColor(item.DecisionType);"></span>
                                 <div class="notif-item-body">
-                                    <div class="notif-item-type">@TypeLabel(item.DecisionType)</div>
-                                    <div class="notif-item-text">
-                                        @NotificationText(item)
+                                    <div class="notif-item-type">
                                         @if (!string.IsNullOrWhiteSpace(item.BranchName))
                                         {
-                                            <span class="notif-item-branch"> · @item.BranchName</span>
+                                            <span class="notif-branch-pill">@item.BranchName</span>
                                         }
+                                        @TypeLabel(item.DecisionType)
                                     </div>
+                                    <div class="notif-item-text">@NotificationText(item)</div>
                                 </div>
                                 <span class="notif-item-time">@RelativeTime(item.CreationTime)</span>
                             </div>
@@ -247,6 +247,18 @@
 
         .notif-item-branch {
             color: var(--fg-3);
+        }
+
+        .notif-branch-pill {
+            display: inline-block;
+            font-size: 0.66rem;
+            font-weight: 600;
+            padding: 1px 7px;
+            margin-right: 6px;
+            border-radius: 999px;
+            background: var(--accent-soft);
+            color: var(--accent);
+            vertical-align: middle;
         }
 
         .notif-item-time {
@@ -467,10 +479,13 @@
 
     private void CloseDropdown() => _open = false;
 
-    private void GoToDecisionLog()
+    private void GoToDecisionLog(Guid? branchId = null)
     {
         _open = false;
-        Navigation.NavigateTo("/intelligence/decision-log");
+        var url = branchId.HasValue
+            ? $"/intelligence/decision-log?branchId={branchId.Value}"
+            : "/intelligence/decision-log";
+        Navigation.NavigateTo(url);
     }
 
     private void GoToTransfers()
@@ -545,11 +560,9 @@
 
     private string RelativeTime(DateTime creationTime)
     {
-        var delta = DateTime.Now - creationTime;
-        if (delta < TimeSpan.Zero)
-        {
-            delta = DateTime.UtcNow - creationTime;
-        }
+        // CreationTime is a UTC audit timestamp — compare against UtcNow, not local Now,
+        // or the "time ago" is off by the machine's UTC offset.
+        var delta = DateTime.UtcNow - creationTime.ToUniversalTime();
         if (delta < TimeSpan.Zero)
         {
             delta = TimeSpan.Zero;

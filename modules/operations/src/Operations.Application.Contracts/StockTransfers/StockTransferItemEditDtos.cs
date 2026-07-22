@@ -14,6 +14,22 @@ public class UpdateApprovedQuantityDto
     public int ApprovedQuantity { get; set; }
 }
 
+public class ShipStockTransferDto
+{
+    /// <summary>
+    /// Per-item quantities actually leaving the source. A missing item defaults to its
+    /// approved quantity; each value is clamped to [0, approved] server-side. Empty ships
+    /// every item at its approved quantity (the old behaviour).
+    /// </summary>
+    public List<ShipTransferLineDto> Lines { get; set; } = new();
+}
+
+public class ShipTransferLineDto
+{
+    public Guid ItemId { get; set; }
+    public int ShippedQuantity { get; set; }
+}
+
 public class CompleteStockTransferDto
 {
     public List<CompleteTransferLineDto> Lines { get; set; } = new();

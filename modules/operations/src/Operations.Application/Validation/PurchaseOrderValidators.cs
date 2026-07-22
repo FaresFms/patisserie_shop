@@ -1,98 +1,103 @@
+using System.Linq;
 using FluentValidation;
+using Microsoft.Extensions.Localization;
+using Operations.Localization;
 using Operations.PurchaseOrders;
 
 namespace Operations.Validation;
 
 public class CreatePurchaseOrderDtoValidator : AbstractValidator<CreatePurchaseOrderDto>
 {
-    public CreatePurchaseOrderDtoValidator()
+    public CreatePurchaseOrderDtoValidator(IStringLocalizer<OperationsResource> localizer)
     {
         RuleFor(x => x.SupplierId)
-            .NotEmpty().WithMessage("Supplier is required.");
+            .NotEmpty().WithMessage(_ => localizer["Validation:SupplierRequired"]);
 
         RuleFor(x => x.DestBranchId)
-            .NotEmpty().WithMessage("Destination branch is required.");
+            .NotEmpty().WithMessage(_ => localizer["Validation:DestinationBranchRequired"]);
 
         RuleFor(x => x.OrderDate)
-            .NotEmpty().WithMessage("Order date is required.");
+            .NotEmpty().WithMessage(_ => localizer["Validation:OrderDateRequired"]);
 
         RuleFor(x => x.Currency)
-            .NotEmpty().WithMessage("Currency is required.")
-            .Length(3).WithMessage("Currency must be exactly 3 characters.")
-            .Matches("^[A-Z]{3}$").WithMessage("Currency must be a 3-letter ISO code (uppercase).");
+            .NotEmpty().WithMessage(_ => localizer["Validation:CurrencyRequired"])
+            .Length(3).WithMessage(_ => localizer["Validation:CurrencyLength"])
+            .Matches("^[A-Z]{3}$").WithMessage(_ => localizer["Validation:CurrencyIso"]);
 
         RuleFor(x => x.Notes)
-            .MaximumLength(512).WithMessage("Notes must not exceed 512 characters.");
+            .MaximumLength(512).WithMessage(_ => localizer["Validation:NotesMax512"]);
 
         RuleFor(x => x)
             .Must(x => !x.ExpectedDeliveryDate.HasValue || x.ExpectedDeliveryDate.Value >= x.OrderDate)
-            .WithMessage("Expected delivery date cannot be earlier than order date.");
+            .WithMessage(_ => localizer["Validation:ExpectedDeliveryBeforeOrder"]);
     }
 }
 
 public class UpdatePurchaseOrderHeaderDtoValidator : AbstractValidator<UpdatePurchaseOrderHeaderDto>
 {
-    public UpdatePurchaseOrderHeaderDtoValidator()
+    public UpdatePurchaseOrderHeaderDtoValidator(IStringLocalizer<OperationsResource> localizer)
     {
         RuleFor(x => x.SupplierId)
-            .NotEmpty().WithMessage("Supplier is required.");
+            .NotEmpty().WithMessage(_ => localizer["Validation:SupplierRequired"]);
 
         RuleFor(x => x.DestBranchId)
-            .NotEmpty().WithMessage("Destination branch is required.");
+            .NotEmpty().WithMessage(_ => localizer["Validation:DestinationBranchRequired"]);
 
         RuleFor(x => x.OrderDate)
-            .NotEmpty().WithMessage("Order date is required.");
+            .NotEmpty().WithMessage(_ => localizer["Validation:OrderDateRequired"]);
 
         RuleFor(x => x.Notes)
-            .MaximumLength(512).WithMessage("Notes must not exceed 512 characters.");
+            .MaximumLength(512).WithMessage(_ => localizer["Validation:NotesMax512"]);
 
         RuleFor(x => x)
             .Must(x => !x.ExpectedDeliveryDate.HasValue || x.ExpectedDeliveryDate.Value >= x.OrderDate)
-            .WithMessage("Expected delivery date cannot be earlier than order date.");
+            .WithMessage(_ => localizer["Validation:ExpectedDeliveryBeforeOrder"]);
     }
 }
 
 public class AddPurchaseOrderItemDtoValidator : AbstractValidator<AddPurchaseOrderItemDto>
 {
-    public AddPurchaseOrderItemDtoValidator()
+    public AddPurchaseOrderItemDtoValidator(IStringLocalizer<OperationsResource> localizer)
     {
         RuleFor(x => x.ProductId)
-            .NotEmpty().WithMessage("Product is required.");
+            .NotEmpty().WithMessage(_ => localizer["Validation:ProductRequired"]);
 
         RuleFor(x => x.OrderedQuantity)
-            .GreaterThan(0).WithMessage("Ordered quantity must be greater than 0.");
+            .GreaterThan(0).WithMessage(_ => localizer["Validation:OrderedQuantityPositive"]);
 
         RuleFor(x => x.UnitPrice)
-            .GreaterThanOrEqualTo(0).WithMessage("Unit price must be 0 or greater.");
+            .GreaterThanOrEqualTo(0).WithMessage(_ => localizer["Validation:UnitPriceNonNegative"]);
     }
 }
 
 public class UpdatePurchaseOrderItemDtoValidator : AbstractValidator<UpdatePurchaseOrderItemDto>
 {
-    public UpdatePurchaseOrderItemDtoValidator()
+    public UpdatePurchaseOrderItemDtoValidator(IStringLocalizer<OperationsResource> localizer)
     {
         RuleFor(x => x.OrderedQuantity)
-            .GreaterThan(0).WithMessage("Ordered quantity must be greater than 0.");
+            .GreaterThan(0).WithMessage(_ => localizer["Validation:OrderedQuantityPositive"]);
 
         RuleFor(x => x.UnitPrice)
-            .GreaterThanOrEqualTo(0).WithMessage("Unit price must be 0 or greater.");
+            .GreaterThanOrEqualTo(0).WithMessage(_ => localizer["Validation:UnitPriceNonNegative"]);
     }
 }
 
 public class ReceiveItemsDtoValidator : AbstractValidator<ReceiveItemsDto>
 {
-    public ReceiveItemsDtoValidator()
+    public ReceiveItemsDtoValidator(IStringLocalizer<OperationsResource> localizer)
     {
         RuleFor(x => x.Lines)
-            .NotEmpty().WithMessage("At least one line must be specified.");
+            .NotEmpty().WithMessage(_ => localizer["Validation:ReceiveLinesRequired"])
+            .Must(lines => lines.Select(l => l.ItemId).Distinct().Count() == lines.Count)
+            .WithMessage(_ => localizer["Validation:ReceiveLinesUnique"]);
 
         RuleForEach(x => x.Lines).ChildRules(line =>
         {
             line.RuleFor(l => l.ItemId)
-                .NotEmpty().WithMessage("Item is required.");
+                .NotEmpty().WithMessage(_ => localizer["Validation:ReceiveItemRequired"]);
 
             line.RuleFor(l => l.ReceivedQuantity)
-                .GreaterThanOrEqualTo(0).WithMessage("Received quantity must be 0 or greater.");
+                .GreaterThan(0).WithMessage(_ => localizer["Validation:ReceiveQuantityPositive"]);
         });
     }
 }

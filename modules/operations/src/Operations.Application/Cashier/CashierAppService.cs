@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Inventory;
 using Inventory.BranchInventory;
 using Inventory.Entities;
+using Inventory.StockBatches;
 using Microsoft.AspNetCore.Authorization;
 using Operations.Cashiers;
 using Operations.Entities;
@@ -13,6 +14,7 @@ using Operations.Sales;
 using Volo.Abp;
 using Volo.Abp.Domain.Repositories;
 using Volo.Abp.Identity;
+using Volo.Abp.Settings;
 using Volo.Abp.Users;
 
 namespace Operations.Cashier;
@@ -38,6 +40,8 @@ public class CashierAppService : OperationsAppService, ICashierAppService
     private readonly IRepository<AppProduct, Guid> _productRepository;
     private readonly IRepository<AppBranch, Guid> _branchRepository;
     private readonly IRepository<IdentityUser, Guid> _userRepository;
+    private readonly ISettingProvider _settingProvider;
+    private readonly IStockBatchRepository _stockBatchRepository;
 
     public CashierAppService(
         ISaleRepository saleRepository,
@@ -48,7 +52,9 @@ public class CashierAppService : OperationsAppService, ICashierAppService
         IBranchInventoryRepository branchInventoryRepository,
         IRepository<AppProduct, Guid> productRepository,
         IRepository<AppBranch, Guid> branchRepository,
-        IRepository<IdentityUser, Guid> userRepository)
+        IRepository<IdentityUser, Guid> userRepository,
+        ISettingProvider settingProvider,
+        IStockBatchRepository stockBatchRepository)
     {
         _saleRepository = saleRepository;
         _shiftRepository = shiftRepository;
@@ -59,6 +65,8 @@ public class CashierAppService : OperationsAppService, ICashierAppService
         _productRepository = productRepository;
         _branchRepository = branchRepository;
         _userRepository = userRepository;
+        _settingProvider = settingProvider;
+        _stockBatchRepository = stockBatchRepository;
     }
 
     // ─── Shifts ───
@@ -194,7 +202,7 @@ public class CashierAppService : OperationsAppService, ICashierAppService
             .ToList();
     }
 
-    // ─── Product tiles (price + flags only; never cost or quantity) ───
+    // ─── Product tiles (sale-safe availability; never exposes cost) ───
 
     public async Task<List<CashierProductDto>> GetProductTilesAsync(Guid branchId, string? filter)
     {
@@ -213,6 +221,8 @@ public class CashierAppService : OperationsAppService, ICashierAppService
             skipCount: 0,
             maxResultCount: 500,
             onlySellable: true);
+        var nonExpired = await _stockBatchRepository.GetNonExpiredQuantitiesByProductAsync(
+            branchId, Clock.Now.ToUniversalTime().Date);
 
         return rows.ConvertAll(r => new CashierProductDto
         {
@@ -222,9 +232,9 @@ public class CashierAppService : OperationsAppService, ICashierAppService
             Description = r.Product.Description,
             SalePrice = r.Product.SalePrice,
             ImageUrl = r.Product.ImageUrl,
-            QuantityOnHand = r.Inventory.QuantityOnHand,
-            IsLowStock = r.Inventory.IsLowStock,
-            IsOutOfStock = r.Inventory.IsOutOfStock
+            QuantityOnHand = StockBatchManager.GetUsableQuantity(r.Product, r.Inventory, nonExpired),
+            IsLowStock = StockBatchManager.GetUsableQuantity(r.Product, r.Inventory, nonExpired) <= r.Inventory.MinimumStock,
+            IsOutOfStock = StockBatchManager.GetUsableQuantity(r.Product, r.Inventory, nonExpired) <= 0
         });
     }
 
@@ -253,15 +263,17 @@ public class CashierAppService : OperationsAppService, ICashierAppService
             input.BranchId,
             invoiceNumber: null,
             saleDate: Clock.Now,
-            currency: "USD",
+            currency: await GetDefaultCurrencyAsync(),
             notes: null);
 
         // 2) Materialise items — unit price is ALWAYS the product's SalePrice (server-set).
         var receiptNames = new Dictionary<Guid, string>();
+        var productById = new Dictionary<Guid, AppProduct>();
         foreach (var line in input.Lines)
         {
             var product = await _productRepository.GetAsync(line.ProductId);
             receiptNames[product.Id] = product.Name;
+            productById[product.Id] = product;
             sale.AddItem(GuidGenerator.Create(), product.Id, line.Quantity, product.SalePrice);
         }
 
@@ -270,11 +282,28 @@ public class CashierAppService : OperationsAppService, ICashierAppService
         var inventories = await _branchInventoryRepository.GetListAsync(
             x => x.BranchId == sale.BranchId && productIds.Contains(x.ProductId));
         var invByProduct = inventories.ToDictionary(x => x.ProductId);
-        var stockSnapshot = invByProduct.ToDictionary(kv => kv.Key, kv => kv.Value.QuantityOnHand);
+        var nonExpired = await _stockBatchRepository.GetNonExpiredQuantitiesByProductAsync(
+            sale.BranchId, Clock.Now.ToUniversalTime().Date);
+        var stockSnapshot = invByProduct.ToDictionary(
+            kv => kv.Key,
+            kv => StockBatchManager.GetUsableQuantity(productById[kv.Key], kv.Value, nonExpired));
+
+        var blockedProducts = sale.Items
+            .Where(i => productById[i.ProductId].ShelfLifeDays.HasValue
+                && stockSnapshot.GetValueOrDefault(i.ProductId) < i.Quantity)
+            .Select(i => receiptNames.GetValueOrDefault(i.ProductId, "-"))
+            .ToList();
+        if (blockedProducts.Count > 0)
+        {
+            throw new BusinessException(OperationsErrorCodes.SaleIncludesExpiredStock)
+                .WithData("Products", string.Join(", ", blockedProducts));
+        }
 
         // 4) Domain validates stock and raises SaleRecordedEto.
         sale.Record(stockSnapshot);
         sale.AssignShift(shift.Id);
+
+        sale.EnsureCashTendered(input.CashTendered);
 
         // 5) Persist so movement rows can reference the sale Id.
         await _saleRepository.InsertAsync(sale, autoSave: true);
@@ -283,15 +312,22 @@ public class CashierAppService : OperationsAppService, ICashierAppService
         foreach (var item in sale.Items)
         {
             var inv = invByProduct[item.ProductId];
-            await _inventoryManager.AdjustStockAsync(
+            var adjustment = await _inventoryManager.AdjustStockDetailedAsync(
                 inv,
                 inv.QuantityOnHand - item.Quantity,
                 StockMovementTypes.Sale,
                 notes: sale.InvoiceNumber,
                 referenceId: sale.Id,
                 referenceType: nameof(AppSale));
+            sale.RecordItemSoldBatches(
+                item.Id,
+                StockTransferBatchBreakdown.Format(
+                    adjustment.ConsumedBatches.Select(
+                        b => new StockTransferBatchBreakdown.Line(b.ExpiryDate, b.Quantity))));
             await _branchInventoryRepository.UpdateAsync(inv);
         }
+
+        await _saleRepository.UpdateAsync(sale, autoSave: true);
 
         return new CashierSaleResultDto
         {
@@ -390,6 +426,18 @@ public class CashierAppService : OperationsAppService, ICashierAppService
         var inventories = await _branchInventoryRepository.GetListAsync(
             x => x.BranchId == sale.BranchId && productIds.Contains(x.ProductId));
         var invByProduct = inventories.ToDictionary(x => x.ProductId);
+        var products = await _productRepository.GetListAsync(p => productIds.Contains(p.Id));
+        var productById = products.ToDictionary(p => p.Id);
+
+        var missingBatchHistory = sale.Items.FirstOrDefault(i =>
+            productById.GetValueOrDefault(i.ProductId)?.ShelfLifeDays.HasValue == true
+            && string.IsNullOrWhiteSpace(i.SoldBatchBreakdown));
+        if (missingBatchHistory != null)
+        {
+            throw new BusinessException(OperationsErrorCodes.SaleBatchHistoryMissing)
+                .WithData("ProductId", missingBatchHistory.ProductId)
+                .WithData("ProductName", productById[missingBatchHistory.ProductId].Name);
+        }
 
         foreach (var item in sale.Items)
         {
@@ -398,13 +446,32 @@ public class CashierAppService : OperationsAppService, ICashierAppService
                 continue; // No inventory row to restore into (product removed); skip safely.
             }
 
-            await _inventoryManager.AdjustStockAsync(
-                inv,
-                inv.QuantityOnHand + item.Quantity,
-                StockMovementTypes.SaleReturn,
-                notes: sale.InvoiceNumber,
-                referenceId: sale.Id,
-                referenceType: nameof(AppSale));
+            var remaining = item.Quantity;
+            foreach (var batch in StockTransferBatchBreakdown.Parse(item.SoldBatchBreakdown))
+            {
+                if (remaining <= 0) break;
+                var quantity = Math.Min(batch.Quantity, remaining);
+                remaining -= quantity;
+                await _inventoryManager.AdjustStockAsync(
+                    inv,
+                    inv.QuantityOnHand + quantity,
+                    StockMovementTypes.SaleReturn,
+                    notes: sale.InvoiceNumber,
+                    referenceId: sale.Id,
+                    referenceType: nameof(AppSale),
+                    batchExpiryDate: batch.ExpiryDate);
+            }
+
+            if (remaining > 0)
+            {
+                await _inventoryManager.AdjustStockAsync(
+                    inv,
+                    inv.QuantityOnHand + remaining,
+                    StockMovementTypes.SaleReturn,
+                    notes: sale.InvoiceNumber,
+                    referenceId: sale.Id,
+                    referenceType: nameof(AppSale));
+            }
             await _branchInventoryRepository.UpdateAsync(inv);
         }
 
@@ -413,6 +480,16 @@ public class CashierAppService : OperationsAppService, ICashierAppService
     }
 
     // ─── Helpers ───
+
+    /// <summary>
+    /// The shop's configured currency. The setting is defined in the host project, so the
+    /// key is referenced by its literal name (same pattern as ProductionOrderAppService).
+    /// </summary>
+    private async Task<string> GetDefaultCurrencyAsync()
+    {
+        var currency = await _settingProvider.GetOrNullAsync("patisserie_shop.Operations.DefaultCurrency");
+        return string.IsNullOrWhiteSpace(currency) ? "USD" : currency.Trim().ToUpperInvariant();
+    }
 
     /// <summary>
     /// The branch a cashier is assigned to, parsed from their persistent

@@ -207,7 +207,7 @@
                                                                   ValueChanged="@(v => _approvedEdits[item.Id] = v)"
                                                                   Variant="Variant.Outlined" Min="0"
                                                                   Margin="Margin.Dense"
-                                                                  Style="max-width: 90px;" />
+                                                                  Class="soft-qty" />
                                                 <SoftIconButton Icon="@Icons.Material.Filled.Check"
                                                                 Color="Color.Success" Size="Size.Small"
                                                                 OnClick="@(() => SaveApprovedAsync(item))" />
@@ -367,7 +367,7 @@
                             <div>
                                 <SoftText Typo="Typo.h6">@OpsL["Ship"]</SoftText>
                                 <SoftText Typo="Typo.caption" Color="Color.Default">
-                                    Stock leaves @_transfer.FromBranchName the moment you confirm.
+                                    @string.Format(OpsL["ShipLeavesSourceHint"], _transfer.FromBranchName)
                                 </SoftText>
                             </div>
                         </SoftStack>
@@ -384,10 +384,17 @@
                             @OpsL["TransferSourceStockMissingNow"]
                         </SoftAlert>
                     }
+                    else if (HasShipShortShipment)
+                    {
+                        <SoftAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true" Class="mb-3">
+                            @OpsL["TransferShipShortInfo"]
+                        </SoftAlert>
+                    }
                     <MudTable T="ShipRow" Items="@_shipRows" Dense="true" Hover="true" Bordered="false">
                         <HeaderContent>
                             <MudTh>@OpsL["Product"]</MudTh>
-                            <MudTh Style="text-align:right;">@OpsL["ShippedQuantity"]</MudTh>
+                            <MudTh Style="text-align:center;">@OpsL["ApprovedQuantity"]</MudTh>
+                            <MudTh Style="text-align:center; min-width: 130px;">@OpsL["ShippedQuantity"]</MudTh>
                             <MudTh Style="text-align:right;">@OpsL["SourceStock"]</MudTh>
                         </HeaderContent>
                         <RowTemplate Context="row">
@@ -397,7 +404,12 @@
                                     <SoftText Typo="Typo.caption" Color="Color.Default">@row.Item.ProductSKU</SoftText>
                                 </SoftStack>
                             </MudTd>
-                            <MudTd Style="text-align:right;">@row.ToShip</MudTd>
+                            <MudTd Style="text-align:center;">@row.Approved</MudTd>
+                            <MudTd Style="text-align:center;">
+                                <SoftNumericField T="int" @bind-Value="row.ToShip"
+                                                  Variant="Variant.Outlined" Min="0" Max="@row.Approved"
+                                                  Margin="Margin.Dense" />
+                            </MudTd>
                             <MudTd Style="text-align:right;">
                                 <SoftText Color="@(row.SourceStock < row.ToShip ? Color.Error : Color.Default)">
                                     @row.SourceStock
@@ -412,7 +424,7 @@
                     <SoftButton Variant="Variant.Filled" Color="Color.Info"
                                 StartIcon="@Icons.Material.Filled.LocalShipping"
                                 OnClick="ConfirmShipAsync"
-                                Disabled="@(_saving || HasShipStockShortage)">@OpsL["Ship"]</SoftButton>
+                                Disabled="@(_saving || HasShipStockShortage || !HasAnythingToShip)">@OpsL["Ship"]</SoftButton>
                 </div>
             </SoftCard>
         </div>
@@ -430,7 +442,7 @@
                         <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
                             <SoftIcon Icon="@Icons.Material.Filled.TaskAlt" Color="Color.Tertiary" Size="Size.Medium" />
                             <div>
-                                <SoftText Typo="Typo.h6">@OpsL["CompleteTransfer"]</SoftText>
+                                <SoftText Typo="Typo.h6">@OpsL["ReceiveTransfer"]</SoftText>
                                 <SoftText Typo="Typo.caption" Color="Color.Default">
                                     @OpsL["CompleteTransferHint"]
                                 </SoftText>
@@ -478,14 +490,51 @@
                     </MudTable>
                 </SoftCardContent>
                 <SoftDivider />
-                <div class="pa-3 d-flex justify-end" style="gap: 8px;">
+                <div class="pa-3 d-flex align-center flex-wrap" style="gap: 8px;">
+                    <SoftButton Variant="Variant.Text" Color="Color.Error"
+                                StartIcon="@Icons.Material.Filled.ReportProblem"
+                                OnClick="OpenReportLost" Disabled="_saving">@OpsL["TransferReportLost"]</SoftButton>
+                    <div class="flex-grow-1"></div>
                     <SoftButton Variant="Variant.Text" OnClick="CloseComplete">@L["Cancel"]</SoftButton>
                     <SoftButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="ReceiveAll">
                         @OpsL["TransferAll"]
                     </SoftButton>
                     <SoftButton Variant="Variant.Filled" Color="Color.Tertiary"
                                 StartIcon="@Icons.Material.Filled.CheckCircle"
-                                OnClick="ConfirmComplete" Disabled="@(_saving || HasReceiveOverShipped)">@OpsL["ConfirmComplete"]</SoftButton>
+                                OnClick="ConfirmComplete" Disabled="@(_saving || HasReceiveOverShipped)">@OpsL["ConfirmReceive"]</SoftButton>
+                </div>
+            </SoftCard>
+        </div>
+    </div>
+}
+
+<!-- ── Report lost confirm ── -->
+@if (_reportLostVisible)
+{
+    <div class="soft-modal-backdrop" @onclick="CloseReportLost">
+        <div class="soft-modal-container" @onclick:stopPropagation="true">
+            <SoftCard Elevation="24" Class="soft-modal-card">
+                <SoftCardHeader Class="pa-4">
+                    <CardHeaderContent>
+                        <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <SoftIcon Icon="@Icons.Material.Filled.ReportProblem" Color="Color.Error" Size="Size.Medium" />
+                            <SoftText Typo="Typo.h6">@OpsL["TransferReportLost"]</SoftText>
+                        </SoftStack>
+                    </CardHeaderContent>
+                    <CardHeaderActions>
+                        <SoftIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="CloseReportLost" />
+                    </CardHeaderActions>
+                </SoftCardHeader>
+                <SoftDivider />
+                <SoftCardContent Class="pa-4">
+                    <SoftText Typo="Typo.body2">@OpsL["TransferReportLostConfirm"]</SoftText>
+                </SoftCardContent>
+                <SoftDivider />
+                <div class="pa-3 d-flex justify-end" style="gap: 8px;">
+                    <SoftButton Variant="Variant.Text" OnClick="CloseReportLost">@L["Cancel"]</SoftButton>
+                    <SoftButton Variant="Variant.Filled" Color="Color.Error"
+                                StartIcon="@Icons.Material.Filled.ReportProblem"
+                                OnClick="ConfirmReportLostAsync" Disabled="_saving">@OpsL["TransferReportLost"]</SoftButton>
                 </div>
             </SoftCard>
         </div>
@@ -750,6 +799,7 @@
 
     private bool _completeVisible;
     private List<CompleteRow> _completeRows = new();
+    private bool _reportLostVisible;
 
     private bool _rejectVisible;
     private string? _rejectReason;
@@ -780,12 +830,15 @@
             || _transfer?.Status == StockTransferStatuses.Approved);
 
     private bool HasShipStockShortage => _shipRows.Any(r => r.ToShip > r.SourceStock);
+    private bool HasShipShortShipment => _shipRows.Any(r => r.ToShip < r.Approved);
+    private bool HasAnythingToShip => _shipRows.Any(r => r.ToShip > 0);
     private bool HasReceiveOverShipped => _completeRows.Any(r => r.ReceiveNow > r.Shipped);
     private bool HasReceiveShortfall => _completeRows.Any(r => r.ReceiveNow < r.Shipped);
 
     public class ShipRow
     {
         public StockTransferItemDto Item { get; set; } = null!;
+        public int Approved { get; set; }
         public int ToShip { get; set; }
         public int SourceStock { get; set; }
     }
@@ -1055,11 +1108,19 @@
             var source = await StockTransferAppService.GetSourceProductsAsync(TransferId);
             var stockByProduct = source.ToDictionary(p => p.ProductId, p => p.QuantityOnHand);
 
-            _shipRows = _transfer!.Items.Select(i => new ShipRow
+            _shipRows = _transfer!.Items.Select(i =>
             {
-                Item = i,
-                ToShip = i.ApprovedQuantity ?? i.RequestedQuantity,
-                SourceStock = stockByProduct.GetValueOrDefault(i.ProductId, 0)
+                var approved = i.ApprovedQuantity ?? i.RequestedQuantity;
+                var sourceStock = stockByProduct.GetValueOrDefault(i.ProductId, 0);
+                return new ShipRow
+                {
+                    Item = i,
+                    Approved = approved,
+                    // Default to approved, but cap at what the source can actually spare so
+                    // the packer starts from a shippable number instead of a blocked one.
+                    ToShip = Math.Min(approved, sourceStock),
+                    SourceStock = sourceStock
+                };
             }).ToList();
             _shipVisible = true;
         }
@@ -1073,8 +1134,15 @@
 
     private async Task ConfirmShipAsync()
     {
+        var input = new ShipStockTransferDto
+        {
+            Lines = _shipRows
+                .Select(r => new ShipTransferLineDto { ItemId = r.Item.Id, ShippedQuantity = r.ToShip })
+                .ToList()
+        };
+
         if (await RunAsync(
-                () => StockTransferAppService.ShipAsync(TransferId), OpsL["TransferShipped"], Severity.Success))
+                () => StockTransferAppService.ShipAsync(TransferId, input), OpsL["TransferShipped"], Severity.Success))
         {
             _shipVisible = false;
         }
@@ -1152,13 +1220,30 @@
 
     private void OpenCompleteDialog()
     {
-        _completeRows = _transfer!.Items.Select(i => new CompleteRow
+        _completeRows = _transfer!.Items.Select(i =>
         {
-            Item = i,
-            Shipped = i.ApprovedQuantity ?? i.RequestedQuantity,
-            ReceiveNow = i.ApprovedQuantity ?? i.RequestedQuantity
+            // Cap at what actually shipped (falls back to approved for legacy transfers).
+            var shipped = i.ShippedQuantity ?? i.ApprovedQuantity ?? i.RequestedQuantity;
+            return new CompleteRow { Item = i, Shipped = shipped, ReceiveNow = shipped };
         }).ToList();
         _completeVisible = true;
+    }
+
+    private void OpenReportLost() => _reportLostVisible = true;
+
+    private void CloseReportLost() => _reportLostVisible = false;
+
+    private async Task ConfirmReportLostAsync()
+    {
+        // Nothing arrived — receive 0 on every line. The source was already decremented
+        // at ship time, so the whole shipment is recorded as transit loss and the
+        // transfer leaves the "needs my action" list.
+        foreach (var row in _completeRows)
+        {
+            row.ReceiveNow = 0;
+        }
+        _reportLostVisible = false;
+        await ConfirmComplete();
     }
 
     private void CloseComplete() => _completeVisible = false;
@@ -1219,6 +1304,12 @@
             if (business.Code == OperationsErrorCodes.InsufficientStockAtSource)
             {
                 Snackbar.Add(OpsL["TransferSourceStockMissingNow"], Severity.Error);
+                return;
+            }
+
+            if (business.Code == OperationsErrorCodes.CannotShipNothing)
+            {
+                Snackbar.Add(OpsL["Operations:Transfers:CannotShipNothing"], Severity.Warning);
                 return;
             }
 

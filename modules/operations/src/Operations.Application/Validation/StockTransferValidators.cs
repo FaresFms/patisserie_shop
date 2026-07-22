@@ -1,71 +1,73 @@
 using FluentValidation;
+using Microsoft.Extensions.Localization;
+using Operations.Localization;
 using Operations.StockTransfers;
 
 namespace Operations.Validation;
 
 public class CreateStockTransferDtoValidator : AbstractValidator<CreateStockTransferDto>
 {
-    public CreateStockTransferDtoValidator()
+    public CreateStockTransferDtoValidator(IStringLocalizer<OperationsResource> localizer)
     {
         RuleFor(x => x.ToBranchId)
-            .NotEmpty().WithMessage("Destination branch is required.");
+            .NotEmpty().WithMessage(_ => localizer["Validation:DestinationBranchRequired"]);
 
         RuleFor(x => x)
             .Must(x => !x.FromBranchId.HasValue || x.FromBranchId != x.ToBranchId)
-            .WithMessage("Source and destination branches must be different.");
+            .WithMessage(_ => localizer["Validation:SourceDestinationDifferent"]);
 
         RuleFor(x => x.RequestedDate)
-            .NotEmpty().WithMessage("Requested date is required.");
+            .NotEmpty().WithMessage(_ => localizer["Validation:RequestedDateRequired"]);
 
         RuleFor(x => x.Notes)
-            .MaximumLength(512).WithMessage("Notes must not exceed 512 characters.");
+            .MaximumLength(512).WithMessage(_ => localizer["Validation:NotesMax512"]);
     }
 }
 
 public class AssignStockTransferSourceDtoValidator : AbstractValidator<AssignStockTransferSourceDto>
 {
-    public AssignStockTransferSourceDtoValidator()
+    public AssignStockTransferSourceDtoValidator(IStringLocalizer<OperationsResource> localizer)
     {
         RuleFor(x => x.FromBranchId)
-            .NotEmpty().WithMessage("Source branch is required.");
+            .NotEmpty().WithMessage(_ => localizer["Validation:SourceBranchRequired"]);
     }
 }
 
 public class AddStockTransferItemDtoValidator : AbstractValidator<AddStockTransferItemDto>
 {
-    public AddStockTransferItemDtoValidator()
+    public AddStockTransferItemDtoValidator(IStringLocalizer<OperationsResource> localizer)
     {
         RuleFor(x => x.ProductId)
-            .NotEmpty().WithMessage("Product is required.");
+            .NotEmpty().WithMessage(_ => localizer["Validation:ProductRequired"]);
 
         RuleFor(x => x.RequestedQuantity)
-            .GreaterThan(0).WithMessage("Requested quantity must be greater than 0.");
+            .GreaterThan(0).WithMessage(_ => localizer["Validation:RequestedQuantityPositive"]);
     }
 }
 
 public class UpdateApprovedQuantityDtoValidator : AbstractValidator<UpdateApprovedQuantityDto>
 {
-    public UpdateApprovedQuantityDtoValidator()
+    public UpdateApprovedQuantityDtoValidator(IStringLocalizer<OperationsResource> localizer)
     {
         RuleFor(x => x.ApprovedQuantity)
-            .GreaterThanOrEqualTo(0).WithMessage("Approved quantity must be 0 or greater.");
+            .GreaterThanOrEqualTo(0).WithMessage(_ => localizer["Validation:ApprovedQuantityNonNegative"]);
     }
 }
 
 public class CompleteStockTransferDtoValidator : AbstractValidator<CompleteStockTransferDto>
 {
-    public CompleteStockTransferDtoValidator()
+    public CompleteStockTransferDtoValidator(IStringLocalizer<OperationsResource> localizer)
     {
         RuleFor(x => x.Lines)
-            .NotEmpty().WithMessage("At least one line must be specified.");
+            .NotEmpty().WithMessage(_ => localizer["Validation:TransferLinesRequired"]);
 
         RuleForEach(x => x.Lines).ChildRules(line =>
         {
             line.RuleFor(l => l.ItemId)
-                .NotEmpty().WithMessage("Item is required.");
+                .NotEmpty().WithMessage(_ => localizer["Validation:TransferItemRequired"]);
 
             line.RuleFor(l => l.TransferredQuantity)
-                .GreaterThanOrEqualTo(0).WithMessage("Transferred quantity must be 0 or greater.");
+                .GreaterThanOrEqualTo(0).WithMessage(_ => localizer["Validation:TransferredQuantityNonNegative"]);
         });
     }
 }

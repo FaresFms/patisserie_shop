@@ -40,7 +40,7 @@ public class ShopSettingsAppService : patisserie_shopAppService, IShopSettingsAp
             ReceiptFooterMessage = await _settingProvider.GetOrNullAsync(patisserie_shopSettings.ReceiptFooterMessage),
             DefaultCurrency = await _settingProvider.GetOrNullAsync(patisserie_shopSettings.DefaultCurrency) ?? "USD",
             DefaultMinimumStock = await _settingProvider.GetAsync(patisserie_shopSettings.DefaultMinimumStock, defaultValue: 5),
-            AutopilotEnabled = await _settingProvider.GetAsync(patisserie_shopSettings.AutopilotEnabled, defaultValue: true)
+            AutopilotEnabled = await _settingProvider.GetAsync(patisserie_shopSettings.AutopilotEnabled, defaultValue: false)
         };
     }
 

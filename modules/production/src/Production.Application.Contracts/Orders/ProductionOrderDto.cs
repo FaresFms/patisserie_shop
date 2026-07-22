@@ -23,6 +23,12 @@ public class ProductionOrderDto : EntityDto<Guid>
     public int ActualOutputQuantity { get; set; }
     public int AcceptedQuantity { get; set; }
     public int RejectedQuantity { get; set; }
+    public int ReservedQuantity { get; set; }
+    public int DispatchedQuantity { get; set; }
+    public int InTransitQuantity { get; set; }
+    public int ReceivedQuantity { get; set; }
+    public int LostQuantity { get; set; }
+    public int RemainingToDispatch { get; set; }
     public DateTime? PlannedStartTime { get; set; }
     public DateTime? ActualStartTime { get; set; }
     public DateTime? CompletedAt { get; set; }
@@ -37,4 +43,5 @@ public class ProductionOrderDto : EntityDto<Guid>
     public string? Notes { get; set; }
     public List<ProductionOrderIngredientDto> Ingredients { get; set; } = new();
     public List<ProductionIngredientAvailabilityDto> Availability { get; set; } = new();
+    public List<ProductionOrderAllocationDto> Allocations { get; set; } = new();
 }

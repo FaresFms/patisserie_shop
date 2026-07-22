@@ -144,6 +144,12 @@ public static class ProductionDbContextModelCreatingExtensions
                 .HasForeignKey(i => i.ProductionOrderId)
                 .OnDelete(DeleteBehavior.Cascade);
             b.Navigation(x => x.Allocations).HasField("_allocations").UsePropertyAccessMode(PropertyAccessMode.Field);
+
+            b.HasMany(x => x.Dispatches)
+                .WithOne()
+                .HasForeignKey(i => i.ProductionOrderId)
+                .OnDelete(DeleteBehavior.Cascade);
+            b.Navigation(x => x.Dispatches).HasField("_dispatches").UsePropertyAccessMode(PropertyAccessMode.Field);
         });
 
         builder.Entity<AppProductionOrderIngredient>(b =>
@@ -163,9 +169,38 @@ public static class ProductionDbContextModelCreatingExtensions
             b.ToTable(ProductionDbProperties.DbTablePrefix + "OrderAllocations", ProductionDbProperties.DbSchema);
             b.ConfigureByConvention();
 
+            b.Property(x => x.ReceivedQuantity).HasColumnName("FulfilledQuantity");
+
             b.HasIndex(x => x.ProductionOrderId).HasDatabaseName("IX_ProductionOrderAllocations_Order");
             b.HasIndex(x => x.BranchId).HasDatabaseName("IX_ProductionOrderAllocations_Branch");
             b.HasIndex(x => x.BranchProductionRequestItemId).HasDatabaseName("IX_ProductionOrderAllocations_RequestItem");
+        });
+
+        builder.Entity<AppProductionOrderDispatch>(b =>
+        {
+            b.ToTable(ProductionDbProperties.DbTablePrefix + "OrderDispatches", ProductionDbProperties.DbSchema);
+            b.ConfigureByConvention();
+
+            b.HasIndex(x => x.ProductionOrderId).HasDatabaseName("IX_ProductionOrderDispatches_Order");
+            b.HasIndex(x => x.StockTransferId).IsUnique().HasDatabaseName("IX_ProductionOrderDispatches_Transfer");
+            b.HasIndex(x => new { x.DestinationBranchId, x.CompletedAt })
+                .HasDatabaseName("IX_ProductionOrderDispatches_BranchCompleted");
+
+            b.HasMany(x => x.Lines)
+                .WithOne()
+                .HasForeignKey(i => i.ProductionOrderDispatchId)
+                .OnDelete(DeleteBehavior.Cascade);
+            b.Navigation(x => x.Lines).HasField("_lines").UsePropertyAccessMode(PropertyAccessMode.Field);
+        });
+
+        builder.Entity<AppProductionOrderDispatchLine>(b =>
+        {
+            b.ToTable(ProductionDbProperties.DbTablePrefix + "OrderDispatchLines", ProductionDbProperties.DbSchema);
+            b.ConfigureByConvention();
+
+            b.HasIndex(x => x.ProductionOrderDispatchId).HasDatabaseName("IX_ProductionOrderDispatchLines_Dispatch");
+            b.HasIndex(x => x.ProductionOrderAllocationId).HasDatabaseName("IX_ProductionOrderDispatchLines_Allocation");
+            b.HasIndex(x => x.BranchProductionRequestItemId).HasDatabaseName("IX_ProductionOrderDispatchLines_RequestItem");
         });
 
         builder.Entity<AppProductionWaste>(b =>

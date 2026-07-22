@@ -106,11 +106,44 @@ public class AppProductionPlan : FullAuditedAggregateRoot<Guid>
         Status = ProductionPlanStatuses.Confirmed;
     }
 
-    public void Cancel()
+    public void MarkInProgress()
+    {
+        if (Status == ProductionPlanStatuses.InProgress)
+        {
+            return;
+        }
+        if (Status != ProductionPlanStatuses.Confirmed)
+        {
+            throw InvalidTransition(ProductionPlanStatuses.InProgress);
+        }
+
+        Status = ProductionPlanStatuses.InProgress;
+    }
+
+    public void Close()
+    {
+        if (Status == ProductionPlanStatuses.Closed)
+        {
+            return;
+        }
+        if (Status != ProductionPlanStatuses.Confirmed && Status != ProductionPlanStatuses.InProgress)
+        {
+            throw InvalidTransition(ProductionPlanStatuses.Closed);
+        }
+
+        Status = ProductionPlanStatuses.Closed;
+    }
+
+    public void Cancel(bool hasProductionOrders)
     {
         if (Status != ProductionPlanStatuses.Draft && Status != ProductionPlanStatuses.Confirmed)
         {
             throw InvalidTransition(ProductionPlanStatuses.Cancelled);
+        }
+        if (hasProductionOrders)
+        {
+            throw new BusinessException(ProductionErrorCodes.CannotCancelPlanWithOrders)
+                .WithData("PlanId", Id);
         }
 
         Status = ProductionPlanStatuses.Cancelled;

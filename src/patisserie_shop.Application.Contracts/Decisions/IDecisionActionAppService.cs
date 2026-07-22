@@ -13,7 +13,13 @@ public interface IDecisionActionAppService : IApplicationService
 {
     Task<DecisionActionPreviewDto> PrepareDecisionActionAsync(Guid decisionLogId);
 
-    Task<DecisionActionResultDto> ExecuteDecisionAsync(Guid decisionLogId);
+    /// <summary>
+    /// Executes a decision, creating the corrective draft document. When
+    /// <paramref name="createdByAutopilot"/> is true (called by the rule autopilot,
+    /// not a human), the created document's notes are tagged so the owner can tell
+    /// system-created orders from ones they made themselves.
+    /// </summary>
+    Task<DecisionActionResultDto> ExecuteDecisionAsync(Guid decisionLogId, bool createdByAutopilot = false);
 
     /// <summary>
     /// Consolidates pending reorder-type decisions (LowStockAlert, ReorderSuggestion,

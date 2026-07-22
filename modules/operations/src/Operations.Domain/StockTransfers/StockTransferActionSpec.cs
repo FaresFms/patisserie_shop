@@ -20,6 +20,12 @@ public class StockTransferActionSpec
     public List<Guid> ManagedBranchIds { get; set; } = new();
 }
 
+public class StockTransferVisibilitySpec
+{
+    public bool CanViewAll { get; set; }
+    public List<Guid> ManagedBranchIds { get; set; } = new();
+}
+
 /// <summary>Per-bucket counts for the action spec — feeds the notification bell and tabs.</summary>
 public class StockTransferActionCounts
 {

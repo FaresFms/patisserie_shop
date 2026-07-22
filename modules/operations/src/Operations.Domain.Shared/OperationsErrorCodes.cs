@@ -11,6 +11,8 @@ public static class OperationsErrorCodes
     public const string DuplicateProductInOrder = "Operations:PurchaseOrders:DuplicateProduct";
     public const string InvalidQuantity = "Operations:PurchaseOrders:InvalidQuantity";
     public const string InvalidPrice = "Operations:PurchaseOrders:InvalidPrice";
+    public const string PurchaseExpiryRequired = "Operations:PurchaseOrders:ExpiryRequired";
+    public const string PurchaseExpiryInPast = "Operations:PurchaseOrders:ExpiryInPast";
 
     // Sales
     public const string DuplicateInvoiceNumber = "Operations:Sales:DuplicateInvoiceNumber";
@@ -18,6 +20,9 @@ public static class OperationsErrorCodes
     public const string DuplicateProductInSale = "Operations:Sales:DuplicateProduct";
     public const string InsufficientStock = "Operations:Sales:InsufficientStock";
     public const string NoInventoryRow = "Operations:Sales:NoInventoryRow";
+    public const string SaleIncludesExpiredStock = "Operations:Sales:IncludesExpiredStock";
+    public const string SaleItemNotFound = "Operations:Sales:ItemNotFound";
+    public const string SaleBatchHistoryMissing = "Operations:Sales:BatchHistoryMissing";
 
     // Cashier / cash drawer
     public const string NoOpenShift = "Operations:Cashier:NoOpenShift";
@@ -29,6 +34,7 @@ public static class OperationsErrorCodes
     public const string BranchNotAssignedToCashier = "Operations:Cashier:BranchNotAssignedToCashier";
     public const string BranchNotManagedByYou = "Operations:Cashier:BranchNotManagedByYou";
     public const string CashierSaleAccessDenied = "Operations:Cashier:SaleAccessDenied";
+    public const string CashTenderedInsufficient = "Operations:Cashier:CashTenderedInsufficient";
 
     // Stock transfers
     public const string TransferInvalidStatusTransition = "Operations:Transfers:InvalidStatusTransition";
@@ -43,4 +49,5 @@ public static class OperationsErrorCodes
     public const string CannotApproveTransferItem = "Operations:Transfers:CannotApproveItem";
     public const string TransferRejectionReasonRequired = "Operations:Transfers:RejectionReasonRequired";
     public const string TransferReceivedExceedsShipped = "Operations:Transfers:ReceivedExceedsShipped";
+    public const string CannotShipNothing = "Operations:Transfers:CannotShipNothing";
 }

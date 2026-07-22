@@ -9,6 +9,7 @@
 @using Volo.Abp.Application.Dtos
 @using Volo.Abp.AspNetCore.Components.Web.Theming.Layout
 @using Inventory
+@using Inventory.Branches
 @using Inventory.Categories
 @using Inventory.Suppliers
 @using Inventory.Products
@@ -24,6 +25,7 @@
 @inject ICategoryAppService CategoryAppService
 @inject ISupplierAppService SupplierAppService
 @inject IBranchInventoryAppService BranchInventoryAppService
+@inject IBranchAppService BranchAppService
 @inject PageLayout PageLayout
 @inject ISnackbar Snackbar
 @inject IStringLocalizer<InventoryResource> InvL
@@ -37,7 +39,7 @@
     <div class="page-head">
         <div>
             <h1 class="page-title">@InvL["Products"]</h1>
-            <div class="page-sub">Catalogue, pricing and stock.</div>
+            <div class="page-sub">@InvL["Products:Subtitle"]</div>
         </div>
         <div class="page-head-actions">
             @if (_canManage)
@@ -226,7 +228,7 @@
                                         <SoftIcon Icon="@Icons.Material.Filled.AddPhotoAlternate"
                                                   Color="Color.Primary"
                                                   Size="Size.Large" />
-                                        <SoftText Typo="Typo.body2">Product photo</SoftText>
+                                        <SoftText Typo="Typo.body2">@InvL["Products:ProductPhoto"]</SoftText>
                                     </div>
                                 }
                             </div>
@@ -236,7 +238,7 @@
                                        OnChange="OnProductImageChangedAsync" />
                             <label class="product-upload-button" for="product-image-input">
                                 <SoftIcon Icon="@Icons.Material.Filled.Upload" Size="Size.Small" />
-                                <span>@(string.IsNullOrWhiteSpace(ProductImagePreview) ? "Choose image" : "Change image")</span>
+                                <span>@(string.IsNullOrWhiteSpace(ProductImagePreview) ? InvL["Products:ChooseImage"] : InvL["Products:ChangeImage"])</span>
                             </label>
                             @if (!string.IsNullOrWhiteSpace(ProductImagePreview))
                             {
@@ -244,7 +246,7 @@
                                             Color="Color.Error"
                                             StartIcon="@Icons.Material.Filled.DeleteOutline"
                                             OnClick="ClearProductImage">
-                                    Remove photo
+                                    @InvL["Products:RemovePhoto"]
                                 </SoftButton>
                             }
                         </aside>
@@ -383,6 +385,31 @@
                                     </div>
                                 </div>
                             </section>
+
+                            @if (!_editingId.HasValue && _canInitializeStock && _stockBranches.Count > 0)
+                            {
+                                <section class="product-form-section">
+                                    <SoftText Typo="Typo.overline" Color="Color.Primary">@InvL["InitialStockAtBranches"]</SoftText>
+                                    <SoftDivider Class="mb-1" />
+                                    <SoftText Typo="Typo.caption" Color="Color.Default" Class="mb-2 d-block">
+                                        @InvL["InitialStockAtBranchesHint"]
+                                    </SoftText>
+                                    <div class="product-form-grid product-form-grid--two">
+                                        @foreach (var branch in _stockBranches)
+                                        {
+                                            var branchId = branch.Id;
+                                            <SoftNumericField T="int"
+                                                              Label="@branch.Name"
+                                                              Value="@_initialStockByBranch.GetValueOrDefault(branchId, 0)"
+                                                              ValueChanged="@(v => _initialStockByBranch[branchId] = v)"
+                                                              Variant="Variant.Outlined"
+                                                              Min="0"
+                                                              Margin="Margin.Dense"
+                                                              HideSpinButtons="true" />
+                                        }
+                                    </div>
+                                </section>
+                            }
                         </div>
                     </div>
                 </SoftCardContent>
@@ -411,13 +438,13 @@
                     <CardHeaderContent>
                         <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
                             <SoftIcon Icon="@Icons.Material.Filled.Warning" Color="Color.Error" Size="Size.Medium" />
-                            <SoftText Typo="Typo.h6">@L["AreYouSure"]</SoftText>
+                            <SoftText Typo="Typo.h6">@InvL["Products:DeleteTitle"]</SoftText>
                         </SoftStack>
                     </CardHeaderContent>
                 </SoftCardHeader>
                 <SoftDivider />
                 <SoftCardContent Class="pa-4">
-                    <SoftText>@L["AreYouSureToDelete"]</SoftText>
+                    <SoftText>@InvL["Products:DeleteConfirm", _pendingDelete?.Name ?? ""]</SoftText>
                 </SoftCardContent>
                 <SoftDivider />
                 <div class="pa-3 d-flex justify-end" style="gap: 8px;">
@@ -426,7 +453,7 @@
                                 Color="Color.Error"
                                 StartIcon="@Icons.Material.Filled.Delete"
                                 OnClick="ConfirmDeleteAsync">
-                        @L["Yes"]
+                        @InvL["DeleteAction"]
                     </SoftButton>
                 </div>
             </SoftCard>
@@ -567,6 +594,12 @@
     private bool _editIsPurchasable = true;
     private bool _editIsProducible = false;
 
+    // "Stock at branches" section on the CREATE dialog: one qty row per branch
+    // (0 = don't stock there). Saves a per-branch trip to the Branch Inventory page.
+    private bool _canInitializeStock;
+    private List<BranchLookupDto> _stockBranches = new();
+    private readonly Dictionary<Guid, int> _initialStockByBranch = new();
+
     private bool _confirmVisible;
     private ProductDto? _pendingDelete;
 
@@ -585,6 +618,22 @@
         }
 
         _canManage = await AuthorizationService.IsGrantedAsync(InventoryPermissions.Products.Manage);
+        _canInitializeStock = await AuthorizationService.IsGrantedAsync(InventoryPermissions.BranchInventory.Initialize);
+        if (_canInitializeStock)
+        {
+            try
+            {
+                // Only offer branches the user can actually stock (a branch manager
+                // manages a subset; InitializeAsync enforces access server-side).
+                var accessible = await BranchInventoryAppService.GetAccessibleBranchIdsAsync();
+                var lookup = await BranchAppService.GetLookupAsync();
+                _stockBranches = lookup.Where(b => accessible.Contains(b.Id)).ToList();
+            }
+            catch
+            {
+                _stockBranches = new();
+            }
+        }
         await LoadLookupsAsync();
     }
 
@@ -723,6 +772,7 @@
         _editIsSellable = true;
         _editIsPurchasable = true;
         _editIsProducible = false;
+        _initialStockByBranch.Clear();
         _dialogVisible = true;
     }
 
@@ -768,14 +818,14 @@
 
         if (!file.ContentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
         {
-            Snackbar.Add("Please choose an image file.", Severity.Warning);
+            Snackbar.Add(InvL["Products:ImageNotImage"], Severity.Warning);
             return;
         }
 
         const long maxImageBytes = 3 * 1024 * 1024;
         if (file.Size > maxImageBytes)
         {
-            Snackbar.Add("Product images must be 3 MB or smaller.", Severity.Warning);
+            Snackbar.Add(InvL["Products:ImageTooLarge"], Severity.Warning);
             return;
         }
 
@@ -808,7 +858,7 @@
 
         if (!allowedExtensions.Contains(extension))
         {
-            Snackbar.Add("Supported image formats are JPG, PNG, WEBP and GIF.", Severity.Warning);
+            Snackbar.Add(InvL["Products:ImageBadFormat"], Severity.Warning);
             return _editImageUrl;
         }
 
@@ -883,7 +933,7 @@
             }
             else
             {
-                await ProductAppService.CreateAsync(new CreateProductDto
+                var created = await ProductAppService.CreateAsync(new CreateProductDto
                 {
                     CategoryId = _editCategoryId.Value,
                     DefaultSupplierId = _editSupplierId,
@@ -903,6 +953,8 @@
                     IsPurchasable = _editIsPurchasable,
                     IsProducible = _editIsProducible
                 });
+
+                await InitializeStockAtBranchesAsync(created.Id);
             }
             Snackbar.Add(L["SuccessfullySaved"], Severity.Success);
             _dialogVisible = false;
@@ -915,6 +967,46 @@
         finally
         {
             _saving = false;
+        }
+    }
+
+    /// <summary>
+    /// Stocks the freshly created product at each branch with a quantity > 0 from the
+    /// "Stock at branches" section. Per-branch failures don't undo the product —
+    /// they surface as a warning so the manager can finish on the Stock page.
+    /// </summary>
+    private async Task InitializeStockAtBranchesAsync(Guid productId)
+    {
+        var failedBranches = new List<string>();
+        foreach (var branch in _stockBranches)
+        {
+            var qty = _initialStockByBranch.GetValueOrDefault(branch.Id, 0);
+            if (qty <= 0)
+            {
+                continue;
+            }
+
+            try
+            {
+                await BranchInventoryAppService.InitializeAsync(new InitializeBranchInventoryDto
+                {
+                    BranchId = branch.Id,
+                    ProductId = productId,
+                    InitialQuantity = qty,
+                    MinimumStock = _editReorderLevel
+                });
+            }
+            catch
+            {
+                failedBranches.Add(branch.Name);
+            }
+        }
+
+        if (failedBranches.Count > 0)
+        {
+            Snackbar.Add(
+                string.Format(InvL["InitialStockPartialFail"], string.Join(", ", failedBranches)),
+                Severity.Warning);
         }
     }
 

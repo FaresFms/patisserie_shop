@@ -102,6 +102,60 @@ public class StockBatchRepository
             .SumAsync(b => b.QuantityRemaining, GetCancellationToken(cancellationToken));
     }
 
+    public async Task<Dictionary<Guid, int>> GetExpiredQuantitiesByProductAsync(
+        Guid branchId,
+        DateTime todayUtc,
+        CancellationToken cancellationToken = default)
+    {
+        var dbContext = await GetDbContextAsync();
+        var today = todayUtc.Date;
+
+        var rows = await dbContext.Set<AppStockBatch>()
+            .Where(b => b.BranchId == branchId
+                        && b.QuantityRemaining > 0
+                        && b.ExpiryDate < today)
+            .GroupBy(b => b.ProductId)
+            .Select(g => new { ProductId = g.Key, Expired = g.Sum(b => b.QuantityRemaining) })
+            .ToListAsync(GetCancellationToken(cancellationToken));
+
+        return rows.ToDictionary(r => r.ProductId, r => r.Expired);
+    }
+
+    public async Task<Dictionary<Guid, int>> GetNonExpiredQuantitiesByProductAsync(
+        Guid branchId,
+        DateTime todayUtc,
+        CancellationToken cancellationToken = default)
+    {
+        var dbContext = await GetDbContextAsync();
+        var today = todayUtc.Date;
+
+        var rows = await dbContext.Set<AppStockBatch>()
+            .Where(b => b.BranchId == branchId
+                        && b.QuantityRemaining > 0
+                        && b.ExpiryDate >= today)
+            .GroupBy(b => b.ProductId)
+            .Select(g => new { ProductId = g.Key, Usable = g.Sum(b => b.QuantityRemaining) })
+            .ToListAsync(GetCancellationToken(cancellationToken));
+
+        return rows.ToDictionary(r => r.ProductId, r => r.Usable);
+    }
+
+    public async Task<Dictionary<(Guid ProductId, Guid BranchId), int>> GetExpiredQuantitiesByProductBranchAsync(
+        DateTime todayUtc,
+        CancellationToken cancellationToken = default)
+    {
+        var dbContext = await GetDbContextAsync();
+        var today = todayUtc.Date;
+
+        var rows = await dbContext.Set<AppStockBatch>()
+            .Where(b => b.QuantityRemaining > 0 && b.ExpiryDate < today)
+            .GroupBy(b => new { b.ProductId, b.BranchId })
+            .Select(g => new { g.Key.ProductId, g.Key.BranchId, Expired = g.Sum(b => b.QuantityRemaining) })
+            .ToListAsync(GetCancellationToken(cancellationToken));
+
+        return rows.ToDictionary(r => (r.ProductId, r.BranchId), r => r.Expired);
+    }
+
     public async Task<long> CountWithDetailsAsync(
         string? filter,
         Guid? branchId,

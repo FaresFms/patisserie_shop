@@ -12,6 +12,8 @@ public class patisserie_shopMenus
     public const string Products = Inventory + ".Products";
     public const string Branches = Inventory + ".Branches";
     public const string BranchInventory = Inventory + ".BranchInventory";
+    public const string Stocktake = Inventory + ".Stocktake";
+    public const string StocktakeReconciliation = Inventory + ".StocktakeReconciliation";
     public const string StockMovements = Inventory + ".StockMovements";
     public const string StockBatches = Inventory + ".StockBatches";
     public const string WasteAnalytics = Inventory + ".WasteAnalytics";

@@ -116,12 +116,28 @@ public class AppProductionOrderTests
     }
 
     [Fact]
+    public void Complete_rejects_expiry_before_the_cook_started()
+    {
+        var order = ReadyStartedOrder();
+
+        Should.Throw<BusinessException>(() => order.Complete(
+                actualOutputQuantity: 20,
+                acceptedQuantity: 20,
+                rejectedQuantity: 0,
+                expiryDate: order.ActualStartTime!.Value.Date.AddDays(-1),
+                wasteReason: null,
+                completedByUserId: Guid.NewGuid(),
+                notes: null))
+            .Code.ShouldBe(ProductionErrorCodes.ProductionExpiryDateInPast);
+    }
+
+    [Fact]
     public void Complete_records_output_and_actual_unit_cost()
     {
         var order = ReadyStartedOrder();
         var expiryDate = DateTime.Today.AddDays(2);
 
-        var output = order.Complete(
+        var completion = order.Complete(
             actualOutputQuantity: 20,
             acceptedQuantity: 18,
             rejectedQuantity: 2,
@@ -129,6 +145,7 @@ public class AppProductionOrderTests
             wasteReason: " edge trim ",
             completedByUserId: Guid.NewGuid(),
             notes: "done");
+        var output = completion.Output;
 
         order.Status.ShouldBe(ProductionOrderStatuses.Completed);
         order.CompletedAt.ShouldNotBeNull();
@@ -140,6 +157,74 @@ public class AppProductionOrderTests
         output.AcceptedQuantity.ShouldBe(18);
         output.UnitCost.ShouldBe(order.UnitProductionCost);
         output.ExpiryDate.ShouldBe(expiryDate.Date);
+    }
+
+    [Fact]
+    public void Dispatch_tracks_remaining_in_transit_received_and_loss_across_multiple_transfers()
+    {
+        var order = NewOrder();
+        var requestId = Guid.NewGuid();
+        var requestItemId = Guid.NewGuid();
+        var destinationBranchId = Guid.NewGuid();
+        order.AddAllocation(
+            Guid.NewGuid(),
+            destinationBranchId,
+            requestId,
+            requestItemId,
+            allocatedQuantity: 12);
+        order.AddIngredientSnapshot(Guid.NewGuid(), Guid.NewGuid(), 10, 2m);
+        order.SetIngredientAvailability(hasShortage: false);
+        order.Start(Guid.NewGuid());
+        order.Complete(12, 12, 0, DateTime.Today.AddDays(2), null, Guid.NewGuid(), null);
+
+        var firstTransferId = Guid.NewGuid();
+        order.CreateDispatch(
+            Guid.NewGuid(), firstTransferId, destinationBranchId, 5,
+            DateTime.UtcNow, Guid.NewGuid);
+
+        order.RemainingToDispatch.ShouldBe(7);
+        order.InTransitQuantity.ShouldBe(5);
+        Should.Throw<BusinessException>(() => order.CreateDispatch(
+                Guid.NewGuid(), Guid.NewGuid(), destinationBranchId, 8,
+                DateTime.UtcNow, Guid.NewGuid))
+            .Code.ShouldBe(ProductionErrorCodes.DispatchQuantityExceedsRemaining);
+
+        var firstReceipt = order.CompleteDispatch(firstTransferId, 4, DateTime.UtcNow);
+        firstReceipt.Sum(x => x.ReceivedQuantity).ShouldBe(4);
+        firstReceipt.Sum(x => x.LostQuantity).ShouldBe(1);
+        order.ReceivedQuantity.ShouldBe(4);
+        order.LostQuantity.ShouldBe(1);
+        order.InTransitQuantity.ShouldBe(0);
+
+        var secondTransferId = Guid.NewGuid();
+        order.CreateDispatch(
+            Guid.NewGuid(), secondTransferId, destinationBranchId, 7,
+            DateTime.UtcNow, Guid.NewGuid);
+        order.CompleteDispatch(secondTransferId, 7, DateTime.UtcNow);
+
+        order.DispatchedQuantity.ShouldBe(12);
+        order.ReceivedQuantity.ShouldBe(11);
+        order.LostQuantity.ShouldBe(1);
+        order.RemainingToDispatch.ShouldBe(0);
+    }
+
+    [Fact]
+    public void Completing_short_output_releases_unproduced_request_allocations()
+    {
+        var order = NewOrder();
+        var requestId = Guid.NewGuid();
+        var requestItemId = Guid.NewGuid();
+        order.AddAllocation(Guid.NewGuid(), Guid.NewGuid(), requestId, requestItemId, 20);
+        order.AddIngredientSnapshot(Guid.NewGuid(), Guid.NewGuid(), 10, 2m);
+        order.SetIngredientAvailability(hasShortage: false);
+        order.Start(Guid.NewGuid());
+
+        var completion = order.Complete(
+            20, 15, 5, DateTime.Today.AddDays(2), "damaged", Guid.NewGuid(), null);
+
+        completion.ReleasedAllocations.Sum(x => x.Quantity).ShouldBe(5);
+        order.ReservedQuantity.ShouldBe(15);
+        order.RemainingToDispatch.ShouldBe(15);
     }
 
     [Fact]

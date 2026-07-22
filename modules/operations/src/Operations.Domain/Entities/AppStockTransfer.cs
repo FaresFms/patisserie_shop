@@ -161,22 +161,45 @@ public class AppStockTransfer : FullAuditedAggregateRoot<Guid>
     /// quantities leaving the source branch so the application layer can apply the
     /// matching TransferOut stock movements. Stock physically leaves the source at
     /// this moment — not at completion.
+    /// <para>
+    /// <paramref name="shippedByItem"/> lets the packer ship LESS than approved (the
+    /// source couldn't spare the full amount); a missing entry defaults to the approved
+    /// quantity, and each value is clamped to [0, approved]. The actual shipped amount is
+    /// recorded per item so the receive step caps against it.
+    /// </para>
     /// </summary>
-    public IReadOnlyList<TransferLine> Ship(Guid? shippedByUserId = null)
+    public IReadOnlyList<TransferLine> Ship(
+        IReadOnlyDictionary<Guid, int>? shippedByItem = null,
+        Guid? shippedByUserId = null)
     {
         if (Status != StockTransferStatuses.Approved)
             throw InvalidTransition(StockTransferStatuses.InTransit);
         if (!FromBranchId.HasValue)
             throw new BusinessException(OperationsErrorCodes.TransferSourceBranchRequired);
 
+        var lines = new List<TransferLine>();
+        foreach (var item in _items)
+        {
+            var approved = item.ApprovedQuantity ?? item.RequestedQuantity;
+            var qty = shippedByItem != null && shippedByItem.TryGetValue(item.Id, out var supplied)
+                ? Math.Clamp(supplied, 0, approved)
+                : approved;
+
+            item.SetShippedQuantity(qty);
+            if (qty > 0)
+            {
+                lines.Add(new TransferLine(item.Id, item.ProductId, qty));
+            }
+        }
+
+        if (lines.Count == 0)
+            throw new BusinessException(OperationsErrorCodes.CannotShipNothing);
+
         ShippedDate = DateTime.UtcNow;
         ShippedByUserId = shippedByUserId;
         ChangeStatus(StockTransferStatuses.InTransit);
 
-        return _items
-            .Select(i => new TransferLine(i.Id, i.ProductId, i.ApprovedQuantity ?? i.RequestedQuantity))
-            .Where(l => l.Quantity > 0)
-            .ToList();
+        return lines;
     }
 
     /// <summary>
@@ -208,10 +231,12 @@ public class AppStockTransfer : FullAuditedAggregateRoot<Guid>
 
     /// <summary>
     /// Marks the transfer completed (InTransit → Completed). Records the actual received
-    /// quantity per item — capped at what was shipped (approved) — raises
+    /// quantity per item — capped at what was actually SHIPPED — raises
     /// TransferCompletedEto, and returns the per-item lines so the application layer can
     /// apply the matching TransferIn stock movements at the destination. The source was
-    /// already decremented at ship time.
+    /// already decremented at ship time; anything received short of shipped is transit
+    /// loss and is simply never added back. Receiving 0 on every line closes a delivery
+    /// that never arrived (see the "report lost" path in the app service).
     /// </summary>
     public IReadOnlyList<TransferLine> Complete(
         IReadOnlyDictionary<Guid, int> transferredByItem,
@@ -225,7 +250,9 @@ public class AppStockTransfer : FullAuditedAggregateRoot<Guid>
         var lines = new List<TransferLine>();
         foreach (var item in _items)
         {
-            var shippedQty = item.ApprovedQuantity ?? item.RequestedQuantity;
+            // Cap against what shipped (falls back to approved for legacy transfers
+            // that predate ShippedQuantity).
+            var shippedQty = item.ShippedQuantity ?? item.ApprovedQuantity ?? item.RequestedQuantity;
             var qty = transferredByItem.TryGetValue(item.Id, out var supplied)
                 ? supplied
                 : shippedQty;
@@ -253,7 +280,16 @@ public class AppStockTransfer : FullAuditedAggregateRoot<Guid>
         {
             TransferId = Id,
             FromBranchId = FromBranchId.Value,
-            ToBranchId = ToBranchId
+            ToBranchId = ToBranchId,
+            Lines = _items.Select(item => new TransferCompletedLineEto
+            {
+                TransferItemId = item.Id,
+                ProductId = item.ProductId,
+                ShippedQuantity = item.ShippedQuantity
+                    ?? item.ApprovedQuantity
+                    ?? item.RequestedQuantity,
+                ReceivedQuantity = item.TransferredQuantity ?? 0
+            }).ToList()
         });
 
         return lines;

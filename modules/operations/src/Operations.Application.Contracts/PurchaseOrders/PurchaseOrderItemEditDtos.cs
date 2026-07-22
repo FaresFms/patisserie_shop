@@ -25,4 +25,5 @@ public class ReceiveLineDto
 {
     public Guid ItemId { get; set; }
     public int ReceivedQuantity { get; set; }
+    public DateTime? ExpiryDate { get; set; }
 }

@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Inventory;
 using Inventory.BranchInventory;
 using Inventory.Entities;
+using Inventory.StockBatches;
 using Microsoft.AspNetCore.Authorization;
 using Operations.Entities;
 using Operations.Permissions;
@@ -25,6 +26,7 @@ public class SaleAppService : OperationsAppService, ISaleAppService
     private readonly SaleManager _manager;
     private readonly BranchInventoryManager _inventoryManager;
     private readonly IRepository<IdentityUser, Guid> _userRepository;
+    private readonly IStockBatchRepository _stockBatchRepository;
 
     public SaleAppService(
         ISaleRepository saleRepository,
@@ -33,7 +35,8 @@ public class SaleAppService : OperationsAppService, ISaleAppService
         IBranchInventoryRepository branchInventoryRepository,
         SaleManager manager,
         BranchInventoryManager inventoryManager,
-        IRepository<IdentityUser, Guid> userRepository)
+        IRepository<IdentityUser, Guid> userRepository,
+        IStockBatchRepository stockBatchRepository)
     {
         _saleRepository = saleRepository;
         _branchRepository = branchRepository;
@@ -42,6 +45,7 @@ public class SaleAppService : OperationsAppService, ISaleAppService
         _manager = manager;
         _inventoryManager = inventoryManager;
         _userRepository = userRepository;
+        _stockBatchRepository = stockBatchRepository;
     }
 
     // ─── Queries ───
@@ -104,6 +108,8 @@ public class SaleAppService : OperationsAppService, ISaleAppService
         await EnsureBranchAccessAsync(branchId);
 
         var rows = await _branchInventoryRepository.GetAvailableProductsAsync(branchId, onlySellable: true);
+        var nonExpired = await _stockBatchRepository.GetNonExpiredQuantitiesByProductAsync(
+            branchId, Clock.Now.ToUniversalTime().Date);
 
         return rows.ConvertAll(r => new SaleProductLookupDto
         {
@@ -113,7 +119,7 @@ public class SaleAppService : OperationsAppService, ISaleAppService
             Unit = r.Product.Unit,
             SalePrice = r.Product.SalePrice,
             Currency = r.Product.Currency,
-            QuantityOnHand = r.Inventory.QuantityOnHand
+            QuantityOnHand = StockBatchManager.GetUsableQuantity(r.Product, r.Inventory, nonExpired)
         });
     }
 
@@ -152,9 +158,11 @@ public class SaleAppService : OperationsAppService, ISaleAppService
             input.Notes);
 
         // 2) Materialise items on the aggregate (each AddItem validates qty/price).
+        var productById = new Dictionary<Guid, AppProduct>();
         foreach (var line in input.Items)
         {
-            await _productRepository.GetAsync(line.ProductId);
+            var product = await _productRepository.GetAsync(line.ProductId);
+            productById[product.Id] = product;
             sale.AddItem(GuidGenerator.Create(), line.ProductId, line.Quantity, line.UnitPrice);
         }
 
@@ -163,7 +171,22 @@ public class SaleAppService : OperationsAppService, ISaleAppService
         var inventories = await _branchInventoryRepository.GetListAsync(
             x => x.BranchId == sale.BranchId && productIds.Contains(x.ProductId));
         var invByProduct = inventories.ToDictionary(x => x.ProductId);
-        var stockSnapshot = invByProduct.ToDictionary(kv => kv.Key, kv => kv.Value.QuantityOnHand);
+        var nonExpired = await _stockBatchRepository.GetNonExpiredQuantitiesByProductAsync(
+            sale.BranchId, Clock.Now.ToUniversalTime().Date);
+        var stockSnapshot = invByProduct.ToDictionary(
+            kv => kv.Key,
+            kv => StockBatchManager.GetUsableQuantity(productById[kv.Key], kv.Value, nonExpired));
+
+        var blockedProducts = sale.Items
+            .Where(i => productById[i.ProductId].ShelfLifeDays.HasValue
+                && stockSnapshot.GetValueOrDefault(i.ProductId) < i.Quantity)
+            .Select(i => productById[i.ProductId].Name)
+            .ToList();
+        if (blockedProducts.Count > 0)
+        {
+            throw new BusinessException(OperationsErrorCodes.SaleIncludesExpiredStock)
+                .WithData("Products", string.Join(", ", blockedProducts));
+        }
 
         // 4) Domain validates stock and raises SaleRecordedEto.
         sale.Record(stockSnapshot);
@@ -176,15 +199,22 @@ public class SaleAppService : OperationsAppService, ISaleAppService
         foreach (var item in sale.Items)
         {
             var inv = invByProduct[item.ProductId];
-            await _inventoryManager.AdjustStockAsync(
+            var adjustment = await _inventoryManager.AdjustStockDetailedAsync(
                 inv,
                 inv.QuantityOnHand - item.Quantity,
                 StockMovementTypes.Sale,
                 notes: sale.InvoiceNumber,
                 referenceId: sale.Id,
                 referenceType: nameof(AppSale));
+            sale.RecordItemSoldBatches(
+                item.Id,
+                StockTransferBatchBreakdown.Format(
+                    adjustment.ConsumedBatches.Select(
+                        b => new StockTransferBatchBreakdown.Line(b.ExpiryDate, b.Quantity))));
             await _branchInventoryRepository.UpdateAsync(inv);
         }
+
+        await _saleRepository.UpdateAsync(sale, autoSave: true);
 
         return await ProjectAsync(sale);
     }
@@ -192,8 +222,68 @@ public class SaleAppService : OperationsAppService, ISaleAppService
     [Authorize(OperationsPermissions.Sales.Delete)]
     public async Task DeleteAsync(Guid id)
     {
-        var sale = await _saleRepository.GetAsync(id);
-        // Soft delete via FullAuditedAggregateRoot; stock is not restored — admin decision.
+        var sale = await _saleRepository.GetWithItemsAsync(id);
+        await EnsureBranchAccessAsync(sale.BranchId);
+
+        // Deleting a mistaken sale means "this sale never happened" — put the goods
+        // back on the shelf, exactly like a void. A voided sale already restored its
+        // stock, so it is only soft-deleted.
+        if (!sale.IsVoided)
+        {
+            var productIds = sale.Items.Select(i => i.ProductId).Distinct().ToList();
+            var inventories = await _branchInventoryRepository.GetListAsync(
+                x => x.BranchId == sale.BranchId && productIds.Contains(x.ProductId));
+            var invByProduct = inventories.ToDictionary(x => x.ProductId);
+            var products = await _productRepository.GetListAsync(p => productIds.Contains(p.Id));
+            var productById = products.ToDictionary(p => p.Id);
+
+            var missingBatchHistory = sale.Items.FirstOrDefault(i =>
+                productById.GetValueOrDefault(i.ProductId)?.ShelfLifeDays.HasValue == true
+                && string.IsNullOrWhiteSpace(i.SoldBatchBreakdown));
+            if (missingBatchHistory != null)
+            {
+                throw new BusinessException(OperationsErrorCodes.SaleBatchHistoryMissing)
+                    .WithData("ProductId", missingBatchHistory.ProductId)
+                    .WithData("ProductName", productById[missingBatchHistory.ProductId].Name);
+            }
+
+            foreach (var item in sale.Items)
+            {
+                if (!invByProduct.TryGetValue(item.ProductId, out var inv))
+                {
+                    continue; // No inventory row to restore into (product removed); skip safely.
+                }
+
+                var remaining = item.Quantity;
+                foreach (var batch in StockTransferBatchBreakdown.Parse(item.SoldBatchBreakdown))
+                {
+                    if (remaining <= 0) break;
+                    var quantity = Math.Min(batch.Quantity, remaining);
+                    remaining -= quantity;
+                    await _inventoryManager.AdjustStockAsync(
+                        inv,
+                        inv.QuantityOnHand + quantity,
+                        StockMovementTypes.SaleReturn,
+                        notes: sale.InvoiceNumber,
+                        referenceId: sale.Id,
+                        referenceType: nameof(AppSale),
+                        batchExpiryDate: batch.ExpiryDate);
+                }
+
+                if (remaining > 0)
+                {
+                    await _inventoryManager.AdjustStockAsync(
+                        inv,
+                        inv.QuantityOnHand + remaining,
+                        StockMovementTypes.SaleReturn,
+                        notes: sale.InvoiceNumber,
+                        referenceId: sale.Id,
+                        referenceType: nameof(AppSale));
+                }
+                await _branchInventoryRepository.UpdateAsync(inv);
+            }
+        }
+
         await _saleRepository.DeleteAsync(sale);
     }
 

@@ -8,6 +8,7 @@
 @using Production.Localization
 @using Production.Orders
 @using Production.Permissions
+@using Production.Waste
 @using Volo.Abp.Application.Dtos
 @using Volo.Abp.AspNetCore.Components.Web.Theming.Layout
 @using Color = MudBlazor.Color
@@ -233,14 +234,42 @@
                                     <SoftDatePicker Label="@ProdL["ExpiryDate"]"
                                                     Date="_completeExpiryDate"
                                                     DateChanged="@(d => _completeExpiryDate = d)"
+                                                    MinDate="@(_detail.ActualStartTime?.Date ?? DateTime.Today)"
                                                     Variant="Variant.Outlined" />
                                 </SoftGridItem>
                                 <SoftGridItem xs="12" md="6">
-                                    <SoftTextField T="string" @bind-Value="_completeWasteReason"
-                                                   Label="@ProdL["WasteReason"]"
-                                                   Variant="Variant.Outlined"
-                                                   Disabled="_completeRejectedQuantity == 0" />
+                                    <SoftLookupSelect TItem="WasteReasonOption" TValue="string"
+                                                      Items="_reasonOptions"
+                                                      ToValue="@(o => o.Value)"
+                                                      ToLabel="@(o => o.Label)"
+                                                      Value="_completeWasteReasonCode"
+                                                      ValueChanged="OnCompleteWasteReasonChanged"
+                                                      Label="@ProdL["WasteReason"]"
+                                                      Clearable="false"
+                                                      Disabled="_completeRejectedQuantity == 0" />
                                 </SoftGridItem>
+                                @if (_completeRejectedQuantity > 0 && _completeWasteReasonCode == ProductionWasteReasons.Other)
+                                {
+                                    <SoftGridItem xs="12" md="6">
+                                        <SoftTextField T="string" @bind-Value="_completeOtherWasteReason"
+                                                       Label="@ProdL["OtherReasonDetails"]"
+                                                       Variant="Variant.Outlined" />
+                                    </SoftGridItem>
+                                }
+                                else
+                                {
+                                    <SoftGridItem xs="12" md="6"></SoftGridItem>
+                                }
+                                @if (_completeRejectedQuantity > 0
+                                    && _completeWasteReasonCode == ProductionWasteReasons.Other
+                                    && string.IsNullOrWhiteSpace(_completeOtherWasteReason))
+                                {
+                                    <SoftGridItem xs="12">
+                                        <SoftAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true">
+                                            @ProdL["OtherReasonDetailsRequired"]
+                                        </SoftAlert>
+                                    </SoftGridItem>
+                                }
                                 <SoftGridItem xs="12">
                                     <SoftTextField T="string" @bind-Value="_completeNotes"
                                                    Label="@ProdL["Notes"]"
@@ -329,6 +358,7 @@
     private Guid? _branchFilter;
     private List<BranchLookupDto> _branches = new();
     private List<StatusOption> _statusOptions = new();
+    private List<WasteReasonOption> _reasonOptions = new();
 
     private bool _detailVisible;
     private ProductionOrderDto? _detail;
@@ -338,7 +368,8 @@
     private int _completeAcceptedQuantity;
     private int _completeRejectedQuantity;
     private DateTime? _completeExpiryDate;
-    private string? _completeWasteReason;
+    private string _completeWasteReasonCode = ProductionWasteReasons.Other;
+    private string? _completeOtherWasteReason;
     private string? _completeNotes;
 
     private bool HasShortage => _detail?.Availability.Any(x => x.HasShortage) == true;
@@ -351,7 +382,9 @@
         && _completeAcceptedQuantity > 0
         && _completeRejectedQuantity >= 0
         && !CompletionTotalsMismatch
-        && (_completeRejectedQuantity == 0 || !string.IsNullOrWhiteSpace(_completeWasteReason));
+        && (_completeRejectedQuantity == 0
+            || _completeWasteReasonCode != ProductionWasteReasons.Other
+            || !string.IsNullOrWhiteSpace(_completeOtherWasteReason));
 
     protected override async Task OnInitializedAsync()
     {
@@ -370,6 +403,7 @@
             new(ProductionOrderStatuses.Completed, ProdL["Status:Completed"]),
             new(ProductionOrderStatuses.Cancelled, ProdL["Status:Cancelled"])
         ];
+        _reasonOptions = BuildReasonOptions();
     }
 
     private async Task<GridData<ProductionOrderListItemDto>> LoadServerData(GridState<ProductionOrderListItemDto> state, CancellationToken cancellationToken)
@@ -502,7 +536,16 @@
         _completeAcceptedQuantity = _detail.AcceptedQuantity > 0 ? _detail.AcceptedQuantity : _completeActualQuantity;
         _completeRejectedQuantity = _detail.RejectedQuantity;
         _completeExpiryDate = _detail.ExpiryDate;
-        _completeWasteReason = _detail.WasteReason;
+        if (!string.IsNullOrWhiteSpace(_detail.WasteReason) && ProductionWasteReasons.IsValid(_detail.WasteReason))
+        {
+            _completeWasteReasonCode = _detail.WasteReason;
+            _completeOtherWasteReason = null;
+        }
+        else
+        {
+            _completeWasteReasonCode = ProductionWasteReasons.Other;
+            _completeOtherWasteReason = _detail.WasteReason;
+        }
         _completeNotes = _detail.Notes;
         _completeVisible = true;
     }
@@ -519,7 +562,7 @@
                 AcceptedQuantity = _completeAcceptedQuantity,
                 RejectedQuantity = _completeRejectedQuantity,
                 ExpiryDate = _completeExpiryDate,
-                WasteReason = _completeWasteReason,
+                WasteReason = ResolveCompletionWasteReason(),
                 Notes = _completeNotes
             });
             _completeVisible = false;
@@ -602,5 +645,42 @@
         _ => null
     };
 
+    private void OnCompleteWasteReasonChanged(string reason)
+    {
+        _completeWasteReasonCode = reason;
+        if (reason != ProductionWasteReasons.Other)
+        {
+            _completeOtherWasteReason = null;
+        }
+    }
+
+    private string? ResolveCompletionWasteReason()
+    {
+        if (_completeRejectedQuantity == 0)
+        {
+            return null;
+        }
+
+        return _completeWasteReasonCode == ProductionWasteReasons.Other
+            ? _completeOtherWasteReason?.Trim()
+            : _completeWasteReasonCode;
+    }
+
+    private List<WasteReasonOption> BuildReasonOptions() =>
+    [
+        new(ProductionWasteReasons.Burned, ProdL["Reason:Burned"]),
+        new(ProductionWasteReasons.UnderBaked, ProdL["Reason:UnderBaked"]),
+        new(ProductionWasteReasons.OverBaked, ProdL["Reason:OverBaked"]),
+        new(ProductionWasteReasons.ShapeDamaged, ProdL["Reason:ShapeDamaged"]),
+        new(ProductionWasteReasons.Dropped, ProdL["Reason:Dropped"]),
+        new(ProductionWasteReasons.Contaminated, ProdL["Reason:Contaminated"]),
+        new(ProductionWasteReasons.IngredientSpoilage, ProdL["Reason:IngredientSpoilage"]),
+        new(ProductionWasteReasons.PackagingDamage, ProdL["Reason:PackagingDamage"]),
+        new(ProductionWasteReasons.ExpiredBeforeDispatch, ProdL["Reason:ExpiredBeforeDispatch"]),
+        new(ProductionWasteReasons.TestBatch, ProdL["Reason:TestBatch"]),
+        new(ProductionWasteReasons.Other, ProdL["Reason:Other"])
+    ];
+
     private sealed record StatusOption(string Value, string Label);
+    private sealed record WasteReasonOption(string Value, string Label);
 }

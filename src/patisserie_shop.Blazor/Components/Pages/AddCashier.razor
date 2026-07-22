@@ -161,9 +161,9 @@
         {
             _branches = await CashierAssignmentAppService.GetBranchOptionsAsync();
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            Snackbar.Add($"{L["AddCashier:LoadFailed"]} {ex.Message}", Severity.Error);
+            Snackbar.Add(L["AddCashier:LoadFailed"], Severity.Error);
         }
         finally
         {
@@ -243,9 +243,9 @@
             _serverError = $"{L["AddCashier:CreateFailed"]} {message}";
             Snackbar.Add(_serverError, Severity.Error);
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            _serverError = $"{L["AddCashier:CreateFailed"]} {ex.Message}";
+            _serverError = L["AddCashier:CreateFailed"];
             Snackbar.Add(_serverError, Severity.Error);
         }
         finally

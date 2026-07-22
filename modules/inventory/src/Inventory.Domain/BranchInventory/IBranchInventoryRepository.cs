@@ -39,6 +39,10 @@ public interface IBranchInventoryRepository : IRepository<AppBranchInventory, Gu
         Guid productId,
         CancellationToken cancellationToken = default);
 
+    Task<List<BranchInventoryWithProduct>> GetStocktakeRowsAsync(
+        Guid branchId,
+        CancellationToken cancellationToken = default);
+
     Task<List<StockSnapshot>> GetActiveStockSnapshotsAsync(
         Guid branchId,
         CancellationToken cancellationToken = default);

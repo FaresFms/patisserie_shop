@@ -15,6 +15,7 @@ public class InventoryDbContext : AbpDbContext<InventoryDbContext>, IInventoryDb
     public DbSet<AppBranchInventory> BranchInventories { get; set; } = null!;
     public DbSet<AppStockMovement> StockMovements { get; set; } = null!;
     public DbSet<AppStockBatch> StockBatches { get; set; } = null!;
+    public DbSet<AppStocktakeSession> StocktakeSessions { get; set; } = null!;
 
     public InventoryDbContext(DbContextOptions<InventoryDbContext> options)
         : base(options)

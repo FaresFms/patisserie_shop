@@ -14,5 +14,6 @@ public class BranchProductionRequestListItemDto : EntityDto<Guid>
     public int ItemCount { get; set; }
     public int RequestedTotalQuantity { get; set; }
     public int ApprovedTotalQuantity { get; set; }
+    public int PlannedTotalQuantity { get; set; }
     public int FulfilledTotalQuantity { get; set; }
 }

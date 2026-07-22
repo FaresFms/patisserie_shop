@@ -538,6 +538,7 @@
     protected override async Task OnInitializedAsync()
     {
         _canView = await AuthorizationService.IsGrantedAsync(OperationsPermissions.Cashier.Default);
+        await LoadShopCurrencyAsync();
     }
 
     private async Task OpenAsync()
@@ -579,9 +580,9 @@
 
             _sales = await CashierAppService.GetRecentSalesAsync(_branch.Id, 60);
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            Snackbar.Add($"{L["CashierShifts:LoadFailed"]} {ex.Message}", Severity.Error);
+            Snackbar.Add(L["CashierShifts:LoadFailed"], Severity.Error);
         }
         finally
         {
@@ -613,9 +614,9 @@
         {
             _detailSale = await CashierAppService.GetSaleDetailsAsync(saleId);
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            Snackbar.Add($"{L["Recent:ViewFailed"]} {ex.Message}", Severity.Error);
+            Snackbar.Add(L["Recent:ViewFailed"], Severity.Error);
         }
         finally
         {
@@ -654,9 +655,9 @@
             _reason = null;
             await RefreshAsync();
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            Snackbar.Add($"{L["Recent:VoidFailed"]} {ex.Message}", Severity.Error);
+            Snackbar.Add(L["Recent:VoidFailed"], Severity.Error);
         }
         finally
         {
@@ -664,7 +665,7 @@
         }
     }
 
-    private static string FormatMoney(decimal v) => $"{v.ToString("N2", CultureInfo.CurrentCulture)} SYP";
+    private string FormatMoney(decimal v) => FormatShopMoney(v);
 
     private string RelativeTime(DateTime saleDate)
     {

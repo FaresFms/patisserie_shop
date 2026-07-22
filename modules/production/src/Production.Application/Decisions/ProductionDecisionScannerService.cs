@@ -4,6 +4,8 @@ using System.Threading.Tasks;
 using Intelligence;
 using Intelligence.Decisions;
 using Intelligence.Entities;
+using Microsoft.Extensions.Localization;
+using Production.Localization;
 using Production.Reports;
 using Volo.Abp.DependencyInjection;
 using Volo.Abp.Domain.Repositories;
@@ -15,13 +17,16 @@ public class ProductionDecisionScannerService : ITransientDependency
 {
     private readonly IRepository<AppDecisionLog, Guid> _decisionLogRepository;
     private readonly IGuidGenerator _guidGenerator;
+    private readonly IStringLocalizer<ProductionResource> _localizer;
 
     public ProductionDecisionScannerService(
         IRepository<AppDecisionLog, Guid> decisionLogRepository,
-        IGuidGenerator guidGenerator)
+        IGuidGenerator guidGenerator,
+        IStringLocalizer<ProductionResource> localizer)
     {
         _decisionLogRepository = decisionLogRepository;
         _guidGenerator = guidGenerator;
+        _localizer = localizer;
     }
 
     public async Task ScanDashboardAsync(ProductionDashboardReadModel dashboard, Guid? kitchenBranchId)
@@ -34,8 +39,8 @@ public class ProductionDecisionScannerService : ITransientDependency
                 DecisionTypes.IngredientShortage,
                 productId,
                 kitchenBranchId,
-                $"{dashboard.WaitingForIngredients} cook order(s) are waiting for ingredients — production cannot start until the missing materials are secured.",
-                "Open the Cook screen and create ingredient purchase orders for the blocked orders.");
+                _localizer["Decision:IngredientShortage:Reason", dashboard.WaitingForIngredients],
+                _localizer["Decision:IngredientShortage:Action"]);
         }
 
         if (dashboard.UnfulfilledDueToday > 0)
@@ -44,8 +49,8 @@ public class ProductionDecisionScannerService : ITransientDependency
                 DecisionTypes.UnfulfilledBranchRequest,
                 productId,
                 kitchenBranchId,
-                $"{dashboard.UnfulfilledDueToday} branch request(s) are due today and their quantities are not fully dispatched yet.",
-                "Review the Dispatch board and send the finished goods to branches by priority.");
+                _localizer["Decision:UnfulfilledRequest:Reason", dashboard.UnfulfilledDueToday],
+                _localizer["Decision:UnfulfilledRequest:Action"]);
         }
 
         if (dashboard.InProduction > 0)
@@ -54,8 +59,8 @@ public class ProductionDecisionScannerService : ITransientDependency
                 DecisionTypes.LateProductionRisk,
                 productId,
                 kitchenBranchId,
-                $"{dashboard.InProduction} order(s) are cooking right now. Leaving them open too long can delay dispatching branch requests.",
-                "Follow up the open cook orders and record accepted/rejected output as soon as each batch finishes.");
+                _localizer["Decision:LateProductionRisk:Reason", dashboard.InProduction],
+                _localizer["Decision:LateProductionRisk:Action"]);
         }
 
         if (dashboard.RejectedToday > 0 && dashboard.YieldPercentToday < 90m)
@@ -64,8 +69,8 @@ public class ProductionDecisionScannerService : ITransientDependency
                 DecisionTypes.HighKitchenWaste,
                 productId,
                 kitchenBranchId,
-                $"Today's yield is only {dashboard.YieldPercentToday:0.##}%, with {dashboard.RejectedToday} rejected unit(s) — kitchen waste is higher than acceptable.",
-                "Review the waste log and find the recurring cause before starting new batches.");
+                _localizer["Decision:HighKitchenWasteToday:Reason", dashboard.YieldPercentToday, dashboard.RejectedToday],
+                _localizer["Decision:HighKitchenWasteToday:Action"]);
         }
     }
 
@@ -80,8 +85,8 @@ public class ProductionDecisionScannerService : ITransientDependency
                 DecisionTypes.ProductionShortageRisk,
                 productId,
                 kitchenBranchId,
-                $"Branch-request fulfillment over the last {analytics.Days} day(s) is only {analytics.FulfillmentPercent:0.##}%. Approved quantity {analytics.ApprovedRequestQuantity}, fulfilled {analytics.FulfilledRequestQuantity}.",
-                "Review the next production plan and increase quantities for products with unmet demand.");
+                _localizer["Decision:ProductionShortageRisk:Reason", analytics.Days, analytics.FulfillmentPercent, analytics.ApprovedRequestQuantity, analytics.FulfilledRequestQuantity],
+                _localizer["Decision:ProductionShortageRisk:Action"]);
         }
 
         if (analytics.CostVariance > 0m && analytics.CostVariancePercent > 15m)
@@ -90,8 +95,8 @@ public class ProductionDecisionScannerService : ITransientDependency
                 DecisionTypes.ProductionCostVariance,
                 productId,
                 kitchenBranchId,
-                $"Actual production cost is {analytics.CostVariancePercent:0.##}% above plan over the last {analytics.Days} day(s).",
-                "Review ingredient, waste and labour costs before approving new batches.");
+                _localizer["Decision:CostVariance:Reason", analytics.CostVariancePercent, analytics.Days],
+                _localizer["Decision:CostVariance:Action"]);
         }
 
         if (analytics.WastePercent > 10m && analytics.RejectedQuantity > 0)
@@ -100,8 +105,8 @@ public class ProductionDecisionScannerService : ITransientDependency
                 DecisionTypes.HighKitchenWaste,
                 productId,
                 kitchenBranchId,
-                $"Waste over the last {analytics.Days} day(s) reached {analytics.WastePercent:0.##}%, with {analytics.RejectedQuantity} rejected unit(s) in total.",
-                "Open waste analytics, find the top cause, then adjust the recipe or the quality check.");
+                _localizer["Decision:HighKitchenWastePeriod:Reason", analytics.Days, analytics.WastePercent, analytics.RejectedQuantity],
+                _localizer["Decision:HighKitchenWastePeriod:Action"]);
         }
     }
 

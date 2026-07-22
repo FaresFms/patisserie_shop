@@ -119,9 +119,10 @@ public class DecisionAutopilotHandler : IDistributedEventHandler<DecisionMadeEto
         // Shop-wide master switch (Setup → Shop settings → "Let the system prepare
         // orders automatically"). When off, every decision stays Pending as a plain
         // suggestion regardless of the per-rule ActionMode — the owner reviews and
-        // acts by hand. Defaults to true so out-of-the-box behavior is unchanged.
+        // acts by hand. Off by default: automation is opt-in (the owner enables it once
+        // they trust the suggestions).
         var autopilotEnabled = await _settingProvider.GetAsync(
-            patisserie_shop.Settings.patisserie_shopSettings.AutopilotEnabled, defaultValue: true);
+            patisserie_shop.Settings.patisserie_shopSettings.AutopilotEnabled, defaultValue: false);
         if (!autopilotEnabled)
         {
             return;
@@ -169,7 +170,7 @@ public class DecisionAutopilotHandler : IDistributedEventHandler<DecisionMadeEto
             return;
         }
 
-        var result = await _decisionActionAppService.ExecuteDecisionAsync(decision.Id);
+        var result = await _decisionActionAppService.ExecuteDecisionAsync(decision.Id, createdByAutopilot: true);
 
         var submitted = false;
         if (rule.ActionMode == RuleActionModes.AutoSubmit && result.ActionCreated && result.ActionId.HasValue)

@@ -11,5 +11,6 @@ public class StockTransferItemDto
     public string ProductUnit { get; set; } = null!;
     public int RequestedQuantity { get; set; }
     public int? ApprovedQuantity { get; set; }
+    public int? ShippedQuantity { get; set; }
     public int? TransferredQuantity { get; set; }
 }

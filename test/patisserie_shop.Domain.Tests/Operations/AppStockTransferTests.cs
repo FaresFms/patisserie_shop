@@ -162,7 +162,7 @@ public class AppStockTransferTests
         transfer.ApproveItem(item.Id, 5);
 
         var shippedBy = Guid.NewGuid();
-        var lines = transfer.Ship(shippedBy);
+        var lines = transfer.Ship(shippedByUserId: shippedBy);
 
         transfer.Status.ShouldBe(StockTransferStatuses.InTransit);
         transfer.ShippedDate.ShouldNotBeNull();
@@ -171,6 +171,60 @@ public class AppStockTransferTests
 
         transfer.RecordItemShippedBatches(item.Id, "2026-07-03:5");
         item.ShippedBatchBreakdown.ShouldBe("2026-07-03:5");
+    }
+
+    [Fact]
+    public void Ship_Short_Records_ShippedQuantity_And_Caps_Receive()
+    {
+        var transfer = NewTransfer();
+        var item = transfer.AddItem(Guid.NewGuid(), Guid.NewGuid(), requestedQty: 10);
+        transfer.Submit();
+        transfer.Approve(null);
+        transfer.ApproveItem(item.Id, 10);
+
+        // Source can only spare 6 of the 10 approved.
+        var lines = transfer.Ship(new Dictionary<Guid, int> { [item.Id] = 6 });
+
+        lines.ShouldHaveSingleItem().Quantity.ShouldBe(6);
+        item.ShippedQuantity.ShouldBe(6);
+
+        // Receiving must cap at what shipped (6), not what was approved (10).
+        Should.Throw<BusinessException>(
+                () => transfer.Complete(new Dictionary<Guid, int> { [item.Id] = 7 }))
+            .Code.ShouldBe(OperationsErrorCodes.TransferReceivedExceedsShipped);
+
+        transfer.Complete(new Dictionary<Guid, int> { [item.Id] = 6 });
+        transfer.Status.ShouldBe(StockTransferStatuses.Completed);
+        item.TransferredQuantity.ShouldBe(6);
+    }
+
+    [Fact]
+    public void Ship_Above_Approved_Is_Clamped_To_Approved()
+    {
+        var transfer = NewTransfer();
+        var item = transfer.AddItem(Guid.NewGuid(), Guid.NewGuid(), requestedQty: 5);
+        transfer.Submit();
+        transfer.Approve(null);
+        transfer.ApproveItem(item.Id, 5);
+
+        var lines = transfer.Ship(new Dictionary<Guid, int> { [item.Id] = 99 });
+
+        lines.ShouldHaveSingleItem().Quantity.ShouldBe(5);
+        item.ShippedQuantity.ShouldBe(5);
+    }
+
+    [Fact]
+    public void Ship_All_Zero_Throws_CannotShipNothing()
+    {
+        var transfer = NewTransfer();
+        var item = transfer.AddItem(Guid.NewGuid(), Guid.NewGuid(), requestedQty: 5);
+        transfer.Submit();
+        transfer.Approve(null);
+        transfer.ApproveItem(item.Id, 5);
+
+        Should.Throw<BusinessException>(
+                () => transfer.Ship(new Dictionary<Guid, int> { [item.Id] = 0 }))
+            .Code.ShouldBe(OperationsErrorCodes.CannotShipNothing);
     }
 
     [Fact]

@@ -7,6 +7,7 @@
 @using Volo.Abp.AspNetCore.Components.Web.Theming.Layout
 @using Inventory
 @using Inventory.Branches
+@using Inventory.BranchInventory
 @using Inventory.Products
 @using Inventory.StockMovements
 @using Inventory.Permissions
@@ -188,7 +189,7 @@
                             @if (!string.IsNullOrWhiteSpace(context.Item.Notes))
                             {
                                 <SoftText Typo="Typo.body2" Style="max-width: 320px; display:inline-block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
-                                    @context.Item.Notes
+                                    @FriendlyNotes(context.Item.Notes)
                                 </SoftText>
                             }
                             else
@@ -200,10 +201,11 @@
                     <TemplateColumn T="StockMovementDto" Title="@L["Actions"]" Sortable="false">
                         <CellTemplate>
                             <span class="row-actions">
-                                <SoftIconButton Icon="@Icons.Material.Outlined.Info"
-                                               Size="Size.Small"
-                                               Title="@L["Details"]"
-                                               OnClick="@(() => OpenDetailAsync(context.Item))" />
+                                <SoftTooltip Text="@L["Details"]">
+                                    <SoftIconButton Icon="@Icons.Material.Outlined.Info"
+                                                   Size="Size.Small"
+                                                   OnClick="@(() => OpenDetailAsync(context.Item))" />
+                                </SoftTooltip>
                             </span>
                         </CellTemplate>
                     </TemplateColumn>
@@ -320,7 +322,7 @@
                             <SoftGridItem xs="12" sm="@notesSm">
                                 <SoftStack Spacing="1">
                                     <SoftText Typo="Typo.caption" Color="Color.Default">@InvL["Notes"]</SoftText>
-                                    <SoftText Typo="Typo.body2">@_detailRow.Notes</SoftText>
+                                    <SoftText Typo="Typo.body2">@FriendlyNotes(_detailRow.Notes)</SoftText>
                                 </SoftStack>
                             </SoftGridItem>
                         }
@@ -541,13 +543,24 @@
         _detailRow = null;
     }
 
-    private static string FriendlyReferenceType(string? referenceType) => referenceType switch
+    private string FriendlyReferenceType(string? referenceType) => referenceType switch
     {
         "AppPurchaseOrder" => "Purchase Order",
         "AppSale" => "Sale",
         "AppStockTransfer" => "Stock Transfer",
+        StocktakeManager.MovementReferenceType => InvL["Menu:Stocktake"],
         _ => referenceType ?? "—"
     };
+
+    private string FriendlyNotes(string? notes)
+    {
+        if (StocktakeMovementNote.TryParse(notes, out var reason, out var text))
+        {
+            return $"{InvL[$"Stocktake:Reason:{reason}"]} — {text}";
+        }
+
+        return notes ?? "—";
+    }
 
     private Variant GetRangeVariant(string range) => _activeRange == range ? Variant.Filled : Variant.Outlined;
 

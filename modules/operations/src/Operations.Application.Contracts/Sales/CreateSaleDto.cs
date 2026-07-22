@@ -6,7 +6,7 @@ namespace Operations.Sales;
 public class CreateSaleDto
 {
     public Guid BranchId { get; set; }
-    /// <summary>Leave blank to auto-generate (INV-YYYY-NNNN).</summary>
+    /// <summary>Leave blank to auto-generate (INV-YYYY-XXXXXXXX).</summary>
     public string? InvoiceNumber { get; set; }
     public DateTime SaleDate { get; set; } = DateTime.Today;
     public string Currency { get; set; } = "USD";

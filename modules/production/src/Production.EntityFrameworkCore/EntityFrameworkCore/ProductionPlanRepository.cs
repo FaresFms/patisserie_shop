@@ -147,7 +147,7 @@ public class ProductionPlanRepository
             .GroupBy(i => i.ProductId)
             .ToDictionary(
                 g => g.Key,
-                g => g.Sum(i => Math.Max(0, i.ApprovedQuantity - i.FulfilledQuantity)));
+                g => g.Sum(i => Math.Max(0, i.ApprovedQuantity - i.PlannedQuantity)));
 
         var velocityQuery = await _velocityRepository.GetQueryableAsync();
         var velocities = await velocityQuery.ToListAsync(ct);

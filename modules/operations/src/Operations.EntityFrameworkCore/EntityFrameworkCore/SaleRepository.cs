@@ -142,7 +142,8 @@ public class SaleRepository
         CancellationToken cancellationToken = default)
     {
         var query = await GetQueryableAsync();
-        query = query.Where(s => s.SaleDate >= fromUtcInclusive && s.SaleDate < toUtcExclusive);
+        query = query.Where(s => !s.IsVoided
+            && s.SaleDate >= fromUtcInclusive && s.SaleDate < toUtcExclusive);
         if (branchIdScope != null)
         {
             query = query.Where(s => branchIdScope.Contains(s.BranchId));
@@ -170,7 +171,8 @@ public class SaleRepository
         var dbContext = await GetDbContextAsync();
 
         var sales = dbContext.Set<AppSale>()
-            .Where(s => s.SaleDate >= fromUtcInclusive && s.SaleDate < toUtcExclusive);
+            .Where(s => !s.IsVoided
+                && s.SaleDate >= fromUtcInclusive && s.SaleDate < toUtcExclusive);
 
         if (branchIdScope != null)
         {
@@ -204,7 +206,8 @@ public class SaleRepository
         var dbContext = await GetDbContextAsync();
 
         var sales = dbContext.Set<AppSale>()
-            .Where(s => s.SaleDate >= fromUtcInclusive && s.SaleDate < toUtcExclusive);
+            .Where(s => !s.IsVoided
+                && s.SaleDate >= fromUtcInclusive && s.SaleDate < toUtcExclusive);
 
         if (branchIdScope != null)
         {
@@ -234,7 +237,8 @@ public class SaleRepository
         CancellationToken cancellationToken = default)
     {
         var query = await GetQueryableAsync();
-        query = query.Where(s => s.SaleDate >= fromUtcInclusive && s.SaleDate < toUtcExclusive);
+        query = query.Where(s => !s.IsVoided
+            && s.SaleDate >= fromUtcInclusive && s.SaleDate < toUtcExclusive);
         if (branchIdScope != null)
         {
             query = query.Where(s => branchIdScope.Contains(s.BranchId));
@@ -261,7 +265,8 @@ public class SaleRepository
         var dbContext = await GetDbContextAsync();
 
         var sales = dbContext.Set<AppSale>()
-            .Where(s => s.SaleDate >= from30Utc && s.SaleDate < toUtcExclusive);
+            .Where(s => !s.IsVoided
+                && s.SaleDate >= from30Utc && s.SaleDate < toUtcExclusive);
 
         var lines = from s in sales
                     from i in s.Items
@@ -289,7 +294,8 @@ public class SaleRepository
         var dbContext = await GetDbContextAsync();
 
         var sales = dbContext.Set<AppSale>()
-            .Where(s => s.SaleDate >= fromUtc && s.SaleDate < toUtcExclusive);
+            .Where(s => !s.IsVoided
+                && s.SaleDate >= fromUtc && s.SaleDate < toUtcExclusive);
 
         // s.SaleDate.DayOfWeek translates server-side on Npgsql (date_part('dow', ...)),
         // already 0 = Sunday … 6 = Saturday — the same convention as System.DayOfWeek.

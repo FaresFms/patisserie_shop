@@ -779,6 +779,216 @@ namespace patisserie_shop.Migrations
                     b.ToTable("InventoryStockMovements", (string)null);
                 });
 
+            modelBuilder.Entity("Inventory.Entities.AppStocktakeLine", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int?>("CountedQuantity")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ExpectedQuantity")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("InventoryConcurrencyStamp")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<Guid>("InventoryId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsPerishable")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid>("ProductId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ProductName")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("ProductSku")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("ProductUnit")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<DateTime?>("ProductionDate")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("ReasonNotes")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<Guid>("SessionId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SessionId", "InventoryId")
+                        .IsUnique()
+                        .HasDatabaseName("UIX_StocktakeLines_Session_Inventory");
+
+                    b.ToTable("InventoryStocktakeLines", (string)null);
+                });
+
+            modelBuilder.Entity("Inventory.Entities.AppStocktakeSession", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("AdjustedLineCount")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("BranchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("ClosedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<Guid?>("ClosedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ConcurrencyStamp")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("ConcurrencyStamp");
+
+                    b.Property<int>("CountedLineCount")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreationTime")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("CreationTime");
+
+                    b.Property<Guid?>("CreatorId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("CreatorId");
+
+                    b.Property<Guid?>("DeleterId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("DeleterId");
+
+                    b.Property<DateTime?>("DeletionTime")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("DeletionTime");
+
+                    b.Property<int>("DifferenceLineCount")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ExtraProperties")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("ExtraProperties");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("IsDeleted");
+
+                    b.Property<DateTime?>("LastModificationTime")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("LastModificationTime");
+
+                    b.Property<Guid?>("LastModifierId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("LastModifierId");
+
+                    b.Property<int>("ManualAdjustmentLineCount")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("MatchedLineCount")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("MovementReferenceId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<int>("OverageQuantity")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ReviewNotes")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<DateTime?>("ReviewedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<Guid?>("ReviewedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ReviewedByName")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<int>("ShortageQuantity")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("SnapshotAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<Guid?>("StartedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("StartedByName")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<DateTime?>("SubmittedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<Guid?>("SubmittedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("SubmittedByName")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<int>("TotalLineCount")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("WriteOffLineCount")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BranchId")
+                        .IsUnique()
+                        .HasDatabaseName("UIX_StocktakeSessions_OneOpenPerBranch")
+                        .HasFilter("\"Status\" IN ('Draft', 'PendingReview') AND NOT \"IsDeleted\"");
+
+                    b.HasIndex("SnapshotAt")
+                        .HasDatabaseName("IX_StocktakeSessions_Snapshot");
+
+                    b.HasIndex("BranchId", "Status")
+                        .HasDatabaseName("IX_StocktakeSessions_Branch_Status");
+
+                    b.ToTable("InventoryStocktakeSessions", (string)null);
+                });
+
             modelBuilder.Entity("Inventory.Entities.AppSupplier", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1197,6 +1407,10 @@ namespace patisserie_shop.Migrations
                     b.Property<Guid>("SaleId")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("SoldBatchBreakdown")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
                     b.Property<decimal>("Subtotal")
                         .HasColumnType("numeric");
 
@@ -1330,6 +1544,9 @@ namespace patisserie_shop.Migrations
                         .HasMaxLength(1024)
                         .HasColumnType("character varying(1024)");
 
+                    b.Property<int?>("ShippedQuantity")
+                        .HasColumnType("integer");
+
                     b.Property<Guid>("StockTransferId")
                         .HasColumnType("uuid");
 
@@ -1460,6 +1677,9 @@ namespace patisserie_shop.Migrations
                     b.Property<string>("Notes")
                         .HasMaxLength(512)
                         .HasColumnType("character varying(512)");
+
+                    b.Property<int>("PlannedQuantity")
+                        .HasColumnType("integer");
 
                     b.Property<Guid>("ProductId")
                         .HasColumnType("uuid");
@@ -1782,14 +2002,24 @@ namespace patisserie_shop.Migrations
                     b.Property<Guid>("BranchId")
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("BranchProductionRequestId")
+                        .HasColumnType("uuid");
+
                     b.Property<Guid?>("BranchProductionRequestItemId")
                         .HasColumnType("uuid");
 
-                    b.Property<int>("FulfilledQuantity")
+                    b.Property<int>("DispatchedQuantity")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("LostQuantity")
                         .HasColumnType("integer");
 
                     b.Property<Guid>("ProductionOrderId")
                         .HasColumnType("uuid");
+
+                    b.Property<int>("ReceivedQuantity")
+                        .HasColumnType("integer")
+                        .HasColumnName("FulfilledQuantity");
 
                     b.HasKey("Id");
 
@@ -1803,6 +2033,92 @@ namespace patisserie_shop.Migrations
                         .HasDatabaseName("IX_ProductionOrderAllocations_Order");
 
                     b.ToTable("ProductionOrderAllocations", (string)null);
+                });
+
+            modelBuilder.Entity("Production.Entities.AppProductionOrderDispatch", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<Guid>("DestinationBranchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("DispatchedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<int>("LostQuantity")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("ProductionOrderId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("ReceivedQuantity")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ShippedQuantity")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("StockTransferId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProductionOrderId")
+                        .HasDatabaseName("IX_ProductionOrderDispatches_Order");
+
+                    b.HasIndex("StockTransferId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_ProductionOrderDispatches_Transfer");
+
+                    b.HasIndex("DestinationBranchId", "CompletedAt")
+                        .HasDatabaseName("IX_ProductionOrderDispatches_BranchCompleted");
+
+                    b.ToTable("ProductionOrderDispatches", (string)null);
+                });
+
+            modelBuilder.Entity("Production.Entities.AppProductionOrderDispatchLine", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("BranchProductionRequestId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("BranchProductionRequestItemId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("LostQuantity")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("ProductionOrderAllocationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ProductionOrderDispatchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("ReceivedQuantity")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ShippedQuantity")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BranchProductionRequestItemId")
+                        .HasDatabaseName("IX_ProductionOrderDispatchLines_RequestItem");
+
+                    b.HasIndex("ProductionOrderAllocationId")
+                        .HasDatabaseName("IX_ProductionOrderDispatchLines_Allocation");
+
+                    b.HasIndex("ProductionOrderDispatchId")
+                        .HasDatabaseName("IX_ProductionOrderDispatchLines_Dispatch");
+
+                    b.ToTable("ProductionOrderDispatchLines", (string)null);
                 });
 
             modelBuilder.Entity("Production.Entities.AppProductionOrderIngredient", b =>
@@ -3934,6 +4250,15 @@ namespace patisserie_shop.Migrations
                     b.ToTable("AbpSettingDefinitions", (string)null);
                 });
 
+            modelBuilder.Entity("Inventory.Entities.AppStocktakeLine", b =>
+                {
+                    b.HasOne("Inventory.Entities.AppStocktakeSession", null)
+                        .WithMany("Lines")
+                        .HasForeignKey("SessionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Operations.Entities.AppPurchaseOrderItem", b =>
                 {
                     b.HasOne("Operations.Entities.AppPurchaseOrder", null)
@@ -3984,6 +4309,24 @@ namespace patisserie_shop.Migrations
                     b.HasOne("Production.Entities.AppProductionOrder", null)
                         .WithMany("Allocations")
                         .HasForeignKey("ProductionOrderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Production.Entities.AppProductionOrderDispatch", b =>
+                {
+                    b.HasOne("Production.Entities.AppProductionOrder", null)
+                        .WithMany("Dispatches")
+                        .HasForeignKey("ProductionOrderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Production.Entities.AppProductionOrderDispatchLine", b =>
+                {
+                    b.HasOne("Production.Entities.AppProductionOrderDispatch", null)
+                        .WithMany("Lines")
+                        .HasForeignKey("ProductionOrderDispatchId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
@@ -4204,6 +4547,11 @@ namespace patisserie_shop.Migrations
                         .HasForeignKey("AuthorizationId");
                 });
 
+            modelBuilder.Entity("Inventory.Entities.AppStocktakeSession", b =>
+                {
+                    b.Navigation("Lines");
+                });
+
             modelBuilder.Entity("Operations.Entities.AppPurchaseOrder", b =>
                 {
                     b.Navigation("Items");
@@ -4233,7 +4581,14 @@ namespace patisserie_shop.Migrations
                 {
                     b.Navigation("Allocations");
 
+                    b.Navigation("Dispatches");
+
                     b.Navigation("Ingredients");
+                });
+
+            modelBuilder.Entity("Production.Entities.AppProductionOrderDispatch", b =>
+                {
+                    b.Navigation("Lines");
                 });
 
             modelBuilder.Entity("Production.Entities.AppProductionPlan", b =>

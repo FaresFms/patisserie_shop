@@ -54,6 +54,35 @@ public interface IStockBatchRepository : IRepository<AppStockBatch, Guid>
         DateTime todayUtc,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Total expired QuantityRemaining per product for ONE branch, keyed by ProductId.
+    /// Products with no expired stock are absent from the map. One query — used by the
+    /// branch-inventory page so it doesn't N+1 over <see cref="GetExpiredQuantityAsync"/>.
+    /// </summary>
+    Task<Dictionary<Guid, int>> GetExpiredQuantitiesByProductAsync(
+        Guid branchId,
+        DateTime todayUtc,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Total QuantityRemaining per product for live, non-expired batches at one branch.
+    /// ExpiryDate equal to today is still usable. Perishable sale/production/transfer
+    /// flows use this as their safety boundary instead of raw QuantityOnHand.
+    /// </summary>
+    Task<Dictionary<Guid, int>> GetNonExpiredQuantitiesByProductAsync(
+        Guid branchId,
+        DateTime todayUtc,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Total expired QuantityRemaining per (product, branch) across ALL branches, keyed
+    /// by the (ProductId, BranchId) pair. Pairs with no expired stock are absent. One
+    /// query — backs the nightly stockout sweep's sellable-stock adjustment.
+    /// </summary>
+    Task<Dictionary<(Guid ProductId, Guid BranchId), int>> GetExpiredQuantitiesByProductBranchAsync(
+        DateTime todayUtc,
+        CancellationToken cancellationToken = default);
+
     Task<long> CountWithDetailsAsync(
         string? filter,
         Guid? branchId,

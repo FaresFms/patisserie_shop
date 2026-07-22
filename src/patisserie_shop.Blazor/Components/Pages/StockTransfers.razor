@@ -13,6 +13,7 @@
 @using Operations.Localization
 @using Inventory.Branches
 @using Inventory.BranchInventory
+@using Inventory.Products
 @using Inventory.Permissions
 @using Intelligence.Decisions
 @using patisserie_shop.Blazor.Services
@@ -25,6 +26,7 @@
 @inject IStockTransferAppService StockTransferAppService
 @inject IBranchAppService BranchAppService
 @inject IBranchInventoryAppService BranchInventoryAppService
+@inject IProductAppService ProductAppService
 @inject IDecisionLogAppService DecisionLogAppService
 @inject TransferNotificationBridge TransferBridge
 @inject PageLayout PageLayout
@@ -39,7 +41,7 @@
     <div class="page-head">
         <div>
             <h1 class="page-title">@OpsL["StockTransfers"]</h1>
-            <div class="page-sub">Request stock, approve, ship and receive between branches.</div>
+            <div class="page-sub">@OpsL["StockTransfers:Subtitle"]</div>
         </div>
         <div class="page-head-actions">
             <SoftButton Variant="Variant.Filled"
@@ -219,7 +221,7 @@
 @if (_createVisible)
 {
     <div class="glass-modal-backdrop" @onclick="CloseCreate">
-        <div class="glass-modal-container glass-modal-container--md" @onclick:stopPropagation="true">
+        <div class="glass-modal-container glass-modal-container--lg" @onclick:stopPropagation="true">
             <SoftCard Elevation="24" Class="glass-modal">
                 <SoftCardHeader Class="pa-4">
                     <CardHeaderContent>
@@ -235,50 +237,122 @@
                 <SoftDivider />
                 <SoftCardContent Class="pa-4">
                     <SoftStack Spacing="3">
-                        <SoftAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
-                            @if (_canChooseBranches)
-                            {
-                                <text>Step 1 of 2 — choose the branches, then add the products on the next screen.</text>
-                            }
-                            else
-                            {
-                                <text>Step 1 of 2 — choose the receiving branch and requested products. The admin or kitchen assigns the source branch after you submit.</text>
-                            }
-                        </SoftAlert>
-                        @if (UseFixedReceivingBranch)
-                        {
-                            <div class="sts-fixed-branch">
-                                <div class="sts-fixed-label">@OpsL["ReceivingBranch"]</div>
-                                <div class="sts-fixed-value">@(_destinationBranches.FirstOrDefault()?.Name ?? "-")</div>
+                        <SoftText Typo="Typo.body2" Class="sts-intro">
+                            @(_canChooseBranches ? OpsL["NewTransferIntroChooser"] : OpsL["NewTransferIntro"])
+                        </SoftText>
+
+                        <div class="sts-route">
+                            <div class="sts-route-cell">
+                                <div class="sts-route-tag">
+                                    <SoftIcon Icon="@Icons.Material.Outlined.Warehouse" Size="Size.Small" />
+                                    @OpsL["FromBranch"]
+                                </div>
+                                @if (_canChooseBranches)
+                                {
+                                    <SoftLookupSelect TItem="BranchLookupDto" TValue="Guid?"
+                                                      Items="SourceBranchOptions"
+                                                      ToValue="@(b => (Guid?)b.Id)"
+                                                      ToLabel="@(b => b.Name)"
+                                                      Value="_newFromId"
+                                                      ValueChanged="@(v => _newFromId = v)"
+                                                      Placeholder="@OpsL["SourceBranchOptional"]"
+                                                      Margin="Margin.Dense"
+                                                      MaxHeight="240"
+                                                      Clearable="true" />
+                                    <div class="sts-route-hint">@OpsL["SourceBranchOptionalHint"]</div>
+                                }
+                                else
+                                {
+                                    <div class="sts-route-auto">@OpsL["SourceDecidedByAdmin"]</div>
+                                }
                             </div>
-                        }
-                        else
-                        {
-                            <SoftLookupSelect TItem="BranchLookupDto" TValue="Guid?"
-                                              Items="DestinationBranchOptions"
-                                              ToValue="@(b => (Guid?)b.Id)"
-                                              ToLabel="@(b => b.Name)"
-                                              Value="_newToId"
-                                              ValueChanged="@(v => _newToId = v)"
-                                              Label="@OpsL["ReceivingBranch"]"
-                                              Required="true" />
-                        }
-                        @if (_canChooseBranches)
-                        {
-                            <div>
-                                <SoftLookupSelect TItem="BranchLookupDto" TValue="Guid?"
-                                                  Items="SourceBranchOptions"
-                                                  ToValue="@(b => (Guid?)b.Id)"
-                                                  ToLabel="@(b => b.Name)"
-                                                  Value="_newFromId"
-                                                  ValueChanged="@(v => _newFromId = v)"
-                                                  Label="@OpsL["SourceBranchOptional"]"
-                                                  Clearable="true" />
-                                <SoftText Typo="Typo.caption" Color="Color.Default">@OpsL["SourceBranchOptionalHint"]</SoftText>
+
+                            <div class="sts-route-arrow" aria-hidden="true">
+                                <SoftIcon Icon="@Icons.Material.Filled.ArrowForward" Size="Size.Small" />
                             </div>
-                        }
+
+                            <div class="sts-route-cell">
+                                <div class="sts-route-tag">
+                                    <SoftIcon Icon="@Icons.Material.Outlined.Storefront" Size="Size.Small" />
+                                    @OpsL["ReceivingBranch"]
+                                </div>
+                                @if (UseFixedReceivingBranch)
+                                {
+                                    <div class="sts-route-fixed">@(_destinationBranches.FirstOrDefault()?.Name ?? "-")</div>
+                                }
+                                else
+                                {
+                                    <SoftLookupSelect TItem="BranchLookupDto" TValue="Guid?"
+                                                      Items="DestinationBranchOptions"
+                                                      ToValue="@(b => (Guid?)b.Id)"
+                                                      ToLabel="@(b => b.Name)"
+                                                      Value="_newToId"
+                                                      ValueChanged="@(v => { _newToId = v; _toError = false; })"
+                                                      Placeholder="@OpsL["ReceivingBranch"]"
+                                                      Margin="Margin.Dense"
+                                                      MaxHeight="240"
+                                                      Required="true"
+                                                      Error="_toError"
+                                                      ErrorText="@L["ThisFieldIsRequired", OpsL["ReceivingBranch"]]" />
+                                }
+                            </div>
+                        </div>
+
                         <MudDatePicker Label="@OpsL["RequestedDate"]" Variant="Variant.Outlined"
+                                       Margin="Margin.Dense" Class="sts-date"
                                        @bind-Date="_newRequestedDate" />
+
+                        <div>
+                            <div class="sts-items-title">
+                                <SoftText Typo="Typo.overline" Color="Color.Primary">@OpsL["RequestedProducts"]</SoftText>
+                                <span class="sts-items-count">@_newItems.Count</span>
+                            </div>
+                            <div class="sts-items @(_itemsError ? "sts-items--error" : "")">
+                                <div class="sts-items-head">
+                                    <span>@OpsL["Product"]</span>
+                                    <span class="sts-items-head-qty">@OpsL["RequestedQuantity"]</span>
+                                    <span class="sts-items-head-x"></span>
+                                </div>
+                                @foreach (var row in _newItems)
+                                {
+                                    var itemRow = row;
+                                    <div class="sts-new-item-row">
+                                        <SoftLookupSelect TItem="ProductLookupDto" TValue="Guid?"
+                                                          Items="_productLookup"
+                                                          ToValue="@(p => (Guid?)p.Id)"
+                                                          ToLabel="@(p => p.Name)"
+                                                          Value="itemRow.ProductId"
+                                                          ValueChanged="@(v => { itemRow.ProductId = v; _itemsError = false; })"
+                                                          Placeholder="@OpsL["Product"]"
+                                                          Margin="Margin.Dense"
+                                                          MaxHeight="240" />
+                                        <SoftNumericField T="int"
+                                                          Value="itemRow.Quantity"
+                                                          ValueChanged="@(v => itemRow.Quantity = v)"
+                                                          Variant="Variant.Outlined"
+                                                          Min="1"
+                                                          Margin="Margin.Dense" />
+                                        <SoftIconButton Icon="@Icons.Material.Filled.Close"
+                                                        Size="Size.Small"
+                                                        OnClick="@(() => _newItems.Remove(itemRow))" />
+                                    </div>
+                                }
+                                <SoftButton Variant="Variant.Text" Size="Size.Small" FullWidth="true"
+                                            Class="sts-add-row"
+                                            StartIcon="@Icons.Material.Filled.Add"
+                                            OnClick="@(() => _newItems.Add(new NewTransferItemRow()))">
+                                    @OpsL["AddAnotherProduct"]
+                                </SoftButton>
+                            </div>
+                            @if (_itemsError)
+                            {
+                                <div class="sts-items-error">
+                                    <SoftIcon Icon="@Icons.Material.Filled.ErrorOutline" Size="Size.Small" />
+                                    @OpsL["AtLeastOneProductRequired"]
+                                </div>
+                            }
+                        </div>
+
                         <SoftTextField T="string"
                                        Label="@OpsL["Notes"]"
                                        @bind-Value="_newNotes"
@@ -294,7 +368,7 @@
                                 EndIcon="@Icons.Material.Filled.ArrowForward"
                                 OnClick="ConfirmCreateAsync"
                                 Disabled="@(_saving || !CanOpenCreate)">
-                        @OpsL["SaveAndAddItems"]
+                        @OpsL["CreateRequest"]
                     </SoftButton>
                 </div>
             </SoftCard>
@@ -336,6 +410,151 @@
     }
 
     .sts-tab:hover { background: var(--hover); color: var(--fg-1); }
+
+    /* ── New-transfer dialog ─────────────────────────────── */
+    .sts-intro { color: var(--fg-3); }
+
+    .sts-route {
+        display: flex;
+        align-items: stretch;
+        gap: 10px;
+    }
+    .sts-route-cell {
+        flex: 1 1 0;
+        min-width: 0;
+        border: 1px solid var(--bd-2);
+        border-radius: var(--r-md);
+        background: var(--surface-2);
+        padding: 12px 14px 10px;
+    }
+    .sts-route-tag {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-bottom: 8px;
+        color: var(--fg-3);
+        font-size: .72rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: .04em;
+    }
+    .sts-route-tag .mud-icon-root {
+        font-size: 17px;
+        color: var(--accent);
+    }
+    .sts-route-arrow {
+        flex: 0 0 auto;
+        align-self: center;
+        width: 34px;
+        height: 34px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 50%;
+        border: 1px solid var(--accent-line);
+        background: var(--accent-soft);
+        color: var(--accent);
+    }
+    [dir="rtl"] .sts-route-arrow { transform: scaleX(-1); }
+    .sts-route-auto {
+        padding: 10px 0 6px;
+        color: var(--fg-3);
+        font-size: .85rem;
+        font-style: italic;
+    }
+    .sts-route-fixed {
+        padding: 8px 0 4px;
+        color: var(--fg-1);
+        font-size: 1rem;
+        font-weight: 700;
+    }
+    .sts-route-hint {
+        margin-top: 4px;
+        color: var(--fg-4);
+        font-size: .72rem;
+    }
+
+    @@media (max-width: 640px) {
+        .sts-route { flex-direction: column; }
+        .sts-route-arrow,
+        [dir="rtl"] .sts-route-arrow { transform: rotate(90deg); }
+    }
+
+    .sts-date { max-width: 240px; }
+
+    .sts-items-title {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 6px;
+    }
+    .sts-items-count {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 20px;
+        height: 20px;
+        padding: 0 6px;
+        border-radius: 999px;
+        background: var(--accent-soft);
+        color: var(--accent);
+        font-size: .72rem;
+        font-weight: 700;
+    }
+    .sts-items {
+        border: 1px solid var(--bd-2);
+        border-radius: var(--r-md);
+        background: var(--surface);
+        padding: 10px 12px;
+        transition: border-color .15s ease;
+    }
+    .sts-items--error { border-color: var(--danger); }
+    .sts-items-error {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-top: 6px;
+        color: var(--danger);
+        font-size: .78rem;
+    }
+    .sts-items-error .mud-icon-root { font-size: 16px; }
+    .sts-items-head {
+        display: flex;
+        gap: 8px;
+        padding-bottom: 6px;
+        margin-bottom: 8px;
+        border-bottom: 1px solid var(--bd-1);
+        color: var(--fg-3);
+        font-size: .72rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: .04em;
+    }
+    .sts-items-head > :first-child { flex: 1 1 auto; }
+    .sts-items-head-qty { flex: 0 0 110px; }
+    .sts-items-head-x { flex: 0 0 26px; }
+
+    .sts-new-item-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 6px;
+    }
+    .sts-new-item-row > :first-child { flex: 1 1 auto; min-width: 0; }
+    /* Direct child only = the quantity field; the product select's own
+       inner .mud-input-control must keep its natural full width. */
+    .sts-new-item-row > .mud-input-control {
+        flex: 0 0 auto;
+        width: 110px;
+    }
+
+    .sts-add-row {
+        margin-top: 4px;
+        border: 1px dashed var(--bd-3) !important;
+        border-radius: var(--r-sm) !important;
+        color: var(--fg-2) !important;
+    }
+    .sts-add-row:hover { border-color: var(--accent) !important; color: var(--accent) !important; }
 
     .sts-tab-active,
     .sts-tab-active:hover {
@@ -394,23 +613,6 @@
         font-weight: 700;
     }
 
-    .sts-fixed-branch {
-        border: 1px solid var(--bd-2);
-        border-radius: var(--r-md);
-        background: var(--surface-2);
-        padding: 10px 12px;
-    }
-    .sts-fixed-label {
-        color: var(--fg-3);
-        font-size: .72rem;
-        font-weight: 700;
-        text-transform: uppercase;
-    }
-    .sts-fixed-value {
-        color: var(--fg-1);
-        font-size: 1rem;
-        font-weight: 700;
-    }
 </style>
 
 @code {
@@ -462,6 +664,10 @@
     [Parameter, SupplyParameterFromQuery(Name = "view")]
     public string? InitialView { get; set; }
 
+    /// <summary>Deep-link (e.g. a dashboard row): open this transfer's detail directly.</summary>
+    [Parameter, SupplyParameterFromQuery(Name = "detailId")]
+    public Guid? InitialDetailId { get; set; }
+
     // Pre-fill handoff from the Decision Log's "Take action" button.
     private Guid? _pendingItemProductId;
     private int? _pendingItemQty;
@@ -479,6 +685,10 @@
     private Guid? _newFromId;
     private DateTime? _newRequestedDate = DateTime.Today;
     private string? _newNotes;
+
+    // Inline validation for the create dialog — shown at the field, not just a toast.
+    private bool _toError;
+    private bool _itemsError;
 
     public record StatusOption(string Value, string Label);
 
@@ -551,7 +761,7 @@
 
         if (OpenNewTransfer)
         {
-            OpenCreateDialog(NewTransferToBranchId, NewTransferNotes);
+            await OpenCreateDialog(NewTransferToBranchId, NewTransferNotes);
             if (_createVisible)
             {
                 if (_canChooseBranches && NewTransferFromBranchId.HasValue
@@ -563,6 +773,12 @@
                 _pendingItemQty = NewTransferQuantity;
                 _sourceDecisionId = NewTransferDecisionId;
             }
+        }
+        else if (InitialDetailId is Guid detailId)
+        {
+            // Dashboard row deep-link: land straight in the transfer's detail so
+            // "receive this one" is one click, not list-then-hunt.
+            _detailId = detailId;
         }
     }
 
@@ -591,10 +807,6 @@
     {
         if (_view == view) return;
         _view = view;
-        if (_grid != null)
-        {
-            _grid.CurrentPage = 0;
-        }
         await ReloadAsync();
     }
 
@@ -709,13 +921,23 @@
 
     private async Task OnDetailChangedAsync() => await ReloadAsync();
 
-    private void OpenCreateDialog() => OpenCreateDialog(null, null);
+    /// <summary>One product+quantity row in the create dialog's inline items editor.</summary>
+    private sealed class NewTransferItemRow
+    {
+        public Guid? ProductId { get; set; }
+        public int Quantity { get; set; } = 1;
+    }
 
-    private void OpenCreateDialog(Guid? toBranchId, string? notes)
+    private readonly List<NewTransferItemRow> _newItems = new();
+    private List<ProductLookupDto> _productLookup = new();
+
+    private Task OpenCreateDialog() => OpenCreateDialog(null, null);
+
+    private async Task OpenCreateDialog(Guid? toBranchId, string? notes)
     {
         if (!CanOpenCreate)
         {
-            Snackbar.Add("No receiving branch is available for this transfer.", Severity.Warning);
+            Snackbar.Add(OpsL["NoReceivingBranchAvailable"], Severity.Warning);
             return;
         }
 
@@ -726,21 +948,38 @@
         _pendingItemProductId = null;
         _pendingItemQty = null;
         _sourceDecisionId = null;
+        _toError = false;
+        _itemsError = false;
+        _newItems.Clear();
+        _newItems.Add(new NewTransferItemRow());
         _createVisible = true;
+
+        if (_productLookup.Count == 0)
+        {
+            try
+            {
+                _productLookup = await ProductAppService.GetLookupAsync();
+                StateHasChanged();
+            }
+            catch
+            {
+                // The picker just stays empty — items can still be added on the detail screen.
+            }
+        }
     }
 
     private void CloseCreate() => _createVisible = false;
 
     private async Task ConfirmCreateAsync()
     {
-        if (!_newToId.HasValue)
+        // Inline validation first: flag the specific fields, then a single summary
+        // toast so the user knows both *what* is wrong and *where* to fix it.
+        _toError = !_newToId.HasValue;
+        _itemsError = !_newItems.Any(r => r.ProductId.HasValue && r.Quantity > 0);
+
+        if (_toError || _itemsError)
         {
-            Snackbar.Add(L["ThisFieldIsRequired", OpsL["ReceivingBranch"]], Severity.Warning);
-            return;
-        }
-        if (!_newRequestedDate.HasValue)
-        {
-            Snackbar.Add(L["ThisFieldIsRequired", OpsL["RequestedDate"]], Severity.Warning);
+            Snackbar.Add(OpsL["NewTransferFixHighlighted"], Severity.Warning);
             return;
         }
         if (_newFromId.HasValue && _newFromId == _newToId)
@@ -777,6 +1016,24 @@
                 });
             }
 
+            // Inline items from the create dialog — one screen instead of a
+            // per-item dialog loop on the detail modal. Duplicates collapse to the
+            // first row (the domain rejects duplicate products per transfer).
+            var addedProducts = new HashSet<Guid>();
+            foreach (var row in _newItems)
+            {
+                if (row.ProductId is not Guid productId || row.Quantity <= 0 || !addedProducts.Add(productId))
+                {
+                    continue;
+                }
+
+                await StockTransferAppService.AddItemAsync(created.Id, new AddStockTransferItemDto
+                {
+                    ProductId = productId,
+                    RequestedQuantity = row.Quantity
+                });
+            }
+
             if (_sourceDecisionId is Guid decisionId)
             {
                 try
@@ -797,7 +1054,7 @@
             _pendingItemQty = null;
             _sourceDecisionId = null;
 
-            Snackbar.Add($"Transfer {created.Reference} created — review the items and submit.", Severity.Success);
+            Snackbar.Add(string.Format(OpsL["TransferCreatedToast"], created.Reference), Severity.Success);
             _createVisible = false;
             _detailId = created.Id;
             await ReloadAsync();

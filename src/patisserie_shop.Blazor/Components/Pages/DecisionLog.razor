@@ -842,9 +842,18 @@
 
     public record LabeledOption(string Value, string Label);
 
+    /// <summary>Deep-link from the notification bell: pre-filter to one branch.</summary>
+    [Parameter, SupplyParameterFromQuery(Name = "branchId")]
+    public Guid? BranchIdFilter { get; set; }
+
     protected override async Task OnInitializedAsync()
     {
         _canAcknowledge = await AuthorizationService.IsGrantedAsync(IntelligencePermissions.DecisionLogs.Acknowledge);
+
+        if (BranchIdFilter.HasValue)
+        {
+            _branchFilter = BranchIdFilter.Value;
+        }
 
         _groupOptions = new List<LabeledOption>
         {
@@ -1052,6 +1061,7 @@
         }
 
         _busyId = item.Id;
+        _preparingExecute = true;
         try
         {
             var preview = await DecisionActionAppService.PrepareDecisionActionAsync(item.Id);
@@ -1079,6 +1089,7 @@
         finally
         {
             _busyId = null;
+            _preparingExecute = false;
         }
     }
 
@@ -1199,7 +1210,7 @@
             parameters["productId"] = item.ProductId.ToString();
         }
 
-        parameters["notes"] = $"Created from cashier stock report {item.Id}.\n{item.Reasoning}";
+        parameters["notes"] = $"{IntL["StockReportNote"]}\n{item.Reasoning}";
 
         NavigationManager.NavigateTo(QueryHelpers.AddQueryString("/production/my-requests", parameters));
     }

@@ -13,5 +13,6 @@ public class PurchaseOrderItemDto
     public int ReceivedQuantity { get; set; }
     public decimal UnitPrice { get; set; }
     public decimal Subtotal { get; set; }
+    public bool TracksExpiry { get; set; }
     public bool IsFullyReceived => ReceivedQuantity >= OrderedQuantity;
 }

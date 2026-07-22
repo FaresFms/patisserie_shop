@@ -104,6 +104,24 @@ public class AppSale : FullAuditedAggregateRoot<Guid>
         ShiftId = shiftId;
     }
 
+    public void EnsureCashTendered(decimal? cashTendered)
+    {
+        if (!cashTendered.HasValue || cashTendered.Value < TotalAmount)
+        {
+            throw new BusinessException(OperationsErrorCodes.CashTenderedInsufficient)
+                .WithData("Tendered", cashTendered ?? 0m)
+                .WithData("Total", TotalAmount);
+        }
+    }
+
+    public void RecordItemSoldBatches(Guid itemId, string? batchBreakdown)
+    {
+        var item = _items.FirstOrDefault(i => i.Id == itemId)
+            ?? throw new BusinessException(OperationsErrorCodes.SaleItemNotFound)
+                .WithData("ItemId", itemId);
+        item.SetSoldBatchBreakdown(batchBreakdown);
+    }
+
     /// <summary>
     /// Marks the sale as voided. Stock restoration is orchestrated by the app service
     /// (it reverses each line via the inventory manager); this method only flips the

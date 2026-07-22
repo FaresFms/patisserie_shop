@@ -438,11 +438,30 @@ body.abp-application-layout .mud-typography-h6 {
     padding: 16px;
     animation: warm-fade .15s ease;
 }
+
+/* Toasts must float ABOVE the custom modal backdrop (z 1400); MudBlazor's
+   default snackbar z-index also lands at 1400 and, being earlier in the DOM,
+   gets covered by the backdrop. Lift the whole snackbar layer above it. */
+.mud-snackbar-provider,
+.mud-snackbar {
+    z-index: 1500 !important;
+}
 .soft-modal-container,
 .glass-modal-container { width: 100%; max-width: 560px; }
 .soft-modal-container--sm, .glass-modal-container--sm { max-width: 420px; }
 .soft-modal-container--md, .glass-modal-container--md { max-width: 640px; }
 .soft-modal-container--lg, .glass-modal-container--lg { max-width: 880px; }
+
+/* Compact numeric field for table cells / tight rows. A plain SoftNumericField
+   stretches its filled control to the full column width, showing a wide lighter
+   box beside the digits. This pins the control (and its inner input-control) to
+   a snug width so only the number's box shows. Apply via Class="soft-qty". */
+.soft-qty,
+.soft-qty .mud-input-control {
+    width: 96px;
+    min-width: 96px;
+    flex: 0 0 auto;
+}
 
 .soft-modal-card,
 body.abp-application-layout .soft-modal-card,
@@ -1014,24 +1033,30 @@ body.abp-application-layout .page-flat .mud-card-content {
 }
 
 /* ========================================================================
-   8. Nav-icon warm glow (sidebar) — requested to match mock-up
+   8. Nav-icon colouring (sidebar)
+   Idle icons stay a calm, muted neutral so the drawer reads as a quiet list.
+   Only the hovered and the ACTIVE item light up in terracotta — the active
+   page gets a soft glow so it clearly stands out. (Previously every icon was
+   accented + glowing, which made the whole sidebar look like a column of
+   glowing orange circles.)
    ======================================================================== */
 body.abp-application-layout .mud-nav-link .mud-icon-root,
 body.abp-application-layout .mud-nav-link .mud-nav-link-icon {
-    color: var(--accent) !important;
-    filter: drop-shadow(0 0 5px var(--accent-soft));
+    color: var(--fg-3);
+    filter: none;
     transition: filter .12s, color .12s;
 }
 body.abp-application-layout .mud-nav-link:hover .mud-icon-root,
 body.abp-application-layout .mud-nav-link:hover .mud-nav-link-icon {
-    filter: drop-shadow(0 0 7px var(--accent-line));
+    color: var(--fg-1);
+    filter: none;
 }
 body.abp-application-layout .mud-nav-link.active .mud-icon-root,
 body.abp-application-layout .mud-nav-link.mud-nav-link-active .mud-icon-root,
 body.abp-application-layout .mud-nav-link.active .mud-nav-link-icon,
 body.abp-application-layout .mud-nav-link.mud-nav-link-active .mud-nav-link-icon {
     color: var(--accent) !important;
-    filter: drop-shadow(0 0 8px var(--accent-line));
+    filter: drop-shadow(0 0 6px var(--accent-line));
 }
 
 /* ========================================================================
@@ -1173,6 +1198,61 @@ body.abp-application-layout .mud-progress-circular.mud-primary-text circle,
 body.abp-application-layout .mud-progress-linear-bar.mud-primary-text {
     color: var(--accent) !important;
     background: var(--accent) !important;
+}
+
+/* =========================================================
+   Date / time picker — recolor MudBlazor's default blue
+   (mud-theme-primary) to the warm terracotta accent.
+   ========================================================= */
+/* Header toolbar (selected year + full date).
+   Text is forced white — it sits on the terracotta fill in both light and
+   dark modes, where --accent-fg flips dark and would be near-invisible. */
+body.abp-application-layout .mud-picker-toolbar.mud-theme-primary {
+    background-color: var(--accent) !important;
+    color: #fff !important;
+}
+body.abp-application-layout .mud-picker-toolbar.mud-theme-primary .mud-button-root,
+body.abp-application-layout .mud-picker-toolbar.mud-theme-primary .mud-typography {
+    color: #fff !important;
+}
+/* The year / date labels are text-buttons; this theme gives them a dark fill,
+   which shows as brown rectangles on the orange header. Strip it so the text
+   sits flush on the terracotta band. */
+body.abp-application-layout .mud-picker-toolbar.mud-theme-primary .mud-button-root {
+    background-color: transparent !important;
+    background-image: none !important;
+    box-shadow: none !important;
+    border: 0 !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    min-width: 0 !important;
+}
+body.abp-application-layout .mud-picker-toolbar.mud-theme-primary .mud-button-root:hover {
+    background-color: rgba(255, 255, 255, 0.14) !important;
+}
+/* Selected calendar day + selected clock number — white on terracotta */
+body.abp-application-layout .mud-picker-calendar-day.mud-selected,
+body.abp-application-layout .mud-picker .mud-selected.mud-theme-primary {
+    background-color: var(--accent) !important;
+    color: #fff !important;
+}
+/* "Today" ring */
+body.abp-application-layout .mud-picker-calendar-day.mud-current,
+body.abp-application-layout .mud-picker-calendar-day.mud-button-outlined {
+    border-color: var(--accent) !important;
+    color: var(--accent) !important;
+}
+/* Year / month list highlight */
+body.abp-application-layout .mud-picker-year.mud-picker-year-selected,
+body.abp-application-layout .mud-picker-month.mud-picker-month-selected {
+    color: var(--accent) !important;
+}
+/* Clock (time picker) hands + center dot */
+body.abp-application-layout .mud-picker .mud-time-picker-hour.mud-theme-primary,
+body.abp-application-layout .mud-picker .mud-time-picker-minute.mud-theme-primary,
+body.abp-application-layout .mud-picker .mud-picker-stick,
+body.abp-application-layout .mud-picker .mud-picker-stick-inner.mud-theme-primary {
+    background-color: var(--accent) !important;
 }
 
 

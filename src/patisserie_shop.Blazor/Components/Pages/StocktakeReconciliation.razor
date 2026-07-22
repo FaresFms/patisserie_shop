@@ -1,0 +1,892 @@
+@page "/inventory/stocktake-reconciliation"
+@attribute [Authorize(OperationsPermissions.Sales.Default)]
+@attribute [Authorize(InventoryPermissions.BranchInventory.Adjust)]
+@using System
+@using System.Collections.Generic
+@using System.Globalization
+@using System.Linq
+@using System.Text
+@using System.Threading.Tasks
+@using Inventory
+@using Inventory.Branches
+@using Inventory.BranchInventory
+@using Inventory.Localization
+@using Inventory.Permissions
+@using Microsoft.AspNetCore.Authorization
+@using Operations.Permissions
+@using Operations.Sales
+@using patisserie_shop.Analytics
+@using Volo.Abp.AspNetCore.Components.Web.Theming.Layout
+@using Color = MudBlazor.Color
+@using Margin = MudBlazor.Margin
+@using Severity = MudBlazor.Severity
+@using Size = MudBlazor.Size
+@using Variant = MudBlazor.Variant
+@inherits patisserie_shopComponentBase
+@inject IStocktakeReconciliationAppService ReconciliationAppService
+@inject IBranchInventoryAppService InventoryAppService
+@inject ISaleAppService SaleAppService
+@inject IBranchAppService BranchAppService
+@inject IStringLocalizer<InventoryResource> InvL
+@inject PageLayout PageLayout
+@inject IJSRuntime JS
+@inject ISnackbar Snackbar
+@inject NavigationManager Nav
+
+@{
+    PageLayout.Title = InvL["StocktakeReconciliation:Title"];
+}
+
+<SoftCard Elevation="2" Class="pa-2 page-flat stocktake-reconciliation">
+    <div class="page-head">
+        <div>
+            <h1 class="page-title">@InvL["StocktakeReconciliation:Title"]</h1>
+            <div class="page-sub">@InvL["StocktakeReconciliation:Subtitle"]</div>
+        </div>
+        <div class="page-head-actions sr-no-print">
+            <SoftButton Variant="Variant.Text" Color="Color.Default"
+                        StartIcon="@Icons.Material.Outlined.Print"
+                        OnClick="PrintAsync" Disabled="@(_loading || _data is null)">
+                @InvL["StocktakeReconciliation:Print"]
+            </SoftButton>
+            <SoftButton Variant="Variant.Text" Color="Color.Primary"
+                        StartIcon="@Icons.Material.Outlined.Download"
+                        OnClick="ExportCsvAsync" Disabled="@(_loading || _data is null)">
+                @InvL["StocktakeReconciliation:Export"]
+            </SoftButton>
+            <SoftButton Variant="Variant.Text" Color="Color.Primary"
+                        StartIcon="@Icons.Material.Filled.Refresh"
+                        OnClick="LoadAsync" Disabled="_loading">
+                @L["Refresh"]
+            </SoftButton>
+        </div>
+    </div>
+
+    <SoftCardContent>
+        <div class="toolbar sr-no-print">
+            <div class="sr-range">
+                @foreach (var option in RangeOptions)
+                {
+                    var days = option;
+                    <SoftButton Variant="@(_days == days ? Variant.Filled : Variant.Text)"
+                                Color="Color.Primary"
+                                Size="Size.Small"
+                                Disabled="_loading"
+                                OnClick="@(() => SetDaysAsync(days))">
+                        @InvL[$"StocktakeReconciliation:Days{days}"]
+                    </SoftButton>
+                }
+            </div>
+
+            @if (_accessibleBranches.Count > 1)
+            {
+                <div class="filter-chip">
+                    <SoftLookupSelect TItem="BranchLookupDto" TValue="Guid?"
+                                      Items="_accessibleBranches"
+                                      ToValue="@(branch => (Guid?)branch.Id)"
+                                      ToLabel="@(branch => branch.Name)"
+                                      Value="_branchId"
+                                      ValueChanged="OnBranchChangedAsync"
+                                      Label="@InvL["StocktakeReconciliation:Branch"]"
+                                      Clearable="true"
+                                      Dense="true"
+                                      Margin="Margin.Dense" />
+                </div>
+            }
+
+            <div class="toolbar-right">
+                @if (_data is not null)
+                {
+                    <span class="sr-period">@_data.FromDate.ToString("d") — @_data.ToDate.ToString("d")</span>
+                }
+            </div>
+        </div>
+
+        @if (_error)
+        {
+            <SoftAlert Severity="Severity.Error" Variant="Variant.Filled" Class="ma-4">
+                @InvL["StocktakeReconciliation:LoadFailed"]
+            </SoftAlert>
+        }
+        else if (_loading && _data is null)
+        {
+            <div class="sr-skeletons">
+                @for (var i = 0; i < 8; i++)
+                {
+                    <SoftSkeleton SkeletonType="SkeletonType.Rectangle" Height="76px" Width="100%" />
+                }
+            </div>
+            <div class="sr-skeleton-table">
+                <SoftSkeleton SkeletonType="SkeletonType.Rectangle" Height="340px" Width="100%" />
+            </div>
+        }
+        else if (_data is not null)
+        {
+            <div class="sr-print-meta">
+                <strong>@SelectedBranchName</strong>
+                <span>@_data.FromDate.ToString("d") — @_data.ToDate.ToString("d")</span>
+                <span>@string.Format(InvL["StocktakeReconciliation:GeneratedAt"], DateTime.Now.ToString("g"))</span>
+            </div>
+
+            <section class="sr-guide sr-no-print">
+                <div class="sr-guide-title">
+                    <SoftIcon Icon="@Icons.Material.Outlined.Lightbulb" Color="Color.Primary" />
+                    <div>
+                        <h2>@InvL["StocktakeReconciliation:GuideTitle"]</h2>
+                        <p>@InvL["StocktakeReconciliation:GuideSubtitle"]</p>
+                    </div>
+                </div>
+                <div class="sr-guide-steps">
+                    <div><b>1</b><span>@InvL["StocktakeReconciliation:GuideSales"]</span></div>
+                    <div><b>2</b><span>@InvL["StocktakeReconciliation:GuideStocktake"]</span></div>
+                    <div><b>3</b><span>@InvL["StocktakeReconciliation:GuideAction"]</span></div>
+                </div>
+            </section>
+
+            <div class="sr-overview">
+                <article class="sr-overview-card">
+                    <div class="sr-overview-icon"><SoftIcon Icon="@Icons.Material.Outlined.ReceiptLong" /></div>
+                    <div>
+                        <span>@InvL["StocktakeReconciliation:SalesOverview"]</span>
+                        <strong>@FormatMoney(_data.TotalRevenue)</strong>
+                        <small>@string.Format(InvL["StocktakeReconciliation:SalesOverviewHint"], _data.TotalSales, _data.UnitsSold)</small>
+                    </div>
+                </article>
+                <article class="sr-overview-card">
+                    <div class="sr-overview-icon"><SoftIcon Icon="@Icons.Material.Outlined.FactCheck" /></div>
+                    <div>
+                        <span>@InvL["StocktakeReconciliation:StocktakeOverview"]</span>
+                        <strong>@_data.CompletedStocktakes.ToString("N0")</strong>
+                        <small>@string.Format(InvL["StocktakeReconciliation:StocktakeOverviewHint"], _data.ProductsWithVariance)</small>
+                    </div>
+                </article>
+                <article class="sr-overview-card sr-overview-card--danger">
+                    <div class="sr-overview-icon"><SoftIcon Icon="@Icons.Material.Outlined.TrendingDown" /></div>
+                    <div>
+                        <span>@InvL["StocktakeReconciliation:ShortageOverview"]</span>
+                        <strong>@string.Format(InvL["StocktakeReconciliation:Pieces"], _data.ShortageQuantity)</strong>
+                        <small>@string.Format(InvL["StocktakeReconciliation:ShortageOverviewHint"], FormatMoney(_data.EstimatedShortageValue))</small>
+                    </div>
+                </article>
+                <article class="sr-overview-card sr-overview-card--warn">
+                    <div class="sr-overview-icon"><SoftIcon Icon="@Icons.Material.Outlined.DeleteSweep" /></div>
+                    <div>
+                        <span>@InvL["StocktakeReconciliation:WriteOffOverview"]</span>
+                        <strong>@string.Format(InvL["StocktakeReconciliation:Pieces"], _data.WriteOffQuantity)</strong>
+                        <small>@string.Format(InvL["StocktakeReconciliation:WriteOffOverviewHint"], FormatMoney(_data.EstimatedWriteOffValue))</small>
+                    </div>
+                </article>
+            </div>
+
+            <SoftAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="sr-explanation">
+                <strong>@InvL["StocktakeReconciliation:ReportRuleTitle"]</strong>
+                <div>@InvL["StocktakeReconciliation:Explanation"]</div>
+                <small>@InvL["StocktakeReconciliation:CostBasisHint"]</small>
+            </SoftAlert>
+
+            @if (_data.UnrecordedSaleQuantity > 0)
+            {
+                <SoftAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="sr-action-alert">
+                    <strong>@InvL["StocktakeReconciliation:UnrecordedAlertTitle"]</strong>
+                    <div>@string.Format(InvL["StocktakeReconciliation:UnrecordedAlertMessage"], _data.UnrecordedSaleQuantity)</div>
+                </SoftAlert>
+            }
+
+            @if (_data.TotalSales == 0 && _data.CompletedStocktakes == 0)
+            {
+                <div class="sr-empty">
+                    <SoftIcon Icon="@Icons.Material.Outlined.Inventory2" />
+                    <span>@InvL["StocktakeReconciliation:NoData"]</span>
+                </div>
+            }
+            else
+            {
+                <section class="sr-section">
+                    <header class="sr-section-head">
+                        <div>
+                            <h2>@InvL["StocktakeReconciliation:AttentionTitle"]</h2>
+                            <p>@InvL["StocktakeReconciliation:AttentionSub"]</p>
+                        </div>
+                        @if (_data.RepeatedVarianceProducts > 0)
+                        {
+                            <SoftChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Filled">
+                                @string.Format(InvL["StocktakeReconciliation:RepeatedCount"], _data.RepeatedVarianceProducts)
+                            </SoftChip>
+                        }
+                    </header>
+
+                    @if (_data.AttentionProducts.Count == 0)
+                    {
+                        <div class="sr-no-variance">@InvL["StocktakeReconciliation:NoAttention"]</div>
+                    }
+                    else
+                    {
+                        <div class="sr-attention-list">
+                            @foreach (var product in _data.AttentionProducts)
+                            {
+                                <article class="sr-attention-row">
+                                    <div class="sr-attention-rank">@(_data.AttentionProducts.IndexOf(product) + 1)</div>
+                                    <div class="sr-attention-product">
+                                        <strong>@product.ProductName</strong>
+                                        <span>@product.Sku</span>
+                                    </div>
+                                    <div class="sr-attention-problem">
+                                        <span>@InvL["StocktakeReconciliation:Problem"]</span>
+                                        <strong>@ProblemLabel(product)</strong>
+                                        <small>@string.Format(InvL["StocktakeReconciliation:IssueOccurrence"], product.StocktakeCount)</small>
+                                    </div>
+                                    <div class="sr-attention-metric">
+                                        <span>@InvL["StocktakeReconciliation:MissingPieces"]</span>
+                                        <strong class="sr-danger">@product.ShortageQuantity.ToString("N0")</strong>
+                                    </div>
+                                    <div class="sr-attention-metric">
+                                        <span>@InvL["StocktakeReconciliation:EstimatedValue"]</span>
+                                        <strong class="sr-danger">@FormatMoney(product.EstimatedShortageValue)</strong>
+                                    </div>
+                                    <div class="sr-attention-action sr-no-print">
+                                        <SoftButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small"
+                                                    StartIcon="@Icons.Material.Filled.Visibility"
+                                                    OnClick="@(() => OpenProductDetails(product))">
+                                            @InvL["StocktakeReconciliation:ViewDetails"]
+                                        </SoftButton>
+                                    </div>
+                                </article>
+                            }
+                        </div>
+                    }
+                </section>
+
+                <section class="sr-section">
+                    <header class="sr-section-head">
+                        <div>
+                            <h2>@InvL["StocktakeReconciliation:ReasonSummary"]</h2>
+                            <p>@InvL["StocktakeReconciliation:ReasonSummarySub"]</p>
+                        </div>
+                        <SoftChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary">
+                            @InvL["StocktakeReconciliation:ProductsWithVariance"]: @_data.ProductsWithVariance
+                        </SoftChip>
+                    </header>
+
+                    @if (_data.Reasons.Count == 0)
+                    {
+                        <div class="sr-no-variance">@InvL["Stocktake:NoAdjustments"]</div>
+                    }
+                    else
+                    {
+                        <div class="sr-reasons">
+                            @foreach (var reason in _data.Reasons)
+                            {
+                                <article class="sr-reason-card">
+                                    <div class="sr-reason-icon"><SoftIcon Icon="@ReasonIcon(reason.Reason)" /></div>
+                                    <div class="sr-reason-content">
+                                    <div class="sr-reason-title">@ReasonLabel(reason.Reason)</div>
+                                    <div class="sr-reason-total">@string.Format(InvL["StocktakeReconciliation:Pieces"], reason.TotalQuantity)</div>
+                                    <div class="sr-reason-meta">
+                                        <span class="sr-danger">@InvL["StocktakeReconciliation:Shortage"]: @reason.ShortageQuantity</span>
+                                        <span class="sr-success">@InvL["StocktakeReconciliation:Overage"]: @reason.OverageQuantity</span>
+                                    </div>
+                                    <small>@string.Format(InvL["StocktakeReconciliation:ReasonLines"], reason.LineCount)</small>
+                                    </div>
+                                </article>
+                            }
+                        </div>
+                    }
+                </section>
+
+                <section class="sr-section">
+                    <header class="sr-section-head sr-products-head">
+                        <div>
+                            <h2>@InvL["StocktakeReconciliation:ProductComparison"]</h2>
+                            <p>@InvL["StocktakeReconciliation:ProductComparisonSub"]</p>
+                        </div>
+                        <SoftButton Variant="Variant.Text" Color="Color.Primary"
+                                    StartIcon="@(_showComparison ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)"
+                                    OnClick="@(() => _showComparison = !_showComparison)">
+                            @InvL[_showComparison ? "StocktakeReconciliation:HideComparison" : "StocktakeReconciliation:ShowComparison"]
+                        </SoftButton>
+                    </header>
+
+                    @if (_showComparison)
+                    {
+                        <SoftTextField @bind-Value="_search"
+                                       Placeholder="@InvL["StocktakeReconciliation:Search"]"
+                                       Variant="Variant.Outlined"
+                                       Margin="Margin.Dense"
+                                       Immediate="true"
+                                       Adornment="Adornment.Start"
+                                       AdornmentIcon="@Icons.Material.Filled.Search"
+                                       Class="sr-search mb-3" />
+
+                        @if (!FilteredProducts.Any())
+                        {
+                            <div class="sr-empty sr-empty--small">@InvL["StocktakeReconciliation:NoData"]</div>
+                        }
+                        else
+                        {
+                        <div class="sr-grid-wrap sr-screen-grid">
+                            <SoftDataGrid T="StocktakeReconciliationProductDto"
+                                          Items="FilteredProducts"
+                                          Dense="true"
+                                          Hover="true"
+                                          Bordered="false"
+                                          Striped="false"
+                                          SortMode="SortMode.Single"
+                                          Class="sr-grid">
+                                <Columns>
+                                    <TemplateColumn T="StocktakeReconciliationProductDto" Title="@InvL["StocktakeReconciliation:Product"]" SortBy="product => product.ProductName">
+                                        <CellTemplate>
+                                            <div class="sr-product">
+                                                <span>@context.Item.ProductName</span>
+                                                <small>@context.Item.Sku @(!string.IsNullOrWhiteSpace(context.Item.Unit) ? $"· {context.Item.Unit}" : string.Empty)</small>
+                                            </div>
+                                        </CellTemplate>
+                                    </TemplateColumn>
+                                    <TemplateColumn T="StocktakeReconciliationProductDto" Title="@InvL["StocktakeReconciliation:CurrentStock"]" SortBy="product => product.CurrentStock">
+                                        <CellTemplate><span class="sr-number">@context.Item.CurrentStock.ToString("N0")</span></CellTemplate>
+                                    </TemplateColumn>
+                                    <TemplateColumn T="StocktakeReconciliationProductDto" Title="@InvL["StocktakeReconciliation:Sold"]" SortBy="product => product.QuantitySold">
+                                        <CellTemplate><span class="sr-number">@context.Item.QuantitySold.ToString("N0")</span></CellTemplate>
+                                    </TemplateColumn>
+                                    <TemplateColumn T="StocktakeReconciliationProductDto" Title="@InvL["StocktakeReconciliation:Shortage"]" SortBy="product => product.ShortageQuantity">
+                                        <CellTemplate><span class="sr-number sr-danger">@context.Item.ShortageQuantity.ToString("N0")</span></CellTemplate>
+                                    </TemplateColumn>
+                                    <TemplateColumn T="StocktakeReconciliationProductDto" Title="@InvL["StocktakeReconciliation:EstimatedValue"]" SortBy="product => product.EstimatedShortageValue">
+                                        <CellTemplate><span class="sr-number sr-danger">@FormatMoney(context.Item.EstimatedShortageValue)</span></CellTemplate>
+                                    </TemplateColumn>
+                                    <TemplateColumn T="StocktakeReconciliationProductDto" Title="@InvL["StocktakeReconciliation:Overage"]" SortBy="product => product.OverageQuantity">
+                                        <CellTemplate><span class="sr-number sr-success">@context.Item.OverageQuantity.ToString("N0")</span></CellTemplate>
+                                    </TemplateColumn>
+                                    <TemplateColumn T="StocktakeReconciliationProductDto" Title="@InvL["StocktakeReconciliation:Status"]" Sortable="false">
+                                        <CellTemplate>
+                                            @if (context.Item.HasRepeatedVariance)
+                                            {
+                                                <SoftChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Outlined">
+                                                    @InvL["StocktakeReconciliation:RepeatedVariance"]
+                                                </SoftChip>
+                                            }
+                                        </CellTemplate>
+                                    </TemplateColumn>
+                                    <TemplateColumn T="StocktakeReconciliationProductDto" Title="@L["Actions"]" Sortable="false">
+                                        <CellTemplate>
+                                            <span class="row-actions">
+                                                <SoftTooltip Text="@InvL["StocktakeReconciliation:ViewDetails"]">
+                                                    <SoftIconButton Icon="@Icons.Material.Filled.Visibility" Color="Color.Primary"
+                                                                    Size="Size.Small" OnClick="@(() => OpenProductDetails(context.Item))" />
+                                                </SoftTooltip>
+                                            </span>
+                                        </CellTemplate>
+                                    </TemplateColumn>
+                                </Columns>
+                            </SoftDataGrid>
+                        </div>
+                        }
+                    }
+
+                    <table class="sr-print-table">
+                            <thead>
+                                <tr>
+                                    <th>@InvL["StocktakeReconciliation:Product"]</th>
+                                    <th>@InvL["StocktakeReconciliation:SKU"]</th>
+                                    <th>@InvL["StocktakeReconciliation:Sold"]</th>
+                                    <th>@InvL["StocktakeReconciliation:Shortage"]</th>
+                                    <th>@InvL["StocktakeReconciliation:Overage"]</th>
+                                    <th>@InvL["StocktakeReconciliation:EstimatedValue"]</th>
+                                    <th>@InvL["StocktakeReconciliation:ShortageRate"]</th>
+                                    <th>@InvL["StocktakeReconciliation:Stocktakes"]</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var product in FilteredProducts)
+                                {
+                                    <tr>
+                                        <td>@product.ProductName</td>
+                                        <td>@product.Sku</td>
+                                        <td>@product.QuantitySold.ToString("N0")</td>
+                                        <td>@product.ShortageQuantity.ToString("N0")</td>
+                                        <td>@product.OverageQuantity.ToString("N0")</td>
+                                        <td>@FormatMoney(product.EstimatedShortageValue)</td>
+                                        <td>@FormatPercent(product.ShortageRate)</td>
+                                        <td>@product.StocktakeCount.ToString("N0")</td>
+                                    </tr>
+                                }
+                            </tbody>
+                    </table>
+                </section>
+            }
+        }
+    </SoftCardContent>
+</SoftCard>
+
+@if (_selectedProduct is not null)
+{
+    <div class="glass-modal-backdrop" @onclick="CloseProductDetails">
+        <div class="glass-modal-container glass-modal-container--lg" @onclick:stopPropagation="true">
+            <SoftCard Elevation="24" Class="glass-modal">
+                <SoftCardHeader Class="pa-4">
+                    <CardHeaderContent>
+                        <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <SoftIcon Icon="@Icons.Material.Filled.ManageSearch" Color="Color.Primary" Size="Size.Medium" />
+                            <div>
+                                <SoftText Typo="Typo.h6">@_selectedProduct.ProductName</SoftText>
+                                <SoftText Typo="Typo.caption">@_selectedProduct.Sku · @SelectedBranchName</SoftText>
+                            </div>
+                        </SoftStack>
+                    </CardHeaderContent>
+                    <CardHeaderActions>
+                        <SoftIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="CloseProductDetails" />
+                    </CardHeaderActions>
+                </SoftCardHeader>
+                <SoftDivider />
+                <SoftCardContent Class="pa-4 glass-modal-body">
+                    <SoftAlert Severity="@ProductIssueSeverity(_selectedProduct)" Variant="Variant.Outlined" Class="mb-4">
+                        <strong>@ProblemLabel(_selectedProduct)</strong>
+                        <div>@ProblemDescription(_selectedProduct)</div>
+                    </SoftAlert>
+
+                    <div class="sr-detail-section">
+                        <h3>@InvL["StocktakeReconciliation:DetailsSales"]</h3>
+                        <div class="sr-detail-grid">
+                            <div><span>@InvL["StocktakeReconciliation:Sold"]</span><strong>@string.Format(InvL["StocktakeReconciliation:Pieces"], _selectedProduct.QuantitySold)</strong></div>
+                            <div><span>@InvL["StocktakeReconciliation:Revenue"]</span><strong>@FormatMoney(_selectedProduct.Revenue)</strong></div>
+                            <div><span>@InvL["StocktakeReconciliation:CurrentStock"]</span><strong>@string.Format(InvL["StocktakeReconciliation:Pieces"], _selectedProduct.CurrentStock)</strong></div>
+                        </div>
+                    </div>
+
+                    <div class="sr-detail-section">
+                        <h3>@InvL["StocktakeReconciliation:DetailsStocktake"]</h3>
+                        <div class="sr-detail-grid">
+                            <div><span>@InvL["StocktakeReconciliation:Stocktakes"]</span><strong>@_selectedProduct.StocktakeCount.ToString("N0")</strong></div>
+                            <div><span>@InvL["StocktakeReconciliation:Shortage"]</span><strong class="sr-danger">@_selectedProduct.ShortageQuantity.ToString("N0")</strong></div>
+                            <div><span>@InvL["StocktakeReconciliation:Overage"]</span><strong class="sr-success">@_selectedProduct.OverageQuantity.ToString("N0")</strong></div>
+                            <div><span>@InvL["StocktakeReconciliation:WriteOff"]</span><strong class="sr-warn">@_selectedProduct.WriteOffQuantity.ToString("N0")</strong></div>
+                            <div><span>@InvL["StocktakeReconciliation:UnrecordedSale"]</span><strong class="sr-danger">@_selectedProduct.UnrecordedSaleQuantity.ToString("N0")</strong></div>
+                            <div><span>@InvL["StocktakeReconciliation:ShortageRate"]</span><strong>@FormatPercent(_selectedProduct.ShortageRate)</strong></div>
+                        </div>
+                    </div>
+
+                    <div class="sr-detail-section">
+                        <h3>@InvL["StocktakeReconciliation:DetailsValue"]</h3>
+                        <div class="sr-detail-grid">
+                            <div><span>@InvL["StocktakeReconciliation:CostPrice"]</span><strong>@FormatMoney(_selectedProduct.CostPrice)</strong></div>
+                            <div><span>@InvL["StocktakeReconciliation:EstimatedShortageValue"]</span><strong class="sr-danger">@FormatMoney(_selectedProduct.EstimatedShortageValue)</strong></div>
+                            <div><span>@InvL["StocktakeReconciliation:EstimatedWriteOffValue"]</span><strong class="sr-warn">@FormatMoney(_selectedProduct.EstimatedWriteOffValue)</strong></div>
+                        </div>
+                        <p class="sr-detail-hint">@InvL["StocktakeReconciliation:CostBasisHint"]</p>
+                    </div>
+
+                    <div class="sr-next-steps">
+                        <h3>@InvL["StocktakeReconciliation:NextSteps"]</h3>
+                        <ul>
+                            @foreach (var step in ProductNextSteps(_selectedProduct))
+                            {
+                                <li>@step</li>
+                            }
+                        </ul>
+                    </div>
+                </SoftCardContent>
+                <SoftDivider />
+                <div class="pa-3 d-flex justify-end sr-modal-actions">
+                    <SoftButton Variant="Variant.Text" OnClick="CloseProductDetails">@L["Close"]</SoftButton>
+                    @if (_branchId.HasValue)
+                    {
+                        <SoftButton Variant="Variant.Filled" Color="Color.Primary"
+                                    StartIcon="@Icons.Material.Filled.Timeline" OnClick="OpenProductStory">
+                            @InvL["StocktakeReconciliation:OpenProductStory"]
+                        </SoftButton>
+                    }
+                </div>
+            </SoftCard>
+        </div>
+    </div>
+}
+
+<style>
+    .stocktake-reconciliation { animation: sr-in .22s ease-out; }
+    @@keyframes sr-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+    .sr-range { display: inline-flex; align-items: center; gap: 4px; }
+    .sr-period { color: var(--fg-3); font-size: 12px; font-variant-numeric: tabular-nums; }
+    .sr-skeletons { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; padding: 18px 32px 0; }
+    .sr-skeleton-table { padding: 18px 32px; }
+    .sr-print-meta { display: none; }
+    .sr-danger { color: var(--danger) !important; }
+    .sr-warn { color: var(--amber-text) !important; }
+    .sr-success { color: var(--green-text) !important; }
+
+    .sr-guide {
+        display: grid; grid-template-columns: minmax(240px, .8fr) minmax(440px, 1.4fr); gap: 24px;
+        margin: 8px 32px 0; padding: 18px 20px; border: 1px solid var(--accent-line);
+        border-radius: var(--r-md); background: var(--accent-soft);
+    }
+    .sr-guide-title { display: flex; align-items: flex-start; gap: 12px; }
+    .sr-guide-title .mud-icon-root { margin-top: 2px; }
+    .sr-guide h2, .sr-guide p { margin: 0; }
+    .sr-guide h2 { color: var(--fg-1); font-family: var(--font-serif); font-size: 17px; }
+    .sr-guide p { margin-top: 4px; color: var(--fg-2); font-size: 12.5px; line-height: 1.65; }
+    .sr-guide-steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+    .sr-guide-steps > div { display: flex; align-items: flex-start; gap: 8px; color: var(--fg-2); font-size: 12px; line-height: 1.55; }
+    .sr-guide-steps b { flex: 0 0 24px; width: 24px; height: 24px; display: grid; place-items: center; border-radius: 50%; background: var(--accent); color: var(--accent-fg); font-size: 12px; }
+
+    .sr-overview { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 16px 32px 0; }
+    .sr-overview-card { display: flex; align-items: flex-start; gap: 12px; min-height: 112px; padding: 16px; border: 1px solid var(--bd-1); border-radius: var(--r-md); background: var(--surface); }
+    .sr-overview-card--danger { border-inline-start: 3px solid var(--danger); }
+    .sr-overview-card--warn { border-inline-start: 3px solid var(--warn); }
+    .sr-overview-icon { flex: 0 0 36px; width: 36px; height: 36px; display: grid; place-items: center; border-radius: var(--r-sm); background: var(--accent-soft); color: var(--accent); }
+    .sr-overview-card--danger .sr-overview-icon { color: var(--danger); }
+    .sr-overview-card--warn .sr-overview-icon { color: var(--amber-text); }
+    .sr-overview-card > div:last-child { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+    .sr-overview-card span { color: var(--fg-2); font-size: 12px; font-weight: 600; }
+    .sr-overview-card strong { color: var(--fg-1); font-family: var(--font-serif); font-size: 22px; line-height: 1.2; font-variant-numeric: tabular-nums; }
+    .sr-overview-card small { color: var(--fg-3); font-size: 11px; line-height: 1.5; }
+
+    .sr-explanation { margin: 16px 32px 0; }
+    .sr-explanation strong { display: block; margin-bottom: 3px; color: var(--fg-1); }
+    .sr-explanation small { display: block; margin-top: 4px; color: var(--fg-3); }
+    .sr-action-alert { margin: 10px 32px 0; }
+    .sr-action-alert strong { display: block; margin-bottom: 2px; }
+
+    .sr-section { margin: 18px 32px 0; padding: 18px 20px; border: 1px solid var(--bd-1); border-radius: var(--r-md); background: var(--surface); }
+    .sr-section-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
+    .sr-section-head h2 { margin: 0; color: var(--fg-1); font-family: var(--font-serif); font-size: 20px; font-weight: 600; }
+    .sr-section-head p { max-width: 720px; margin: 4px 0 0; color: var(--fg-3); font-size: 12.5px; line-height: 1.6; }
+    .sr-products-head { align-items: center; }
+    .sr-search { width: min(320px, 100%); }
+
+    .sr-reasons { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; }
+    .sr-reason-card { display: flex; align-items: flex-start; gap: 12px; padding: 14px; border: 1px solid var(--bd-1); border-radius: var(--r-sm); background: var(--surface-2); }
+    .sr-reason-icon { flex: 0 0 34px; width: 34px; height: 34px; display: grid; place-items: center; border-radius: 50%; color: var(--accent); background: var(--accent-soft); }
+    .sr-reason-content { min-width: 0; }
+    .sr-reason-title { color: var(--fg-1); font-size: 13px; font-weight: 700; }
+    .sr-reason-total { margin-top: 2px; color: var(--fg-1); font-family: var(--font-serif); font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
+    .sr-reason-meta { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 2px; font-size: 11.5px; }
+    .sr-reason-card small { display: block; margin-top: 5px; color: var(--fg-3); }
+    .sr-no-variance { padding: 16px; color: var(--fg-3); text-align: center; }
+
+    .sr-attention-list { display: flex; flex-direction: column; }
+    .sr-attention-row { display: grid; grid-template-columns: 34px minmax(180px, 1.35fr) minmax(180px, 1.15fr) 90px 130px 142px; align-items: center; gap: 14px; padding: 13px 4px; border-bottom: 1px solid var(--bd-1); }
+    .sr-attention-row:last-child { border-bottom: none; }
+    .sr-attention-rank { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 50%; color: var(--accent-fg); background: var(--accent); font-weight: 700; font-variant-numeric: tabular-nums; }
+    .sr-attention-product, .sr-attention-problem, .sr-attention-metric { display: flex; flex-direction: column; }
+    .sr-attention-product strong { color: var(--fg-1); }
+    .sr-attention-product span { color: var(--fg-3); font-family: var(--font-mono); font-size: 11.5px; }
+    .sr-attention-problem span, .sr-attention-metric span { color: var(--fg-3); font-size: 10.5px; }
+    .sr-attention-problem strong, .sr-attention-metric strong { color: var(--fg-1); font-variant-numeric: tabular-nums; }
+    .sr-attention-problem small { margin-top: 2px; color: var(--fg-3); font-size: 10.5px; }
+    .sr-attention-action { display: flex; justify-content: flex-end; }
+
+    .sr-grid-wrap { overflow-x: auto; }
+    .sr-grid { min-width: 900px; }
+    .sr-product { display: flex; flex-direction: column; min-width: 170px; }
+    .sr-product > span { color: var(--fg-1); font-weight: 600; }
+    .sr-product small { color: var(--fg-3); font-family: var(--font-mono); }
+    .sr-number { display: inline-block; min-width: 42px; text-align: end; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .sr-print-table { display: none; width: 100%; border-collapse: collapse; font-size: 11px; }
+    .sr-print-table th, .sr-print-table td { padding: 5px 6px; border-bottom: 1px solid var(--bd-2); text-align: start; font-variant-numeric: tabular-nums; }
+    .sr-print-table th { color: var(--fg-2); font-weight: 700; }
+
+    .sr-empty { min-height: 220px; display: flex; align-items: center; justify-content: center; gap: 10px; color: var(--fg-3); }
+    .sr-empty--small { min-height: 100px; }
+
+    .sr-detail-section { margin-bottom: 18px; }
+    .sr-detail-section h3, .sr-next-steps h3 { margin: 0 0 9px; color: var(--fg-1); font-family: var(--font-serif); font-size: 16px; }
+    .sr-detail-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border: 1px solid var(--bd-1); border-radius: var(--r-sm); overflow: hidden; }
+    .sr-detail-grid > div { display: flex; flex-direction: column; gap: 3px; min-height: 70px; padding: 12px 14px; border-inline-end: 1px solid var(--bd-1); border-bottom: 1px solid var(--bd-1); background: var(--surface-2); }
+    .sr-detail-grid > div:nth-child(3n) { border-inline-end: none; }
+    .sr-detail-grid > div:nth-last-child(-n+3) { border-bottom: none; }
+    .sr-detail-grid span { color: var(--fg-3); font-size: 11px; }
+    .sr-detail-grid strong { color: var(--fg-1); font-size: 17px; font-variant-numeric: tabular-nums; }
+    .sr-detail-hint { margin: 7px 2px 0; color: var(--fg-3); font-size: 11px; }
+    .sr-next-steps { padding: 14px 16px; border-radius: var(--r-sm); background: var(--accent-soft); }
+    .sr-next-steps ul { margin: 0; padding-inline-start: 20px; color: var(--fg-2); font-size: 12.5px; line-height: 1.9; }
+    .sr-modal-actions { gap: 8px; }
+
+    @@media (max-width: 1050px) {
+        .sr-overview { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .sr-guide { grid-template-columns: 1fr; }
+        .sr-attention-row { grid-template-columns: 34px minmax(180px, 1.3fr) minmax(180px, 1fr) 90px 130px; }
+        .sr-attention-action { grid-column: 2 / -1; justify-content: flex-start; }
+    }
+
+    @@media (max-width: 760px) {
+        .sr-skeletons { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .sr-section, .sr-explanation, .sr-action-alert, .sr-overview, .sr-guide { margin-left: 12px; margin-right: 12px; }
+        .sr-guide-steps { grid-template-columns: 1fr; }
+        .sr-attention-row { grid-template-columns: 32px 1fr 1fr; }
+        .sr-attention-problem { grid-column: 2 / -1; }
+        .sr-attention-action { grid-column: 2 / -1; }
+        .sr-products-head { align-items: stretch; flex-direction: column; }
+        .sr-search { width: 100%; }
+        .sr-detail-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .sr-detail-grid > div:nth-child(3n) { border-inline-end: 1px solid var(--bd-1); }
+        .sr-detail-grid > div:nth-child(2n) { border-inline-end: none; }
+        .sr-detail-grid > div:nth-last-child(-n+3) { border-bottom: 1px solid var(--bd-1); }
+        .sr-detail-grid > div:nth-last-child(-n+2) { border-bottom: none; }
+    }
+
+    @@media (max-width: 600px) {
+        .sr-overview, .sr-skeletons { grid-template-columns: 1fr; }
+        .sr-range { width: 100%; }
+        .sr-range .mud-button-root { flex: 1; }
+        .sr-period { display: none; }
+        .sr-detail-grid { grid-template-columns: 1fr; }
+        .sr-detail-grid > div, .sr-detail-grid > div:nth-child(2n), .sr-detail-grid > div:nth-child(3n) { border-inline-end: none; border-bottom: 1px solid var(--bd-1); }
+        .sr-detail-grid > div:last-child { border-bottom: none; }
+        .sr-modal-actions { flex-direction: column-reverse; }
+        .sr-modal-actions .mud-button-root { width: 100%; }
+    }
+
+    @@media print {
+        body.stocktake-report-printing * { visibility: hidden !important; }
+        body.stocktake-report-printing .stocktake-reconciliation,
+        body.stocktake-report-printing .stocktake-reconciliation * { visibility: visible !important; }
+        body.stocktake-report-printing .stocktake-reconciliation { position: absolute; inset: 0; width: 100%; padding: 0 !important; background: #fff !important; color: #222 !important; }
+        body.stocktake-report-printing .sr-no-print,
+        body.stocktake-report-printing .sr-screen-grid { display: none !important; }
+        body.stocktake-report-printing .sr-print-meta { display: flex; gap: 16px; margin: 0 32px 12px; color: #555; font-size: 11px; }
+        body.stocktake-report-printing .sr-print-table { display: table; }
+        body.stocktake-report-printing .sr-section,
+        body.stocktake-report-printing .sr-overview-card,
+        body.stocktake-report-printing .sr-reason-card { box-shadow: none !important; break-inside: avoid; }
+        body.stocktake-report-printing .sr-section { margin-top: 10px; }
+        body.stocktake-report-printing .sr-explanation,
+        body.stocktake-report-printing .sr-action-alert { display: none; }
+        body.stocktake-report-printing .sr-overview { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+        body.stocktake-report-printing .sr-attention-row { grid-template-columns: 26px minmax(150px, 1.4fr) minmax(150px, 1fr) 80px 110px; padding: 6px 2px; }
+        body.stocktake-report-printing .mud-table-pagination { display: none !important; }
+    }
+</style>
+
+@code {
+    private static readonly int[] RangeOptions = { 7, 30, 90 };
+
+    private StocktakeReconciliationDto? _data;
+    private StocktakeReconciliationProductDto? _selectedProduct;
+    private List<BranchLookupDto> _accessibleBranches = new();
+    private int _days = 30;
+    private Guid? _branchId;
+    private string _search = string.Empty;
+    private bool _loading;
+    private bool _error;
+    private bool _showComparison;
+
+    private string SelectedBranchName
+        => _branchId.HasValue
+            ? _accessibleBranches.FirstOrDefault(branch => branch.Id == _branchId.Value)?.Name
+                ?? InvL["StocktakeReconciliation:Branch"]
+            : InvL["StocktakeReconciliation:AllBranches"];
+
+    private IEnumerable<StocktakeReconciliationProductDto> FilteredProducts
+        => _data?.Products.Where(product =>
+            string.IsNullOrWhiteSpace(_search)
+            || product.ProductName.Contains(_search, StringComparison.OrdinalIgnoreCase)
+            || product.Sku.Contains(_search, StringComparison.OrdinalIgnoreCase))
+            ?? Enumerable.Empty<StocktakeReconciliationProductDto>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            await LoadShopCurrencyAsync();
+            var branches = await BranchAppService.GetLookupAsync();
+            var inventoryIds = (await InventoryAppService.GetAccessibleBranchIdsAsync()).ToHashSet();
+            var salesIds = (await SaleAppService.GetAccessibleBranchIdsAsync()).ToHashSet();
+            _accessibleBranches = branches
+                .Where(branch => inventoryIds.Contains(branch.Id) && salesIds.Contains(branch.Id))
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            _error = true;
+            await HandleErrorAsync(ex);
+        }
+
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error = false;
+        _selectedProduct = null;
+        try
+        {
+            _data = await ReconciliationAppService.GetAsync(new GetStocktakeReconciliationInput
+            {
+                Days = _days,
+                BranchId = _branchId
+            });
+        }
+        catch (Exception ex)
+        {
+            _error = true;
+            await HandleErrorAsync(ex);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task SetDaysAsync(int days)
+    {
+        if (_days == days) return;
+        _days = days;
+        await LoadAsync();
+    }
+
+    private async Task OnBranchChangedAsync(Guid? branchId)
+    {
+        _branchId = branchId;
+        await LoadAsync();
+    }
+
+    private string FormatMoney(decimal value) => FormatShopMoney(value, 2);
+
+    private static string FormatPercent(decimal value)
+        => $"{value.ToString("N1", CultureInfo.CurrentCulture)}%";
+
+    private async Task PrintAsync()
+    {
+        if (_data is null) return;
+        await JS.InvokeVoidAsync("reportTools.printStocktakeReconciliation");
+    }
+
+    private async Task ExportCsvAsync()
+    {
+        if (_data is null) return;
+
+        try
+        {
+            var csv = BuildCsv();
+            var fileName = $"stocktake-reconciliation-{_data.FromDate:yyyyMMdd}-{_data.ToDate:yyyyMMdd}.csv";
+            await JS.InvokeVoidAsync("reportTools.downloadCsv", fileName, csv);
+            Snackbar.Add(InvL["StocktakeReconciliation:Exported"], Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            await HandleErrorAsync(ex);
+        }
+    }
+
+    private string BuildCsv()
+    {
+        var builder = new StringBuilder();
+        AppendCsvRow(builder, InvL["StocktakeReconciliation:Title"]);
+        AppendCsvRow(builder, InvL["StocktakeReconciliation:Branch"], SelectedBranchName);
+        AppendCsvRow(builder, _data!.FromDate.ToString("d"), _data.ToDate.ToString("d"));
+        AppendCsvRow(builder, InvL["StocktakeReconciliation:EstimatedShortageValue"], FormatMoney(_data.EstimatedShortageValue));
+        AppendCsvRow(builder, InvL["StocktakeReconciliation:EstimatedWriteOffValue"], FormatMoney(_data.EstimatedWriteOffValue));
+        builder.AppendLine();
+
+        AppendCsvRow(
+            builder,
+            InvL["StocktakeReconciliation:Product"],
+            InvL["StocktakeReconciliation:SKU"],
+            InvL["StocktakeReconciliation:CurrentStock"],
+            InvL["StocktakeReconciliation:Sold"],
+            InvL["StocktakeReconciliation:Revenue"],
+            InvL["StocktakeReconciliation:Shortage"],
+            InvL["StocktakeReconciliation:Overage"],
+            InvL["StocktakeReconciliation:NetVariance"],
+            InvL["StocktakeReconciliation:EstimatedValue"],
+            InvL["StocktakeReconciliation:WriteOff"],
+            InvL["StocktakeReconciliation:EstimatedWriteOffValue"],
+            InvL["StocktakeReconciliation:UnrecordedSale"],
+            InvL["StocktakeReconciliation:ShortageRate"],
+            InvL["StocktakeReconciliation:Stocktakes"]);
+
+        foreach (var product in FilteredProducts)
+        {
+            AppendCsvRow(
+                builder,
+                product.ProductName,
+                product.Sku,
+                product.CurrentStock.ToString(CultureInfo.InvariantCulture),
+                product.QuantitySold.ToString(CultureInfo.InvariantCulture),
+                FormatMoney(product.Revenue),
+                product.ShortageQuantity.ToString(CultureInfo.InvariantCulture),
+                product.OverageQuantity.ToString(CultureInfo.InvariantCulture),
+                product.NetVariance.ToString(CultureInfo.InvariantCulture),
+                FormatMoney(product.EstimatedShortageValue),
+                product.WriteOffQuantity.ToString(CultureInfo.InvariantCulture),
+                FormatMoney(product.EstimatedWriteOffValue),
+                product.UnrecordedSaleQuantity.ToString(CultureInfo.InvariantCulture),
+                FormatPercent(product.ShortageRate),
+                product.StocktakeCount.ToString(CultureInfo.InvariantCulture));
+        }
+
+        return builder.ToString();
+    }
+
+    private static void AppendCsvRow(StringBuilder builder, params string[] values)
+    {
+        builder.AppendLine(string.Join(",", values.Select(EscapeCsv)));
+    }
+
+    private static string EscapeCsv(string value)
+        => $"\"{(value ?? string.Empty).Replace("\"", "\"\"")}\"";
+
+    private string ReasonLabel(string reason) => InvL[$"Stocktake:Reason:{reason}"];
+
+    private string ReasonIcon(string reason) => reason switch
+    {
+        StocktakeVarianceReasons.Damaged => Icons.Material.Outlined.BrokenImage,
+        StocktakeVarianceReasons.Expired => Icons.Material.Outlined.EventBusy,
+        StocktakeVarianceReasons.Waste => Icons.Material.Outlined.DeleteSweep,
+        StocktakeVarianceReasons.Complimentary => Icons.Material.Outlined.CardGiftcard,
+        StocktakeVarianceReasons.UnrecordedSale => Icons.Material.Outlined.ReceiptLong,
+        StocktakeVarianceReasons.UnrecordedReceipt => Icons.Material.Outlined.Inventory,
+        StocktakeVarianceReasons.CountingError => Icons.Material.Outlined.Calculate,
+        _ => Icons.Material.Outlined.HelpOutline
+    };
+
+    private string ProblemLabel(StocktakeReconciliationProductDto product)
+    {
+        if (product.UnrecordedSaleQuantity > 0) return InvL["StocktakeReconciliation:IssueUnrecordedSale"];
+        if (product.WriteOffQuantity > 0) return InvL["StocktakeReconciliation:IssueWriteOff"];
+        if (product.HasRepeatedVariance) return InvL["StocktakeReconciliation:IssueRepeated"];
+        return InvL["StocktakeReconciliation:IssueShortage"];
+    }
+
+    private string ProblemDescription(StocktakeReconciliationProductDto product)
+    {
+        if (product.UnrecordedSaleQuantity > 0)
+            return string.Format(InvL["StocktakeReconciliation:IssueUnrecordedSaleDescription"], product.UnrecordedSaleQuantity);
+        if (product.WriteOffQuantity > 0)
+            return string.Format(InvL["StocktakeReconciliation:IssueWriteOffDescription"], product.WriteOffQuantity);
+        if (product.HasRepeatedVariance)
+            return string.Format(InvL["StocktakeReconciliation:IssueRepeatedDescription"], product.StocktakeCount);
+        return string.Format(InvL["StocktakeReconciliation:IssueShortageDescription"], product.ShortageQuantity);
+    }
+
+    private static Severity ProductIssueSeverity(StocktakeReconciliationProductDto product)
+        => product.UnrecordedSaleQuantity > 0 ? Severity.Error
+            : product.WriteOffQuantity > 0 || product.HasRepeatedVariance ? Severity.Warning
+            : Severity.Info;
+
+    private IEnumerable<string> ProductNextSteps(StocktakeReconciliationProductDto product)
+    {
+        if (product.UnrecordedSaleQuantity > 0)
+            yield return InvL["StocktakeReconciliation:NextUnrecordedSale"];
+        if (product.WriteOffQuantity > 0)
+            yield return InvL["StocktakeReconciliation:NextWriteOff"];
+        if (product.HasRepeatedVariance)
+            yield return InvL["StocktakeReconciliation:NextRepeated"];
+        yield return InvL["StocktakeReconciliation:NextRecount"];
+        if (!_branchId.HasValue)
+            yield return InvL["StocktakeReconciliation:SelectBranchForStory"];
+    }
+
+    private void OpenProductDetails(StocktakeReconciliationProductDto product)
+        => _selectedProduct = product;
+
+    private void CloseProductDetails()
+        => _selectedProduct = null;
+
+    private void OpenProductStory()
+    {
+        if (_selectedProduct is null || !_branchId.HasValue) return;
+        Nav.NavigateTo($"/inventory/product-story?productId={_selectedProduct.ProductId}&branchId={_branchId.Value}");
+    }
+
+}

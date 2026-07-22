@@ -79,11 +79,29 @@ public class patisserie_shopMenuContributor : IMenuContributor
         ).RequirePermissions(InventoryPermissions.BranchInventory.Default));
 
         inventoryMenu.AddItem(new ApplicationMenuItem(
+            patisserie_shopMenus.Stocktake,
+            invL["Menu:Stocktake"],
+            "/inventory/stocktake",
+            icon: "fas fa-clipboard-check",
+            order: 2
+        ).RequirePermissions(InventoryPermissions.BranchInventory.Default));
+
+        inventoryMenu.AddItem(new ApplicationMenuItem(
+            patisserie_shopMenus.StocktakeReconciliation,
+            invL["Menu:StocktakeReconciliation"],
+            "/inventory/stocktake-reconciliation",
+            icon: "fas fa-balance-scale",
+            order: 3
+        ).RequirePermissions(
+            InventoryPermissions.BranchInventory.Adjust,
+            OperationsPermissions.Sales.Default));
+
+        inventoryMenu.AddItem(new ApplicationMenuItem(
             patisserie_shopMenus.WasteAnalytics,
             invL["Menu:WasteAnalytics"],
             "/inventory/waste-analytics",
             icon: "fas fa-trash-alt",
-            order: 2
+            order: 4
         ).RequirePermissions(InventoryPermissions.StockMovements.Default));
 
         context.Menu.AddItem(inventoryMenu);

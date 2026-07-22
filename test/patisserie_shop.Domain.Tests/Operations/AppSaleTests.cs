@@ -135,6 +135,21 @@ public class AppSaleTests
     }
 
     [Fact]
+    public void Cash_Sale_Requires_The_Full_Tendered_Amount()
+    {
+        var sale = NewSale();
+        sale.AddItem(Guid.NewGuid(), Guid.NewGuid(), quantity: 2, unitPrice: 5m);
+
+        Should.Throw<BusinessException>(() => sale.EnsureCashTendered(null))
+            .Code.ShouldBe(OperationsErrorCodes.CashTenderedInsufficient);
+        Should.Throw<BusinessException>(() => sale.EnsureCashTendered(9.99m))
+            .Code.ShouldBe(OperationsErrorCodes.CashTenderedInsufficient);
+
+        Should.NotThrow(() => sale.EnsureCashTendered(10m));
+        Should.NotThrow(() => sale.EnsureCashTendered(20m));
+    }
+
+    [Fact]
     public void Void_Should_Flip_State_And_Capture_Who_When_And_Why()
     {
         var sale = NewSale();

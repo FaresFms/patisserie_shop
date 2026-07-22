@@ -62,6 +62,9 @@ public static class ProductionErrorCodes
     public const string CannotConfirmEmptyPlan = "Production:115";
     public const string InvalidPlanStatusTransition = "Production:116";
     public const string BranchRequestAccessDenied = "Production:117";
+    public const string CannotCancelPlanWithOrders = "Production:118";
+    public const string RequestPlannedQuantityExceeded = "Production:119";
+    public const string RequestFulfilledQuantityExceeded = "Production:120";
 
     // ── Production orders + cook workflow (Wave 4) ──
 
@@ -76,6 +79,12 @@ public static class ProductionErrorCodes
     public const string NoPlannedQuantityForProductionOrder = "Production:209";
     public const string ProductionExpiryDateRequired = "Production:210";
     public const string IngredientDefaultSupplierRequired = "Production:211";
+    public const string ProductionExpiryDateInPast = "Production:212";
+    public const string DispatchQuantityExceedsRemaining = "Production:213";
+    public const string DispatchDestinationHasNoAllocation = "Production:214";
+    public const string ProductionDispatchAlreadyExists = "Production:215";
+    public const string ProductionDispatchNotFound = "Production:216";
+    public const string ProductionDispatchAllocationNotFound = "Production:217";
 
     // ── Waste, dashboard, analytics, decisions (Wave 6) ──
 

@@ -417,6 +417,7 @@ public class IdentityDataSeedContributor : IDataSeedContributor, ITransientDepen
         InventoryPermissions.Branches.Default,
         InventoryPermissions.BranchInventory.Default,
         InventoryPermissions.BranchInventory.Adjust,
+        InventoryPermissions.BranchInventory.ReviewStocktakes,
         InventoryPermissions.StockMovements.Default,
 
         // Operations — read POs + receive; manage sales; request/ship/receive transfers

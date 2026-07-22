@@ -5,6 +5,7 @@ using Inventory.Entities;
 using Inventory.Products;
 using Inventory.StockBatches;
 using Inventory.StockMovements;
+using Inventory.Stocktakes;
 using Inventory.Suppliers;
 using Riok.Mapperly.Abstractions;
 using Volo.Abp.Mapperly;
@@ -99,4 +100,28 @@ public partial class StockBatchToDtoMapper : MapperBase<AppStockBatch, StockBatc
     [MapperIgnoreTarget(nameof(StockBatchDto.ProductUnit))]
     [MapperIgnoreTarget(nameof(StockBatchDto.BranchName))]
     public override partial void Map(AppStockBatch source, StockBatchDto destination);
+}
+
+[Mapper]
+public partial class StocktakeSessionLineToDtoMapper : MapperBase<AppStocktakeLine, StocktakeSessionLineDto>
+{
+    public override partial StocktakeSessionLineDto Map(AppStocktakeLine source);
+    public override partial void Map(AppStocktakeLine source, StocktakeSessionLineDto destination);
+}
+
+[Mapper]
+public partial class StocktakeSessionToDtoMapper : MapperBase<AppStocktakeSession, StocktakeSessionDto>
+{
+    [MapperIgnoreTarget(nameof(StocktakeSessionDto.Lines))]
+    public override partial StocktakeSessionDto Map(AppStocktakeSession source);
+
+    [MapperIgnoreTarget(nameof(StocktakeSessionDto.Lines))]
+    public override partial void Map(AppStocktakeSession source, StocktakeSessionDto destination);
+}
+
+[Mapper]
+public partial class StocktakeSessionToListDtoMapper : MapperBase<AppStocktakeSession, StocktakeSessionListDto>
+{
+    public override partial StocktakeSessionListDto Map(AppStocktakeSession source);
+    public override partial void Map(AppStocktakeSession source, StocktakeSessionListDto destination);
 }

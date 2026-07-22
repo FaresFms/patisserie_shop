@@ -1,0 +1,1493 @@
+@page "/inventory/stocktake"
+@attribute [Authorize(InventoryPermissions.BranchInventory.Default)]
+@using System
+@using System.Collections.Generic
+@using System.Linq
+@using System.Threading.Tasks
+@using Inventory
+@using Inventory.Branches
+@using Inventory.BranchInventory
+@using Inventory.Localization
+@using Inventory.Permissions
+@using Inventory.Stocktakes
+@using Microsoft.AspNetCore.Authorization
+@using Volo.Abp
+@using Volo.Abp.AspNetCore.Components.Web.Theming.Layout
+@using Color = MudBlazor.Color
+@using Margin = MudBlazor.Margin
+@using Severity = MudBlazor.Severity
+@using Size = MudBlazor.Size
+@using Variant = MudBlazor.Variant
+@inherits patisserie_shopComponentBase
+@inject IBranchInventoryAppService InventoryAppService
+@inject IStocktakeSessionAppService StocktakeSessionAppService
+@inject IBranchAppService BranchAppService
+@inject IStringLocalizer<InventoryResource> InvL
+@inject PageLayout PageLayout
+@inject ISnackbar Snackbar
+
+@{
+    PageLayout.Title = InvL["Stocktake:Title"];
+}
+
+<SoftCard Elevation="2" Class="pa-2 page-flat stocktake-page">
+    <div class="page-head">
+        <div>
+            <h1 class="page-title">@InvL["Stocktake:Title"]</h1>
+            <div class="page-sub">@InvL["Stocktake:Subtitle"]</div>
+        </div>
+        @if (_session is not null)
+        {
+            <div class="page-head-actions">
+                @if (IsDraftSession && _canAdjust)
+                {
+                    <SoftButton Variant="Variant.Text" Color="Color.Error"
+                                StartIcon="@Icons.Material.Outlined.Cancel"
+                                Disabled="_loading || _posting || _savingDraft"
+                                OnClick="@(() => _cancelSessionVisible = true)">
+                        @InvL["Stocktake:CancelSession"]
+                    </SoftButton>
+                }
+                <SoftButton Variant="Variant.Text" Color="Color.Primary"
+                            StartIcon="@Icons.Material.Filled.Refresh"
+                            Disabled="_loading || _posting || _savingDraft"
+                            OnClick="RequestReload">
+                    @InvL["Stocktake:Reload"]
+                </SoftButton>
+            </div>
+        }
+    </div>
+
+    <SoftCardContent>
+        <div class="stocktake-branch-row">
+            <div class="stocktake-branch-copy">
+                <span class="stocktake-label">@InvL["Stocktake:Branch"]</span>
+                @if (_accessibleBranches.Count == 1)
+                {
+                    <span class="stocktake-branch-name">@_accessibleBranches[0].Name</span>
+                }
+            </div>
+
+            @if (_accessibleBranches.Count > 1)
+            {
+                <div class="filter-chip stocktake-branch-select">
+                    <SoftLookupSelect TItem="BranchLookupDto" TValue="Guid?"
+                                      Items="_accessibleBranches"
+                                      ToValue="@(branch => (Guid?)branch.Id)"
+                                      ToLabel="@(branch => branch.Name)"
+                                      Value="_branchId"
+                                      ValueChanged="OnBranchChangedAsync"
+                                      Label="@InvL["Stocktake:Branch"]"
+                                      Dense="true"
+                                      Margin="Margin.Dense" />
+                </div>
+            }
+
+            @if (_session is not null)
+            {
+                <span class="stocktake-snapshot">
+                    <SoftIcon Icon="@Icons.Material.Outlined.Schedule" Size="Size.Small" />
+                    @string.Format(InvL["Stocktake:Snapshot"], _session.SnapshotAt.ToString("g"))
+                </span>
+                @if (IsDraftSession)
+                {
+                    <SoftChip T="string" Size="Size.Small"
+                              Color="@(_draftDirty ? Color.Warning : Color.Success)"
+                              Variant="Variant.Outlined">
+                        @(_draftDirty ? InvL["Stocktake:UnsavedBadge"] : InvL["Stocktake:DraftBadge"])
+                    </SoftChip>
+                }
+                else
+                {
+                    <SoftChip T="string" Size="Size.Small"
+                              Color="@SessionStatusColor(_session.Status)"
+                              Variant="@SessionStatusVariant(_session.Status)">
+                        @InvL[$"Stocktake:Status:{_session.Status}"]
+                    </SoftChip>
+                }
+            }
+        </div>
+
+        @if (_lastResult is not null)
+        {
+            <SoftAlert Severity="Severity.Success" Variant="Variant.Outlined" Class="mb-3 stocktake-success">
+                <div>
+                    <strong>@InvL["Stocktake:Success"]</strong>
+                    <div>@string.Format(InvL["Stocktake:SuccessDetails"], _lastResult.AdjustedLineCount, _lastResult.ShortageQuantity, _lastResult.OverageQuantity)</div>
+                    <small>@string.Format(InvL["Stocktake:Reference"], _lastResult.ReferenceId.ToString("N")[..8].ToUpperInvariant())</small>
+                </div>
+            </SoftAlert>
+        }
+
+        @if (_sheetStale)
+        {
+            <SoftAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mb-3">
+                @InvL[InventoryErrorCodes.BranchInventoryConcurrency]
+            </SoftAlert>
+        }
+
+        @if (_loading)
+        {
+            <SoftStack Spacing="2" Class="py-6">
+                <SoftSkeleton Height="74px" />
+                <SoftSkeleton Height="320px" />
+            </SoftStack>
+        }
+        else if (_accessibleBranches.Count == 0)
+        {
+            <div class="stocktake-empty">
+                <SoftIcon Icon="@Icons.Material.Outlined.Storefront" />
+                <SoftText Typo="Typo.h6">@InvL["Stocktake:NoBranches"]</SoftText>
+            </div>
+        }
+        else if (_session is null)
+        {
+            <div class="stocktake-empty">
+                <SoftIcon Icon="@Icons.Material.Outlined.FactCheck" />
+                <SoftText Typo="Typo.h6">@InvL["Stocktake:NoActiveDraft"]</SoftText>
+                <SoftText Typo="Typo.body2">@InvL["Stocktake:StartHint"]</SoftText>
+                @if (_canAdjust)
+                {
+                    <SoftButton Variant="Variant.Filled" Color="Color.Primary"
+                                StartIcon="@Icons.Material.Filled.PlayArrow"
+                                Disabled="_startingSession"
+                                OnClick="StartSessionAsync">
+                        @(_startingSession ? InvL["Stocktake:Starting"] : InvL["Stocktake:Start"])
+                    </SoftButton>
+                }
+            </div>
+        }
+        else if (_lines.Count == 0)
+        {
+            <div class="stocktake-empty">
+                <SoftIcon Icon="@Icons.Material.Outlined.Inventory2" />
+                <SoftText Typo="Typo.h6">@InvL["Stocktake:Empty"]</SoftText>
+            </div>
+        }
+        else
+        {
+            @if (IsPendingReviewSession)
+            {
+                <SoftAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mb-3">
+                    <strong>@InvL["Stocktake:PendingReviewTitle"]</strong>
+                    <div>@InvL["Stocktake:PendingReviewMessage"]</div>
+                </SoftAlert>
+            }
+
+            <div class="stocktake-stats">
+                <div class="stocktake-stat stocktake-stat--progress">
+                    <span class="stat-label">@InvL["Stocktake:CountedProgress"]</span>
+                    <span class="stat-value">@CountedLineCount / @_lines.Count</span>
+                    <SoftProgressLinear Value="@ProgressPercent" Color="Color.Primary" Rounded="true" Size="Size.Small" />
+                </div>
+                <div class="stocktake-stat">
+                    <span class="stat-label">@InvL["Stocktake:ExpectedUnits"]</span>
+                    <span class="stat-value">@ExpectedUnits</span>
+                </div>
+                <div class="stocktake-stat">
+                    <span class="stat-label">@InvL["Stocktake:CountedUnits"]</span>
+                    <span class="stat-value">@CountedUnits</span>
+                </div>
+                <div class="stocktake-stat @(_differenceLineCount > 0 ? "stocktake-stat--warn" : string.Empty)">
+                    <span class="stat-label">@InvL["Stocktake:DifferenceLines"]</span>
+                    <span class="stat-value">@_differenceLineCount</span>
+                </div>
+            </div>
+
+            @if (CanSubmit)
+            {
+                <SoftAlert Severity="Severity.Success" Variant="Variant.Text" Dense="true" Class="mb-2">
+                    @InvL["Stocktake:AllCounted"]
+                </SoftAlert>
+            }
+            else if (CountedLineCount == _lines.Count)
+            {
+                <SoftAlert Severity="Severity.Warning" Variant="Variant.Text" Dense="true" Class="mb-2">
+                    @InvL["Stocktake:ReasonRequiredInline"]
+                </SoftAlert>
+            }
+
+            <div class="toolbar stocktake-toolbar">
+                <SoftTextField T="string"
+                               @bind-Value="_filter"
+                               Placeholder="@InvL["Stocktake:Search"]"
+                               Variant="Variant.Outlined"
+                               Margin="Margin.Dense"
+                               Immediate="true"
+                               Adornment="Adornment.Start"
+                               AdornmentIcon="@Icons.Material.Filled.Search"
+                               Class="toolbar-search" />
+
+                <div class="toolbar-right stocktake-toolbar-actions">
+                    <SoftButton Variant="Variant.Text" Color="Color.Primary" Size="Size.Small"
+                                StartIcon="@Icons.Material.Filled.DoneAll"
+                                Disabled="!CanEditDraft || _posting || CountedLineCount == _lines.Count"
+                                OnClick="MarkRemainingMatched">
+                        @InvL["Stocktake:MarkRemainingMatched"]
+                    </SoftButton>
+                    <SoftButton Variant="Variant.Text" Color="Color.Default" Size="Size.Small"
+                                StartIcon="@Icons.Material.Filled.RestartAlt"
+                                Disabled="!CanEditDraft || _posting || !HasEnteredCounts"
+                                OnClick="ResetCounts">
+                        @InvL["Stocktake:Reset"]
+                    </SoftButton>
+                </div>
+            </div>
+
+            <SoftDataGrid T="StocktakeEntry"
+                          Items="FilteredLines"
+                          Dense="true"
+                          Hover="true"
+                          Bordered="false"
+                          Striped="false"
+                          SortMode="SortMode.Single"
+                          Class="stocktake-grid">
+                <Columns>
+                    <TemplateColumn T="StocktakeEntry" Title="@InvL["Product"]" SortBy="entry => entry.ProductName">
+                        <CellTemplate>
+                            <div class="stocktake-product">
+                                <span class="stocktake-product-name">@context.Item.ProductName</span>
+                                <span class="stocktake-product-meta">@context.Item.ProductSKU · @context.Item.ProductUnit</span>
+                            </div>
+                        </CellTemplate>
+                    </TemplateColumn>
+
+                    <TemplateColumn T="StocktakeEntry" Title="@InvL["Stocktake:Expected"]" SortBy="entry => entry.ExpectedQuantity">
+                        <CellTemplate>
+                            <span class="stocktake-expected">@context.Item.ExpectedQuantity</span>
+                        </CellTemplate>
+                    </TemplateColumn>
+
+                    <TemplateColumn T="StocktakeEntry" Title="@InvL["Stocktake:Counted"]" Sortable="false">
+                        <CellTemplate>
+                            <SoftNumericField T="int?"
+                                              Value="context.Item.CountedQuantity"
+                                              ValueChanged="@(value => OnCountChanged(context.Item, value))"
+                                              Min="0"
+                                              Disabled="!CanEditDraft || _savingDraft || _posting"
+                                              Immediate="true"
+                                              Variant="Variant.Outlined"
+                                              Margin="Margin.Dense"
+                                              Class="stocktake-count-input" />
+                        </CellTemplate>
+                    </TemplateColumn>
+
+                    <TemplateColumn T="StocktakeEntry" Title="@InvL["Stocktake:Difference"]" Sortable="false">
+                        <CellTemplate>
+                            @if (context.Item.Difference.HasValue)
+                            {
+                                var difference = context.Item.Difference.Value;
+                                <span class="@DifferenceClass(difference)">@FormatDifference(difference)</span>
+                            }
+                            else
+                            {
+                                <span class="stocktake-dash">—</span>
+                            }
+                        </CellTemplate>
+                    </TemplateColumn>
+
+                    <TemplateColumn T="StocktakeEntry" Title="@InvL["Stocktake:Reason"]" Sortable="false">
+                        <CellTemplate>
+                            @if (context.Item.Difference is not null and not 0)
+                            {
+                                <div class="stocktake-reason-cell">
+                                    <div class="filter-chip stocktake-reason-select">
+                                        <SoftLookupSelect TItem="ReasonOption" TValue="string"
+                                                          Items="@ReasonOptionsFor(context.Item)"
+                                                          ToValue="@(option => option.Value)"
+                                                          ToLabel="@(option => option.Label)"
+                                                          Value="context.Item.Reason"
+                                                          ValueChanged="@(reason => OnReasonChanged(context.Item, reason))"
+                                                          Label="@InvL["Stocktake:ChooseReason"]"
+                                                          Disabled="!CanEditDraft || _savingDraft || _posting"
+                                                          Dense="true"
+                                                          Margin="Margin.Dense" />
+                                    </div>
+
+                                    @if (context.Item.Reason == StocktakeVarianceReasons.Other)
+                                    {
+                                        <SoftTextField T="string"
+                                                       Value="context.Item.ReasonNotes"
+                                                       ValueChanged="@(notes => OnReasonNotesChanged(context.Item, notes))"
+                                                       Placeholder="@InvL["Stocktake:OtherReasonPlaceholder"]"
+                                                       Variant="Variant.Outlined"
+                                                       Margin="Margin.Dense"
+                                                       Immediate="true"
+                                                       Disabled="!CanEditDraft || _savingDraft || _posting"
+                                                       MaxLength="120"
+                                                       Class="stocktake-reason-notes" />
+                                    }
+
+                                    @if (context.Item.IsPerishable && context.Item.Difference > 0)
+                                    {
+                                        <SoftDatePicker Label="@InvL["Stocktake:ProductionDate"]"
+                                                        Date="context.Item.ProductionDate"
+                                                        DateChanged="@(date => OnProductionDateChanged(context.Item, date))"
+                                                        MaxDate="DateTime.Today"
+                                                        Disabled="!CanEditDraft || _savingDraft || _posting"
+                                                        Variant="Variant.Outlined"
+                                                        Margin="Margin.Dense"
+                                                        Class="stocktake-production-date" />
+                                    }
+                                </div>
+                            }
+                            else
+                            {
+                                <span class="stocktake-dash">—</span>
+                            }
+                        </CellTemplate>
+                    </TemplateColumn>
+
+                    <TemplateColumn T="StocktakeEntry" Title="@InvL["Stocktake:Status"]" Sortable="false">
+                        <CellTemplate>
+                            @if (!context.Item.Difference.HasValue)
+                            {
+                                <SoftChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined">
+                                    @InvL["Stocktake:Pending"]
+                                </SoftChip>
+                            }
+                            else if (context.Item.Difference == 0)
+                            {
+                                <SoftChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Outlined">
+                                    @InvL["Stocktake:Matched"]
+                                </SoftChip>
+                            }
+                            else if (context.Item.Difference < 0)
+                            {
+                                <SoftChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Filled">
+                                    @InvL["Stocktake:Short"]
+                                </SoftChip>
+                            }
+                            else
+                            {
+                                <SoftChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Filled">
+                                    @InvL["Stocktake:Over"]
+                                </SoftChip>
+                            }
+                        </CellTemplate>
+                    </TemplateColumn>
+                </Columns>
+            </SoftDataGrid>
+
+            <div class="stocktake-footer">
+                <div class="stocktake-footer-summary">
+                    <span><strong>@CountedLineCount</strong> / @_lines.Count @InvL["Stocktake:CountedProgress"]</span>
+                    <span class="stocktake-footer-divider">·</span>
+                    <span class="stocktake-short-text">@InvL["Stocktake:ShortageUnits"]: @ShortageUnits</span>
+                    <span class="stocktake-footer-divider">·</span>
+                    <span class="stocktake-over-text">@InvL["Stocktake:OverageUnits"]: @OverageUnits</span>
+                </div>
+                @if (IsDraftSession && _canAdjust)
+                {
+                    <div class="stocktake-footer-actions">
+                        <SoftButton Variant="Variant.Outlined" Color="Color.Primary"
+                                    StartIcon="@Icons.Material.Filled.Save"
+                                    Disabled="_savingDraft || _posting || !_draftDirty"
+                                    OnClick="SaveDraftAsync">
+                            @(_savingDraft ? InvL["Stocktake:SavingDraft"] : InvL["Stocktake:SaveDraft"])
+                        </SoftButton>
+                        <SoftButton Variant="Variant.Filled" Color="Color.Primary"
+                                    StartIcon="@Icons.Material.Filled.Send"
+                                    Disabled="!CanSubmit"
+                                    OnClick="OpenReview">
+                            @InvL["Stocktake:SubmitReview"]
+                        </SoftButton>
+                    </div>
+                }
+            </div>
+        }
+    </SoftCardContent>
+</SoftCard>
+
+@if (_branchId.HasValue && !_loading)
+{
+    <SoftCard Elevation="2" Class="pa-2 page-flat stocktake-history">
+        <div class="page-head stocktake-history-head">
+            <div>
+                <h2 class="page-title">@InvL["Stocktake:HistoryTitle"]</h2>
+                <div class="page-sub">@InvL["Stocktake:HistorySubtitle"]</div>
+            </div>
+            <div class="page-head-actions">
+                <SoftButton Variant="Variant.Text" Color="Color.Primary"
+                            StartIcon="@Icons.Material.Filled.Refresh"
+                            Disabled="_historyLoading"
+                            OnClick="LoadHistoryAsync">
+                    @L["Refresh"]
+                </SoftButton>
+            </div>
+        </div>
+        <SoftCardContent>
+            @if (_historyLoading)
+            {
+                <SoftSkeleton Height="150px" />
+            }
+            else if (_history.Count == 0)
+            {
+                <div class="stocktake-history-empty">@InvL["Stocktake:NoHistory"]</div>
+            }
+            else
+            {
+                <SoftDataGrid T="StocktakeSessionListDto" Items="_history" Dense="true" Hover="true"
+                              Bordered="false" Striped="false" Class="stocktake-history-grid">
+                    <Columns>
+                        <PropertyColumn T="StocktakeSessionListDto" TProperty="DateTime"
+                                        Property="session => session.SnapshotAt"
+                                        Title="@InvL["Stocktake:StartedAt"]"
+                                        Format="g" />
+                        <TemplateColumn T="StocktakeSessionListDto" Title="@InvL["Stocktake:Status"]">
+                            <CellTemplate>
+                                <SoftChip T="string" Size="Size.Small"
+                                          Color="@SessionStatusColor(context.Item.Status)"
+                                          Variant="@SessionStatusVariant(context.Item.Status)">
+                                    @InvL[$"Stocktake:Status:{context.Item.Status}"]
+                                </SoftChip>
+                            </CellTemplate>
+                        </TemplateColumn>
+                        <TemplateColumn T="StocktakeSessionListDto" Title="@InvL["Stocktake:Progress"]">
+                            <CellTemplate>
+                                <span class="stocktake-history-number">@context.Item.CountedLineCount / @context.Item.TotalLineCount</span>
+                            </CellTemplate>
+                        </TemplateColumn>
+                        <TemplateColumn T="StocktakeSessionListDto" Title="@InvL["Stocktake:Result"]">
+                            <CellTemplate>
+                                @if (context.Item.Status == StocktakeSessionStatuses.Completed)
+                                {
+                                    <div class="stocktake-history-result">
+                                        <span>@InvL["Stocktake:ReviewAdjusted"]: @context.Item.AdjustedLineCount</span>
+                                        <small>@InvL["Stocktake:ShortageUnits"] @context.Item.ShortageQuantity · @InvL["Stocktake:OverageUnits"] @context.Item.OverageQuantity</small>
+                                    </div>
+                                }
+                                else
+                                {
+                                    <span class="stocktake-dash">—</span>
+                                }
+                            </CellTemplate>
+                        </TemplateColumn>
+                        <TemplateColumn T="StocktakeSessionListDto" Title="@InvL["Stocktake:ClosedAt"]">
+                            <CellTemplate>
+                                @(context.Item.ClosedAt?.ToString("g") ?? InvL["Stocktake:NotClosed"])
+                            </CellTemplate>
+                        </TemplateColumn>
+                        <TemplateColumn T="StocktakeSessionListDto" Title="@L["Actions"]" Sortable="false">
+                            <CellTemplate>
+                                <span class="row-actions">
+                                    <SoftTooltip Text="@InvL["Stocktake:ViewDetails"]">
+                                        <SoftIconButton Icon="@Icons.Material.Filled.Visibility" Color="Color.Primary"
+                                                        Size="Size.Small"
+                                                        OnClick="@(() => OpenHistoryDetailsAsync(context.Item.Id))" />
+                                    </SoftTooltip>
+                                </span>
+                            </CellTemplate>
+                        </TemplateColumn>
+                    </Columns>
+                </SoftDataGrid>
+            }
+        </SoftCardContent>
+    </SoftCard>
+}
+
+@if (_reviewVisible)
+{
+    <div class="glass-modal-backdrop" @onclick="CloseReview">
+        <div class="glass-modal-container glass-modal-container--md" @onclick:stopPropagation="true">
+            <SoftCard Elevation="24" Class="glass-modal">
+                <SoftCardHeader Class="pa-4">
+                    <CardHeaderContent>
+                        <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <SoftIcon Icon="@Icons.Material.Filled.FactCheck" Color="Color.Primary" Size="Size.Medium" />
+                            <div>
+                                <SoftText Typo="Typo.h6">@InvL["Stocktake:SubmitTitle"]</SoftText>
+                                <SoftText Typo="Typo.caption" Color="Color.Default">@InvL["Stocktake:SubmitSubtitle"]</SoftText>
+                            </div>
+                        </SoftStack>
+                    </CardHeaderContent>
+                    <CardHeaderActions>
+                        <SoftIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small"
+                                        Disabled="_posting" OnClick="CloseReview" />
+                    </CardHeaderActions>
+                </SoftCardHeader>
+                <SoftDivider />
+                <SoftCardContent Class="pa-4 glass-modal-body">
+                    <div class="stocktake-review-grid">
+                        <div><span>@InvL["Stocktake:ReviewBranch"]</span><strong>@SelectedBranchName</strong></div>
+                        <div><span>@InvL["Stocktake:ReviewCounted"]</span><strong>@CountedLineCount</strong></div>
+                        <div><span>@InvL["Stocktake:ReviewMatched"]</span><strong>@MatchedLineCount</strong></div>
+                        <div><span>@InvL["Stocktake:ReviewAdjusted"]</span><strong>@_differenceLineCount</strong></div>
+                        <div><span>@InvL["Stocktake:ReviewWriteOff"]</span><strong>@WriteOffLineCount</strong></div>
+                        <div><span>@InvL["Stocktake:ReviewManual"]</span><strong>@ManualAdjustmentLineCount</strong></div>
+                        <div class="stocktake-review-short"><span>@InvL["Stocktake:ShortageUnits"]</span><strong>@ShortageUnits</strong></div>
+                        <div class="stocktake-review-over"><span>@InvL["Stocktake:OverageUnits"]</span><strong>@OverageUnits</strong></div>
+                    </div>
+
+                    @if (HasPerishableOverage)
+                    {
+                        <SoftAlert Severity="Severity.Info" Variant="Variant.Text" Dense="true" Class="mb-3">
+                            @InvL["Stocktake:PerishableOverageHint"]
+                        </SoftAlert>
+                    }
+
+                    @if (HasUnrecordedSale)
+                    {
+                        <SoftAlert Severity="Severity.Warning" Variant="Variant.Text" Dense="true" Class="mb-3">
+                            @InvL["Stocktake:UnrecordedSaleHint"]
+                        </SoftAlert>
+                    }
+
+                    <SoftTextField T="string"
+                                   Label="@InvL["Stocktake:Notes"]"
+                                   Placeholder="@InvL["Stocktake:NotesPlaceholder"]"
+                                   HelperText="@InvL["Stocktake:NotesHint"]"
+                                   Value="_notes"
+                                   ValueChanged="OnNotesChanged"
+                                   Variant="Variant.Outlined"
+                                   Lines="3"
+                                   Immediate="true"
+                                   Disabled="_savingDraft || _posting"
+                                   MaxLength="300" />
+                </SoftCardContent>
+                <SoftDivider />
+                <div class="pa-3 d-flex justify-end stocktake-modal-actions">
+                    <SoftButton Variant="Variant.Text" Disabled="_posting" OnClick="CloseReview">
+                        @InvL["Stocktake:Cancel"]
+                    </SoftButton>
+                    <SoftButton Variant="Variant.Filled" Color="Color.Primary"
+                                StartIcon="@Icons.Material.Filled.CheckCircle"
+                                Disabled="_posting || string.IsNullOrWhiteSpace(_notes)"
+                                OnClick="SubmitAsync">
+                        @(_posting ? InvL["Stocktake:Submitting"] : InvL["Stocktake:Submit"])
+                    </SoftButton>
+                </div>
+            </SoftCard>
+        </div>
+    </div>
+}
+
+@if (_discardVisible)
+{
+    <div class="glass-modal-backdrop" @onclick="KeepCounting">
+        <div class="glass-modal-container glass-modal-container--sm" @onclick:stopPropagation="true">
+            <SoftCard Elevation="24" Class="glass-modal">
+                <SoftCardHeader Class="pa-4">
+                    <CardHeaderContent>
+                        <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <SoftIcon Icon="@Icons.Material.Filled.WarningAmber" Color="Color.Primary" Size="Size.Medium" />
+                            <SoftText Typo="Typo.h6">@InvL["Stocktake:DiscardTitle"]</SoftText>
+                        </SoftStack>
+                    </CardHeaderContent>
+                </SoftCardHeader>
+                <SoftCardContent Class="px-4 pb-4">
+                    <SoftText Typo="Typo.body2">@InvL["Stocktake:UnsavedSwitchMessage"]</SoftText>
+                </SoftCardContent>
+                <SoftDivider />
+                <div class="pa-3 d-flex justify-end stocktake-modal-actions">
+                    <SoftButton Variant="Variant.Text" OnClick="KeepCounting">@InvL["Stocktake:KeepCounting"]</SoftButton>
+                    <SoftButton Variant="Variant.Filled" Color="Color.Error" OnClick="ConfirmDiscardAsync">
+                        @InvL["Stocktake:Discard"]
+                    </SoftButton>
+                </div>
+            </SoftCard>
+        </div>
+    </div>
+}
+
+@if (_cancelSessionVisible && _session is not null)
+{
+    <div class="glass-modal-backdrop" @onclick="@(() => _cancelSessionVisible = false)">
+        <div class="glass-modal-container glass-modal-container--sm" @onclick:stopPropagation="true">
+            <SoftCard Elevation="24" Class="glass-modal">
+                <SoftCardHeader Class="pa-4">
+                    <CardHeaderContent>
+                        <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <SoftIcon Icon="@Icons.Material.Filled.WarningAmber" Color="Color.Primary" Size="Size.Medium" />
+                            <SoftText Typo="Typo.h6">@InvL["Stocktake:CancelSessionTitle"]</SoftText>
+                        </SoftStack>
+                    </CardHeaderContent>
+                </SoftCardHeader>
+                <SoftCardContent Class="px-4 pb-4">
+                    <SoftText Typo="Typo.body2">@InvL["Stocktake:CancelSessionMessage"]</SoftText>
+                </SoftCardContent>
+                <SoftDivider />
+                <div class="pa-3 d-flex justify-end stocktake-modal-actions">
+                    <SoftButton Variant="Variant.Text" Disabled="_cancellingSession"
+                                OnClick="@(() => _cancelSessionVisible = false)">
+                        @InvL["Stocktake:KeepCounting"]
+                    </SoftButton>
+                    <SoftButton Variant="Variant.Filled" Color="Color.Error"
+                                Disabled="_cancellingSession" OnClick="CancelSessionAsync">
+                        @InvL["Stocktake:CancelSessionConfirm"]
+                    </SoftButton>
+                </div>
+            </SoftCard>
+        </div>
+    </div>
+}
+
+@if (_detailSession is not null)
+{
+    <div class="glass-modal-backdrop" @onclick="CloseHistoryDetails">
+        <div class="glass-modal-container glass-modal-container--lg" @onclick:stopPropagation="true">
+            <SoftCard Elevation="24" Class="glass-modal">
+                <SoftCardHeader Class="pa-4">
+                    <CardHeaderContent>
+                        <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <SoftIcon Icon="@Icons.Material.Filled.History" Color="Color.Primary" Size="Size.Medium" />
+                            <div>
+                                <SoftText Typo="Typo.h6">@InvL["Stocktake:DetailsTitle"]</SoftText>
+                                <SoftText Typo="Typo.caption">@_detailSession.SnapshotAt.ToString("g") · @InvL[$"Stocktake:Status:{_detailSession.Status}"]</SoftText>
+                            </div>
+                        </SoftStack>
+                    </CardHeaderContent>
+                    <CardHeaderActions>
+                        <SoftIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="CloseHistoryDetails" />
+                    </CardHeaderActions>
+                </SoftCardHeader>
+                <SoftDivider />
+                <SoftCardContent Class="pa-4 glass-modal-body">
+                    <div class="stocktake-detail-summary">
+                        <div><span>@InvL["Stocktake:ReviewCounted"]</span><strong>@_detailSession.CountedLineCount / @_detailSession.TotalLineCount</strong></div>
+                        <div><span>@InvL["Stocktake:ReviewAdjusted"]</span><strong>@_detailSession.AdjustedLineCount</strong></div>
+                        <div><span>@InvL["Stocktake:ShortageUnits"]</span><strong class="stocktake-short-text">@_detailSession.ShortageQuantity</strong></div>
+                        <div><span>@InvL["Stocktake:OverageUnits"]</span><strong class="stocktake-over-text">@_detailSession.OverageQuantity</strong></div>
+                    </div>
+                    <div class="stocktake-detail-summary mb-3">
+                        <div><span>@InvL["Stocktake:StartedBy"]</span><strong>@(_detailSession.StartedByName ?? "—")</strong></div>
+                        <div><span>@InvL["Stocktake:SubmittedBy"]</span><strong>@(_detailSession.SubmittedByName ?? "—")</strong></div>
+                        <div><span>@InvL["Stocktake:SubmittedAt"]</span><strong>@(_detailSession.SubmittedAt?.ToString("g") ?? "—")</strong></div>
+                        <div><span>@InvL["Stocktake:ReviewedBy"]</span><strong>@(_detailSession.ReviewedByName ?? "—")</strong></div>
+                        <div><span>@InvL["Stocktake:ReviewedAt"]</span><strong>@(_detailSession.ReviewedAt?.ToString("g") ?? "—")</strong></div>
+                    </div>
+                    @if (!string.IsNullOrWhiteSpace(_detailSession.Notes))
+                    {
+                        <SoftAlert Severity="Severity.Info" Variant="Variant.Text" Dense="true" Class="mb-3">
+                            @_detailSession.Notes
+                        </SoftAlert>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(_detailSession.ReviewNotes))
+                    {
+                        <SoftAlert Severity="@(_detailSession.Status == StocktakeSessionStatuses.Rejected ? Severity.Error : Severity.Info)"
+                                   Variant="Variant.Text" Dense="true" Class="mb-3">
+                            <strong>@InvL["Stocktake:ReviewNotes"]</strong>
+                            <div>@_detailSession.ReviewNotes</div>
+                        </SoftAlert>
+                    }
+                    <SoftDataGrid T="StocktakeSessionLineDto" Items="_detailSession.Lines" Dense="true"
+                                  Hover="true" Bordered="false" Striped="false" Class="stocktake-detail-grid">
+                        <Columns>
+                            <TemplateColumn T="StocktakeSessionLineDto" Title="@InvL["Product"]">
+                                <CellTemplate>
+                                    <div class="stocktake-product">
+                                        <span class="stocktake-product-name">@context.Item.ProductName</span>
+                                        <span class="stocktake-product-meta">@context.Item.ProductSku · @context.Item.ProductUnit</span>
+                                    </div>
+                                </CellTemplate>
+                            </TemplateColumn>
+                            <PropertyColumn T="StocktakeSessionLineDto" TProperty="int"
+                                            Property="line => line.ExpectedQuantity" Title="@InvL["Stocktake:Expected"]" />
+                            <TemplateColumn T="StocktakeSessionLineDto" Title="@InvL["Stocktake:Counted"]">
+                                <CellTemplate>@(context.Item.CountedQuantity?.ToString() ?? "—")</CellTemplate>
+                            </TemplateColumn>
+                            <TemplateColumn T="StocktakeSessionLineDto" Title="@InvL["Stocktake:Difference"]">
+                                <CellTemplate>
+                                    @(context.Item.Difference.HasValue ? FormatDifference(context.Item.Difference.Value) : "—")
+                                </CellTemplate>
+                            </TemplateColumn>
+                            <TemplateColumn T="StocktakeSessionLineDto" Title="@InvL["Stocktake:Reason"]">
+                                <CellTemplate>
+                                    @(string.IsNullOrWhiteSpace(context.Item.Reason) ? "—" : InvL[$"Stocktake:Reason:{context.Item.Reason}"])
+                                </CellTemplate>
+                            </TemplateColumn>
+                        </Columns>
+                    </SoftDataGrid>
+                    @if (_detailSession.Status == StocktakeSessionStatuses.PendingReview && _canReviewStocktakes)
+                    {
+                        <SoftTextField T="string"
+                                       Label="@InvL["Stocktake:ReviewNotes"]"
+                                       Placeholder="@InvL["Stocktake:ReviewNotesPlaceholder"]"
+                                       Value="_reviewNotes"
+                                       ValueChanged="@(value => _reviewNotes = value ?? string.Empty)"
+                                       Variant="Variant.Outlined"
+                                       Lines="3"
+                                       Immediate="true"
+                                       Disabled="_reviewing"
+                                       MaxLength="300"
+                                       Class="mt-3" />
+                    }
+                </SoftCardContent>
+                <SoftDivider />
+                <div class="pa-3 d-flex justify-end stocktake-modal-actions">
+                    <SoftButton Variant="Variant.Text" Disabled="_reviewing" OnClick="CloseHistoryDetails">@L["Close"]</SoftButton>
+                    @if (_detailSession.Status == StocktakeSessionStatuses.PendingReview && _canReviewStocktakes)
+                    {
+                        <SoftButton Variant="Variant.Outlined" Color="Color.Error"
+                                    StartIcon="@Icons.Material.Filled.Close"
+                                    Disabled="_reviewing || string.IsNullOrWhiteSpace(_reviewNotes)"
+                                    OnClick="RejectAsync">
+                            @(_reviewing ? InvL["Stocktake:Rejecting"] : InvL["Stocktake:Reject"])
+                        </SoftButton>
+                        <SoftButton Variant="Variant.Filled" Color="Color.Primary"
+                                    StartIcon="@Icons.Material.Filled.CheckCircle"
+                                    Disabled="_reviewing"
+                                    OnClick="ApproveAsync">
+                            @(_reviewing ? InvL["Stocktake:Approving"] : InvL["Stocktake:Approve"])
+                        </SoftButton>
+                    }
+                </div>
+            </SoftCard>
+        </div>
+    </div>
+}
+
+<style>
+    .stocktake-page { animation: stocktake-in .2s ease-out; }
+    @@keyframes stocktake-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+    .stocktake-branch-row {
+        display: flex; align-items: center; gap: 16px; min-height: 54px;
+        padding: 8px 0 14px; border-bottom: 1px solid var(--bd-1); flex-wrap: wrap;
+    }
+    .stocktake-branch-copy { display: flex; flex-direction: column; gap: 2px; }
+    .stocktake-label { color: var(--fg-3); font-size: .7rem; letter-spacing: .06em; text-transform: uppercase; }
+    .stocktake-branch-name { color: var(--fg-1); font-family: var(--font-serif); font-size: 1.05rem; font-weight: 600; }
+    .stocktake-branch-select { min-width: 230px; }
+    .stocktake-snapshot { margin-inline-start: auto; display: inline-flex; align-items: center; gap: 6px; color: var(--fg-3); font-size: .78rem; }
+
+    .stocktake-success { border-color: color-mix(in srgb, var(--success) 42%, transparent); }
+    .stocktake-success small { display: block; margin-top: 3px; color: var(--fg-3); font-family: var(--font-mono); }
+
+    .stocktake-empty {
+        min-height: 300px; display: flex; flex-direction: column; align-items: center;
+        justify-content: center; gap: 12px; color: var(--fg-3); text-align: center;
+    }
+    .stocktake-empty .mud-icon-root { font-size: 64px; opacity: .42; }
+
+    .stocktake-stats {
+        display: grid; grid-template-columns: minmax(210px, 1.5fr) repeat(3, minmax(130px, 1fr));
+        border-bottom: 1px solid var(--bd-1); margin-bottom: 10px;
+    }
+    .stocktake-stat { padding: 16px; border-inline-end: 1px solid var(--bd-1); display: flex; flex-direction: column; gap: 5px; }
+    .stocktake-stat:last-child { border-inline-end: 0; }
+    .stocktake-stat .stat-label { color: var(--fg-3); font-size: .73rem; text-transform: uppercase; letter-spacing: .04em; }
+    .stocktake-stat .stat-value { color: var(--fg-1); font-size: 1.35rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+    .stocktake-stat--warn .stat-value { color: var(--danger); }
+    .stocktake-stat--progress .mud-progress-linear { margin-top: 3px; }
+
+    .stocktake-toolbar { gap: 12px; }
+    .stocktake-toolbar-actions { display: flex; gap: 4px; flex-wrap: wrap; }
+    .stocktake-grid { margin-top: 2px; }
+    .stocktake-grid .mud-table-cell { vertical-align: middle; }
+    .stocktake-product { display: flex; flex-direction: column; min-width: 180px; }
+    .stocktake-product-name { color: var(--fg-1); font-weight: 600; }
+    .stocktake-product-meta { color: var(--fg-3); font-size: .75rem; font-family: var(--font-mono); }
+    .stocktake-expected { display: inline-block; min-width: 48px; font-size: 1.05rem; font-weight: 700; font-variant-numeric: tabular-nums; text-align: center; }
+    .stocktake-count-input { width: 118px; }
+    .stocktake-count-input input { text-align: center; font-size: 1rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+    .stocktake-reason-cell { display: flex; flex-direction: column; gap: 7px; min-width: 205px; padding-block: 3px; }
+    .stocktake-reason-select { min-width: 205px; }
+    .stocktake-reason-notes, .stocktake-production-date { width: 205px; }
+    .stocktake-reason-notes input { font-size: .8rem; }
+    .stocktake-difference { display: inline-flex; min-width: 52px; justify-content: center; padding: 4px 9px; border-radius: 999px; font-weight: 700; font-variant-numeric: tabular-nums; }
+    .stocktake-difference--matched { color: var(--green-text); background: color-mix(in srgb, var(--success) 12%, transparent); }
+    .stocktake-difference--short { color: var(--danger); background: color-mix(in srgb, var(--danger) 11%, transparent); }
+    .stocktake-difference--over { color: var(--amber-text); background: color-mix(in srgb, var(--warn) 13%, transparent); }
+    .stocktake-dash { color: var(--fg-4); }
+
+    .stocktake-footer {
+        position: sticky; bottom: 0; z-index: 4; display: flex; align-items: center; justify-content: space-between;
+        gap: 16px; padding: 12px 14px; border-top: 1px solid var(--bd-2);
+        background: color-mix(in srgb, var(--surface) 94%, transparent); backdrop-filter: blur(10px);
+        box-shadow: 0 -8px 22px color-mix(in srgb, var(--fg-1) 5%, transparent);
+    }
+    .stocktake-footer-summary { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; color: var(--fg-2); font-size: .82rem; }
+    .stocktake-footer-actions { display: flex; align-items: center; gap: 8px; }
+    .stocktake-footer-divider { color: var(--fg-4); }
+    .stocktake-short-text { color: var(--danger); }
+    .stocktake-over-text { color: var(--amber-text); }
+
+    .stocktake-review-grid { display: grid; grid-template-columns: repeat(4, 1fr); border: 1px solid var(--bd-1); border-radius: var(--r-md); margin-bottom: 16px; overflow: hidden; }
+    .stocktake-review-grid > div { display: flex; flex-direction: column; gap: 4px; padding: 13px; border-inline-end: 1px solid var(--bd-1); border-bottom: 1px solid var(--bd-1); }
+    .stocktake-review-grid > div:nth-child(4n) { border-inline-end: 0; }
+    .stocktake-review-grid > div:nth-last-child(-n+4) { border-bottom: 0; }
+    .stocktake-review-grid span { color: var(--fg-3); font-size: .72rem; }
+    .stocktake-review-grid strong { font-size: 1.05rem; font-variant-numeric: tabular-nums; }
+    .stocktake-review-short strong { color: var(--danger); }
+    .stocktake-review-over strong { color: var(--amber-text); }
+    .stocktake-modal-actions { gap: 8px; }
+
+    .stocktake-history { margin-top: 26px; animation: stocktake-in .22s ease-out; }
+    .stocktake-history-head { padding-top: 8px; }
+    .stocktake-history-head .page-title { font-size: 1.45rem; }
+    .stocktake-history-empty { padding: 44px 16px; color: var(--fg-3); text-align: center; border-block: 1px solid var(--bd-1); }
+    .stocktake-history-number { font-family: var(--font-mono); font-weight: 700; font-variant-numeric: tabular-nums; }
+    .stocktake-history-result { display: flex; flex-direction: column; gap: 2px; }
+    .stocktake-history-result small { color: var(--fg-3); font-size: .72rem; }
+    .stocktake-detail-summary { display: grid; grid-template-columns: repeat(4, 1fr); border: 1px solid var(--bd-1); border-radius: var(--r-md); margin-bottom: 16px; overflow: hidden; }
+    .stocktake-detail-summary > div { display: flex; flex-direction: column; gap: 4px; padding: 12px; border-inline-end: 1px solid var(--bd-1); }
+    .stocktake-detail-summary > div:last-child { border-inline-end: 0; }
+    .stocktake-detail-summary span { color: var(--fg-3); font-size: .72rem; }
+    .stocktake-detail-summary strong { font-variant-numeric: tabular-nums; }
+
+    html[dir="rtl"] .stocktake-page { direction: rtl; text-align: right; }
+
+    @@media (max-width: 900px) {
+        .stocktake-stats { grid-template-columns: repeat(2, 1fr); }
+        .stocktake-stat:nth-child(2) { border-inline-end: 0; }
+        .stocktake-stat:nth-child(-n+2) { border-bottom: 1px solid var(--bd-1); }
+        .stocktake-snapshot { width: 100%; margin-inline-start: 0; }
+        .stocktake-review-grid { grid-template-columns: repeat(2, 1fr); }
+        .stocktake-detail-summary { grid-template-columns: repeat(2, 1fr); }
+        .stocktake-detail-summary > div { border-bottom: 1px solid var(--bd-1); }
+        .stocktake-detail-summary > div:nth-child(2n) { border-inline-end: 0; }
+        .stocktake-detail-summary > div:nth-last-child(-n+2) { border-bottom: 0; }
+        .stocktake-review-grid > div { border-inline-end: 1px solid var(--bd-1) !important; border-bottom: 1px solid var(--bd-1) !important; }
+        .stocktake-review-grid > div:nth-child(2n) { border-inline-end: 0 !important; }
+        .stocktake-review-grid > div:nth-last-child(-n+2) { border-bottom: 0 !important; }
+    }
+    @@media (max-width: 620px) {
+        .stocktake-stats { grid-template-columns: 1fr 1fr; }
+        .stocktake-stat { padding: 12px; }
+        .stocktake-toolbar, .stocktake-footer { align-items: stretch; flex-direction: column; }
+        .stocktake-footer-actions { flex-direction: column; }
+        .stocktake-footer .mud-button-root { width: 100%; }
+        .stocktake-reason-cell, .stocktake-reason-select, .stocktake-reason-notes, .stocktake-production-date { min-width: 185px; width: 185px; }
+    }
+</style>
+
+@code {
+    private readonly List<BranchLookupDto> _accessibleBranches = new();
+    private readonly List<StocktakeEntry> _lines = new();
+    private readonly List<StocktakeSessionListDto> _history = new();
+    private readonly List<ReasonOption> _shortageReasonOptions = new();
+    private readonly List<ReasonOption> _overageReasonOptions = new();
+    private Guid? _branchId;
+    private Guid? _pendingBranchId;
+    private StocktakeSessionDto? _session;
+    private StocktakeSessionDto? _detailSession;
+    private StocktakeResultDto? _lastResult;
+    private string _filter = string.Empty;
+    private string _notes = string.Empty;
+    private string _reviewNotes = string.Empty;
+    private bool _canAdjust;
+    private bool _canReviewStocktakes;
+    private bool _loading = true;
+    private bool _posting;
+    private bool _reviewing;
+    private bool _startingSession;
+    private bool _savingDraft;
+    private bool _cancellingSession;
+    private bool _cancelSessionVisible;
+    private bool _historyLoading;
+    private bool _draftDirty;
+    private bool _reviewVisible;
+    private bool _discardVisible;
+    private bool _sheetStale;
+    private DiscardIntent _discardIntent;
+
+    private string SelectedBranchName => _accessibleBranches.Find(branch => branch.Id == _branchId)?.Name ?? string.Empty;
+
+    private List<StocktakeEntry> FilteredLines => string.IsNullOrWhiteSpace(_filter)
+        ? _lines
+        : _lines.Where(line =>
+                line.ProductName.Contains(_filter, StringComparison.CurrentCultureIgnoreCase)
+                || line.ProductSKU.Contains(_filter, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+    private int CountedLineCount => _lines.Count(line => line.CountedQuantity.HasValue);
+    private int ExpectedUnits => _lines.Sum(line => line.ExpectedQuantity);
+    private int CountedUnits => _lines.Where(line => line.CountedQuantity.HasValue).Sum(line => line.CountedQuantity!.Value);
+    private int _differenceLineCount => _lines.Count(line => line.Difference is not null and not 0);
+    private int MatchedLineCount => _lines.Count(line => line.Difference == 0);
+    private int WriteOffLineCount => _lines.Count(line =>
+        line.Difference < 0
+        && !string.IsNullOrWhiteSpace(line.Reason)
+        && StocktakeVarianceReasons.IsWriteOff(line.Reason));
+    private int ManualAdjustmentLineCount => _differenceLineCount - WriteOffLineCount;
+    private int ShortageUnits => _lines.Where(line => line.Difference < 0).Sum(line => -line.Difference!.Value);
+    private int OverageUnits => _lines.Where(line => line.Difference > 0).Sum(line => line.Difference!.Value);
+    private bool HasEnteredCounts => CountedLineCount > 0;
+    private bool HasPerishableOverage => _lines.Any(line => line.IsPerishable && line.Difference > 0);
+    private bool HasUnrecordedSale => _lines.Any(line => line.Reason == StocktakeVarianceReasons.UnrecordedSale);
+    private double ProgressPercent => _lines.Count == 0 ? 0 : CountedLineCount * 100d / _lines.Count;
+    private bool IsDraftSession => _session?.Status == StocktakeSessionStatuses.Draft;
+    private bool IsPendingReviewSession => _session?.Status == StocktakeSessionStatuses.PendingReview;
+    private bool CanEditDraft => IsDraftSession && _canAdjust;
+    private bool CanSubmit => CanEditDraft && !_posting && !_savingDraft
+        && _lines.Count > 0
+        && CountedLineCount == _lines.Count
+        && _lines.All(IsLineReady);
+
+    protected override async Task OnInitializedAsync()
+    {
+        BuildReasonOptions();
+        try
+        {
+            _canAdjust = await AuthorizationService.IsGrantedAsync(InventoryPermissions.BranchInventory.Adjust);
+            _canReviewStocktakes = await AuthorizationService.IsGrantedAsync(InventoryPermissions.BranchInventory.ReviewStocktakes);
+            var allBranches = await BranchAppService.GetLookupAsync();
+            var accessibleIds = await InventoryAppService.GetAccessibleBranchIdsAsync();
+            var accessibleSet = accessibleIds.ToHashSet();
+            _accessibleBranches.AddRange(allBranches.Where(branch => accessibleSet.Contains(branch.Id)));
+
+            if (_accessibleBranches.Count > 0)
+            {
+                await SelectBranchAsync(_accessibleBranches[0].Id);
+            }
+        }
+        catch
+        {
+            Snackbar.Add(InvL["Stocktake:LoadFailed"], Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task SelectBranchAsync(Guid branchId)
+    {
+        _branchId = branchId;
+        _lastResult = null;
+        await LoadBranchStateAsync();
+    }
+
+    private async Task LoadBranchStateAsync()
+    {
+        if (!_branchId.HasValue)
+        {
+            _session = null;
+            _lines.Clear();
+            _history.Clear();
+            return;
+        }
+
+        _loading = true;
+        _sheetStale = false;
+        _filter = string.Empty;
+        try
+        {
+            ApplySession(await StocktakeSessionAppService.GetActiveAsync(_branchId.Value));
+            await LoadHistoryAsync();
+        }
+        catch
+        {
+            _session = null;
+            _lines.Clear();
+            Snackbar.Add(InvL["Stocktake:LoadFailed"], Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task LoadHistoryAsync()
+    {
+        if (!_branchId.HasValue) return;
+
+        _historyLoading = true;
+        try
+        {
+            var result = await StocktakeSessionAppService.GetListAsync(new GetStocktakeSessionsInput
+            {
+                BranchId = _branchId.Value,
+                Sorting = "SnapshotAt desc",
+                SkipCount = 0,
+                MaxResultCount = 20
+            });
+            _history.Clear();
+            _history.AddRange(result.Items);
+        }
+        catch
+        {
+            _history.Clear();
+            Snackbar.Add(InvL["Stocktake:HistoryLoadFailed"], Severity.Error);
+        }
+        finally
+        {
+            _historyLoading = false;
+        }
+    }
+
+    private async Task StartSessionAsync()
+    {
+        if (!_branchId.HasValue || _startingSession || !_canAdjust) return;
+
+        _startingSession = true;
+        try
+        {
+            ApplySession(await StocktakeSessionAppService.StartAsync(new StartStocktakeSessionDto
+            {
+                BranchId = _branchId.Value
+            }));
+            await LoadHistoryAsync();
+        }
+        catch (BusinessException ex)
+        {
+            Snackbar.Add(InvL[ex.Code ?? "Stocktake:StartFailed"], Severity.Warning);
+        }
+        catch
+        {
+            Snackbar.Add(InvL["Stocktake:StartFailed"], Severity.Error);
+        }
+        finally
+        {
+            _startingSession = false;
+        }
+    }
+
+    private async Task OnBranchChangedAsync(Guid? branchId)
+    {
+        if (!branchId.HasValue || branchId == _branchId) return;
+
+        if (_draftDirty)
+        {
+            _pendingBranchId = branchId;
+            _discardIntent = DiscardIntent.ChangeBranch;
+            _discardVisible = true;
+            return;
+        }
+
+        await SelectBranchAsync(branchId.Value);
+    }
+
+    private async Task RequestReload()
+    {
+        if (_draftDirty)
+        {
+            _discardIntent = DiscardIntent.Reload;
+            _discardVisible = true;
+            return;
+        }
+
+        await LoadBranchStateAsync();
+    }
+
+    private async Task ConfirmDiscardAsync()
+    {
+        _discardVisible = false;
+
+        if (_discardIntent == DiscardIntent.ChangeBranch && _pendingBranchId.HasValue)
+        {
+            var branchId = _pendingBranchId.Value;
+            _pendingBranchId = null;
+            await SelectBranchAsync(branchId);
+        }
+        else
+        {
+            await LoadBranchStateAsync();
+        }
+    }
+
+    private void KeepCounting()
+    {
+        _pendingBranchId = null;
+        _discardVisible = false;
+    }
+
+    private void OnCountChanged(StocktakeEntry entry, int? value)
+    {
+        if (!CanEditDraft) return;
+        entry.CountedQuantity = value < 0 ? 0 : value;
+        if (entry.Difference is null or 0)
+        {
+            entry.Reason = null;
+            entry.ReasonNotes = null;
+        }
+        else if (!StocktakeVarianceReasons.IsAllowedForDifference(entry.Reason, entry.Difference.Value))
+        {
+            entry.Reason = null;
+            entry.ReasonNotes = null;
+        }
+
+        if (entry.IsPerishable && entry.Difference > 0 && !entry.ProductionDate.HasValue)
+        {
+            entry.ProductionDate = _session?.SnapshotAt.Date ?? DateTime.Today;
+        }
+        _lastResult = null;
+        _sheetStale = false;
+        _draftDirty = true;
+    }
+
+    private void OnReasonChanged(StocktakeEntry entry, string? reason)
+    {
+        if (!CanEditDraft) return;
+        entry.Reason = reason;
+        if (reason != StocktakeVarianceReasons.Other)
+        {
+            entry.ReasonNotes = null;
+        }
+        _draftDirty = true;
+    }
+
+    private void OnReasonNotesChanged(StocktakeEntry entry, string? notes)
+    {
+        if (!CanEditDraft) return;
+        entry.ReasonNotes = notes;
+        _draftDirty = true;
+    }
+
+    private void OnProductionDateChanged(StocktakeEntry entry, DateTime? date)
+    {
+        if (!CanEditDraft) return;
+        entry.ProductionDate = date;
+        _draftDirty = true;
+    }
+
+    private void MarkRemainingMatched()
+    {
+        if (!CanEditDraft) return;
+        foreach (var line in _lines.Where(line => !line.CountedQuantity.HasValue))
+        {
+            line.CountedQuantity = line.ExpectedQuantity;
+            line.Reason = null;
+            line.ReasonNotes = null;
+        }
+        _draftDirty = true;
+    }
+
+    private void ResetCounts()
+    {
+        if (!CanEditDraft) return;
+        foreach (var line in _lines)
+        {
+            line.CountedQuantity = null;
+            line.Reason = null;
+            line.ReasonNotes = null;
+        }
+        _notes = string.Empty;
+        _reviewVisible = false;
+        _sheetStale = false;
+        _draftDirty = true;
+    }
+
+    private void OpenReview()
+    {
+        if (!CanSubmit) return;
+        _reviewVisible = true;
+    }
+
+    private void OnNotesChanged(string? notes)
+    {
+        if (!CanEditDraft) return;
+        _notes = notes ?? string.Empty;
+        _draftDirty = true;
+    }
+
+    private void CloseReview()
+    {
+        if (_posting) return;
+        _reviewVisible = false;
+    }
+
+    private async Task SubmitAsync()
+    {
+        if (!CanSubmit || _session is null || string.IsNullOrWhiteSpace(_notes)) return;
+
+        _posting = true;
+        try
+        {
+            ApplySession(await StocktakeSessionAppService.SubmitAsync(new SubmitStocktakeSessionDto
+            {
+                Id = _session.Id,
+                ConcurrencyStamp = _session.ConcurrencyStamp,
+                Notes = _notes.Trim(),
+                Lines = BuildDraftLines()
+            }));
+
+            _reviewVisible = false;
+            await LoadHistoryAsync();
+            Snackbar.Add(InvL["Stocktake:Submitted"], Severity.Success);
+        }
+        catch (BusinessException ex) when (
+            ex.Code == InventoryErrorCodes.BranchInventoryConcurrency
+            || ex.Code == InventoryErrorCodes.StocktakeIncomplete
+            || ex.Code == InventoryErrorCodes.StocktakeSessionConcurrency
+            || ex.Code == InventoryErrorCodes.StocktakeSessionLineMismatch)
+        {
+            _reviewVisible = false;
+            _sheetStale = true;
+            Snackbar.Add(InvL[ex.Code], Severity.Warning);
+        }
+        catch (BusinessException ex)
+        {
+            Snackbar.Add(InvL[ex.Code ?? "Stocktake:SubmitFailed"], Severity.Warning);
+        }
+        catch
+        {
+            Snackbar.Add(InvL["Stocktake:SubmitFailed"], Severity.Error);
+        }
+        finally
+        {
+            _posting = false;
+        }
+    }
+
+    private async Task SaveDraftAsync()
+    {
+        if (_session is null || !CanEditDraft || _savingDraft || !_draftDirty) return;
+
+        _savingDraft = true;
+        try
+        {
+            ApplySession(await StocktakeSessionAppService.SaveDraftAsync(new SaveStocktakeSessionDraftDto
+            {
+                Id = _session.Id,
+                ConcurrencyStamp = _session.ConcurrencyStamp,
+                Notes = string.IsNullOrWhiteSpace(_notes) ? null : _notes.Trim(),
+                Lines = BuildDraftLines()
+            }));
+            await LoadHistoryAsync();
+            Snackbar.Add(InvL["Stocktake:DraftSaved"], Severity.Success);
+        }
+        catch (BusinessException ex)
+        {
+            Snackbar.Add(InvL[ex.Code ?? "Stocktake:DraftSaveFailed"], Severity.Warning);
+        }
+        catch
+        {
+            Snackbar.Add(InvL["Stocktake:DraftSaveFailed"], Severity.Error);
+        }
+        finally
+        {
+            _savingDraft = false;
+        }
+    }
+
+    private async Task CancelSessionAsync()
+    {
+        if (_session is null || !CanEditDraft || _cancellingSession) return;
+
+        _cancellingSession = true;
+        try
+        {
+            await StocktakeSessionAppService.CancelAsync(new CancelStocktakeSessionDto
+            {
+                Id = _session.Id,
+                ConcurrencyStamp = _session.ConcurrencyStamp
+            });
+            _cancelSessionVisible = false;
+            Snackbar.Add(InvL["Stocktake:SessionCancelled"], Severity.Success);
+            await LoadBranchStateAsync();
+        }
+        catch (BusinessException ex)
+        {
+            Snackbar.Add(InvL[ex.Code ?? "Stocktake:CancelSessionFailed"], Severity.Warning);
+        }
+        catch
+        {
+            Snackbar.Add(InvL["Stocktake:CancelSessionFailed"], Severity.Error);
+        }
+        finally
+        {
+            _cancellingSession = false;
+        }
+    }
+
+    private async Task OpenHistoryDetailsAsync(Guid id)
+    {
+        try
+        {
+            _detailSession = await StocktakeSessionAppService.GetAsync(id);
+            _reviewNotes = _detailSession.ReviewNotes ?? string.Empty;
+        }
+        catch
+        {
+            Snackbar.Add(InvL["Stocktake:DetailsFailed"], Severity.Error);
+        }
+    }
+
+    private void CloseHistoryDetails()
+    {
+        if (_reviewing) return;
+        _detailSession = null;
+        _reviewNotes = string.Empty;
+    }
+
+    private async Task ApproveAsync()
+    {
+        if (_detailSession?.Status != StocktakeSessionStatuses.PendingReview || !_canReviewStocktakes || _reviewing) return;
+
+        _reviewing = true;
+        try
+        {
+            var approved = await StocktakeSessionAppService.ApproveAsync(new ReviewStocktakeSessionDto
+            {
+                Id = _detailSession.Id,
+                ConcurrencyStamp = _detailSession.ConcurrencyStamp,
+                ReviewNotes = string.IsNullOrWhiteSpace(_reviewNotes) ? null : _reviewNotes.Trim()
+            });
+            _lastResult = approved.Result;
+            _detailSession = null;
+            _reviewNotes = string.Empty;
+            await LoadBranchStateAsync();
+            Snackbar.Add(InvL["Stocktake:Approved"], Severity.Success);
+        }
+        catch (BusinessException ex)
+        {
+            Snackbar.Add(InvL[ex.Code ?? "Stocktake:ApproveFailed"], Severity.Warning);
+        }
+        catch
+        {
+            Snackbar.Add(InvL["Stocktake:ApproveFailed"], Severity.Error);
+        }
+        finally
+        {
+            _reviewing = false;
+        }
+    }
+
+    private async Task RejectAsync()
+    {
+        if (_detailSession?.Status != StocktakeSessionStatuses.PendingReview
+            || !_canReviewStocktakes
+            || _reviewing
+            || string.IsNullOrWhiteSpace(_reviewNotes)) return;
+
+        _reviewing = true;
+        try
+        {
+            await StocktakeSessionAppService.RejectAsync(new RejectStocktakeSessionDto
+            {
+                Id = _detailSession.Id,
+                ConcurrencyStamp = _detailSession.ConcurrencyStamp,
+                ReviewNotes = _reviewNotes.Trim()
+            });
+            _detailSession = null;
+            _reviewNotes = string.Empty;
+            await LoadBranchStateAsync();
+            Snackbar.Add(InvL["Stocktake:Rejected"], Severity.Success);
+        }
+        catch (BusinessException ex)
+        {
+            Snackbar.Add(InvL[ex.Code ?? "Stocktake:RejectFailed"], Severity.Warning);
+        }
+        catch
+        {
+            Snackbar.Add(InvL["Stocktake:RejectFailed"], Severity.Error);
+        }
+        finally
+        {
+            _reviewing = false;
+        }
+    }
+
+    private void ApplySession(StocktakeSessionDto? session)
+    {
+        _session = session;
+        _lines.Clear();
+        if (session is not null)
+        {
+            _lines.AddRange(session.Lines.ConvertAll(line => new StocktakeEntry(line)));
+        }
+        _notes = session?.Notes ?? string.Empty;
+        _draftDirty = false;
+        _sheetStale = false;
+    }
+
+    private List<StocktakeSessionDraftLineDto> BuildDraftLines()
+        => _lines.ConvertAll(line => new StocktakeSessionDraftLineDto
+        {
+            LineId = line.LineId,
+            CountedQuantity = line.CountedQuantity,
+            Reason = line.Reason,
+            ReasonNotes = line.ReasonNotes,
+            ProductionDate = line.IsPerishable && line.Difference > 0 ? line.ProductionDate : null
+        });
+
+    private static Color SessionStatusColor(string status) => status switch
+    {
+        StocktakeSessionStatuses.Completed => Color.Success,
+        StocktakeSessionStatuses.PendingReview => Color.Warning,
+        StocktakeSessionStatuses.Rejected => Color.Error,
+        StocktakeSessionStatuses.Cancelled => Color.Error,
+        _ => Color.Default
+    };
+
+    private static Variant SessionStatusVariant(string status)
+        => status is StocktakeSessionStatuses.Completed or StocktakeSessionStatuses.PendingReview
+            ? Variant.Filled
+            : Variant.Outlined;
+
+    private static string FormatDifference(int difference) => difference > 0 ? $"+{difference}" : difference.ToString();
+
+    private IReadOnlyCollection<ReasonOption> ReasonOptionsFor(StocktakeEntry entry)
+        => entry.Difference < 0 ? _shortageReasonOptions : _overageReasonOptions;
+
+    private bool IsLineReady(StocktakeEntry entry)
+    {
+        if (!entry.CountedQuantity.HasValue) return false;
+        if (entry.Difference == 0) return true;
+        if (!StocktakeVarianceReasons.IsAllowedForDifference(entry.Reason, entry.Difference!.Value)) return false;
+        if (entry.Reason == StocktakeVarianceReasons.Other && string.IsNullOrWhiteSpace(entry.ReasonNotes)) return false;
+        return !entry.IsPerishable || entry.Difference < 0 || entry.ProductionDate.HasValue;
+    }
+
+    private void BuildReasonOptions()
+    {
+        _shortageReasonOptions.AddRange(new[]
+        {
+            ReasonOptionFor(StocktakeVarianceReasons.Damaged),
+            ReasonOptionFor(StocktakeVarianceReasons.Expired),
+            ReasonOptionFor(StocktakeVarianceReasons.Waste),
+            ReasonOptionFor(StocktakeVarianceReasons.Complimentary),
+            ReasonOptionFor(StocktakeVarianceReasons.UnrecordedSale),
+            ReasonOptionFor(StocktakeVarianceReasons.CountingError),
+            ReasonOptionFor(StocktakeVarianceReasons.Other)
+        });
+
+        _overageReasonOptions.AddRange(new[]
+        {
+            ReasonOptionFor(StocktakeVarianceReasons.UnrecordedReceipt),
+            ReasonOptionFor(StocktakeVarianceReasons.CountingError),
+            ReasonOptionFor(StocktakeVarianceReasons.Other)
+        });
+    }
+
+    private ReasonOption ReasonOptionFor(string reason)
+        => new(reason, InvL[$"Stocktake:Reason:{reason}"]);
+
+    private static string DifferenceClass(int difference) => difference switch
+    {
+        < 0 => "stocktake-difference stocktake-difference--short",
+        > 0 => "stocktake-difference stocktake-difference--over",
+        _ => "stocktake-difference stocktake-difference--matched"
+    };
+
+    private sealed class StocktakeEntry
+    {
+        public Guid LineId { get; }
+        public Guid InventoryId { get; }
+        public string ProductName { get; }
+        public string ProductSKU { get; }
+        public string ProductUnit { get; }
+        public int ExpectedQuantity { get; }
+        public bool IsPerishable { get; }
+        public DateTime? ProductionDate { get; set; }
+        public int? CountedQuantity { get; set; }
+        public string? Reason { get; set; }
+        public string? ReasonNotes { get; set; }
+        public int? Difference => CountedQuantity - ExpectedQuantity;
+
+        public StocktakeEntry(StocktakeSessionLineDto line)
+        {
+            LineId = line.Id;
+            InventoryId = line.InventoryId;
+            ProductName = line.ProductName;
+            ProductSKU = line.ProductSku;
+            ProductUnit = line.ProductUnit;
+            ExpectedQuantity = line.ExpectedQuantity;
+            IsPerishable = line.IsPerishable;
+            CountedQuantity = line.CountedQuantity;
+            Reason = line.Reason;
+            ReasonNotes = line.ReasonNotes;
+            ProductionDate = line.ProductionDate;
+        }
+    }
+
+    private sealed record ReasonOption(string Value, string Label);
+
+    private enum DiscardIntent
+    {
+        Reload,
+        ChangeBranch
+    }
+}

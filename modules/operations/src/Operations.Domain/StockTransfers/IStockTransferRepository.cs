@@ -25,6 +25,7 @@ public interface IStockTransferRepository : IRepository<AppStockTransfer, Guid>
         string? filter,
         List<Guid>? fromBranchIdIn = null,
         List<Guid>? toBranchIdIn = null,
+        StockTransferVisibilitySpec? visibility = null,
         CancellationToken cancellationToken = default);
 
     Task<List<StockTransferListRow>> GetFilteredListAsync(
@@ -37,6 +38,7 @@ public interface IStockTransferRepository : IRepository<AppStockTransfer, Guid>
         int maxResultCount,
         List<Guid>? fromBranchIdIn = null,
         List<Guid>? toBranchIdIn = null,
+        StockTransferVisibilitySpec? visibility = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>Transfers currently waiting for the given user's action (see <see cref="StockTransferActionSpec"/>).</summary>

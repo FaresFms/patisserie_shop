@@ -29,7 +29,7 @@
     <div class="page-head">
         <div>
             <h1 class="page-title">@OpsL["Sales"]</h1>
-            <div class="page-sub">Recorded sales transactions.</div>
+            <div class="page-sub">@OpsL["Sales:Subtitle"]</div>
         </div>
         <div class="page-head-actions">
             <SoftButton Variant="Variant.Filled" Color="Color.Primary"
@@ -176,14 +176,14 @@
                 </SoftCardHeader>
                 <SoftDivider />
                 <SoftCardContent Class="pa-4">
-                    <SoftText>Delete sale @_pendingDelete.InvoiceNumber? Stock will not be returned.</SoftText>
+                    <SoftText>@string.Format(OpsL["SaleDeleteConfirm"], _pendingDelete.InvoiceNumber)</SoftText>
                 </SoftCardContent>
                 <SoftDivider />
                 <div class="pa-3 d-flex justify-end" style="gap: 8px;">
                     <SoftButton Variant="Variant.Text" OnClick="CancelDelete">@L["Cancel"]</SoftButton>
                     <SoftButton Variant="Variant.Filled" Color="Color.Error"
                                 StartIcon="@Icons.Material.Filled.Delete"
-                                OnClick="ConfirmDeleteAsync">@L["Yes"]</SoftButton>
+                                OnClick="ConfirmDeleteAsync">@OpsL["Delete"]</SoftButton>
                 </div>
             </SoftCard>
         </div>
@@ -284,7 +284,7 @@
     private async Task OnSavedAsync(SaleDto created)
     {
         _createVisible = false;
-        Snackbar.Add($"Sale {created.InvoiceNumber} recorded.", Severity.Success);
+        Snackbar.Add(string.Format(OpsL["SaleRecordedToast"], created.InvoiceNumber), Severity.Success);
         await ReloadAsync();
     }
 

@@ -16,6 +16,33 @@ namespace Operations.PurchaseOrders;
 /// </summary>
 public interface IPurchaseOrderRepository : IRepository<AppPurchaseOrder, Guid>
 {
+    Task<AppPurchaseOrder> GetWithItemsAsync(
+        Guid id,
+        CancellationToken cancellationToken = default);
+
+    Task<long> CountFilteredAsync(
+        string? filter,
+        string? status,
+        Guid? supplierId,
+        Guid? destBranchId,
+        DateTime? fromDate,
+        DateTime? toDate,
+        List<Guid>? visibleBranchIds,
+        CancellationToken cancellationToken = default);
+
+    Task<List<AppPurchaseOrder>> GetFilteredListAsync(
+        string? filter,
+        string? status,
+        Guid? supplierId,
+        Guid? destBranchId,
+        DateTime? fromDate,
+        DateTime? toDate,
+        List<Guid>? visibleBranchIds,
+        string sorting,
+        int skipCount,
+        int maxResultCount,
+        CancellationToken cancellationToken = default);
+
     /// <summary>
     /// Per-supplier delivery metrics over received/terminal POs whose OrderDate falls
     /// in [fromUtc, toUtcExclusive). Only Received and PartialReceived orders count.

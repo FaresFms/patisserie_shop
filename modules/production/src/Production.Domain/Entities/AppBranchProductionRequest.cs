@@ -173,31 +173,60 @@ public class AppBranchProductionRequest : FullAuditedAggregateRoot<Guid>
         Status = BranchProductionRequestStatuses.Cancelled;
     }
 
-    public void MarkPlanned(bool partial)
+    public void ReservePlannedQuantity(Guid itemId, int quantity)
     {
         if (!BranchProductionRequestStatuses.IsApprovedDemand(Status))
         {
-            throw InvalidTransition(partial
-                ? BranchProductionRequestStatuses.PartiallyPlanned
-                : BranchProductionRequestStatuses.Planned);
+            throw InvalidTransition(BranchProductionRequestStatuses.PartiallyPlanned);
         }
 
-        Status = partial
-            ? BranchProductionRequestStatuses.PartiallyPlanned
-            : BranchProductionRequestStatuses.Planned;
+        FindItem(itemId).ReservePlannedQuantity(quantity);
+        RecalculateDemandStatus();
+    }
+
+    public void ReleasePlannedQuantity(Guid itemId, int quantity)
+    {
+        if (!BranchProductionRequestStatuses.IsApprovedDemand(Status))
+        {
+            throw InvalidTransition(BranchProductionRequestStatuses.Approved);
+        }
+
+        FindItem(itemId).ReleasePlannedQuantity(quantity);
+        RecalculateDemandStatus();
     }
 
     public void AddFulfilledQuantity(Guid itemId, int quantity)
     {
         var item = FindItem(itemId);
         item.AddFulfilledQuantity(quantity);
+        RecalculateDemandStatus();
+    }
 
+    private void RecalculateDemandStatus()
+    {
         // A line approved at 0 (a single rejected product) is trivially satisfied —
         // FulfilledQuantity (0) >= ApprovedQuantity (0) — so it must not block the
         // whole request from reaching Fulfilled once every other line is delivered.
-        Status = _items.All(i => i.FulfilledQuantity >= i.ApprovedQuantity)
-            ? BranchProductionRequestStatuses.Fulfilled
-            : BranchProductionRequestStatuses.PartiallyFulfilled;
+        if (_items.All(i => i.FulfilledQuantity >= i.ApprovedQuantity))
+        {
+            Status = BranchProductionRequestStatuses.Fulfilled;
+        }
+        else if (_items.Any(i => i.FulfilledQuantity > 0))
+        {
+            Status = BranchProductionRequestStatuses.PartiallyFulfilled;
+        }
+        else if (_items.All(i => i.PlannedQuantity >= i.ApprovedQuantity))
+        {
+            Status = BranchProductionRequestStatuses.Planned;
+        }
+        else if (_items.Any(i => i.PlannedQuantity > 0))
+        {
+            Status = BranchProductionRequestStatuses.PartiallyPlanned;
+        }
+        else
+        {
+            Status = BranchProductionRequestStatuses.Approved;
+        }
     }
 
     private void EnsureDraft()
