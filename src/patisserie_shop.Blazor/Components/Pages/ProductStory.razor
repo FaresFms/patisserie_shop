@@ -329,7 +329,7 @@
         catch (Exception ex)
         {
             _data = null;
-            _error = ex.Message;
+            _error = GetFriendlyErrorMessage(ex, "Error:LoadTryAgain");
             await HandleErrorAsync(ex);
         }
         finally

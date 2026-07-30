@@ -88,7 +88,7 @@ body {
 }
 .panel-deco {
   position: absolute;
-  right: -180px; bottom: -180px;
+  inset-inline-end: -180px; bottom: -180px;
   width: 520px; height: 520px;
   border-radius: 50%;
   border: 1px solid var(--panel-bd);
@@ -140,7 +140,7 @@ body {
   position: relative;
 }
 .login-form-top {
-  position: absolute; top: 24px; right: 24px;
+  position: absolute; top: 24px; inset-inline-end: 24px;
   display: flex; align-items: center; gap: 6px;
 }
 .login-icon-btn {
@@ -158,6 +158,8 @@ body {
   border: 1px solid var(--bd-1); background: var(--surface);
   color: var(--fg-2); font-size: 11px; font-weight: 700;
   letter-spacing: 0.06em; cursor: pointer; font-family: inherit;
+  display: inline-flex; align-items: center; justify-content: center;
+  text-decoration: none;
 }
 .lang-btn:hover { background: var(--hover); color: var(--fg-1); }
 
@@ -200,7 +202,7 @@ body {
 
 .login-input-wrap { position: relative; }
 .login-input-wrap > .material-icons-outlined {
-  position: absolute; left: 11px; top: 50%; transform: translateY(-50%);
+  position: absolute; inset-inline-start: 11px; top: 50%; transform: translateY(-50%);
   color: var(--fg-4); font-size: 17px; pointer-events: none;
   transition: color .12s;
 }
@@ -211,7 +213,8 @@ body {
 .login-card input[type="email"],
 .login-card input[type="password"] {
   width: 100%; height: 42px;
-  padding: 0 42px 0 38px;
+  padding-block: 0;
+  padding-inline: 42px;
   background: var(--surface);
   border: 1px solid var(--bd-2);
   border-radius: 7px;
@@ -240,7 +243,7 @@ body {
 }
 
 .pw-toggle {
-  position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+  position: absolute; inset-inline-end: 10px; top: 50%; transform: translateY(-50%);
   width: 30px; height: 30px;
   background: transparent; border: 0;
   color: var(--fg-3); cursor: pointer;
@@ -254,6 +257,25 @@ body {
   color: currentColor;
   font-size: 18px;
   pointer-events: none;
+}
+
+/* Password values and their controls always read left-to-right, even when the
+   surrounding login form is Arabic. Physical sides keep the eye and lock from
+   collapsing onto each other when the document direction changes. */
+.password-input-wrap { direction: ltr; }
+.password-input-wrap > .material-icons-outlined {
+  inset-inline-start: auto;
+  left: 11px;
+  right: auto;
+}
+.password-input-wrap .pw-toggle {
+  inset-inline-end: auto;
+  right: 10px;
+  left: auto;
+}
+.password-input-wrap input {
+  padding-left: 38px;
+  padding-right: 46px;
 }
 
 /* Remember me */
@@ -338,7 +360,11 @@ body {
 .acct-card-head { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
 .acct-card-head .material-icons-outlined { color: var(--accent); font-size: 20px; }
 .acct-card-title { font-size: 16px; font-weight: 600; color: var(--fg-1); }
-.acct-card-sub { font-size: 12.5px; color: var(--fg-3); margin: 0 0 18px 30px; }
+.acct-card-sub {
+  font-size: 12.5px; color: var(--fg-3);
+  margin-block: 0 18px;
+  margin-inline-start: 30px;
+}
 
 .acct-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .acct-grid .acct-field-full { grid-column: 1 / -1; }
@@ -369,6 +395,6 @@ body {
 .acct-alert .material-icons-outlined { font-size: 16px; flex-shrink: 0; }
 .acct-alert--success { background: rgba(60,140,80,0.10); border: 1px solid rgba(60,140,80,0.25); color: var(--green-text, #2e6b3e); }
 .acct-alert--error { background: rgba(179,84,58,0.08); border: 1px solid rgba(179,84,58,0.22); color: var(--danger); }
-.acct-alert ul { margin: 0; padding-left: 16px; }
+.acct-alert ul { margin: 0; padding-inline-start: 16px; }
 
 .acct-validation { color: var(--danger); font-size: 12px; margin-top: 4px; display: block; }

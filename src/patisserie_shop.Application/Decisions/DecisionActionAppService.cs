@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Intelligence;
 using Intelligence.Decisions;
 using Intelligence.Entities;
+using Intelligence.Localization;
 using Intelligence.Permissions;
 using Inventory;
 using Inventory.BranchInventory;
@@ -95,9 +96,6 @@ public class DecisionActionAppService : patisserie_shopAppService, IDecisionActi
         _stockBatchRepository = stockBatchRepository;
         _purchaseOrderRepository = purchaseOrderRepository;
     }
-
-    /// <summary>Notes prefix marking a document the rule autopilot created (not a human).</summary>
-    private const string AutopilotNotesTag = "[Auto] ";
 
     public async Task<DecisionActionResultDto> ExecuteDecisionAsync(Guid decisionLogId, bool createdByAutopilot = false)
     {
@@ -248,6 +246,8 @@ public class DecisionActionAppService : patisserie_shopAppService, IDecisionActi
         Guid branchId,
         List<(DecisionLogDto Decision, ProductDto Product)> members)
     {
+        using var contentCulture = PersistedContentCulture.UseArabic();
+
         // First member's product currency seeds the PO (all lines share a supplier, so
         // currency is effectively per-supplier). Compute each decision's quantity with the
         // shared helper so consolidated numbers match the single-execute path exactly.
@@ -325,6 +325,8 @@ public class DecisionActionAppService : patisserie_shopAppService, IDecisionActi
     private async Task<DecisionActionResultDto> CreateDraftPurchaseOrderAsync(
         DecisionLogDto decision, bool createdByAutopilot)
     {
+        using var contentCulture = PersistedContentCulture.UseArabic();
+
         if (!decision.BranchId.HasValue)
         {
             throw new BusinessException(IntelligenceErrorCodes.DecisionBranchRequired)
@@ -460,6 +462,7 @@ public class DecisionActionAppService : patisserie_shopAppService, IDecisionActi
     private async Task<DecisionActionResultDto> CreateDraftStockTransferAsync(
         DecisionLogDto decision, bool createdByAutopilot)
     {
+        using var contentCulture = PersistedContentCulture.UseArabic();
         var plan = await ComputeStockTransferPlanAsync(decision);
 
         var transfer = await _stockTransferAppService.CreateAsync(new CreateStockTransferDto
@@ -586,11 +589,17 @@ public class DecisionActionAppService : patisserie_shopAppService, IDecisionActi
             return new DecisionActionResultDto { ActionCreated = false };
         }
 
+        string movementNotes;
+        using (PersistedContentCulture.UseArabic())
+        {
+            movementNotes = L["AutoNote:WasteWriteOff", writeOffQty];
+        }
+
         await _branchInventoryAppService.AdjustStockAsync(inventory.Id, new AdjustStockDto
         {
             NewQuantity = inventory.QuantityOnHand - writeOffQty,
             MovementType = StockMovementTypes.WriteOff,
-            Notes = L["AutoNote:WasteWriteOff", writeOffQty],
+            Notes = movementNotes,
             ConcurrencyStamp = inventory.ConcurrencyStamp
         });
 
@@ -599,7 +608,7 @@ public class DecisionActionAppService : patisserie_shopAppService, IDecisionActi
             ActionCreated = true,
             ActionType = DecisionActionTypes.StockAdjustment,
             ActionId = null, // no document — the AppStockMovement ledger is the trail
-            ActionNumber = $"WriteOff −{writeOffQty}"
+            ActionNumber = L["ActionNumber:WriteOff", writeOffQty]
         };
     }
 
@@ -780,7 +789,8 @@ public class DecisionActionAppService : patisserie_shopAppService, IDecisionActi
     }
 
     /// <summary>Autopilot marker for document notes; empty for human-initiated actions.</summary>
-    private static string Tag(bool createdByAutopilot) => createdByAutopilot ? AutopilotNotesTag : string.Empty;
+    private string Tag(bool createdByAutopilot)
+        => createdByAutopilot ? $"{L["AutoNote:AutopilotTag"]} " : string.Empty;
 
     /// <summary>Keeps auto-generated notes inside the PO Notes column limit.</summary>
     private static string TruncateNotes(string notes)

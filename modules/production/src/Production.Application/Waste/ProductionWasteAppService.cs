@@ -8,6 +8,7 @@ using Production.Entities;
 using Production.Permissions;
 using Volo.Abp;
 using Volo.Abp.Application.Dtos;
+using Volo.Abp.Localization;
 
 namespace Production.Waste;
 
@@ -111,6 +112,7 @@ public class ProductionWasteAppService : ProductionAppService, IProductionWasteA
     [Authorize(ProductionPermissions.Waste.WriteOff)]
     public async Task<ProductionWasteDto> CreateWriteOffAsync(CreateProductionWasteWriteOffDto input)
     {
+        using var contentCulture = CultureHelper.Use("ar-SY", "ar-SY");
         if (input.Quantity <= 0)
         {
             throw new BusinessException(ProductionErrorCodes.InvalidWasteQuantity)

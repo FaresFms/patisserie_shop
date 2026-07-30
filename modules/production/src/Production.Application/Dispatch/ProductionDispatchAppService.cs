@@ -6,6 +6,7 @@ using Production.Entities;
 using Production.Orders;
 using Production.Permissions;
 using Volo.Abp;
+using Volo.Abp.Localization;
 
 namespace Production.Dispatch;
 
@@ -26,6 +27,8 @@ public class ProductionDispatchAppService : ProductionAppService, IProductionDis
     [Authorize(ProductionPermissions.Dispatch.CreateTransfer)]
     public async Task<ProductionDispatchResultDto> CreateTransferAsync(CreateProductionDispatchTransferDto input)
     {
+        using var contentCulture = CultureHelper.Use("ar-SY", "ar-SY");
+
         if (input.Quantity <= 0)
         {
             throw new BusinessException(ProductionErrorCodes.InvalidOrderQuantity)

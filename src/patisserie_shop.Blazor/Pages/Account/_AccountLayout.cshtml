@@ -1,12 +1,27 @@
+@using System.Globalization
+@using Microsoft.AspNetCore.Mvc.Localization
+@using patisserie_shop.Localization
+@using Volo.Abp.Localization
+@inject IHtmlLocalizer<patisserie_shopResource> L
 @{
     Layout = null;
+    var isArabic = CultureInfo.CurrentUICulture.Name.StartsWith("ar", StringComparison.OrdinalIgnoreCase);
+    var direction = CultureHelper.IsRtl ? "rtl" : "ltr";
+    var targetCulture = isArabic ? "en" : "ar";
+    var request = ViewContext.HttpContext.Request;
+    var returnUrl = $"{request.PathBase}{request.Path}{request.QueryString}";
+    var cultureSwitchUrl =
+        $"/Abp/Languages/Switch?culture={targetCulture}&uiCulture={targetCulture}&returnUrl={Uri.EscapeDataString(returnUrl)}";
+    var switchLanguageLabel = isArabic
+        ? L["Nav:SwitchToEnglish"].Value
+        : L["Nav:SwitchToArabic"].Value;
 }
 <!DOCTYPE html>
-<html lang="en" data-theme="light">
+<html lang="@CultureInfo.CurrentUICulture.Name" dir="@direction" data-theme="light">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>My account — Patisserie</title>
+    <title>@L["Account:Title"] — @L["AppName"]</title>
 
     @await RenderSectionAsync("styles", required: false)
 
@@ -23,14 +38,24 @@
     <div class="acct-topbar">
         <div class="acct-brand">
             <span class="acct-brand-mark"><span class="material-icons-outlined">storefront</span></span>
-            Patisserie
+            @L["AppName"]
         </div>
         <div class="acct-topbar-right">
             <a class="acct-back" href="/">
-                <span class="material-icons-outlined">arrow_back</span>
-                Back to app
+                <span class="material-icons-outlined">@(isArabic ? "arrow_forward" : "arrow_back")</span>
+                @L["Nav:BackToApp"]
             </a>
-            <button type="button" class="login-icon-btn" id="themeBtn" aria-label="Toggle theme">
+            <a class="lang-btn"
+               href="@cultureSwitchUrl"
+               title="@switchLanguageLabel"
+               aria-label="@switchLanguageLabel">@(isArabic ? "EN" : "AR")</a>
+            <button type="button"
+                    class="login-icon-btn"
+                    id="themeBtn"
+                    data-switch-to-light="@L["Nav:SwitchToLight"]"
+                    data-switch-to-dark="@L["Nav:SwitchToDark"]"
+                    aria-label="@L["Nav:SwitchToDark"]"
+                    title="@L["Nav:SwitchToDark"]">
                 <span class="material-icons-outlined" id="themeIcon">dark_mode</span>
             </button>
         </div>
@@ -45,15 +70,19 @@
             const root = document.documentElement;
             const themeBtn = document.getElementById('themeBtn');
             const themeIcon = document.getElementById('themeIcon');
-            function syncIcon() {
-                themeIcon.textContent = root.getAttribute('data-theme') === 'dark' ? 'light_mode' : 'dark_mode';
+            function syncThemeButton() {
+                const isDark = root.getAttribute('data-theme') === 'dark';
+                themeIcon.textContent = isDark ? 'light_mode' : 'dark_mode';
+                const label = isDark ? themeBtn.dataset.switchToLight : themeBtn.dataset.switchToDark;
+                themeBtn.setAttribute('aria-label', label);
+                themeBtn.title = label;
             }
-            syncIcon();
+            syncThemeButton();
             themeBtn.addEventListener('click', function () {
                 const isDark = root.getAttribute('data-theme') === 'dark';
                 if (window.applyDataTheme) { window.applyDataTheme(!isDark); }
                 else { root.setAttribute('data-theme', isDark ? 'light' : 'dark'); }
-                syncIcon();
+                syncThemeButton();
             });
         })();
     </script>

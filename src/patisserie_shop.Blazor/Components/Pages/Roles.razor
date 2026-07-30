@@ -16,7 +16,7 @@
 @inject ISnackbar Snackbar
 
 @{
-    PageLayout.Title = "Roles";
+    PageLayout.Title = L["Roles"];
 }
 
 <SoftCard Elevation="2" Class="pa-2 page-flat">
@@ -30,7 +30,7 @@
             {
                 <SoftButton Variant="Variant.Filled" Color="Color.Primary"
                             StartIcon="@Icons.Material.Filled.Add" OnClick="OpenCreateDialog">
-                    New role
+                    @L["Roles:New"]
                 </SoftButton>
             }
         </div>
@@ -62,21 +62,23 @@
                       Dense="true" Hover="true" Bordered="false" Striped="true"
                       Loading="_loading" SortMode="SortMode.Single">
             <Columns>
-                <PropertyColumn T="IdentityRoleDto" TProperty="string" Property="x => x.Name" Title="Role name" />
-                <TemplateColumn T="IdentityRoleDto" Title="Flags" Sortable="false">
+                <TemplateColumn T="IdentityRoleDto" Title="@L["Roles:Name"]" SortBy="x => x.Name">
+                    <CellTemplate>@DisplayRoleName(context.Item.Name)</CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn T="IdentityRoleDto" Title="@L["Roles:Properties"]" Sortable="false">
                     <CellTemplate>
                         <SoftStack Row="true" Spacing="1">
                             @if (context.Item.IsDefault)
                             {
-                                <SoftChip T="string" Color="Color.Info" Size="Size.Small" Variant="Variant.Filled">Default</SoftChip>
+                                <SoftChip T="string" Color="Color.Info" Size="Size.Small" Variant="Variant.Filled">@L["Roles:Default"]</SoftChip>
                             }
                             @if (context.Item.IsPublic)
                             {
-                                <SoftChip T="string" Color="Color.Success" Size="Size.Small" Variant="Variant.Outlined">Public</SoftChip>
+                                <SoftChip T="string" Color="Color.Success" Size="Size.Small" Variant="Variant.Outlined">@L["Roles:Public"]</SoftChip>
                             }
                             @if (context.Item.IsStatic)
                             {
-                                <SoftChip T="string" Color="Color.Default" Size="Size.Small" Variant="Variant.Outlined">Static</SoftChip>
+                                <SoftChip T="string" Color="Color.Default" Size="Size.Small" Variant="Variant.Outlined">@L["Roles:System"]</SoftChip>
                             }
                         </SoftStack>
                     </CellTemplate>
@@ -125,7 +127,7 @@
                         <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
                             <SoftIcon Icon="@(_editingId.HasValue ? Icons.Material.Filled.Edit : Icons.Material.Filled.AddCircle)"
                                       Color="Color.Primary" Size="Size.Medium" />
-                            <SoftText Typo="Typo.h6">@(_editingId.HasValue ? "Edit role" : "New role")</SoftText>
+                            <SoftText Typo="Typo.h6">@(_editingId.HasValue ? L["Roles:Edit"] : L["Roles:New"])</SoftText>
                         </SoftStack>
                     </CardHeaderContent>
                     <CardHeaderActions>
@@ -135,10 +137,10 @@
                 <SoftDivider />
                 <SoftCardContent Class="pa-4">
                     <SoftStack Spacing="3">
-                        <SoftTextField T="string" Label="Role name" @bind-Value="_editName"
+                        <SoftTextField T="string" Label="@L["Roles:Name"]" @bind-Value="_editName"
                                        Variant="Variant.Outlined" MaxLength="256" Required="true" Immediate="true" />
-                        <SoftCheckBox T="bool" @bind-Value="_editIsDefault" Label="Default — auto-assigned to new users" Color="Color.Primary" />
-                        <SoftCheckBox T="bool" @bind-Value="_editIsPublic" Label="Public — visible to other users" Color="Color.Primary" />
+                        <SoftCheckBox T="bool" @bind-Value="_editIsDefault" Label="@L["Roles:DefaultDescription"]" Color="Color.Primary" />
+                        <SoftCheckBox T="bool" @bind-Value="_editIsPublic" Label="@L["Roles:PublicDescription"]" Color="Color.Primary" />
                     </SoftStack>
                 </SoftCardContent>
                 <SoftDivider />
@@ -187,7 +189,7 @@
 <PermissionModal Visible="_permVisible"
                  ProviderName="R"
                  ProviderKey="@_permRoleName"
-                 EntityName="@_permRoleName"
+                 EntityName="@DisplayRoleName(_permRoleName)"
                  CanManage="_canManagePermissions"
                  OnClose="OnPermissionsClosed" />
 
@@ -290,7 +292,7 @@
     {
         if (string.IsNullOrWhiteSpace(_editName))
         {
-            Snackbar.Add(L["ThisFieldIsRequired", "Role name"], Severity.Warning);
+            Snackbar.Add(L["ThisFieldIsRequired", L["Roles:Name"]], Severity.Warning);
             return;
         }
 
@@ -359,4 +361,14 @@
         _permVisible = false;
         _permRoleName = null;
     }
+
+    private string DisplayRoleName(string? roleName) => roleName switch
+    {
+        "admin" => L["Roles:DisplayName:Admin"],
+        "BranchManager" => L["Roles:DisplayName:BranchManager"],
+        "Cashier" => L["Roles:DisplayName:Cashier"],
+        "KitchenManager" => L["Roles:DisplayName:KitchenManager"],
+        null => string.Empty,
+        _ => roleName
+    };
 }

@@ -922,13 +922,9 @@
         _     => Color.Error
     };
 
-    private string FormatMovementType(string type) => type switch
+    private string FormatMovementType(string type)
     {
-        "Purchase"         => L["InvDash:Purchase"].Value,
-        "Sale"             => L["InvDash:Sale"].Value,
-        "TransferIn"       => L["InvDash:TransferIn"].Value,
-        "TransferOut"      => L["InvDash:TransferOut"].Value,
-        "ManualAdjustment" => L["InvDash:Adjustment"].Value,
-        _                  => type
-    };
+        var localized = InvL[$"MovementType:{type}"];
+        return localized.ResourceNotFound ? type : localized.Value;
+    }
 }

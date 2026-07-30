@@ -186,12 +186,12 @@ public class BranchHealthAppService : patisserie_shopAppService, IBranchHealthAp
     /// not excess). Out-of-stock rows are low-stock by definition, so they already
     /// count as unhealthy here.
     /// </summary>
-    private static HealthComponentDto ScoreStockHealth(List<InventoryStockRow> rows)
+    private HealthComponentDto ScoreStockHealth(List<InventoryStockRow> rows)
     {
         if (rows.Count == 0)
         {
             return Component("StockHealth", StockHealthMax, StockHealthMax,
-                "No inventory tracked — assumed healthy");
+                L["BranchHealth:Detail:NoInventory"]);
         }
 
         var low = rows.Count(r => r.Inventory.IsLowStock);
@@ -203,19 +203,19 @@ public class BranchHealthAppService : patisserie_shopAppService, IBranchHealthAp
         var points = (int)Math.Round(StockHealthMax * healthyPct, MidpointRounding.AwayFromZero);
 
         return Component("StockHealth", points, StockHealthMax,
-            $"{Pct(healthyPct)} of {rows.Count} items healthy ({healthy} healthy, {low} low, {excess} excess)");
+            L["BranchHealth:Detail:StockHealth", Pct(healthyPct), rows.Count, healthy, low, excess]);
     }
 
     /// <summary>20 pts, minus 4 per out-of-stock row, floored at 0.</summary>
-    private static HealthComponentDto ScoreStockout(List<InventoryStockRow> rows)
+    private HealthComponentDto ScoreStockout(List<InventoryStockRow> rows)
     {
         var outCount = rows.Count(r => r.Inventory.IsOutOfStock);
         var penalty = outCount * StockoutPenaltyPerRow;
         var points = Math.Max(0, StockoutMax - penalty);
 
         var detail = outCount == 0
-            ? "No items out of stock"
-            : $"{outCount} item(s) out of stock (−{penalty})";
+            ? L["BranchHealth:Detail:NoStockout"].Value
+            : L["BranchHealth:Detail:Stockout", outCount, penalty].Value;
 
         return Component("StockoutSeverity", points, StockoutMax, detail);
     }
@@ -224,7 +224,7 @@ public class BranchHealthAppService : patisserie_shopAppService, IBranchHealthAp
     /// 15 pts. The first 3 pending decisions are free; each pending beyond the grace
     /// costs 1 pt, floored at 0.
     /// </summary>
-    private static HealthComponentDto ScorePendingLoad(List<AppDecisionLog> decisions)
+    private HealthComponentDto ScorePendingLoad(List<AppDecisionLog> decisions)
     {
         var pending = decisions.Count(d => d.Status == DecisionLogStatuses.Pending);
         var over = Math.Max(0, pending - PendingGrace);
@@ -232,10 +232,10 @@ public class BranchHealthAppService : patisserie_shopAppService, IBranchHealthAp
         var points = Math.Max(0, PendingLoadMax - penalty);
 
         var detail = pending == 0
-            ? "No pending decisions"
+            ? L["BranchHealth:Detail:NoPending"].Value
             : over == 0
-                ? $"{pending} pending (within grace of {PendingGrace})"
-                : $"{pending} pending — {over} over grace of {PendingGrace} (−{penalty})";
+                ? L["BranchHealth:Detail:PendingWithinGrace", pending, PendingGrace].Value
+                : L["BranchHealth:Detail:PendingOverGrace", pending, over, PendingGrace, penalty].Value;
 
         return Component("PendingLoad", points, PendingLoadMax, detail);
     }
@@ -245,33 +245,37 @@ public class BranchHealthAppService : patisserie_shopAppService, IBranchHealthAp
     /// ratio = wasteCost / max(sales, 1); points = round(15 × (1 − min(ratio×10, 1))).
     /// 0% waste → 15 pts; ≥10% waste → 0 pts. No waste recorded → full 15.
     /// </summary>
-    private static HealthComponentDto ScoreWasteRatio(decimal wasteCost, decimal salesRevenue, string currency)
+    private HealthComponentDto ScoreWasteRatio(decimal wasteCost, decimal salesRevenue, string currency)
     {
         if (wasteCost <= 0)
         {
             return Component("WasteRatio", WasteRatioMax, WasteRatioMax,
-                "No waste recorded in the last 30 days");
+                L["BranchHealth:Detail:NoWaste", WasteWindowDays]);
         }
 
         var ratio = (double)(wasteCost / Math.Max(salesRevenue, 1m));
         var scaled = Math.Min(ratio * WasteRatioCapMultiplier, 1.0);
         var points = (int)Math.Round(WasteRatioMax * (1.0 - scaled), MidpointRounding.AwayFromZero);
 
-        var detail = $"{Pct(ratio)} waste-to-sales over 30 days " +
-                     $"({Money(wasteCost, currency)} waste vs {Money(salesRevenue, currency)} sales)";
+        var detail = L[
+            "BranchHealth:Detail:WasteRatio",
+            Pct(ratio),
+            WasteWindowDays,
+            Money(wasteCost, currency),
+            Money(salesRevenue, currency)];
 
         return Component("WasteRatio", points, WasteRatioMax, detail);
     }
 
     /// <summary>10 pts, minus 2 per batch expiring within 3 days, floored at 0.</summary>
-    private static HealthComponentDto ScoreExpiryRisk(int expiringCount)
+    private HealthComponentDto ScoreExpiryRisk(int expiringCount)
     {
         var penalty = expiringCount * ExpiryPenaltyPerBatch;
         var points = Math.Max(0, ExpiryRiskMax - penalty);
 
         var detail = expiringCount == 0
-            ? $"No batches expiring within {ExpiryWindowDays} days"
-            : $"{expiringCount} batch(es) expiring within {ExpiryWindowDays} days (−{penalty})";
+            ? L["BranchHealth:Detail:NoExpiry", ExpiryWindowDays].Value
+            : L["BranchHealth:Detail:Expiry", expiringCount, ExpiryWindowDays, penalty].Value;
 
         return Component("ExpiryRisk", points, ExpiryRiskMax, detail);
     }
@@ -280,14 +284,14 @@ public class BranchHealthAppService : patisserie_shopAppService, IBranchHealthAp
     /// 10 pts × the fraction of decisions created &gt; 48h ago that have been acted on
     /// (no longer Pending). If there are no such "due" decisions, full 10.
     /// </summary>
-    private static HealthComponentDto ScoreResponsiveness(List<AppDecisionLog> decisions, DateTime nowUtc)
+    private HealthComponentDto ScoreResponsiveness(List<AppDecisionLog> decisions, DateTime nowUtc)
     {
         var cutoff = nowUtc.AddHours(-ResponsivenessAgeHours);
         var due = decisions.Where(d => d.CreationTime <= cutoff).ToList();
         if (due.Count == 0)
         {
             return Component("Responsiveness", ResponsivenessMax, ResponsivenessMax,
-                "No decisions older than 48h to act on");
+                L["BranchHealth:Detail:NoOldDecisions", ResponsivenessAgeHours]);
         }
 
         var acted = due.Count(d => d.Status != DecisionLogStatuses.Pending);
@@ -295,7 +299,12 @@ public class BranchHealthAppService : patisserie_shopAppService, IBranchHealthAp
         var points = (int)Math.Round(ResponsivenessMax * actedPct, MidpointRounding.AwayFromZero);
 
         return Component("Responsiveness", points, ResponsivenessMax,
-            $"{Pct(actedPct)} of {due.Count} decisions older than 48h acted on ({acted} resolved)");
+            L[
+                "BranchHealth:Detail:Responsiveness",
+                Pct(actedPct),
+                due.Count,
+                ResponsivenessAgeHours,
+                acted]);
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────

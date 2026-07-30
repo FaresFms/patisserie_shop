@@ -24,6 +24,6 @@ public class ProductionDashboardAppService : ProductionAppService, IProductionDa
     {
         var model = await _orderRepository.GetDashboardAsync(input.KitchenBranchId);
         await _decisionScanner.ScanDashboardAsync(model, input.KitchenBranchId);
-        return ProductionReportMapper.MapDashboard(model);
+        return ProductionReportMapper.MapDashboard(model, L);
     }
 }

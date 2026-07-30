@@ -16,7 +16,7 @@
 @inject ISnackbar Snackbar
 
 @{
-    PageLayout.Title = "Users";
+    PageLayout.Title = L["Users"];
 }
 
 <SoftCard Elevation="2" Class="pa-2 page-flat">
@@ -30,7 +30,7 @@
             {
                 <SoftButton Variant="Variant.Filled" Color="Color.Primary"
                             StartIcon="@Icons.Material.Filled.Add" OnClick="OpenCreateDialog">
-                    New user
+                    @L["Users:New"]
                 </SoftButton>
             }
         </div>
@@ -62,21 +62,21 @@
                       Dense="true" Hover="true" Bordered="false" Striped="true"
                       Loading="_loading" SortMode="SortMode.Single">
             <Columns>
-                <PropertyColumn T="IdentityUserDto" TProperty="string" Property="x => x.UserName" Title="Username" />
-                <TemplateColumn T="IdentityUserDto" Title="Name" Sortable="false">
+                <PropertyColumn T="IdentityUserDto" TProperty="string" Property="x => x.UserName" Title="@L["Users:Username"]" />
+                <TemplateColumn T="IdentityUserDto" Title="@L["Users:FullName"]" Sortable="false">
                     <CellTemplate>@($"{context.Item.Name} {context.Item.Surname}".Trim())</CellTemplate>
                 </TemplateColumn>
-                <PropertyColumn T="IdentityUserDto" TProperty="string" Property="x => x.Email!" Title="Email" Sortable="false" />
-                <PropertyColumn T="IdentityUserDto" TProperty="string" Property="x => x.PhoneNumber!" Title="Phone" Sortable="false" />
-                <TemplateColumn T="IdentityUserDto" Title="Status" Sortable="true" SortBy="x => x.IsActive">
+                <PropertyColumn T="IdentityUserDto" TProperty="string" Property="x => x.Email!" Title="@L["Users:Email"]" Sortable="false" />
+                <PropertyColumn T="IdentityUserDto" TProperty="string" Property="x => x.PhoneNumber!" Title="@L["Users:Phone"]" Sortable="false" />
+                <TemplateColumn T="IdentityUserDto" Title="@L["Users:Status"]" Sortable="true" SortBy="x => x.IsActive">
                     <CellTemplate>
                         @if (context.Item.IsActive)
                         {
-                            <SoftChip T="string" Color="Color.Success" Size="Size.Small" Variant="Variant.Filled">Active</SoftChip>
+                            <SoftChip T="string" Color="Color.Success" Size="Size.Small" Variant="Variant.Filled">@L["Users:Active"]</SoftChip>
                         }
                         else
                         {
-                            <SoftChip T="string" Color="Color.Default" Size="Size.Small" Variant="Variant.Outlined">Inactive</SoftChip>
+                            <SoftChip T="string" Color="Color.Default" Size="Size.Small" Variant="Variant.Outlined">@L["Users:Inactive"]</SoftChip>
                         }
                     </CellTemplate>
                 </TemplateColumn>
@@ -124,7 +124,7 @@
                         <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
                             <SoftIcon Icon="@(_editingId.HasValue ? Icons.Material.Filled.Edit : Icons.Material.Filled.AddCircle)"
                                       Color="Color.Primary" Size="Size.Medium" />
-                            <SoftText Typo="Typo.h6">@(_editingId.HasValue ? "Edit user" : "New user")</SoftText>
+                            <SoftText Typo="Typo.h6">@(_editingId.HasValue ? L["Users:Edit"] : L["Users:New"])</SoftText>
                         </SoftStack>
                     </CardHeaderContent>
                     <CardHeaderActions>
@@ -134,34 +134,34 @@
                 <SoftDivider />
                 <SoftCardContent Class="pa-4 glass-modal-body" Style="max-height: 65vh; overflow-y: auto;">
                     <SoftStack Spacing="3">
-                        <SoftTextField T="string" Label="Username" @bind-Value="_editUserName"
+                        <SoftTextField T="string" Label="@L["Users:Username"]" @bind-Value="_editUserName"
                                        Variant="Variant.Outlined" MaxLength="256" Required="true" Immediate="true" />
                         <SoftStack Row="true" Spacing="2">
-                            <SoftTextField T="string" Label="Name" @bind-Value="_editName"
+                            <SoftTextField T="string" Label="@L["Users:FirstName"]" @bind-Value="_editName"
                                            Variant="Variant.Outlined" MaxLength="64" />
-                            <SoftTextField T="string" Label="Surname" @bind-Value="_editSurname"
+                            <SoftTextField T="string" Label="@L["Users:LastName"]" @bind-Value="_editSurname"
                                            Variant="Variant.Outlined" MaxLength="64" />
                         </SoftStack>
-                        <SoftTextField T="string" Label="@(_editingId.HasValue ? "New password (leave blank to keep)" : "Password")"
+                        <SoftTextField T="string" Label="@(_editingId.HasValue ? L["Users:NewPasswordOptional"] : L["Users:Password"])"
                                        @bind-Value="_editPassword" Variant="Variant.Outlined"
                                        InputType="InputType.Password" MaxLength="128"
                                        Required="@(!_editingId.HasValue)" />
                         <SoftStack Row="true" Spacing="2">
-                            <SoftTextField T="string" Label="Email" @bind-Value="_editEmail"
+                            <SoftTextField T="string" Label="@L["Users:Email"]" @bind-Value="_editEmail"
                                            Variant="Variant.Outlined" InputType="InputType.Email" MaxLength="256" Required="true" />
-                            <SoftTextField T="string" Label="Phone" @bind-Value="_editPhone"
+                            <SoftTextField T="string" Label="@L["Users:Phone"]" @bind-Value="_editPhone"
                                            Variant="Variant.Outlined" MaxLength="32" />
                         </SoftStack>
                         <SoftStack Row="true" Spacing="3">
-                            <SoftCheckBox T="bool" @bind-Value="_editIsActive" Label="Active" Color="Color.Primary" />
-                            <SoftCheckBox T="bool" @bind-Value="_editLockoutEnabled" Label="Lockout enabled" Color="Color.Primary" />
+                            <SoftCheckBox T="bool" @bind-Value="_editIsActive" Label="@L["Users:Active"]" Color="Color.Primary" />
+                            <SoftCheckBox T="bool" @bind-Value="_editLockoutEnabled" Label="@L["Users:LockoutEnabled"]" Color="Color.Primary" />
                         </SoftStack>
 
                         <SoftDivider />
-                        <SoftText Typo="Typo.subtitle2">Roles</SoftText>
+                        <SoftText Typo="Typo.subtitle2">@L["Users:AssignedRoles"]</SoftText>
                         @if (_allRoles.Count == 0)
                         {
-                            <SoftText Style="color: var(--fg-3);">No roles available.</SoftText>
+                            <SoftText Style="color: var(--fg-3);">@L["Users:NoRolesAvailable"]</SoftText>
                         }
                         else
                         {
@@ -172,7 +172,7 @@
                                         <SoftCheckBox T="bool"
                                                       Value="@_selectedRoles.Contains(role.Name)"
                                                       ValueChanged="@(v => ToggleRole(role.Name, v))"
-                                                      Label="@role.Name"
+                                                      Label="@DisplayRoleName(role.Name)"
                                                       Color="Color.Primary" />
                                     </div>
                                 }
@@ -377,7 +377,7 @@
     {
         if (string.IsNullOrWhiteSpace(_editUserName))
         {
-            Snackbar.Add(L["ThisFieldIsRequired", "Username"], Severity.Warning);
+            Snackbar.Add(L["ThisFieldIsRequired", L["Users:Username"]], Severity.Warning);
             return;
         }
 
@@ -464,4 +464,13 @@
         _permUserId = null;
         _permUserName = null;
     }
+
+    private string DisplayRoleName(string roleName) => roleName switch
+    {
+        "admin" => L["Roles:DisplayName:Admin"],
+        "BranchManager" => L["Roles:DisplayName:BranchManager"],
+        "Cashier" => L["Roles:DisplayName:Cashier"],
+        "KitchenManager" => L["Roles:DisplayName:KitchenManager"],
+        _ => roleName
+    };
 }

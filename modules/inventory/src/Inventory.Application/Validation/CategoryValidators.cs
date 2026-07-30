@@ -1,30 +1,32 @@
 using FluentValidation;
 using Inventory.Categories;
+using Inventory.Localization;
+using Microsoft.Extensions.Localization;
 
 namespace Inventory.Validation;
 
 public class CreateCategoryDtoValidator : AbstractValidator<CreateCategoryDto>
 {
-    public CreateCategoryDtoValidator()
+    public CreateCategoryDtoValidator(IStringLocalizer<InventoryResource> localizer)
     {
         RuleFor(x => x.Name)
-            .NotEmpty().WithMessage("Name is required.")
-            .MaximumLength(128).WithMessage("Name must not exceed 128 characters.");
+            .NotEmpty().WithMessage(_ => localizer["Validation:NameRequired"])
+            .MaximumLength(128).WithMessage(_ => localizer["Validation:NameMax128"]);
 
         RuleFor(x => x.Description)
-            .MaximumLength(512).WithMessage("Description must not exceed 512 characters.");
+            .MaximumLength(512).WithMessage(_ => localizer["Validation:DescriptionMax512"]);
     }
 }
 
 public class UpdateCategoryDtoValidator : AbstractValidator<UpdateCategoryDto>
 {
-    public UpdateCategoryDtoValidator()
+    public UpdateCategoryDtoValidator(IStringLocalizer<InventoryResource> localizer)
     {
         RuleFor(x => x.Name)
-            .NotEmpty().WithMessage("Name is required.")
-            .MaximumLength(128).WithMessage("Name must not exceed 128 characters.");
+            .NotEmpty().WithMessage(_ => localizer["Validation:NameRequired"])
+            .MaximumLength(128).WithMessage(_ => localizer["Validation:NameMax128"]);
 
         RuleFor(x => x.Description)
-            .MaximumLength(512).WithMessage("Description must not exceed 512 characters.");
+            .MaximumLength(512).WithMessage(_ => localizer["Validation:DescriptionMax512"]);
     }
 }

@@ -4,17 +4,20 @@
 @using Volo.Abp.Localization
 @using Volo.Abp.AspNetCore.Components.Web.Theming.Bundling
 @using MudBlazor
+@using patisserie_shop.Localization
 @inject IHostEnvironment Env
+@inject IStringLocalizer<patisserie_shopResource> L
 @{
-    var rtl = CultureHelper.IsRtl ? "rtl" : string.Empty;
+    var direction = CultureHelper.IsRtl ? "rtl" : "ltr";
+    var rtlClass = CultureHelper.IsRtl ? "rtl" : string.Empty;
 }
 
 <!DOCTYPE html>
-<html lang="@CultureInfo.CurrentCulture.Name" dir="@rtl">
+<html lang="@CultureInfo.CurrentUICulture.Name" dir="@direction">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>patisserie_shop</title>
+    <title>@L["AppName"]</title>
     <base href="/" />
 
     <AbpStyles BundleName="@BlazorLeptonXLiteThemeBundles.Styles.Global" />
@@ -27,21 +30,21 @@
 
     
 </head>
-<body class="abp-application-layout @rtl">
+<body class="abp-application-layout @rtlClass">
 
     <Routes @rendermode="InteractiveServer" />
 
     <div id="blazor-error-ui">
         @if (Env.IsDevelopment())
         {
-            <text>An unhandled exception has occurred. See browser dev tools for details.</text>
+            <text>@L["App:UnhandledErrorDevelopment"]</text>
         }
         else if (Env.IsStaging() || Env.IsProduction())
         {
-            <text>An error has occurred. This application may no longer respond until reloaded.</text>
+            <text>@L["App:UnhandledError"]</text>
         }
-        <a href="" class="reload">Reload</a>
-        <a class="dismiss">🗙</a>
+        <a href="" class="reload">@L["App:Reload"]</a>
+        <a class="dismiss" role="button" tabindex="0" aria-label="@L["Close"]" title="@L["Close"]">🗙</a>
     </div>
     
     <AbpScripts BundleName="@BlazorLeptonXLiteThemeBundles.Scripts.Global" />

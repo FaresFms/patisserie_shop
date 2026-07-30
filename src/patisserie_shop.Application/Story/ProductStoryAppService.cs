@@ -1,15 +1,19 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using Intelligence.Decisions;
+using Intelligence.Localization;
 using Inventory;
 using Inventory.BranchInventory;
 using Inventory.Entities;
+using Inventory.Localization;
 using Inventory.Permissions;
 using Inventory.StockMovements;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.Extensions.Localization;
 using Operations.Sales;
 using Volo.Abp.Domain.Repositories;
 
@@ -38,6 +42,8 @@ public class ProductStoryAppService : patisserie_shopAppService, IProductStoryAp
     private readonly IRepository<AppBranch, Guid> _branchRepository;
     private readonly ISaleRepository _saleRepository;
     private readonly BranchAccessChecker _branchAccess;
+    private readonly IStringLocalizer<InventoryResource> _inventoryLocalizer;
+    private readonly IStringLocalizer<IntelligenceResource> _intelligenceLocalizer;
 
     public ProductStoryAppService(
         IStockMovementRepository movementRepository,
@@ -47,7 +53,9 @@ public class ProductStoryAppService : patisserie_shopAppService, IProductStoryAp
         IRepository<AppProduct, Guid> productRepository,
         IRepository<AppBranch, Guid> branchRepository,
         ISaleRepository saleRepository,
-        BranchAccessChecker branchAccess)
+        BranchAccessChecker branchAccess,
+        IStringLocalizer<InventoryResource> inventoryLocalizer,
+        IStringLocalizer<IntelligenceResource> intelligenceLocalizer)
     {
         _movementRepository = movementRepository;
         _decisionLogRepository = decisionLogRepository;
@@ -57,6 +65,8 @@ public class ProductStoryAppService : patisserie_shopAppService, IProductStoryAp
         _branchRepository = branchRepository;
         _saleRepository = saleRepository;
         _branchAccess = branchAccess;
+        _inventoryLocalizer = inventoryLocalizer;
+        _intelligenceLocalizer = intelligenceLocalizer;
     }
 
     public async Task<ProductStoryDto> GetAsync(GetProductStoryInput input)
@@ -138,7 +148,7 @@ public class ProductStoryAppService : patisserie_shopAppService, IProductStoryAp
         };
     }
 
-    private static StoryEventDto ToMovementEvent(StockMovementWithContext row)
+    private StoryEventDto ToMovementEvent(StockMovementWithContext row)
     {
         var m = row.Movement;
         var delta = m.QuantityAfter - m.QuantityBefore;
@@ -146,20 +156,23 @@ public class ProductStoryAppService : patisserie_shopAppService, IProductStoryAp
 
         var (eventType, title) = m.MovementType switch
         {
-            StockMovementTypes.Purchase => (StoryEventTypes.Purchase, $"Received {qty} units from a purchase"),
-            StockMovementTypes.Sale => (StoryEventTypes.Sale, $"Sold {qty} units"),
-            StockMovementTypes.TransferIn => (StoryEventTypes.TransferIn, $"Transferred in {qty} units"),
-            StockMovementTypes.TransferOut => (StoryEventTypes.TransferOut, $"Transferred out {qty} units"),
-            StockMovementTypes.WriteOff => (StoryEventTypes.WriteOff, $"Wrote off {qty} units as waste"),
+            StockMovementTypes.Purchase => (StoryEventTypes.Purchase, L["ProductStory:Movement:Purchase", qty].Value),
+            StockMovementTypes.Sale => (StoryEventTypes.Sale, L["ProductStory:Movement:Sale", qty].Value),
+            StockMovementTypes.TransferIn => (StoryEventTypes.TransferIn, L["ProductStory:Movement:TransferIn", qty].Value),
+            StockMovementTypes.TransferOut => (StoryEventTypes.TransferOut, L["ProductStory:Movement:TransferOut", qty].Value),
+            StockMovementTypes.WriteOff => (StoryEventTypes.WriteOff, L["ProductStory:Movement:WriteOff", qty].Value),
             _ => (StoryEventTypes.Adjustment, delta >= 0
-                ? $"Stock adjusted up by {qty}"
-                : $"Stock adjusted down by {qty}")
+                ? L["ProductStory:Movement:AdjustedUp", _inventoryLocalizer[$"MovementType:{m.MovementType}"], qty].Value
+                : L["ProductStory:Movement:AdjustedDown", _inventoryLocalizer[$"MovementType:{m.MovementType}"], qty].Value)
         };
 
-        var detail = new StringBuilder($"Stock {m.QuantityBefore} → {m.QuantityAfter}.");
+        var detail = new StringBuilder(L[
+            "ProductStory:Movement:StockChange",
+            m.QuantityBefore,
+            m.QuantityAfter].Value);
         if (!string.IsNullOrWhiteSpace(m.Notes))
         {
-            detail.Append(' ').Append(m.Notes.Trim());
+            detail.Append(' ').Append(FriendlyMovementNotes(m.Notes));
         }
 
         return new StoryEventDto
@@ -172,7 +185,7 @@ public class ProductStoryAppService : patisserie_shopAppService, IProductStoryAp
         };
     }
 
-    private static StoryEventDto ToDecisionEvent(DecisionLogWithRuleName row)
+    private StoryEventDto ToDecisionEvent(DecisionLogWithRuleName row)
     {
         var d = row.DecisionLog;
 
@@ -182,44 +195,53 @@ public class ProductStoryAppService : patisserie_shopAppService, IProductStoryAp
             detail.Append('[').Append(row.RuleName).Append("] ");
         }
         detail.Append(d.Reasoning);
-        detail.Append(" — Status: ").Append(d.Status).Append('.');
+        detail.Append(' ').Append(L[
+            "ProductStory:Decision:Status",
+            _intelligenceLocalizer[$"DecisionStatus:{d.Status}"]]);
         if (d.Outcome != null)
         {
-            detail.Append(" Outcome: ").Append(d.Outcome).Append('.');
+            detail.Append(' ').Append(L[
+                "ProductStory:Decision:Outcome",
+                _intelligenceLocalizer[$"Outcome:{d.Outcome}"]]);
         }
 
         return new StoryEventDto
         {
             OccurredAt = d.CreationTime,
             EventType = StoryEventTypes.Decision,
-            Title = $"Decision: {d.DecisionType}",
+            Title = L[
+                "ProductStory:Decision:Title",
+                _intelligenceLocalizer[$"DecisionType:{d.DecisionType}"]],
             Detail = detail.ToString(),
             QuantityDelta = null
         };
     }
 
-    private static StoryEventDto ToBatchEvent(AppStockBatch batch, DateTime nowUtc)
+    private StoryEventDto ToBatchEvent(AppStockBatch batch, DateTime nowUtc)
     {
         string detail;
         if (batch.IsExpired(nowUtc))
         {
             detail = batch.QuantityRemaining > 0
-                ? $"Expired with {batch.QuantityRemaining} units remaining."
-                : "Fully consumed.";
+                ? L["ProductStory:Batch:ExpiredRemaining", batch.QuantityRemaining]
+                : L["ProductStory:Batch:Consumed"];
         }
         else
         {
             detail = batch.IsDepleted
-                ? "Fully consumed."
-                : $"{batch.QuantityRemaining} of {batch.QuantityReceived} units remaining.";
+                ? L["ProductStory:Batch:Consumed"]
+                : L["ProductStory:Batch:Remaining", batch.QuantityRemaining, batch.QuantityReceived];
         }
 
         return new StoryEventDto
         {
             OccurredAt = batch.CreationTime,
             EventType = StoryEventTypes.Batch,
-            Title = $"Batch {batch.BatchNumber} received: {batch.QuantityReceived} units, "
-                  + $"expires {batch.ExpiryDate:yyyy-MM-dd}",
+            Title = L[
+                "ProductStory:Batch:Received",
+                batch.BatchNumber,
+                batch.QuantityReceived,
+                batch.ExpiryDate.ToString("d", CultureInfo.CurrentCulture)],
             Detail = detail,
             QuantityDelta = null
         };
@@ -227,4 +249,14 @@ public class ProductStoryAppService : patisserie_shopAppService, IProductStoryAp
 
     private static int NormalizeMaxEvents(int maxEvents)
         => maxEvents <= 0 ? DefaultMaxEvents : Math.Min(maxEvents, MaxEventsCap);
+
+    private string FriendlyMovementNotes(string notes)
+    {
+        if (StocktakeMovementNote.TryParse(notes, out var reason, out var text))
+        {
+            return $"{_inventoryLocalizer[$"Stocktake:Reason:{reason}"]} — {text}";
+        }
+
+        return notes.Trim();
+    }
 }

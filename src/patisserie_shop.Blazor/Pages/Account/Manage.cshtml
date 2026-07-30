@@ -1,12 +1,15 @@
 @page
+@using Microsoft.AspNetCore.Mvc.Localization
+@using patisserie_shop.Localization
 @model patisserie_shop.Blazor.Pages.Account.ManageModel
+@inject IHtmlLocalizer<patisserie_shopResource> L
 @{
     Layout = "_AccountLayout";
 }
 
 <div class="acct-wrap">
-    <h1 class="acct-page-title">My account</h1>
-    <div class="acct-page-sub">Update your profile details and change your password.</div>
+    <h1 class="acct-page-title">@L["Account:Title"]</h1>
+    <div class="acct-page-sub">@L["Account:Subtitle"]</div>
 
     @if (!ViewData.ModelState.IsValid)
     {
@@ -20,9 +23,9 @@
     <div class="acct-card">
         <div class="acct-card-head">
             <span class="material-icons-outlined">person_outline</span>
-            <span class="acct-card-title">Profile</span>
+            <span class="acct-card-title">@L["Account:Profile"]</span>
         </div>
-        <p class="acct-card-sub">Your personal information and contact details.</p>
+        <p class="acct-card-sub">@L["Account:ProfileDescription"]</p>
 
         @if (Model.StatusSection == "profile" && !string.IsNullOrEmpty(Model.StatusMessage))
         {
@@ -37,32 +40,32 @@
 
             <div class="acct-grid">
                 <div class="login-field">
-                    <label class="login-label" asp-for="ProfileInfo.UserName">Username</label>
-                    <input asp-for="ProfileInfo.UserName" type="text" autocomplete="username" />
+                    <label class="login-label" asp-for="ProfileInfo.UserName">@L["Account:UserName"]</label>
+                    <input asp-for="ProfileInfo.UserName" type="text" autocomplete="username" dir="auto" />
                     <span class="acct-validation" asp-validation-for="ProfileInfo.UserName"></span>
                 </div>
 
                 <div class="login-field">
-                    <label class="login-label" asp-for="ProfileInfo.Email">Email</label>
-                    <input asp-for="ProfileInfo.Email" type="email" autocomplete="email" />
+                    <label class="login-label" asp-for="ProfileInfo.Email">@L["Account:Email"]</label>
+                    <input asp-for="ProfileInfo.Email" type="email" autocomplete="email" dir="auto" />
                     <span class="acct-validation" asp-validation-for="ProfileInfo.Email"></span>
                 </div>
 
                 <div class="login-field">
-                    <label class="login-label" asp-for="ProfileInfo.Name">Name</label>
+                    <label class="login-label" asp-for="ProfileInfo.Name">@L["Account:Name"]</label>
                     <input asp-for="ProfileInfo.Name" type="text" autocomplete="given-name" />
                     <span class="acct-validation" asp-validation-for="ProfileInfo.Name"></span>
                 </div>
 
                 <div class="login-field">
-                    <label class="login-label" asp-for="ProfileInfo.Surname">Surname</label>
+                    <label class="login-label" asp-for="ProfileInfo.Surname">@L["Account:Surname"]</label>
                     <input asp-for="ProfileInfo.Surname" type="text" autocomplete="family-name" />
                     <span class="acct-validation" asp-validation-for="ProfileInfo.Surname"></span>
                 </div>
 
                 <div class="login-field acct-field-full">
-                    <label class="login-label" asp-for="ProfileInfo.PhoneNumber">Phone number</label>
-                    <input asp-for="ProfileInfo.PhoneNumber" type="tel" autocomplete="tel" />
+                    <label class="login-label" asp-for="ProfileInfo.PhoneNumber">@L["Account:PhoneNumber"]</label>
+                    <input asp-for="ProfileInfo.PhoneNumber" type="tel" autocomplete="tel" dir="ltr" />
                     <span class="acct-validation" asp-validation-for="ProfileInfo.PhoneNumber"></span>
                 </div>
             </div>
@@ -70,7 +73,7 @@
             <div class="acct-actions">
                 <button type="submit" class="login-submit" style="width: auto; padding: 0 22px;">
                     <span class="material-icons-outlined">save</span>
-                    Save profile
+                    @L["Account:SaveProfile"]
                 </button>
             </div>
         </form>
@@ -80,12 +83,12 @@
     <div class="acct-card">
         <div class="acct-card-head">
             <span class="material-icons-outlined">lock_outline</span>
-            <span class="acct-card-title">Password</span>
+            <span class="acct-card-title">@L["Account:Password"]</span>
         </div>
         <p class="acct-card-sub">
             @(Model.HasPassword
-                ? "Enter your current password and choose a new one."
-                : "Set a password for your account.")
+                ? L["Account:ChangePasswordDescription"]
+                : L["Account:SetPasswordDescription"])
         </p>
 
         @if (Model.StatusSection == "password" && !string.IsNullOrEmpty(Model.StatusMessage))
@@ -101,21 +104,21 @@
                 @if (Model.HasPassword)
                 {
                     <div class="login-field acct-field-full">
-                        <label class="login-label" asp-for="PasswordInfo.CurrentPassword">Current password</label>
-                        <input asp-for="PasswordInfo.CurrentPassword" type="password" autocomplete="current-password" />
+                        <label class="login-label" asp-for="PasswordInfo.CurrentPassword">@L["Account:CurrentPassword"]</label>
+                        <input asp-for="PasswordInfo.CurrentPassword" type="password" autocomplete="current-password" dir="ltr" />
                         <span class="acct-validation" asp-validation-for="PasswordInfo.CurrentPassword"></span>
                     </div>
                 }
 
                 <div class="login-field">
-                    <label class="login-label" asp-for="PasswordInfo.NewPassword">New password</label>
-                    <input asp-for="PasswordInfo.NewPassword" type="password" autocomplete="new-password" />
+                    <label class="login-label" asp-for="PasswordInfo.NewPassword">@L["Account:NewPassword"]</label>
+                    <input asp-for="PasswordInfo.NewPassword" type="password" autocomplete="new-password" dir="ltr" />
                     <span class="acct-validation" asp-validation-for="PasswordInfo.NewPassword"></span>
                 </div>
 
                 <div class="login-field">
-                    <label class="login-label" asp-for="PasswordInfo.NewPasswordConfirm">Confirm new password</label>
-                    <input asp-for="PasswordInfo.NewPasswordConfirm" type="password" autocomplete="new-password" />
+                    <label class="login-label" asp-for="PasswordInfo.NewPasswordConfirm">@L["Account:ConfirmNewPassword"]</label>
+                    <input asp-for="PasswordInfo.NewPasswordConfirm" type="password" autocomplete="new-password" dir="ltr" />
                     <span class="acct-validation" asp-validation-for="PasswordInfo.NewPasswordConfirm"></span>
                 </div>
             </div>
@@ -123,7 +126,7 @@
             <div class="acct-actions">
                 <button type="submit" class="login-submit" style="width: auto; padding: 0 22px;">
                     <span class="material-icons-outlined">key</span>
-                    @(Model.HasPassword ? "Change password" : "Set password")
+                    @(Model.HasPassword ? L["Account:ChangePassword"] : L["Account:SetPassword"])
                 </button>
             </div>
         </form>

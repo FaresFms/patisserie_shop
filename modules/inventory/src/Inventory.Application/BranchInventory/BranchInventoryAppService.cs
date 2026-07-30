@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Authorization;
 using Volo.Abp;
 using Volo.Abp.Application.Dtos;
 using Volo.Abp.Domain.Repositories;
+using Volo.Abp.Localization;
 using Volo.Abp.Timing;
 
 namespace Inventory.BranchInventory;
@@ -166,6 +167,7 @@ public class BranchInventoryAppService : InventoryAppService, IBranchInventoryAp
     [Authorize(InventoryPermissions.BranchInventory.Adjust)]
     public async Task<BranchInventoryDto> WriteOffExpiredAsync(Guid id)
     {
+        using var contentCulture = CultureHelper.Use("ar-SY", "ar-SY");
         var inv = await _inventoryRepository.GetAsync(id);
         await _branchAccess.EnsureAccessAsync(inv.BranchId);
 
@@ -185,7 +187,7 @@ public class BranchInventoryAppService : InventoryAppService, IBranchInventoryAp
             inv,
             inv.QuantityOnHand - toWriteOff,
             StockMovementTypes.WriteOff,
-            notes: "Expired stock write-off");
+            notes: L["StockMovementNote:ExpiredWriteOff"]);
         await _inventoryRepository.UpdateAsync(inv, autoSave: true);
         return await ProjectAsync(inv);
     }

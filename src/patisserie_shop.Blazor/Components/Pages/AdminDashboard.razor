@@ -1,6 +1,7 @@
 @using System.Threading.Tasks
 @using patisserie_shop.Dashboard
 @using Intelligence.Decisions
+@using Inventory.Localization
 @using ApexCharts
 @using Color = MudBlazor.Color
 @using Variant = MudBlazor.Variant
@@ -9,6 +10,7 @@
 @inject IAdminDashboardAppService AdminDashboardService
 @inject IBranchHealthAppService BranchHealthService
 @inject NavigationManager Nav
+@inject IStringLocalizer<InventoryResource> InvL
 
 <SoftCard Elevation="2" Class="pa-2 page-flat admin-dash">
     <div class="page-head">
@@ -1031,8 +1033,7 @@
         }
         catch (Exception ex)
         {
-            _error = $"{ex.GetType().Name}: {ex.Message}";
-            Console.Error.WriteLine($"[AdminDashboard] {ex}");
+            _error = GetFriendlyErrorMessage(ex, "Error:LoadTryAgain");
             await HandleErrorAsync(ex);
         }
         finally
@@ -1073,15 +1074,11 @@
         _ => type
     };
 
-    private string FormatMovementType(string type) => type switch
+    private string FormatMovementType(string type)
     {
-        "Purchase" => L["AdminDash:MoveTypePurchase"].Value,
-        "Sale" => L["AdminDash:MoveTypeSale"].Value,
-        "TransferIn" => L["AdminDash:MoveTypeTransferIn"].Value,
-        "TransferOut" => L["AdminDash:MoveTypeTransferOut"].Value,
-        "ManualAdjustment" => L["AdminDash:MoveTypeAdjustment"].Value,
-        _ => type
-    };
+        var localized = InvL[$"MovementType:{type}"];
+        return localized.ResourceNotFound ? type : localized.Value;
+    }
 
     private string TimeAgo(DateTime utc)
     {

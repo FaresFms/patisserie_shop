@@ -1,54 +1,56 @@
 using FluentValidation;
 using Inventory.Branches;
+using Inventory.Localization;
+using Microsoft.Extensions.Localization;
 
 namespace Inventory.Validation;
 
 public class CreateBranchDtoValidator : AbstractValidator<CreateBranchDto>
 {
-    public CreateBranchDtoValidator()
+    public CreateBranchDtoValidator(IStringLocalizer<InventoryResource> localizer)
     {
         RuleFor(x => x.Name)
-            .NotEmpty().WithMessage("Name is required.")
-            .MaximumLength(128).WithMessage("Name must not exceed 128 characters.");
+            .NotEmpty().WithMessage(_ => localizer["Validation:NameRequired"])
+            .MaximumLength(128).WithMessage(_ => localizer["Validation:NameMax128"]);
 
         RuleFor(x => x.Address)
-            .MaximumLength(512).WithMessage("Address must not exceed 512 characters.");
+            .MaximumLength(512).WithMessage(_ => localizer["Validation:AddressMax512"]);
 
         RuleFor(x => x.Phone)
-            .MaximumLength(32).WithMessage("Phone must not exceed 32 characters.");
+            .MaximumLength(32).WithMessage(_ => localizer["Validation:PhoneMax32"]);
 
         RuleFor(x => x.Email)
-            .MaximumLength(256).WithMessage("Email must not exceed 256 characters.")
-            .EmailAddress().WithMessage("Email must be a valid email address.")
+            .MaximumLength(256).WithMessage(_ => localizer["Validation:EmailMax256"])
+            .EmailAddress().WithMessage(_ => localizer["Validation:EmailInvalid"])
             .When(x => !string.IsNullOrWhiteSpace(x.Email));
 
         RuleFor(x => x.BranchType)
-            .NotEmpty().WithMessage("Branch type is required.")
-            .Must(BranchTypes.IsValid).WithMessage("Invalid branch type.");
+            .NotEmpty().WithMessage(_ => localizer["Validation:BranchTypeRequired"])
+            .Must(BranchTypes.IsValid).WithMessage(_ => localizer["Validation:BranchTypeInvalid"]);
     }
 }
 
 public class UpdateBranchDtoValidator : AbstractValidator<UpdateBranchDto>
 {
-    public UpdateBranchDtoValidator()
+    public UpdateBranchDtoValidator(IStringLocalizer<InventoryResource> localizer)
     {
         RuleFor(x => x.Name)
-            .NotEmpty().WithMessage("Name is required.")
-            .MaximumLength(128).WithMessage("Name must not exceed 128 characters.");
+            .NotEmpty().WithMessage(_ => localizer["Validation:NameRequired"])
+            .MaximumLength(128).WithMessage(_ => localizer["Validation:NameMax128"]);
 
         RuleFor(x => x.Address)
-            .MaximumLength(512).WithMessage("Address must not exceed 512 characters.");
+            .MaximumLength(512).WithMessage(_ => localizer["Validation:AddressMax512"]);
 
         RuleFor(x => x.Phone)
-            .MaximumLength(32).WithMessage("Phone must not exceed 32 characters.");
+            .MaximumLength(32).WithMessage(_ => localizer["Validation:PhoneMax32"]);
 
         RuleFor(x => x.Email)
-            .MaximumLength(256).WithMessage("Email must not exceed 256 characters.")
-            .EmailAddress().WithMessage("Email must be a valid email address.")
+            .MaximumLength(256).WithMessage(_ => localizer["Validation:EmailMax256"])
+            .EmailAddress().WithMessage(_ => localizer["Validation:EmailInvalid"])
             .When(x => !string.IsNullOrWhiteSpace(x.Email));
 
         RuleFor(x => x.BranchType)
-            .NotEmpty().WithMessage("Branch type is required.")
-            .Must(BranchTypes.IsValid).WithMessage("Invalid branch type.");
+            .NotEmpty().WithMessage(_ => localizer["Validation:BranchTypeRequired"])
+            .Must(BranchTypes.IsValid).WithMessage(_ => localizer["Validation:BranchTypeInvalid"]);
     }
 }

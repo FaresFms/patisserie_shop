@@ -3,9 +3,7 @@
 @using System.Threading.Tasks
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.AspNetCore.Components
-@using Volo.Abp
 @using Volo.Abp.AspNetCore.Components.Web.Theming.Layout
-@using Volo.Abp.Validation
 @using Operations.Permissions
 @using patisserie_shop.Cashier
 @using Color = MudBlazor.Color
@@ -232,37 +230,15 @@
             Snackbar.Add(string.Format(L["AddCashier:Created"], input.UserName), Severity.Success);
             Navigation.NavigateTo("/operations/cashier-assignments");
         }
-        catch (AbpValidationException ex)
+        catch (Exception ex)
         {
-            _serverError = $"{L["AddCashier:CreateFailed"]} {ResolveValidationMessage(ex)}";
-            Snackbar.Add(_serverError, Severity.Error);
-        }
-        catch (BusinessException ex)
-        {
-            var message = ex.Message;
-            _serverError = $"{L["AddCashier:CreateFailed"]} {message}";
-            Snackbar.Add(_serverError, Severity.Error);
-        }
-        catch (Exception)
-        {
-            _serverError = L["AddCashier:CreateFailed"];
-            Snackbar.Add(_serverError, Severity.Error);
+            _serverError = GetFriendlyErrorMessage(ex, "AddCashier:CreateFailed");
+            await HandleErrorAsync(ex);
         }
         finally
         {
             _saving = false;
         }
-    }
-
-    private static string ResolveValidationMessage(AbpValidationException ex)
-    {
-        if (ex.ValidationErrors is { Count: > 0 })
-        {
-            return string.Join(" ", ex.ValidationErrors
-                .Select(e => e.ErrorMessage)
-                .Where(m => !string.IsNullOrWhiteSpace(m)));
-        }
-        return ex.Message;
     }
 
     private void GoBack()

@@ -947,8 +947,7 @@
         }
         catch (Exception ex)
         {
-            _error = $"{ex.GetType().Name}: {ex.Message}";
-            Console.Error.WriteLine($"[BranchManagerDashboard] {ex}");
+            _error = GetFriendlyErrorMessage(ex, "Error:LoadTryAgain");
             await HandleErrorAsync(ex);
         }
         finally

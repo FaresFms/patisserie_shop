@@ -10,6 +10,7 @@ using Production.Reports;
 using Volo.Abp.DependencyInjection;
 using Volo.Abp.Domain.Repositories;
 using Volo.Abp.Guids;
+using Volo.Abp.Localization;
 
 namespace Production.Decisions;
 
@@ -31,6 +32,7 @@ public class ProductionDecisionScannerService : ITransientDependency
 
     public async Task ScanDashboardAsync(ProductionDashboardReadModel dashboard, Guid? kitchenBranchId)
     {
+        using var contentCulture = CultureHelper.Use("ar-SY", "ar-SY");
         var productId = dashboard.ProductFocus.FirstOrDefault()?.ProductId ?? Guid.Empty;
 
         if (dashboard.WaitingForIngredients > 0)
@@ -76,6 +78,7 @@ public class ProductionDecisionScannerService : ITransientDependency
 
     public async Task ScanAnalyticsAsync(ProductionAnalyticsReadModel analytics, Guid? kitchenBranchId)
     {
+        using var contentCulture = CultureHelper.Use("ar-SY", "ar-SY");
         var productId = analytics.ProductPerformance.FirstOrDefault()?.ProductId ?? Guid.Empty;
 
         if (analytics.ApprovedRequestQuantity > analytics.FulfilledRequestQuantity

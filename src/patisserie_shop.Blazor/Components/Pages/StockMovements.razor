@@ -1,5 +1,6 @@
 @page "/inventory/stock-movements"
 @attribute [Authorize(InventoryPermissions.StockMovements.Default)]
+@using System.Globalization
 @using System.Threading
 @using System.Threading.Tasks
 @using Microsoft.AspNetCore.Authorization
@@ -148,8 +149,8 @@
                     <TemplateColumn T="StockMovementDto" Title="@InvL["DateTime"]" SortBy="x => x.CreationTime">
                         <CellTemplate>
                             <SoftStack Spacing="0">
-                                <SoftText Typo="Typo.body2" Style="font-weight:500;">@context.Item.CreationTime.ToString("MMM d, yyyy")</SoftText>
-                                <SoftText Typo="Typo.caption" Color="Color.Default">@context.Item.CreationTime.ToString("HH:mm:ss")</SoftText>
+                                <SoftText Typo="Typo.body2" Style="font-weight:500;">@context.Item.CreationTime.ToString("d", CultureInfo.CurrentCulture)</SoftText>
+                                <SoftText Typo="Typo.caption" Color="Color.Default">@context.Item.CreationTime.ToString("T", CultureInfo.CurrentCulture)</SoftText>
                             </SoftStack>
                         </CellTemplate>
                     </TemplateColumn>
@@ -246,7 +247,7 @@
                         <SoftGridItem xs="12" sm="6">
                             <SoftStack Spacing="1">
                                 <SoftText Typo="Typo.caption" Color="Color.Default">@InvL["DateTime"]</SoftText>
-                                <SoftText Typo="Typo.body1" Style="font-weight:500;">@_detailRow.CreationTime.ToString("MMM d, yyyy — HH:mm:ss")</SoftText>
+                                <SoftText Typo="Typo.body1" Style="font-weight:500;">@_detailRow.CreationTime.ToString("G", CultureInfo.CurrentCulture)</SoftText>
                             </SoftStack>
                         </SoftGridItem>
                         <SoftGridItem xs="12" sm="6">
@@ -545,9 +546,9 @@
 
     private string FriendlyReferenceType(string? referenceType) => referenceType switch
     {
-        "AppPurchaseOrder" => "Purchase Order",
-        "AppSale" => "Sale",
-        "AppStockTransfer" => "Stock Transfer",
+        "AppPurchaseOrder" => InvL["ReferenceType:PurchaseOrder"],
+        "AppSale" => InvL["ReferenceType:Sale"],
+        "AppStockTransfer" => InvL["ReferenceType:StockTransfer"],
         StocktakeManager.MovementReferenceType => InvL["Menu:Stocktake"],
         _ => referenceType ?? "—"
     };
@@ -574,13 +575,5 @@
         _ => Icons.Material.Filled.SwapVert
     };
 
-    private string MovementLabel(string type) => type switch
-    {
-        StockMovementTypes.Purchase => InvL["MovementType:Purchase"],
-        StockMovementTypes.Sale => InvL["MovementType:Sale"],
-        StockMovementTypes.TransferIn => InvL["MovementType:TransferIn"],
-        StockMovementTypes.TransferOut => InvL["MovementType:TransferOut"],
-        StockMovementTypes.ManualAdjustment => InvL["MovementType:ManualAdjustment"],
-        _ => type
-    };
+    private string MovementLabel(string type) => InvL[$"MovementType:{type}"];
 }

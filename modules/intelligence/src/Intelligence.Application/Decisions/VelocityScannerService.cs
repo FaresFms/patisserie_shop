@@ -83,6 +83,7 @@ public class VelocityScannerService : ITransientDependency
 
     public async Task ScanAsync()
     {
+        using var contentCulture = PersistedContentCulture.UseArabic();
         var nowUtc = DateTime.UtcNow;
 
         // Velocity computation MUST run before the sweep so days-of-cover math

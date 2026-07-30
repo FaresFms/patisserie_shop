@@ -468,8 +468,11 @@
     private bool _editIsActive = true;
     private bool _editIsDefault;
     private string? _editNotes;
+    private bool _editHadDemoMarker;
     private string? _outputUnit;
     private List<ItemRow> _editItems = new();
+
+    private const string DemoMarker = "[DEMO-PRODUCTION-AR]";
 
     private PlannedCostDto? _cost;
 
@@ -591,6 +594,7 @@
         _editIsActive = true;
         _editIsDefault = false;
         _editNotes = null;
+        _editHadDemoMarker = false;
         _outputUnit = null;
         _editItems = new();
         _cost = null;
@@ -613,7 +617,8 @@
             _editMinutes = f.EstimatedProductionMinutes;
             _editIsActive = f.IsActive;
             _editIsDefault = f.IsDefault;
-            _editNotes = f.Notes;
+            _editHadDemoMarker = f.Notes?.Contains(DemoMarker, StringComparison.Ordinal) == true;
+            _editNotes = WithoutDemoMarker(f.Notes);
             _outputUnit = f.FinishedProductUnit
                 ?? _finishedProducts.FirstOrDefault(p => p.Id == f.FinishedProductId)?.Unit;
             _editItems = f.Items
@@ -734,7 +739,7 @@
             EstimatedProductionMinutes = _editMinutes,
             IsActive = _editIsActive,
             IsDefault = _editIsDefault,
-            Notes = _editNotes,
+            Notes = FormulaNotesForSave(),
             Items = _editItems.Select(i => new CreateProductionFormulaItemDto
             {
                 IngredientProductId = i.IngredientProductId,
@@ -743,6 +748,30 @@
                 SortOrder = order++
             }).ToList()
         };
+    }
+
+    private string? FormulaNotesForSave()
+    {
+        var notes = WithoutDemoMarker(_editNotes);
+        if (!_editHadDemoMarker)
+        {
+            return notes;
+        }
+
+        return string.IsNullOrWhiteSpace(notes)
+            ? DemoMarker
+            : $"{notes} {DemoMarker}";
+    }
+
+    private static string? WithoutDemoMarker(string? notes)
+    {
+        if (string.IsNullOrWhiteSpace(notes))
+        {
+            return notes;
+        }
+
+        var visibleNotes = notes.Replace(DemoMarker, string.Empty, StringComparison.Ordinal).Trim();
+        return visibleNotes.Length == 0 ? null : visibleNotes;
     }
 
     private static UpdateProductionFormulaDto ToUpdateDto(CreateProductionFormulaDto dto) => new()

@@ -1,104 +1,106 @@
 using FluentValidation;
+using Inventory.Localization;
 using Inventory.Products;
+using Microsoft.Extensions.Localization;
 
 namespace Inventory.Validation;
 
 public class CreateProductDtoValidator : AbstractValidator<CreateProductDto>
 {
-    public CreateProductDtoValidator()
+    public CreateProductDtoValidator(IStringLocalizer<InventoryResource> localizer)
     {
         RuleFor(x => x.CategoryId)
-            .NotEmpty().WithMessage("Category is required.");
+            .NotEmpty().WithMessage(_ => localizer["Validation:CategoryRequired"]);
 
         RuleFor(x => x.Name)
-            .NotEmpty().WithMessage("Name is required.")
-            .MaximumLength(128).WithMessage("Name must not exceed 128 characters.");
+            .NotEmpty().WithMessage(_ => localizer["Validation:NameRequired"])
+            .MaximumLength(128).WithMessage(_ => localizer["Validation:NameMax128"]);
 
         RuleFor(x => x.SKU)
-            .NotEmpty().WithMessage("SKU is required.")
-            .MaximumLength(64).WithMessage("SKU must not exceed 64 characters.")
-            .Matches("^[A-Za-z0-9._-]+$").WithMessage("SKU may only contain letters, digits, '.', '_' or '-'.");
+            .NotEmpty().WithMessage(_ => localizer["Validation:SkuRequired"])
+            .MaximumLength(64).WithMessage(_ => localizer["Validation:SkuMax64"])
+            .Matches("^[A-Za-z0-9._-]+$").WithMessage(_ => localizer["Validation:SkuFormat"]);
 
         RuleFor(x => x.Description)
-            .MaximumLength(1024).WithMessage("Description must not exceed 1024 characters.");
+            .MaximumLength(1024).WithMessage(_ => localizer["Validation:DescriptionMax1024"]);
 
         RuleFor(x => x.Unit)
-            .NotEmpty().WithMessage("Unit is required.")
-            .MaximumLength(32).WithMessage("Unit must not exceed 32 characters.");
+            .NotEmpty().WithMessage(_ => localizer["Validation:UnitRequired"])
+            .MaximumLength(32).WithMessage(_ => localizer["Validation:UnitMax32"]);
 
         RuleFor(x => x.CostPrice)
-            .GreaterThanOrEqualTo(0).WithMessage("Cost price must be 0 or greater.");
+            .GreaterThanOrEqualTo(0).WithMessage(_ => localizer["Validation:CostPriceNonNegative"]);
 
         RuleFor(x => x.SalePrice)
-            .GreaterThanOrEqualTo(0).WithMessage("Sale price must be 0 or greater.");
+            .GreaterThanOrEqualTo(0).WithMessage(_ => localizer["Validation:SalePriceNonNegative"]);
 
         RuleFor(x => x.Currency)
-            .NotEmpty().WithMessage("Currency is required.")
-            .Length(3).WithMessage("Currency must be exactly 3 characters.")
-            .Matches("^[A-Z]{3}$").WithMessage("Currency must be a 3-letter ISO code (uppercase).");
+            .NotEmpty().WithMessage(_ => localizer["Validation:CurrencyRequired"])
+            .Length(3).WithMessage(_ => localizer["Validation:CurrencyLength"])
+            .Matches("^[A-Z]{3}$").WithMessage(_ => localizer["Validation:CurrencyIso"]);
 
         RuleFor(x => x.ReorderLevel)
-            .GreaterThanOrEqualTo(0).WithMessage("Reorder level must be 0 or greater.");
+            .GreaterThanOrEqualTo(0).WithMessage(_ => localizer["Validation:ReorderLevelNonNegative"]);
 
         RuleFor(x => x.ImageUrl)
-            .MaximumLength(512).WithMessage("Image URL must not exceed 512 characters.");
+            .MaximumLength(512).WithMessage(_ => localizer["Validation:ImageUrlMax512"]);
 
         RuleFor(x => x.ShelfLifeDays)
             .InclusiveBetween(1, 3650).When(x => x.ShelfLifeDays.HasValue)
-            .WithMessage("Shelf life must be between 1 and 3650 days (leave empty for non-perishable).");
+            .WithMessage(_ => localizer["Validation:ShelfLifeRange"]);
 
         RuleFor(x => x.ProductType)
-            .NotEmpty().WithMessage("Product type is required.")
-            .Must(ProductTypes.IsValid).WithMessage("Invalid product type.");
+            .NotEmpty().WithMessage(_ => localizer["Validation:ProductTypeRequired"])
+            .Must(ProductTypes.IsValid).WithMessage(_ => localizer["Validation:ProductTypeInvalid"]);
     }
 }
 
 public class UpdateProductDtoValidator : AbstractValidator<UpdateProductDto>
 {
-    public UpdateProductDtoValidator()
+    public UpdateProductDtoValidator(IStringLocalizer<InventoryResource> localizer)
     {
         RuleFor(x => x.CategoryId)
-            .NotEmpty().WithMessage("Category is required.");
+            .NotEmpty().WithMessage(_ => localizer["Validation:CategoryRequired"]);
 
         RuleFor(x => x.Name)
-            .NotEmpty().WithMessage("Name is required.")
-            .MaximumLength(128).WithMessage("Name must not exceed 128 characters.");
+            .NotEmpty().WithMessage(_ => localizer["Validation:NameRequired"])
+            .MaximumLength(128).WithMessage(_ => localizer["Validation:NameMax128"]);
 
         RuleFor(x => x.SKU)
-            .NotEmpty().WithMessage("SKU is required.")
-            .MaximumLength(64).WithMessage("SKU must not exceed 64 characters.")
-            .Matches("^[A-Za-z0-9._-]+$").WithMessage("SKU may only contain letters, digits, '.', '_' or '-'.");
+            .NotEmpty().WithMessage(_ => localizer["Validation:SkuRequired"])
+            .MaximumLength(64).WithMessage(_ => localizer["Validation:SkuMax64"])
+            .Matches("^[A-Za-z0-9._-]+$").WithMessage(_ => localizer["Validation:SkuFormat"]);
 
         RuleFor(x => x.Description)
-            .MaximumLength(1024).WithMessage("Description must not exceed 1024 characters.");
+            .MaximumLength(1024).WithMessage(_ => localizer["Validation:DescriptionMax1024"]);
 
         RuleFor(x => x.Unit)
-            .NotEmpty().WithMessage("Unit is required.")
-            .MaximumLength(32).WithMessage("Unit must not exceed 32 characters.");
+            .NotEmpty().WithMessage(_ => localizer["Validation:UnitRequired"])
+            .MaximumLength(32).WithMessage(_ => localizer["Validation:UnitMax32"]);
 
         RuleFor(x => x.CostPrice)
-            .GreaterThanOrEqualTo(0).WithMessage("Cost price must be 0 or greater.");
+            .GreaterThanOrEqualTo(0).WithMessage(_ => localizer["Validation:CostPriceNonNegative"]);
 
         RuleFor(x => x.SalePrice)
-            .GreaterThanOrEqualTo(0).WithMessage("Sale price must be 0 or greater.");
+            .GreaterThanOrEqualTo(0).WithMessage(_ => localizer["Validation:SalePriceNonNegative"]);
 
         RuleFor(x => x.Currency)
-            .NotEmpty().WithMessage("Currency is required.")
-            .Length(3).WithMessage("Currency must be exactly 3 characters.")
-            .Matches("^[A-Z]{3}$").WithMessage("Currency must be a 3-letter ISO code (uppercase).");
+            .NotEmpty().WithMessage(_ => localizer["Validation:CurrencyRequired"])
+            .Length(3).WithMessage(_ => localizer["Validation:CurrencyLength"])
+            .Matches("^[A-Z]{3}$").WithMessage(_ => localizer["Validation:CurrencyIso"]);
 
         RuleFor(x => x.ReorderLevel)
-            .GreaterThanOrEqualTo(0).WithMessage("Reorder level must be 0 or greater.");
+            .GreaterThanOrEqualTo(0).WithMessage(_ => localizer["Validation:ReorderLevelNonNegative"]);
 
         RuleFor(x => x.ImageUrl)
-            .MaximumLength(512).WithMessage("Image URL must not exceed 512 characters.");
+            .MaximumLength(512).WithMessage(_ => localizer["Validation:ImageUrlMax512"]);
 
         RuleFor(x => x.ShelfLifeDays)
             .InclusiveBetween(1, 3650).When(x => x.ShelfLifeDays.HasValue)
-            .WithMessage("Shelf life must be between 1 and 3650 days (leave empty for non-perishable).");
+            .WithMessage(_ => localizer["Validation:ShelfLifeRange"]);
 
         RuleFor(x => x.ProductType)
-            .NotEmpty().WithMessage("Product type is required.")
-            .Must(ProductTypes.IsValid).WithMessage("Invalid product type.");
+            .NotEmpty().WithMessage(_ => localizer["Validation:ProductTypeRequired"])
+            .Must(ProductTypes.IsValid).WithMessage(_ => localizer["Validation:ProductTypeInvalid"]);
     }
 }

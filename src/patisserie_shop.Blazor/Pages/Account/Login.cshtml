@@ -1,13 +1,22 @@
 @page
+@using System.Globalization
 @using Microsoft.AspNetCore.Mvc.Localization
-@using Volo.Abp.Account.Localization
+@using patisserie_shop.Localization
 @using Volo.Abp.AspNetCore.Mvc.UI.Alerts
 @model Volo.Abp.Account.Web.Pages.Account.LoginModel
-@inject IHtmlLocalizer<AccountResource> L
+@inject IHtmlLocalizer<patisserie_shopResource> AppL
 @inject IAlertManager AlertManager
 @{
     Layout = "_LoginLayout";
     var hasErrors = !ViewData.ModelState.IsValid || AlertManager.Alerts.Count > 0;
+    var isArabic = CultureInfo.CurrentUICulture.Name.StartsWith("ar", StringComparison.OrdinalIgnoreCase);
+    var targetCulture = isArabic ? "en" : "ar";
+    var returnUrl = $"{Request.PathBase}{Request.Path}{Request.QueryString}";
+    var cultureSwitchUrl =
+        $"/Abp/Languages/Switch?culture={targetCulture}&uiCulture={targetCulture}&returnUrl={Uri.EscapeDataString(returnUrl)}";
+    var switchLanguageLabel = isArabic
+        ? AppL["Nav:SwitchToEnglish"].Value
+        : AppL["Nav:SwitchToArabic"].Value;
 }
 
 <div class="login-layout">
@@ -20,19 +29,12 @@
                 <span class="panel-brand-mark">
                     <span class="material-icons-outlined">storefront</span>
                 </span>
-                Patisserie
+                @AppL["AppName"]
             </div>
         </div>
         <div class="panel-body">
-            <h1 class="panel-headline">
-                Every pastry,<br>
-                every stock count,<br>
-                <em>accounted for.</em>
-            </h1>
-            <p class="panel-tagline">
-                Inventory, sales, suppliers and stock movements — all in one place,
-                so you can focus on what you bake.
-            </p>
+            <h1 class="panel-headline">@AppL["Account:Login:HeroTitle"]</h1>
+            <p class="panel-tagline">@AppL["Account:Login:HeroSubtitle"]</p>
         </div>
     </div>
 
@@ -41,15 +43,24 @@
 
         <!-- Top-right controls -->
         <div class="login-form-top">
-            <button type="button" class="lang-btn">AR</button>
-            <button type="button" class="login-icon-btn" id="themeBtn" aria-label="Toggle theme">
+            <a class="lang-btn"
+               href="@cultureSwitchUrl"
+               title="@switchLanguageLabel"
+               aria-label="@switchLanguageLabel">@(isArabic ? "EN" : "AR")</a>
+            <button type="button"
+                    class="login-icon-btn"
+                    id="themeBtn"
+                    data-switch-to-light="@AppL["Nav:SwitchToLight"]"
+                    data-switch-to-dark="@AppL["Nav:SwitchToDark"]"
+                    aria-label="@AppL["Nav:SwitchToDark"]"
+                    title="@AppL["Nav:SwitchToDark"]">
                 <span class="material-icons-outlined" id="themeIcon">dark_mode</span>
             </button>
         </div>
 
         <div class="login-card">
-            <h2 class="login-title">Sign in</h2>
-            <p class="login-sub">Welcome back — enter your credentials to continue.</p>
+            <h2 class="login-title">@AppL["Account:Login:SignIn"]</h2>
+            <p class="login-sub">@AppL["Account:Login:Subtitle"]</p>
 
             <!-- ABP alerts + model validation errors -->
             <div class="login-error @(hasErrors ? "show" : "")" role="alert">
@@ -69,14 +80,15 @@
 
                 <div class="login-field">
                     <label class="login-label" asp-for="LoginInput.UserNameOrEmailAddress">
-                        Email or username
+                        @AppL["Account:Login:UserNameOrEmail"]
                     </label>
                     <div class="login-input-wrap">
                         <span class="material-icons-outlined">mail_outline</span>
                         <input asp-for="LoginInput.UserNameOrEmailAddress"
                                type="text"
-                               placeholder="you@patisserie.com"
+                               placeholder="@AppL["Account:Login:UserNamePlaceholder"]"
                                autocomplete="username"
+                               dir="auto"
                                autofocus />
                     </div>
                     <span asp-validation-for="LoginInput.UserNameOrEmailAddress" class="text-danger"></span>
@@ -84,20 +96,27 @@
 
                 <div class="login-field">
                     <div class="login-label-row">
-                        <label class="login-label" asp-for="LoginInput.Password">Password</label>
+                        <label class="login-label" asp-for="LoginInput.Password">@AppL["Account:Password"]</label>
                         <a asp-page="./ForgotPassword"
                            asp-route-returnUrl="@Model.ReturnUrl"
                            asp-route-returnUrlHash="@Model.ReturnUrlHash"
-                           class="login-forgot">Forgot password?</a>
+                           class="login-forgot">@AppL["Account:Login:ForgotPassword"]</a>
                     </div>
-                    <div class="login-input-wrap">
+                    <div class="login-input-wrap password-input-wrap">
                         <span class="material-icons-outlined">lock_outline</span>
                         <input asp-for="LoginInput.Password"
                                type="password"
                                placeholder="••••••••"
                                autocomplete="current-password"
+                               dir="ltr"
                                id="loginPassword" />
-                        <button type="button" class="pw-toggle" id="pwToggle" aria-label="Show password">
+                        <button type="button"
+                                class="pw-toggle"
+                                id="pwToggle"
+                                data-show-label="@AppL["Account:ShowPassword"]"
+                                data-hide-label="@AppL["Account:HidePassword"]"
+                                aria-label="@AppL["Account:ShowPassword"]"
+                                title="@AppL["Account:ShowPassword"]">
                             <span class="material-icons-outlined" id="pwIcon">visibility_off</span>
                         </button>
                     </div>
@@ -106,17 +125,18 @@
 
                 <div class="remember-row">
                     <input asp-for="LoginInput.RememberMe" type="checkbox" id="rememberMe" />
-                    <label class="remember-label" for="rememberMe">Keep me signed in</label>
+                    <label class="remember-label" for="rememberMe">@AppL["Account:Login:RememberMe"]</label>
                 </div>
 
                 <button type="submit" class="login-submit">
                     <span class="material-icons-outlined">login</span>
-                    Sign in
+                    @AppL["Account:Login:SignIn"]
                 </button>
             </form>
 
             <div class="login-footer">
-                Need access? <a href="mailto:admin@patisserie.com">Contact your administrator.</a>
+                @AppL["Account:Login:NeedAccess"]
+                <a href="mailto:admin@patisserie.com">@AppL["Account:Login:ContactAdministrator"]</a>
             </div>
         </div>
 
@@ -131,11 +151,14 @@
             const themeBtn = document.getElementById('themeBtn');
             const themeIcon = document.getElementById('themeIcon');
 
-            function syncIcon() {
+            function syncThemeButton() {
                 const isDark = root.getAttribute('data-theme') === 'dark';
                 themeIcon.textContent = isDark ? 'light_mode' : 'dark_mode';
+                const label = isDark ? themeBtn.dataset.switchToLight : themeBtn.dataset.switchToDark;
+                themeBtn.setAttribute('aria-label', label);
+                themeBtn.title = label;
             }
-            syncIcon();
+            syncThemeButton();
 
             themeBtn.addEventListener('click', function () {
                 const isDark = root.getAttribute('data-theme') === 'dark';
@@ -144,7 +167,7 @@
                 } else {
                     root.setAttribute('data-theme', isDark ? 'light' : 'dark');
                 }
-                syncIcon();
+                syncThemeButton();
             });
 
             // Password visibility toggle
@@ -156,6 +179,9 @@
                     const show = pwInput.type === 'password';
                     pwInput.type = show ? 'text' : 'password';
                     pwIcon.textContent = show ? 'visibility' : 'visibility_off';
+                    const label = show ? pwToggle.dataset.hideLabel : pwToggle.dataset.showLabel;
+                    pwToggle.setAttribute('aria-label', label);
+                    pwToggle.title = label;
                 });
             }
         })();

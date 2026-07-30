@@ -25,8 +25,6 @@ public class ProductionActionItemReadModel
 {
     public string Type { get; set; } = null!;
     public string Severity { get; set; } = null!;
-    public string Title { get; set; } = null!;
-    public string Detail { get; set; } = null!;
     public string Url { get; set; } = null!;
     public int Count { get; set; }
 }

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using Inventory;
 using Inventory.Entities;
 using Microsoft.Extensions.Logging;
 using Operations.Entities;
@@ -9,50 +10,43 @@ using Volo.Abp.Data;
 using Volo.Abp.DependencyInjection;
 using Volo.Abp.Domain.Repositories;
 using Volo.Abp.Guids;
+using Volo.Abp.Identity;
+using Volo.Abp.Security.Claims;
 using Volo.Abp.Uow;
 
 namespace patisserie_shop.DbMigrator;
 
 /// <summary>
-/// Seeds ~90 days of historical demo sales for the two retail branches
-/// (Main Street Boutique and Riverside Café) so the dashboards and charts
-/// have realistic history on a fresh database.
-///
-/// Runs AFTER <see cref="PatisserieDataSeedContributor"/> (ordering enforced in
-/// <see cref="patisserie_shopDbMigratorModule"/> via AbpDataSeedOptions) and bails
-/// out gracefully if the expected branches/products are missing.
-///
-/// IMPORTANT: historical sales are inserted silently — AppSale.Record() is
-/// deliberately NOT called, so no SaleRecordedEto is published and current
-/// stock levels are not touched. These rows are pure ledger history.
-///
-/// Idempotent: skips entirely if any HIST- invoice already exists, or if the
-/// database already contains sales older than 7 days (i.e. history of any kind).
+/// Creates ninety days of deterministic sales for every sales branch. The rows are inserted
+/// as historical ledger data, without publishing SaleRecordedEto, so the carefully staged
+/// current stock balances remain unchanged. Every sale is attributed to that branch's cashier.
 /// </summary>
 public class SalesHistorySeedContributor : IDataSeedContributor, ITransientDependency
 {
-    public const string HistoricalInvoicePrefix = "HIST-";
-
     private const int HistoryDays = 90;
-    private const string MainStreetBranchName = "بوتيك الشارع الرئيسي";
-    private const string RiversideBranchName = "مقهى ضفة النهر";
 
-    private readonly IRepository<AppSale, Guid> _saleRepo;
-    private readonly IRepository<AppProduct, Guid> _productRepo;
-    private readonly IRepository<AppBranch, Guid> _branchRepo;
+    private readonly IRepository<AppSale, Guid> _saleRepository;
+    private readonly IRepository<AppProduct, Guid> _productRepository;
+    private readonly IRepository<AppBranch, Guid> _branchRepository;
+    private readonly IdentityUserManager _userManager;
+    private readonly ICurrentPrincipalAccessor _currentPrincipalAccessor;
     private readonly IGuidGenerator _guidGenerator;
     private readonly ILogger<SalesHistorySeedContributor> _logger;
 
     public SalesHistorySeedContributor(
-        IRepository<AppSale, Guid> saleRepo,
-        IRepository<AppProduct, Guid> productRepo,
-        IRepository<AppBranch, Guid> branchRepo,
+        IRepository<AppSale, Guid> saleRepository,
+        IRepository<AppProduct, Guid> productRepository,
+        IRepository<AppBranch, Guid> branchRepository,
+        IdentityUserManager userManager,
+        ICurrentPrincipalAccessor currentPrincipalAccessor,
         IGuidGenerator guidGenerator,
         ILogger<SalesHistorySeedContributor> logger)
     {
-        _saleRepo = saleRepo;
-        _productRepo = productRepo;
-        _branchRepo = branchRepo;
+        _saleRepository = saleRepository;
+        _productRepository = productRepository;
+        _branchRepository = branchRepository;
+        _userManager = userManager;
+        _currentPrincipalAccessor = currentPrincipalAccessor;
         _guidGenerator = guidGenerator;
         _logger = logger;
     }
@@ -60,140 +54,116 @@ public class SalesHistorySeedContributor : IDataSeedContributor, ITransientDepen
     [UnitOfWork]
     public async Task SeedAsync(DataSeedContext context)
     {
-        // ── Idempotency guard ──
-        var historyCutoff = DateTime.UtcNow.AddDays(-7);
-        var alreadySeeded = await _saleRepo.AnyAsync(s =>
-            s.InvoiceNumber.StartsWith(HistoricalInvoicePrefix) || s.SaleDate < historyCutoff);
-        if (alreadySeeded)
+        if (await _saleRepository.AnyAsync(s => s.SaleDate < DateTime.UtcNow.AddDays(-7)))
         {
-            _logger.LogInformation("[Seed] Historical sales already exist — skipping sales history seeding.");
+            _logger.LogInformation("[Seed] Historical sales already exist; sales history was preserved.");
             return;
         }
 
-        // ── Prerequisites (seeded by PatisserieDataSeedContributor) ──
-        var branches = await _branchRepo.GetListAsync();
-        var mainStreet = branches.FirstOrDefault(b => b.Name == MainStreetBranchName);
-        var riverside = branches.FirstOrDefault(b => b.Name == RiversideBranchName);
-        if (mainStreet == null || riverside == null)
-        {
-            _logger.LogWarning(
-                "[Seed] Sales history seeding skipped — expected retail branches not found. " +
-                "Existing branches: {Names}. Re-run the migrator after the demo branches exist.",
-                string.Join(", ", branches.Select(b => b.Name)));
-            return;
-        }
-
-        var products = (await _productRepo.GetListAsync()).Where(p => p.IsActive).ToList();
-        if (products.Count == 0)
-        {
-            _logger.LogWarning("[Seed] Sales history seeding skipped — no active products found.");
-            return;
-        }
-
-        // Popularity weights by SKU prefix: viennoiseries/breads sell most,
-        // petit fours / cookies mid, cakes less, seasonal least.
-        var weighted = products
+        var products = (await _productRepository.GetListAsync())
+            .Where(p => p.IsActive
+                        && p.IsSellable
+                        && p.ProductType == ProductTypes.FinishedGood)
             .Select(p => (Product: p, Weight: GetPopularityWeight(p.SKU)))
             .ToList();
+        if (products.Count == 0)
+        {
+            _logger.LogWarning("[Seed] Sales history could not be created because no sellable finished products exist.");
+            return;
+        }
 
-        // Fixed seed → deterministic, reproducible demo data.
-        var rng = new Random(20260610);
-
-        // 90 days ending yesterday (UTC dates).
+        var branches = await _branchRepository.GetListAsync(
+            b => b.IsActive && b.BranchType == BranchTypes.SalesBranch);
+        var branchesByName = branches.ToDictionary(b => b.Name);
         var endDay = DateTime.UtcNow.Date.AddDays(-1);
         var startDay = endDay.AddDays(-(HistoryDays - 1));
-
-        // (branch, weekday base min/max) — Main Street runs slightly busier.
-        var retailBranches = new[]
-        {
-            (Branch: mainStreet, MinPerDay: 5, MaxPerDay: 10),
-            (Branch: riverside, MinPerDay: 4, MaxPerDay: 8),
-        };
-
-        // Keep the dead-stock scenarios staged by PatisserieDataSeedContributor
-        // coherent: Main Street's seasonal items were "last sold" 35–45 days ago,
-        // Riverside's Profiterole Tower (PF-005) 40 days ago — so no historical
-        // sales of those products inside their dead windows.
-        var mainSeasonalCutoff = endDay.AddDays(-45);
-        var riversidePf005Cutoff = endDay.AddDays(-40);
-        var mainRecentPool = weighted
-            .Where(x => !x.Product.SKU.StartsWith("SS-", StringComparison.OrdinalIgnoreCase))
-            .ToList();
-        var riversideRecentPool = weighted
-            .Where(x => !x.Product.SKU.Equals("PF-005", StringComparison.OrdinalIgnoreCase))
-            .ToList();
-
-        var batch = new List<AppSale>();
         var totalSales = 0;
         var totalItems = 0;
 
-        for (var dayIndex = 0; dayIndex < HistoryDays; dayIndex++)
+        for (var branchIndex = 0; branchIndex < GraduationSeedData.RetailBranches.Count; branchIndex++)
         {
-            var day = startDay.AddDays(dayIndex);
-
-            // Gentle upward trend: +~15% volume over the 90-day window.
-            var trendFactor = 1.0 + 0.15 * dayIndex / (HistoryDays - 1);
-            var weekendFactor = day.DayOfWeek switch
+            var spec = GraduationSeedData.RetailBranches[branchIndex];
+            if (!branchesByName.TryGetValue(spec.Name, out var branch) || spec.CashierUserName == null)
             {
-                DayOfWeek.Friday => 1.3,
-                DayOfWeek.Saturday => 1.6,
-                DayOfWeek.Sunday => 1.4,
-                _ => 1.0,
-            };
-
-            var daySeq = 0;
-            foreach (var (branch, minPerDay, maxPerDay) in retailBranches)
-            {
-                var pool = weighted;
-                if (branch == mainStreet && day >= mainSeasonalCutoff)
-                {
-                    pool = mainRecentPool;
-                }
-                else if (branch == riverside && day >= riversidePf005Cutoff)
-                {
-                    pool = riversideRecentPool;
-                }
-
-                var baseCount = rng.Next(minPerDay, maxPerDay + 1);
-                var saleCount = Math.Max(1, (int)Math.Round(baseCount * weekendFactor * trendFactor));
-
-                for (var i = 0; i < saleCount; i++)
-                {
-                    daySeq++;
-                    var sale = BuildSale(rng, branch.Id, day, daySeq, pool);
-                    totalSales++;
-                    totalItems += sale.Items.Count;
-                    batch.Add(sale);
-                }
+                continue;
             }
 
-            // Flush once per week to keep the change tracker small.
-            if ((dayIndex + 1) % 7 == 0 || dayIndex == HistoryDays - 1)
+            var cashier = await _userManager.FindByNameAsync(spec.CashierUserName)
+                ?? throw new InvalidOperationException(
+                    $"Presentation cashier '{spec.CashierUserName}' was not found.");
+            using var actorScope = _currentPrincipalAccessor.Change(
+                GraduationSeedData.PrincipalFor(
+                    cashier,
+                    IdentityDataSeedContributor.CashierRoleName));
+
+            var rng = new Random(20260730 + branchIndex * 97);
+            var recentPool = GetRecentProductPool(spec.Name, products);
+            var branchBatch = new List<AppSale>();
+
+            for (var dayIndex = 0; dayIndex < HistoryDays; dayIndex++)
             {
-                await _saleRepo.InsertManyAsync(batch, autoSave: true);
-                batch.Clear();
+                var day = startDay.AddDays(dayIndex);
+                var trendFactor = 0.92 + 0.16 * dayIndex / (HistoryDays - 1);
+                var busyDayFactor = day.DayOfWeek switch
+                {
+                    DayOfWeek.Thursday => 1.18,
+                    DayOfWeek.Friday => 1.35,
+                    DayOfWeek.Saturday => 1.15,
+                    _ => 1.0
+                };
+                var baseCount = rng.Next(spec.MinSalesPerDay, spec.MaxSalesPerDay + 1);
+                var saleCount = Math.Max(
+                    1,
+                    (int)Math.Round(baseCount * trendFactor * busyDayFactor));
+
+                for (var sequence = 1; sequence <= saleCount; sequence++)
+                {
+                    var pool = day >= endDay.AddDays(-40) ? recentPool : products;
+                    var sale = BuildSale(
+                        rng,
+                        branch.Id,
+                        branchIndex,
+                        day,
+                        sequence,
+                        pool);
+                    branchBatch.Add(sale);
+                    totalSales++;
+                    totalItems += sale.Items.Count;
+                }
+
+                if ((dayIndex + 1) % 7 == 0 || dayIndex == HistoryDays - 1)
+                {
+                    await _saleRepository.InsertManyAsync(branchBatch, autoSave: true);
+                    branchBatch.Clear();
+                }
             }
         }
 
         _logger.LogInformation(
-            "[Seed] Seeded {Sales} historical sales ({Items} line items) across {Days} days " +
-            "for {MainStreet} and {Riverside}.",
-            totalSales, totalItems, HistoryDays, MainStreetBranchName, RiversideBranchName);
+            "[Seed] Created {Sales} historical sales with {Items} lines across {Branches} branches and {Days} days.",
+            totalSales,
+            totalItems,
+            GraduationSeedData.RetailBranches.Count,
+            HistoryDays);
     }
 
     private AppSale BuildSale(
         Random rng,
         Guid branchId,
+        int branchIndex,
         DateTime day,
-        int daySeq,
+        int sequence,
         List<(AppProduct Product, int Weight)> weighted)
     {
-        // Invoice format clearly distinct from the app's INV-YYYY-NNNN sequence,
-        // unique per (day, sequence-within-day) — no collision risk.
-        var invoiceNumber = $"{HistoricalInvoicePrefix}{day:yyyyMMdd}-{daySeq:D3}";
-
-        // Sale time spread across business hours, 07:00–19:00.
-        var saleDate = day.AddHours(7).AddMinutes(rng.Next(0, 12 * 60 + 1));
+        var invoiceNumber = $"INV-{day:yyyyMMdd}-{branchIndex + 1:D2}{sequence:D3}";
+        var saleDate = day.AddHours(7).AddMinutes(rng.Next(0, 13 * 60 + 1));
+        var notes = rng.Next(0, 10) switch
+        {
+            0 => "طلب استلام من الفرع.",
+            1 => "طلب ضيافة لمكتب قريب.",
+            2 => "تم تطبيق عرض الصباح.",
+            _ => null
+        };
 
         var sale = new AppSale(
             _guidGenerator.Create(),
@@ -201,62 +171,63 @@ public class SalesHistorySeedContributor : IDataSeedContributor, ITransientDepen
             invoiceNumber,
             saleDate,
             currency: "USD",
-            notes: "بيع تجريبي تاريخي مُدخَل");
+            notes);
 
-        // 1–5 distinct products per sale, popularity-weighted without replacement.
         var lineCount = rng.Next(1, 6);
         var pool = new List<(AppProduct Product, int Weight)>(weighted);
-
         for (var line = 0; line < lineCount && pool.Count > 0; line++)
         {
             var product = PickWeighted(rng, pool);
-
-            // Big-ticket items (whole cakes, etc.) sell 1–2 at a time; the rest 1–6.
-            var maxQty = product.SalePrice >= 20m ? 2 : 6;
-            var quantity = rng.Next(1, maxQty + 1);
-
-            // Occasional small price variation (promo / day-old discount, ±5%).
-            var unitPrice = product.SalePrice;
-            if (rng.NextDouble() < 0.15)
-            {
-                var variation = (decimal)(0.95 + rng.NextDouble() * 0.10);
-                unitPrice = Math.Round(unitPrice * variation, 2, MidpointRounding.AwayFromZero);
-            }
-
+            var maxQuantity = product.SalePrice >= 20m ? 2 : 6;
+            var quantity = rng.Next(1, maxQuantity + 1);
+            var unitPrice = rng.NextDouble() < 0.12
+                ? Math.Round(product.SalePrice * 0.90m, 2, MidpointRounding.AwayFromZero)
+                : product.SalePrice;
             sale.AddItem(_guidGenerator.Create(), product.Id, quantity, unitPrice);
         }
 
-        // NOTE: sale.Record(...) is intentionally NOT called — see class docs.
         return sale;
     }
 
-    private static AppProduct PickWeighted(Random rng, List<(AppProduct Product, int Weight)> pool)
+    private static List<(AppProduct Product, int Weight)> GetRecentProductPool(
+        string branchName,
+        List<(AppProduct Product, int Weight)> products)
     {
-        var totalWeight = pool.Sum(x => x.Weight);
-        var roll = rng.Next(0, totalWeight);
-
-        for (var i = 0; i < pool.Count; i++)
+        var excludedSku = branchName switch
         {
-            roll -= pool[i].Weight;
+            "فرع المزة" => "SS-001",
+            "فرع المالكي" => "SS-002",
+            "فرع مشروع دمر" => "PF-005",
+            "فرع جرمانا" => "SS-003",
+            _ => null
+        };
+
+        return excludedSku == null
+            ? products
+            : products.Where(x => x.Product.SKU != excludedSku).ToList();
+    }
+
+    private static AppProduct PickWeighted(
+        Random rng,
+        List<(AppProduct Product, int Weight)> pool)
+    {
+        var roll = rng.Next(0, pool.Sum(x => x.Weight));
+        for (var index = 0; index < pool.Count; index++)
+        {
+            roll -= pool[index].Weight;
             if (roll < 0)
             {
-                var picked = pool[i].Product;
-                pool.RemoveAt(i); // without replacement — AddItem forbids duplicate products
+                var picked = pool[index].Product;
+                pool.RemoveAt(index);
                 return picked;
             }
         }
 
-        // Unreachable when totalWeight > 0; defensive fallback.
-        var last = pool[^1].Product;
+        var fallback = pool[^1].Product;
         pool.RemoveAt(pool.Count - 1);
-        return last;
+        return fallback;
     }
 
-    /// <summary>
-    /// Demo SKUs are prefixed by category (see PatisserieDataSeedContributor):
-    /// VN viennoiseries, BR breads, PF petit fours, CB cookies, CT cakes & tarts,
-    /// SS seasonal specials. Unknown SKUs get a middle-of-the-road weight.
-    /// </summary>
     private static int GetPopularityWeight(string sku)
     {
         if (sku.StartsWith("VN-", StringComparison.OrdinalIgnoreCase)) return 10;
@@ -264,7 +235,7 @@ public class SalesHistorySeedContributor : IDataSeedContributor, ITransientDepen
         if (sku.StartsWith("PF-", StringComparison.OrdinalIgnoreCase)) return 5;
         if (sku.StartsWith("CB-", StringComparison.OrdinalIgnoreCase)) return 5;
         if (sku.StartsWith("CT-", StringComparison.OrdinalIgnoreCase)) return 3;
-        if (sku.StartsWith("SS-", StringComparison.OrdinalIgnoreCase)) return 1;
+        if (sku.StartsWith("SS-", StringComparison.OrdinalIgnoreCase)) return 2;
         return 4;
     }
 }

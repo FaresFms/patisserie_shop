@@ -48,6 +48,7 @@ public class DecisionMakerService : DomainService
     /// </summary>
     public async Task EvaluateAsync(StockChangedEto eto, int expiredQuantity = 0)
     {
+        using var contentCulture = PersistedContentCulture.UseArabic();
         var sellableQty = Math.Max(0, eto.NewQty - Math.Max(0, expiredQuantity));
 
         var queryable = (await _rulesRepo.GetQueryableAsync())
