@@ -6,14 +6,17 @@
 @using Volo.Abp.Application.Dtos
 @using Volo.Abp.AspNetCore.Components.Web.Theming.Layout
 @using Volo.Abp.Identity
+@using patisserie_shop.Users
 @using Color = MudBlazor.Color
 @using Variant = MudBlazor.Variant
 @using Size = MudBlazor.Size
 @using Margin = MudBlazor.Margin
 @inherits patisserie_shopComponentBase
 @inject IIdentityUserAppService UserAppService
+@inject IUserDirectoryAppService UserDirectoryAppService
 @inject PageLayout PageLayout
 @inject ISnackbar Snackbar
+@inject NavigationManager Navigation
 
 @{
     PageLayout.Title = L["Users"];
@@ -48,6 +51,18 @@
                            Immediate="true"
                            Class="toolbar-search"
                            Style="max-width: 320px;" />
+            <div class="filter-chip">
+                <SoftLookupSelect TItem="IdentityRoleDto" TValue="Guid?"
+                                  Items="_allRoles"
+                                  ToValue="@(role => (Guid?)role.Id)"
+                                  ToLabel="@(role => DisplayRoleName(role.Name))"
+                                  Value="_roleFilter"
+                                  ValueChanged="OnRoleFilterChangedAsync"
+                                  Label="@L["Users:AllRoles"]"
+                                  Margin="Margin.Dense"
+                                  Clearable="true"
+                                  Dense="true" />
+            </div>
             <div class="toolbar-right">
                 <SoftButton Variant="Variant.Text" Color="Color.Primary"
                             StartIcon="@Icons.Material.Filled.Refresh" OnClick="ReloadAsync">
@@ -84,6 +99,11 @@
                     <CellTemplate>
                         <span class="row-actions">
                             <SoftStack Row="true" Spacing="1">
+                                <SoftTooltip Text="@L["Users:ViewDetails"]">
+                                    <SoftIconButton Icon="@Icons.Material.Filled.Visibility"
+                                                    Color="Color.Default" Size="Size.Small"
+                                                    OnClick="() => OpenDetails(context.Item.Id)" />
+                                </SoftTooltip>
                                 @if (_canManagePermissions)
                                 {
                                     <SoftIconButton Icon="@Icons.Material.Filled.Security"
@@ -234,6 +254,7 @@
     private SoftDataGrid<IdentityUserDto> _grid = null!;
     private bool _loading;
     private string? _filter;
+    private Guid? _roleFilter;
 
     private bool _canCreate;
     private bool _canUpdate;
@@ -285,9 +306,10 @@
                 sorting = $"{sort.SortBy} {(sort.Descending ? "desc" : "asc")}";
             }
 
-            var result = await UserAppService.GetListAsync(new GetIdentityUsersInput
+            var result = await UserDirectoryAppService.GetListAsync(new GetUsersInput
             {
                 Filter = _filter,
+                RoleId = _roleFilter,
                 SkipCount = state.Page * state.PageSize,
                 MaxResultCount = state.PageSize,
                 Sorting = sorting
@@ -313,6 +335,17 @@
     private async Task ReloadAsync()
     {
         if (_grid != null) await _grid.ReloadServerData();
+    }
+
+    private async Task OnRoleFilterChangedAsync(Guid? roleId)
+    {
+        _roleFilter = roleId;
+        await ReloadAsync();
+    }
+
+    private void OpenDetails(Guid userId)
+    {
+        Navigation.NavigateTo($"/identity/users/{userId}");
     }
 
     private void ToggleRole(string roleName, bool selected)

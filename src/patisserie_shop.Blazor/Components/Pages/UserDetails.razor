@@ -1,0 +1,497 @@
+@page "/identity/users/{UserId:guid}"
+@attribute [Authorize(IdentityPermissions.Users.Default)]
+@using System.Globalization
+@using Microsoft.AspNetCore.Authorization
+@using Volo.Abp.AspNetCore.Components.Web.Theming.Layout
+@using Volo.Abp.Identity
+@using patisserie_shop.Users
+@using Color = MudBlazor.Color
+@using Variant = MudBlazor.Variant
+@using Size = MudBlazor.Size
+@inherits patisserie_shopComponentBase
+@inject IUserDirectoryAppService UserDirectoryAppService
+@inject PageLayout PageLayout
+@inject NavigationManager Navigation
+
+@{
+    PageLayout.Title = L["Users:Details"];
+}
+
+<SoftCard Elevation="2" Class="pa-2 page-flat user-details-page">
+    <div class="page-head">
+        <div>
+            <h1 class="page-title">@(_user is null ? L["Users:Details"] : DisplayName(_user))</h1>
+            <div class="page-sub">@L["Users:DetailsSubtitle"]</div>
+        </div>
+        <div class="page-head-actions">
+            <SoftButton Variant="Variant.Text"
+                        Color="Color.Primary"
+                        StartIcon="@Icons.Material.Filled.ArrowBack"
+                        OnClick="BackToUsers">
+                @L["Users:BackToUsers"]
+            </SoftButton>
+        </div>
+    </div>
+
+    <SoftCardContent>
+        @if (_loading)
+        {
+            <SoftStack Spacing="3">
+                <SoftSkeleton Height="150px" />
+                <SoftSkeleton Height="240px" />
+            </SoftStack>
+        }
+        else if (_user is null)
+        {
+            <SoftAlert Severity="Severity.Error">@L["Users:DetailsLoadFailed"]</SoftAlert>
+        }
+        else
+        {
+            <div class="user-details-hero">
+                <div class="user-details-identity">
+                    <div class="user-details-avatar">
+                        <SoftIcon Icon="@Icons.Material.Filled.Person" Size="Size.Large" Color="Color.Primary" />
+                    </div>
+                    <div>
+                        <div class="user-details-name">@DisplayName(_user)</div>
+                        <div class="user-details-username">@@@_user.UserName</div>
+                        <div class="user-details-chips">
+                            <SoftChip T="string"
+                                      Color="@(_user.IsActive ? Color.Success : Color.Default)"
+                                      Size="Size.Small"
+                                      Variant="@(_user.IsActive ? Variant.Filled : Variant.Outlined)">
+                                @(_user.IsActive ? L["Users:Active"] : L["Users:Inactive"])
+                            </SoftChip>
+                            @foreach (var roleName in _user.RoleNames)
+                            {
+                                <SoftChip T="string" Color="Color.Primary" Size="Size.Small" Variant="Variant.Outlined">
+                                    @DisplayRoleName(roleName)
+                                </SoftChip>
+                            }
+                        </div>
+                    </div>
+                </div>
+
+                <div class="user-last-login">
+                    <div class="user-last-login-icon">
+                        <SoftIcon Icon="@Icons.Material.Filled.Login" Color="Color.Primary" Size="Size.Medium" />
+                    </div>
+                    <div>
+                        <div class="user-detail-label">@L["Users:LastLogin"]</div>
+                        <div class="@(_user.LastSignInTime.HasValue ? "user-last-login-value" : "user-last-login-value user-last-login-value--empty")">
+                            @FormatLastLogin(_user.LastSignInTime)
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="user-details-grid">
+                <SoftCard Elevation="1" Class="user-detail-section">
+                    <SoftCardContent>
+                        <div class="user-detail-section-title">
+                            <SoftIcon Icon="@Icons.Material.Filled.Badge" Color="Color.Primary" Size="Size.Small" />
+                            <span>@L["Users:AccountInformation"]</span>
+                        </div>
+                        <div class="user-detail-list">
+                            <div class="user-detail-row">
+                                <span class="user-detail-label">@L["Users:Username"]</span>
+                                <span class="user-detail-value">@_user.UserName</span>
+                            </div>
+                            <div class="user-detail-row">
+                                <span class="user-detail-label">@L["Users:FullName"]</span>
+                                <span class="user-detail-value">@DisplayName(_user)</span>
+                            </div>
+                            <div class="user-detail-row">
+                                <span class="user-detail-label">@L["Roles"]</span>
+                                <span class="user-detail-value">@DisplayRoles(_user)</span>
+                            </div>
+                            <div class="user-detail-row">
+                                <span class="user-detail-label">@L["Users:CreatedAt"]</span>
+                                <span class="user-detail-value">@FormatDate(_user.CreationTime)</span>
+                            </div>
+                            <div class="user-detail-row">
+                                <span class="user-detail-label">@L["Users:LastUpdated"]</span>
+                                <span class="user-detail-value">@FormatDate(_user.LastModificationTime)</span>
+                            </div>
+                        </div>
+                    </SoftCardContent>
+                </SoftCard>
+
+                <SoftCard Elevation="1" Class="user-detail-section">
+                    <SoftCardContent>
+                        <div class="user-detail-section-title">
+                            <SoftIcon Icon="@Icons.Material.Filled.ContactMail" Color="Color.Primary" Size="Size.Small" />
+                            <span>@L["Users:ContactInformation"]</span>
+                        </div>
+                        <div class="user-detail-list">
+                            <div class="user-detail-row">
+                                <span class="user-detail-label">@L["Users:Email"]</span>
+                                <span class="user-detail-value user-detail-value-with-chip">
+                                    <span>@DisplayValue(_user.Email)</span>
+                                    <SoftChip T="string"
+                                              Color="@(_user.EmailConfirmed ? Color.Success : Color.Default)"
+                                              Size="Size.Small"
+                                              Variant="Variant.Outlined">
+                                        @(_user.EmailConfirmed ? L["Users:Confirmed"] : L["Users:NotConfirmed"])
+                                    </SoftChip>
+                                </span>
+                            </div>
+                            <div class="user-detail-row">
+                                <span class="user-detail-label">@L["Users:Phone"]</span>
+                                <span class="user-detail-value user-detail-value-with-chip">
+                                    <span>@DisplayValue(_user.PhoneNumber)</span>
+                                    <SoftChip T="string"
+                                              Color="@(_user.PhoneNumberConfirmed ? Color.Success : Color.Default)"
+                                              Size="Size.Small"
+                                              Variant="Variant.Outlined">
+                                        @(_user.PhoneNumberConfirmed ? L["Users:Confirmed"] : L["Users:NotConfirmed"])
+                                    </SoftChip>
+                                </span>
+                            </div>
+                        </div>
+                    </SoftCardContent>
+                </SoftCard>
+
+                <SoftCard Elevation="1" Class="user-detail-section user-detail-section--wide">
+                    <SoftCardContent>
+                        <div class="user-detail-section-title">
+                            <SoftIcon Icon="@Icons.Material.Filled.Security" Color="Color.Primary" Size="Size.Small" />
+                            <span>@L["Users:SecurityInformation"]</span>
+                        </div>
+                        <div class="user-detail-list user-detail-list--columns">
+                            <div class="user-detail-row">
+                                <span class="user-detail-label">@L["Users:LastLogin"]</span>
+                                <span class="user-detail-value">@FormatLastLogin(_user.LastSignInTime)</span>
+                            </div>
+                            <div class="user-detail-row">
+                                <span class="user-detail-label">@L["Users:LastPasswordChange"]</span>
+                                <span class="user-detail-value">@FormatDate(_user.LastPasswordChangeTime)</span>
+                            </div>
+                            <div class="user-detail-row">
+                                <span class="user-detail-label">@L["Users:LockoutProtection"]</span>
+                                <span class="user-detail-value">
+                                    @(_user.LockoutEnabled ? L["Users:Enabled"] : L["Users:Disabled"])
+                                </span>
+                            </div>
+                            <div class="user-detail-row">
+                                <span class="user-detail-label">@L["Users:LockedUntil"]</span>
+                                <span class="user-detail-value">@FormatLockout(_user.LockoutEnd)</span>
+                            </div>
+                        </div>
+                    </SoftCardContent>
+                </SoftCard>
+            </div>
+        }
+    </SoftCardContent>
+</SoftCard>
+
+<style>
+    .user-details-hero {
+        display: flex;
+        align-items: stretch;
+        justify-content: space-between;
+        gap: 24px;
+        padding: 24px;
+        margin-bottom: 20px;
+        border: 1px solid var(--bd-2);
+        border-radius: var(--r-lg);
+        background: linear-gradient(135deg, var(--surface), var(--accent-soft));
+        box-shadow: var(--shadow-sm);
+    }
+
+    .user-details-identity {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        min-width: 0;
+    }
+
+    .user-details-avatar {
+        width: 64px;
+        height: 64px;
+        flex: 0 0 64px;
+        display: grid;
+        place-items: center;
+        border-radius: 50%;
+        border: 1px solid var(--accent-line);
+        background: var(--surface);
+    }
+
+    .user-details-name {
+        color: var(--fg-1);
+        font-family: var(--font-serif);
+        font-size: 24px;
+        font-weight: 700;
+        line-height: 1.2;
+    }
+
+    .user-details-username {
+        margin-top: 3px;
+        color: var(--fg-3);
+        font-family: var(--font-mono);
+        font-size: 13px;
+    }
+
+    .user-details-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-top: 12px;
+    }
+
+    .user-last-login {
+        min-width: 300px;
+        display: flex;
+        align-items: center;
+        gap: 13px;
+        padding: 18px 20px;
+        border: 1px solid var(--accent-line);
+        border-radius: var(--r-md);
+        background: var(--surface);
+    }
+
+    .user-last-login-icon {
+        width: 42px;
+        height: 42px;
+        display: grid;
+        place-items: center;
+        border-radius: 50%;
+        background: var(--accent-soft);
+    }
+
+    .user-last-login-value {
+        margin-top: 4px;
+        color: var(--fg-1);
+        font-size: 17px;
+        font-weight: 700;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .user-last-login-value--empty {
+        color: var(--fg-3);
+        font-weight: 600;
+    }
+
+    .user-details-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 16px;
+    }
+
+    .user-detail-section {
+        border: 1px solid var(--bd-2);
+        border-radius: var(--r-md);
+        background: var(--surface);
+        box-shadow: var(--shadow-sm);
+    }
+
+    .user-detail-section--wide {
+        grid-column: 1 / -1;
+    }
+
+    .user-detail-section-title {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        padding-bottom: 13px;
+        margin-bottom: 4px;
+        border-bottom: 1px solid var(--bd-1);
+        color: var(--fg-1);
+        font-family: var(--font-serif);
+        font-size: 17px;
+        font-weight: 700;
+    }
+
+    .user-detail-list {
+        display: grid;
+    }
+
+    .user-detail-list--columns {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        column-gap: 28px;
+    }
+
+    .user-detail-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 18px;
+        min-height: 48px;
+        padding: 9px 0;
+        border-bottom: 1px solid var(--bd-1);
+    }
+
+    .user-detail-row:last-child {
+        border-bottom: 0;
+    }
+
+    .user-detail-label {
+        color: var(--fg-3);
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: .04em;
+        text-transform: uppercase;
+    }
+
+    .user-detail-value {
+        min-width: 0;
+        color: var(--fg-1);
+        font-size: 14px;
+        font-weight: 600;
+        text-align: end;
+        overflow-wrap: anywhere;
+    }
+
+    .user-detail-value-with-chip {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    @@media (max-width: 900px) {
+        .user-details-hero {
+            flex-direction: column;
+        }
+
+        .user-last-login {
+            min-width: 0;
+        }
+
+        .user-details-grid,
+        .user-detail-list--columns {
+            grid-template-columns: 1fr;
+        }
+
+        .user-detail-section--wide {
+            grid-column: auto;
+        }
+    }
+
+    @@media (max-width: 560px) {
+        .user-details-hero {
+            padding: 18px;
+        }
+
+        .user-details-identity {
+            align-items: flex-start;
+        }
+
+        .user-details-avatar {
+            width: 50px;
+            height: 50px;
+            flex-basis: 50px;
+        }
+
+        .user-details-name {
+            font-size: 20px;
+        }
+
+        .user-detail-row {
+            align-items: flex-start;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .user-detail-value,
+        .user-detail-value-with-chip {
+            text-align: start;
+            justify-content: flex-start;
+        }
+    }
+</style>
+
+@code {
+    [Parameter] public Guid UserId { get; set; }
+
+    private bool _loading;
+    private UserDetailsDto? _user;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _loading = true;
+        _user = null;
+
+        try
+        {
+            _user = await UserDirectoryAppService.GetDetailsAsync(UserId);
+        }
+        catch (Exception ex)
+        {
+            await HandleErrorAsync(ex);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void BackToUsers()
+    {
+        Navigation.NavigateTo("/identity/users");
+    }
+
+    private string DisplayName(UserDetailsDto user)
+    {
+        var fullName = $"{user.Name} {user.Surname}".Trim();
+        return string.IsNullOrWhiteSpace(fullName) ? user.UserName : fullName;
+    }
+
+    private string DisplayRoles(UserDetailsDto user)
+    {
+        if (user.RoleNames.Count == 0)
+        {
+            return L["Users:NoAssignedRoles"];
+        }
+
+        return string.Join(", ", user.RoleNames.ConvertAll(DisplayRoleName));
+    }
+
+    private string DisplayRoleName(string roleName) => roleName switch
+    {
+        "admin" => L["Roles:DisplayName:Admin"],
+        "BranchManager" => L["Roles:DisplayName:BranchManager"],
+        "Cashier" => L["Roles:DisplayName:Cashier"],
+        "KitchenManager" => L["Roles:DisplayName:KitchenManager"],
+        _ => roleName
+    };
+
+    private string DisplayValue(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? L["Users:NotProvided"] : value;
+    }
+
+    private string FormatDate(DateTimeOffset? value)
+    {
+        return value.HasValue
+            ? value.Value.ToLocalTime().ToString("f", CultureInfo.CurrentCulture)
+            : L["Users:NotAvailable"];
+    }
+
+    private string FormatLastLogin(DateTimeOffset? value)
+    {
+        return value.HasValue
+            ? value.Value.ToLocalTime().ToString("f", CultureInfo.CurrentCulture)
+            : L["Users:NeverLoggedIn"];
+    }
+
+    private string FormatDate(DateTime? value)
+    {
+        return value.HasValue
+            ? value.Value.ToLocalTime().ToString("f", CultureInfo.CurrentCulture)
+            : L["Users:NotAvailable"];
+    }
+
+    private string FormatDate(DateTime value)
+    {
+        return value.ToLocalTime().ToString("f", CultureInfo.CurrentCulture);
+    }
+
+    private string FormatLockout(DateTimeOffset? value)
+    {
+        return value.HasValue && value.Value > DateTimeOffset.Now
+            ? value.Value.ToLocalTime().ToString("f", CultureInfo.CurrentCulture)
+            : L["Users:NotLocked"];
+    }
+}
