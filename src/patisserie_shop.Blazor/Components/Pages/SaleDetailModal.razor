@@ -24,7 +24,7 @@
                         <div>
                             <SoftText Typo="Typo.h6">@_sale.InvoiceNumber</SoftText>
                             <SoftText Typo="Typo.caption" Color="Color.Default">
-                                @($"{_sale.BranchName} • {_sale.SaleDate:MMM d, yyyy}")
+                                @_sale.BranchName • <BrowserLocalTime Value="@_sale.SaleDate" Display="BrowserTimeDisplay.LongDateTime" />
                             </SoftText>
                         </div>
                     </SoftStack>
@@ -39,7 +39,6 @@
                 <SoftStack Spacing="4">
 
                     @{
-                        var saleDateText = _sale.SaleDate.ToString("MMM d, yyyy");
                         var totalText = $"{_sale.TotalAmount:N2} {_sale.Currency}";
                         var recordedByText = _sale.CreatorUserName ?? "-";
                     }
@@ -48,7 +47,12 @@
                         <SoftText Typo="Typo.overline" Color="Color.Primary">@OpsL["SaleInfo"]</SoftText>
                         <SoftDivider Class="mb-3" />
                         <div class="po-info-grid">
-                            <InfoRow Label="@OpsL["SaleDate"]" Value="@saleDateText" />
+                            <InfoRow Label="@OpsL["SaleDate"]">
+                                <BrowserLocalTime Value="@_sale.SaleDate" Display="BrowserTimeDisplay.LongDateTime" />
+                            </InfoRow>
+                            <InfoRow Label="@OpsL["RecordedAt"]">
+                                <BrowserLocalTime Value="@_sale.CreationTime" Display="BrowserTimeDisplay.LongDateTime" />
+                            </InfoRow>
                             <InfoRow Label="@OpsL["Branch"]" Value="@_sale.BranchName" />
                             <InfoRow Label="@OpsL["TotalAmount"]" Value="@totalText" Strong="true" />
                             <InfoRow Label="@OpsL["RecordedBy"]" Value="@recordedByText" />

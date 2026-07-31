@@ -112,16 +112,21 @@
                         <div class="@(hint.Mine ? "sts-hint sts-hint-mine" : "sts-hint")">
                             <MudIcon Icon="@(hint.Mine ? Icons.Material.Filled.TouchApp : Icons.Material.Outlined.HourglassEmpty)"
                                      Size="Size.Small" />
-                            <span>@hint.Text</span>
+                            @if (_transfer.Status == StockTransferStatuses.Completed && _transfer.CompletedDate.HasValue)
+                            {
+                                <BrowserLocalTime Value="@_transfer.CompletedDate.Value"
+                                                  Display="BrowserTimeDisplay.LongDateTime"
+                                                  Template="@OpsL["Hint:Completed"]" />
+                            }
+                            else
+                            {
+                                <span>@hint.Text</span>
+                            }
                         </div>
                     }
 
                     <!-- Transfer info -->
                     @{
-                        var requestedText = _transfer.RequestedDate.ToString("MMM d, yyyy");
-                        var approvedText  = _transfer.ApprovedDate?.ToString("MMM d, yyyy") ?? "-";
-                        var shippedText   = _transfer.ShippedDate?.ToString("MMM d, yyyy") ?? "-";
-                        var completedText = _transfer.CompletedDate?.ToString("MMM d, yyyy") ?? "-";
                         var requestedBy   = _transfer.RequestedByUserName ?? "-";
                         var approvedBy    = _transfer.ApprovedByUserName ?? "-";
                     }
@@ -129,10 +134,11 @@
                         <SoftText Typo="Typo.overline" Color="Color.Primary">@OpsL["TransferInfo"]</SoftText>
                         <SoftDivider Class="mb-3" />
                         <div class="sts-info-grid">
-                            <InfoRow Label="@OpsL["RequestedDate"]" Value="@requestedText" />
-                            <InfoRow Label="@OpsL["ApprovedDate"]" Value="@approvedText" />
-                            <InfoRow Label="@OpsL["ShippedDate"]" Value="@shippedText" />
-                            <InfoRow Label="@OpsL["CompletedDate"]" Value="@completedText" />
+                            <InfoRow Label="@OpsL["CreatedAt"]"><BrowserLocalTime Value="@_transfer.CreationTime" Display="BrowserTimeDisplay.LongDateTime" /></InfoRow>
+                            <InfoRow Label="@OpsL["RequestedDate"]"><BrowserLocalTime Value="@_transfer.RequestedDate" Display="BrowserTimeDisplay.LongDate" /></InfoRow>
+                            <InfoRow Label="@OpsL["ApprovedDate"]"><BrowserLocalTime Value="@_transfer.ApprovedDate" Display="BrowserTimeDisplay.LongDateTime" Fallback="-" /></InfoRow>
+                            <InfoRow Label="@OpsL["ShippedDate"]"><BrowserLocalTime Value="@_transfer.ShippedDate" Display="BrowserTimeDisplay.LongDateTime" Fallback="-" /></InfoRow>
+                            <InfoRow Label="@OpsL["CompletedDate"]"><BrowserLocalTime Value="@_transfer.CompletedDate" Display="BrowserTimeDisplay.LongDateTime" Fallback="-" /></InfoRow>
                             <InfoRow Label="@OpsL["RequestedBy"]" Value="@requestedBy" />
                             <InfoRow Label="@OpsL["ApprovedBy"]" Value="@approvedBy" />
                         </div>
@@ -912,8 +918,7 @@
             StockTransferStatuses.InTransit => CanCompleteCurrentTransfer
                 ? (OpsL["Hint:InTransitReceiver"].Value, true)
                 : (string.Format(OpsL["Hint:InTransitOther"], _transfer.ToBranchName), false),
-            StockTransferStatuses.Completed =>
-                (string.Format(OpsL["Hint:Completed"], _transfer.CompletedDate?.ToString("MMM d, yyyy") ?? "-"), false),
+            StockTransferStatuses.Completed => (string.Empty, false),
             _ => (string.Empty, false)
         };
     }

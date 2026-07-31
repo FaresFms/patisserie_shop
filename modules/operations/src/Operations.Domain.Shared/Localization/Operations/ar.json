@@ -47,6 +47,8 @@
     "Currency": "العملة",
     "Notes": "ملاحظات",
     "CreatedBy": "أنشأه",
+    "CreatedAt": "أُنشئ في",
+    "RecordedAt": "سُجّل في",
     "ItemCount": "عدد الأصناف",
     "Status": "الحالة",
     "BackToList": "العودة إلى القائمة",

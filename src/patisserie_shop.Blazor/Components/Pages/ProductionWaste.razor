@@ -187,7 +187,7 @@
                       Class="pw-grid">
             <Columns>
                 <TemplateColumn T="ProductionWasteDto" Title="@ProdL["RecordedAt"]" SortBy="x => x.RecordedAt">
-                    <CellTemplate>@context.Item.RecordedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</CellTemplate>
+                    <CellTemplate><BrowserLocalTime Value="@context.Item.RecordedAt" Display="BrowserTimeDisplay.DateTime" /></CellTemplate>
                 </TemplateColumn>
                 <TemplateColumn T="ProductionWasteDto" Title="@ProdL["Product"]" SortBy="x => x.ProductName">
                     <CellTemplate>

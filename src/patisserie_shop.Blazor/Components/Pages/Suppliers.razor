@@ -136,7 +136,9 @@
                         }
                     </CellTemplate>
                 </TemplateColumn>
-                <PropertyColumn T="SupplierDto" TProperty="DateTime" Property="x => x.CreationTime" Title="@InvL["CreationTime"]" Format="g" />
+                <TemplateColumn T="SupplierDto" Title="@InvL["CreationTime"]" SortBy="x => x.CreationTime">
+                    <CellTemplate><BrowserLocalTime Value="@context.Item.CreationTime" Display="BrowserTimeDisplay.DateTime" /></CellTemplate>
+                </TemplateColumn>
                 <TemplateColumn T="SupplierDto" Title="@InvL["Actions"]" Sortable="false">
                     <CellTemplate>
                         <span class="row-actions">

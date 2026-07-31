@@ -16,7 +16,9 @@
 <SoftCard Elevation="2" Class="pa-2 page-flat bm-dash">
     <div class="page-head">
         <div>
-            <h1 class="page-title">@_greeting@(_userName is null ? "" : $", {_userName}") 👋</h1>
+            <h1 class="page-title"><BrowserGreeting Morning="@L["MgrDash:GoodMorning"]"
+                                                       Afternoon="@L["MgrDash:GoodAfternoon"]"
+                                                       Evening="@L["MgrDash:GoodEvening"]" />@(_userName is null ? "" : $", {_userName}") 👋</h1>
             <div class="page-sub">
                 @if (_data?.HasBranchAssigned == true)
                 {
@@ -223,7 +225,9 @@
                                             <div class="bm-stock-meta">
                                                 @if (s.LastSoldDate.HasValue)
                                                 {
-                                                    <span>@L["MgrDash:LastSold", s.LastSoldDate.Value.ToString("MMM d", System.Globalization.CultureInfo.CurrentCulture)]</span>
+                                                    <BrowserLocalTime Value="@s.LastSoldDate.Value"
+                                                                      Display="BrowserTimeDisplay.MonthDayTime"
+                                                                      Template="@L["MgrDash:LastSold"]" />
                                                 }
                                                 else
                                                 {
@@ -304,7 +308,7 @@
                                     {
                                         <tr>
                                             <td class="bm-mono">@s.InvoiceNumber</td>
-                                            <td>@s.SaleDate.ToLocalTime().ToString("MMM d, HH:mm", System.Globalization.CultureInfo.CurrentCulture)</td>
+                                            <td><BrowserLocalTime Value="@s.SaleDate" Display="BrowserTimeDisplay.MonthDayTime" /></td>
                                             <td class="t-right bm-mono">@s.ItemCount</td>
                                             <td class="t-right bm-mono">@FormatMoney(s.TotalAmount)</td>
                                         </tr>
@@ -424,7 +428,10 @@
                                             </div>
                                             <div class="bm-transfer-sub">
                                                 <span>@(t.ItemCount == 1 ? L["MgrDash:ItemCountSingular", t.ItemCount] : L["MgrDash:ItemCountPlural", t.ItemCount])</span>
-                                                <span class="bm-transfer-date">@L["MgrDash:Requested", t.RequestedDate.ToLocalTime().ToString("MMM d", System.Globalization.CultureInfo.CurrentCulture)]</span>
+                                                <BrowserLocalTime Value="@t.RequestedDate"
+                                                                  Display="BrowserTimeDisplay.MonthDay"
+                                                                  Template="@L["MgrDash:Requested"]"
+                                                                  Class="bm-transfer-date" />
                                             </div>
                                         </div>
                                     </div>
@@ -862,7 +869,6 @@
     private BranchDashboardDto? _data;
     private bool _loading;
     private DateTime? _lastRefresh;
-    private string _greeting = "";
     private string? _userName;
     private string? _error;
     private Guid? _busyId;
@@ -928,7 +934,6 @@
     protected override async Task OnInitializedAsync()
     {
         await LoadShopCurrencyAsync();
-        _greeting = ComputeGreeting(DateTime.Now);
         var state = await AuthState.GetAuthenticationStateAsync();
         _userName = state.User.Identity?.Name;
 
@@ -1013,13 +1018,6 @@
         }
     }
 
-    private string ComputeGreeting(DateTime now)
-    {
-        var h = now.Hour;
-        if (h < 12) return L["MgrDash:GoodMorning"];
-        if (h < 18) return L["MgrDash:GoodAfternoon"];
-        return L["MgrDash:GoodEvening"];
-    }
 
     private string FormatMoney(decimal v) => FormatShopMoney(v, 0);
 

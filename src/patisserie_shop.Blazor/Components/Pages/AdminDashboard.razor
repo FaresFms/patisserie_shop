@@ -19,7 +19,9 @@
             <div class="page-sub">
                 @if (_lastRefresh.HasValue)
                 {
-                    <span>@L["AdminDash:LastUpdated", _lastRefresh.Value.ToLocalTime().ToString("MMM d, HH:mm", System.Globalization.CultureInfo.CurrentCulture)]</span>
+                    <BrowserLocalTime Value="@_lastRefresh.Value"
+                                      Display="BrowserTimeDisplay.MonthDayTime"
+                                      Template="@L["AdminDash:LastUpdated"]" />
                 }
                 else
                 {

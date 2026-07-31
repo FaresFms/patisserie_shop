@@ -79,7 +79,9 @@
                     <div>
                         <div class="user-detail-label">@L["Users:LastLogin"]</div>
                         <div class="@(_user.LastSignInTime.HasValue ? "user-last-login-value" : "user-last-login-value user-last-login-value--empty")">
-                            @FormatLastLogin(_user.LastSignInTime)
+                            <BrowserLocalTime OffsetValue="@_user.LastSignInTime"
+                                              Display="BrowserTimeDisplay.FullDateTime"
+                                              Fallback="@L["Users:NeverLoggedIn"]" />
                         </div>
                     </div>
                 </div>
@@ -107,11 +109,11 @@
                             </div>
                             <div class="user-detail-row">
                                 <span class="user-detail-label">@L["Users:CreatedAt"]</span>
-                                <span class="user-detail-value">@FormatDate(_user.CreationTime)</span>
+                                <span class="user-detail-value"><BrowserLocalTime Value="@_user.CreationTime" Display="BrowserTimeDisplay.FullDateTime" /></span>
                             </div>
                             <div class="user-detail-row">
                                 <span class="user-detail-label">@L["Users:LastUpdated"]</span>
-                                <span class="user-detail-value">@FormatDate(_user.LastModificationTime)</span>
+                                <span class="user-detail-value"><BrowserLocalTime Value="@_user.LastModificationTime" Display="BrowserTimeDisplay.FullDateTime" Fallback="@L["Users:NotAvailable"]" /></span>
                             </div>
                         </div>
                     </SoftCardContent>
@@ -161,11 +163,11 @@
                         <div class="user-detail-list user-detail-list--columns">
                             <div class="user-detail-row">
                                 <span class="user-detail-label">@L["Users:LastLogin"]</span>
-                                <span class="user-detail-value">@FormatLastLogin(_user.LastSignInTime)</span>
+                                <span class="user-detail-value"><BrowserLocalTime OffsetValue="@_user.LastSignInTime" Display="BrowserTimeDisplay.FullDateTime" Fallback="@L["Users:NeverLoggedIn"]" /></span>
                             </div>
                             <div class="user-detail-row">
                                 <span class="user-detail-label">@L["Users:LastPasswordChange"]</span>
-                                <span class="user-detail-value">@FormatDate(_user.LastPasswordChangeTime)</span>
+                                <span class="user-detail-value"><BrowserLocalTime OffsetValue="@_user.LastPasswordChangeTime" Display="BrowserTimeDisplay.FullDateTime" Fallback="@L["Users:NotAvailable"]" /></span>
                             </div>
                             <div class="user-detail-row">
                                 <span class="user-detail-label">@L["Users:LockoutProtection"]</span>
@@ -175,7 +177,16 @@
                             </div>
                             <div class="user-detail-row">
                                 <span class="user-detail-label">@L["Users:LockedUntil"]</span>
-                                <span class="user-detail-value">@FormatLockout(_user.LockoutEnd)</span>
+                                <span class="user-detail-value">
+                                    @if (_user.LockoutEnd.HasValue && _user.LockoutEnd.Value > DateTimeOffset.UtcNow)
+                                    {
+                                        <BrowserLocalTime OffsetValue="@_user.LockoutEnd" Display="BrowserTimeDisplay.FullDateTime" />
+                                    }
+                                    else
+                                    {
+                                        @L["Users:NotLocked"]
+                                    }
+                                </span>
                             </div>
                         </div>
                     </SoftCardContent>
@@ -462,36 +473,4 @@
         return string.IsNullOrWhiteSpace(value) ? L["Users:NotProvided"] : value;
     }
 
-    private string FormatDate(DateTimeOffset? value)
-    {
-        return value.HasValue
-            ? value.Value.ToLocalTime().ToString("f", CultureInfo.CurrentCulture)
-            : L["Users:NotAvailable"];
-    }
-
-    private string FormatLastLogin(DateTimeOffset? value)
-    {
-        return value.HasValue
-            ? value.Value.ToLocalTime().ToString("f", CultureInfo.CurrentCulture)
-            : L["Users:NeverLoggedIn"];
-    }
-
-    private string FormatDate(DateTime? value)
-    {
-        return value.HasValue
-            ? value.Value.ToLocalTime().ToString("f", CultureInfo.CurrentCulture)
-            : L["Users:NotAvailable"];
-    }
-
-    private string FormatDate(DateTime value)
-    {
-        return value.ToLocalTime().ToString("f", CultureInfo.CurrentCulture);
-    }
-
-    private string FormatLockout(DateTimeOffset? value)
-    {
-        return value.HasValue && value.Value > DateTimeOffset.Now
-            ? value.Value.ToLocalTime().ToString("f", CultureInfo.CurrentCulture)
-            : L["Users:NotLocked"];
-    }
 }

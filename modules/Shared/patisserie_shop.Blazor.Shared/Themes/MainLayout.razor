@@ -9,6 +9,7 @@
 @using Microsoft.JSInterop
 @using Volo.Abp.Settings
 @using patisserie_shop.Localization
+@using patisserie_shop.Blazor.Shared.Services
 @inherits Volo.Abp.AspNetCore.Components.Web.LeptonXLiteTheme.Themes.LeptonXLite.MainLayout
 @attribute [ExposeServices(typeof(Volo.Abp.AspNetCore.Components.Web.LeptonXLiteTheme.Themes.LeptonXLite.MainLayout))]
 @attribute [Dependency(ReplaceServices = true)]
@@ -18,6 +19,7 @@
 @inject PageLayout PageLayout
 @inject IJSRuntime JS
 @inject ISettingProvider SettingProvider
+@inject IUserTimeZoneProvider UserTimeZoneProvider
 
 
 <MudThemeProvider Theme="_theme" IsDarkMode="_isDarkMode" />
@@ -25,6 +27,7 @@
     <MudPopoverProvider />
     <MudDialogProvider />
     <MudSnackbarProvider />
+    <div @key="_timeZoneVersion" style="display: contents">
     <SoftLayout>
 
     <!-- ─── Top AppBar ─────────────────────────────────────────── -->
@@ -195,6 +198,7 @@
     </SoftMainContent>
 
     </SoftLayout>
+    </div>
 </SoftRtlProvider>
 
 @code {
@@ -219,10 +223,12 @@
     private bool _isArabic = false;
     private string _shopName = string.Empty;
     private List<ApplicationMenuItem> _menuItems = new();
+    private int _timeZoneVersion;
 
     protected override async Task OnInitializedAsync()
     {
         await base.OnInitializedAsync();
+        await UserTimeZoneProvider.EnsureLoadedAsync();
 
         _isArabic = CultureInfo.CurrentCulture.Name.StartsWith("ar", StringComparison.OrdinalIgnoreCase);
 
@@ -255,6 +261,15 @@
 
         try
         {
+            var browserTimeZone = await JS.InvokeAsync<string?>("getBrowserTimezone");
+            if (await UserTimeZoneProvider.SetBrowserTimeZoneAsync(browserTimeZone))
+            {
+                // Recreate the displayed subtree once so timestamps initially
+                // rendered with the fallback timezone use the browser timezone.
+                _timeZoneVersion++;
+                StateHasChanged();
+            }
+
             // Restore dark mode preference from localStorage.
             var isDarkModeStr = await JS.InvokeAsync<string?>("localStorage.getItem", "ewallet-darkMode");
             if (bool.TryParse(isDarkModeStr, out var savedLegacyDarkMode))
@@ -277,6 +292,15 @@
         catch (JSDisconnectedException)
         {
             // The circuit can be disposed during navigation/auth redirects.
+        }
+        catch (InvalidOperationException)
+        {
+            // JavaScript interop can be unavailable during prerendering.
+        }
+        catch (JSException)
+        {
+            // Browser detection is best effort; the configured timezone or UTC
+            // fallback loaded during initialization remains active.
         }
     }
     private void SanitizeMenuUrls(List<ApplicationMenuItem> items)

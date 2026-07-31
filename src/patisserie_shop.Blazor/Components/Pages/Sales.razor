@@ -98,7 +98,12 @@
                 <PropertyColumn T="SaleDto" TProperty="string" Property="x => x.BranchName" Title="@OpsL["Branch"]" />
                 <TemplateColumn T="SaleDto" Title="@OpsL["SaleDate"]" SortBy="x => x.SaleDate">
                     <CellTemplate>
-                        <SoftText Typo="Typo.body2">@context.Item.SaleDate.ToString("MMM d, yyyy")</SoftText>
+                        <SoftText Typo="Typo.body2"><BrowserLocalTime Value="@context.Item.SaleDate" Display="BrowserTimeDisplay.LongDateTime" /></SoftText>
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn T="SaleDto" Title="@OpsL["RecordedAt"]" SortBy="x => x.CreationTime">
+                    <CellTemplate>
+                        <SoftText Typo="Typo.body2"><BrowserLocalTime Value="@context.Item.CreationTime" Display="BrowserTimeDisplay.DateTime" /></SoftText>
                     </CellTemplate>
                 </TemplateColumn>
                 <TemplateColumn T="SaleDto" Title="@OpsL["Items"]" Sortable="false">

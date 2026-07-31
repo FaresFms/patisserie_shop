@@ -37,7 +37,13 @@ public interface ICashierAppService : IApplicationService
     /// <summary>This cashier's sales at the branch within the window (default 60 min), newest first.</summary>
     Task<List<RecentSaleDto>> GetRecentSalesAsync(Guid branchId, int withinMinutes = 60);
 
-    /// <summary>Invoice details for a sale owned by this cashier in their assigned branch.</summary>
+    /// <summary>
+    /// Recent sales for the top-navigation panel. Cashiers see their own assigned-branch
+    /// sales; supervisors see sales across the branches they are allowed to manage.
+    /// </summary>
+    Task<List<RecentSaleDto>> GetRecentSalesForCurrentUserAsync(int withinMinutes = 60);
+
+    /// <summary>Invoice details within the current user's cashier or supervisor scope.</summary>
     Task<SaleDto> GetSaleDetailsAsync(Guid saleId);
 
     /// <summary>

@@ -232,7 +232,11 @@
                                 }
                                 <TemplateColumn T="BranchInventoryDto" Title="@InvL["LastRestocked"]" SortBy="x => x.LastRestockedDate ?? DateTime.MinValue">
                                     <CellTemplate>
-                                        <SoftText Typo="Typo.body2">@(context.Item.LastRestockedDate?.ToString("g") ?? "-")</SoftText>
+                                        <SoftText Typo="Typo.body2">
+                                            <BrowserLocalTime Value="@context.Item.LastRestockedDate"
+                                                              Display="BrowserTimeDisplay.DateTime"
+                                                              Fallback="-" />
+                                        </SoftText>
                                     </CellTemplate>
                                 </TemplateColumn>
                                 <TemplateColumn T="BranchInventoryDto" Title="@InvL["Actions"]" Sortable="false">
@@ -297,7 +301,9 @@
                                             @InvL["MaximumStock"] @(item.MaximumStock?.ToString() ?? "—")
                                         </div>
                                         <div class="bi-prod-restock">
-                                            @InvL["LastRestocked"]: @(item.LastRestockedDate?.ToLocalTime().ToString("MMM d") ?? "—")
+                                            @InvL["LastRestocked"]:
+                                            <BrowserLocalTime Value="@item.LastRestockedDate"
+                                                              Display="BrowserTimeDisplay.MonthDayTime" />
                                         </div>
 
                                         <SoftDivider Class="bi-prod-div" />

@@ -55,7 +55,7 @@
                             <SoftProgressCircular Indeterminate="true" Color="Color.Primary" Size="Size.Small" />
                         </div>
                     }
-                    else if (_shift is null)
+                    else if (!_canViewAllShifts && _shift is null)
                     {
                         <div class="recent-state">
                             <SoftIcon Icon="@Icons.Material.Outlined.PointOfSale" Style="font-size:40px;opacity:.4;" />
@@ -84,7 +84,15 @@
                                             }
                                         </div>
                                         <div class="recent-item-meta">
-                                            @RelativeTime(s.SaleDate) · @L["Recent:Items", s.ItemCount]
+                                            @if (IsWithinLastHour(s.SaleDate))
+                                            {
+                                                @RelativeTime(s.SaleDate)
+                                            }
+                                            else
+                                            {
+                                                <BrowserLocalTime Value="@s.SaleDate" Display="BrowserTimeDisplay.Time" />
+                                            }
+                                            <text> · @L["Recent:Items", s.ItemCount]</text>
                                         </div>
                                     </div>
                                     <div class="recent-item-total">@FormatMoney(s.Total)</div>
@@ -167,7 +175,8 @@
                                 <div>
                                     <SoftText Typo="Typo.h6">@_detailSale.InvoiceNumber</SoftText>
                                     <SoftText Typo="Typo.caption" Color="Color.Default">
-                                        @_detailSale.SaleDate.ToLocalTime().ToString("g", CultureInfo.CurrentCulture)
+                                        <BrowserLocalTime Value="@_detailSale.SaleDate"
+                                                          Display="BrowserTimeDisplay.DateTime" />
                                     </SoftText>
                                 </div>
                             </SoftStack>
@@ -525,6 +534,7 @@
     private bool _open;
     private bool _loading;
     private bool _busy;
+    private bool _canViewAllShifts;
 
     private CashierBranchDto? _branch;
     private CashierShiftDto? _shift;
@@ -538,6 +548,8 @@
     protected override async Task OnInitializedAsync()
     {
         _canView = await AuthorizationService.IsGrantedAsync(OperationsPermissions.Cashier.Default);
+        _canViewAllShifts = await AuthorizationService.IsGrantedAsync(
+            OperationsPermissions.Cashier.ViewAllShifts);
         await LoadShopCurrencyAsync();
     }
 
@@ -559,6 +571,12 @@
         _loading = true;
         try
         {
+            if (_canViewAllShifts)
+            {
+                _sales = await CashierAppService.GetRecentSalesForCurrentUserAsync(60);
+                return;
+            }
+
             // Branch context = the cashier's single assigned branch (authoritative).
             _branch ??= await CashierAppService.GetMyBranchAsync();
 
@@ -578,7 +596,7 @@
                 return;
             }
 
-            _sales = await CashierAppService.GetRecentSalesAsync(_branch.Id, 60);
+            _sales = await CashierAppService.GetRecentSalesForCurrentUserAsync(60);
         }
         catch (Exception)
         {
@@ -669,13 +687,24 @@
 
     private string RelativeTime(DateTime saleDate)
     {
-        var delta = DateTime.Now - saleDate.ToLocalTime();
+        var utc = saleDate.Kind == DateTimeKind.Utc
+            ? saleDate
+            : DateTime.SpecifyKind(saleDate, DateTimeKind.Utc);
+        var delta = DateTime.UtcNow - utc;
         if (delta < TimeSpan.Zero)
         {
             delta = TimeSpan.Zero;
         }
         if (delta.TotalMinutes < 1) return L["Recent:JustNow"];
         if (delta.TotalHours < 1) return L["Recent:MinutesAgo", (int)delta.TotalMinutes];
-        return saleDate.ToLocalTime().ToString("t", CultureInfo.CurrentCulture);
+        return L["Recent:MinutesAgo", (int)delta.TotalMinutes];
+    }
+
+    private static bool IsWithinLastHour(DateTime saleDate)
+    {
+        var utc = saleDate.Kind == DateTimeKind.Utc
+            ? saleDate
+            : DateTime.SpecifyKind(saleDate, DateTimeKind.Utc);
+        return DateTime.UtcNow - utc < TimeSpan.FromHours(1);
     }
 }

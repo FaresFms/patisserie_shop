@@ -149,8 +149,8 @@
                     <TemplateColumn T="StockMovementDto" Title="@InvL["DateTime"]" SortBy="x => x.CreationTime">
                         <CellTemplate>
                             <SoftStack Spacing="0">
-                                <SoftText Typo="Typo.body2" Style="font-weight:500;">@context.Item.CreationTime.ToString("d", CultureInfo.CurrentCulture)</SoftText>
-                                <SoftText Typo="Typo.caption" Color="Color.Default">@context.Item.CreationTime.ToString("T", CultureInfo.CurrentCulture)</SoftText>
+                                <SoftText Typo="Typo.body2" Style="font-weight:500;"><BrowserLocalTime Value="@context.Item.CreationTime" Display="BrowserTimeDisplay.Date" /></SoftText>
+                                <SoftText Typo="Typo.caption" Color="Color.Default"><BrowserLocalTime Value="@context.Item.CreationTime" Display="BrowserTimeDisplay.Time" /></SoftText>
                             </SoftStack>
                         </CellTemplate>
                     </TemplateColumn>
@@ -247,7 +247,7 @@
                         <SoftGridItem xs="12" sm="6">
                             <SoftStack Spacing="1">
                                 <SoftText Typo="Typo.caption" Color="Color.Default">@InvL["DateTime"]</SoftText>
-                                <SoftText Typo="Typo.body1" Style="font-weight:500;">@_detailRow.CreationTime.ToString("G", CultureInfo.CurrentCulture)</SoftText>
+                                <SoftText Typo="Typo.body1" Style="font-weight:500;"><BrowserLocalTime Value="@_detailRow.CreationTime" Display="BrowserTimeDisplay.DateTime" /></SoftText>
                             </SoftStack>
                         </SoftGridItem>
                         <SoftGridItem xs="12" sm="6">

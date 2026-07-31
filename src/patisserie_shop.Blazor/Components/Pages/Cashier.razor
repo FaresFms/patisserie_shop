@@ -76,7 +76,8 @@
             <div class="pos-header-left">
                 <div class="pos-header-branch">@(_shift.BranchName ?? "")</div>
                 <div class="pos-header-meta">
-                    @L["Cashier:Opened"] @_shift.OpenedAt.ToLocalTime().ToString("t", CultureInfo.CurrentCulture)
+                    @L["Cashier:Opened"]
+                    <BrowserLocalTime Value="@_shift.OpenedAt" Display="BrowserTimeDisplay.Time" />
                 </div>
             </div>
             <div class="pos-header-stats">
@@ -343,7 +344,9 @@
                                 <div class="pos-receipt-addr">@_shopPhone</div>
                             }
                             <div class="pos-receipt-inv">@L["Cashier:Invoice"] @_receipt.InvoiceNumber</div>
-                            <div class="pos-receipt-date">@_receipt.SaleDate.ToLocalTime().ToString("g", CultureInfo.CurrentCulture)</div>
+                            <BrowserLocalTime Value="@_receipt.SaleDate"
+                                              Display="BrowserTimeDisplay.DateTime"
+                                              Class="pos-receipt-date" />
                         </div>
                         <div class="pos-receipt-lines">
                             @foreach (var l in _receipt.Lines)
@@ -423,7 +426,11 @@
                         {
                             <div class="pos-held-row">
                                 <div class="pos-held-info">
-                                    <div class="pos-held-label">@h.Label</div>
+                                    <div class="pos-held-label">
+                                        <BrowserLocalTime Value="@h.HeldAtUtc"
+                                                          Display="BrowserTimeDisplay.Time"
+                                                          Fallback="@h.Label" />
+                                    </div>
                                     <div class="pos-held-meta">
                                         @L["Cashier:Items", h.Lines.Sum(x => x.Quantity)] · @FormatMoney(h.Lines.Sum(x => x.Subtotal))
                                     </div>
@@ -905,7 +912,7 @@
         if (_cart.Count == 0) return;
         _heldCarts.Add(new HeldCart
         {
-            Label = DateTime.Now.ToString("t", CultureInfo.CurrentCulture),
+            HeldAtUtc = DateTime.UtcNow,
             Lines = _cart.Select(l => l.Clone()).ToList()
         });
         ClearCart();
@@ -926,7 +933,7 @@
         {
             _heldCarts.Add(new HeldCart
             {
-                Label = DateTime.Now.ToString("t", CultureInfo.CurrentCulture),
+                HeldAtUtc = DateTime.UtcNow,
                 Lines = _cart.Select(l => l.Clone()).ToList()
             });
         }
@@ -1268,6 +1275,7 @@
 
     private sealed class HeldCart
     {
+        public DateTime? HeldAtUtc { get; set; }
         public string Label { get; set; } = "";
         public List<CartLine> Lines { get; set; } = new();
     }

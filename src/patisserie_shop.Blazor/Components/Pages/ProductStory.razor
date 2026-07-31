@@ -119,11 +119,8 @@
                 else
                 {
                     <div class="ps-timeline">
-                        @foreach (var day in _data.Events.GroupBy(e => e.OccurredAt.ToLocalTime().Date))
+                        @foreach (var ev in _data.Events)
                         {
-                            <div class="ps-day">@day.Key.ToString("ddd, dd MMM")</div>
-                            @foreach (var ev in day)
-                            {
                                 <div class="ps-event">
                                     <span class="ps-dot @DotClass(ev.EventType)"></span>
                                     <div class="ps-body">
@@ -135,8 +132,9 @@
                                                     @(delta > 0 ? $"+{delta}" : $"−{-delta}")
                                                 </span>
                                             }
-                                            <span class="ps-time" title="@ev.OccurredAt.ToLocalTime().ToString("f")">
-                                                @RelativeTime(ev.OccurredAt) · @ev.OccurredAt.ToLocalTime().ToString("HH:mm")
+                                            <span class="ps-time">
+                                                @RelativeTime(ev.OccurredAt) ·
+                                                <BrowserLocalTime Value="@ev.OccurredAt" Display="BrowserTimeDisplay.MonthDayTime" />
                                             </span>
                                         </div>
                                         @if (!string.IsNullOrWhiteSpace(ev.Detail))
@@ -145,7 +143,6 @@
                                         }
                                     </div>
                                 </div>
-                            }
                         }
                     </div>
                 }

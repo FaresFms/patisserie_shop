@@ -51,6 +51,8 @@
     "Currency": "Currency",
     "Notes": "Notes",
     "CreatedBy": "Created by",
+    "CreatedAt": "Created at",
+    "RecordedAt": "Recorded at",
     "ItemCount": "# Items",
     "Status": "Status",
     "BackToList": "Back to list",

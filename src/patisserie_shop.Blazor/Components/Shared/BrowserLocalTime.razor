@@ -1,0 +1,73 @@
+@using System.Globalization
+@using patisserie_shop.Blazor.Shared.Services
+@namespace patisserie_shop.Blazor.Components.Shared
+@inject IUserTimeZoneProvider UserTimeZoneProvider
+
+@if (_utcValue.HasValue)
+{
+    <time datetime="@_utcValue.Value.ToString("O", CultureInfo.InvariantCulture)"
+          class="@Class"
+          title="@Title">@FormattedText</time>
+}
+else
+{
+    @Fallback
+}
+
+@code {
+    [Parameter] public DateTime? Value { get; set; }
+    [Parameter] public DateTimeOffset? OffsetValue { get; set; }
+    [Parameter] public BrowserTimeDisplay Display { get; set; } = BrowserTimeDisplay.DateTime;
+    [Parameter] public string Fallback { get; set; } = "—";
+    [Parameter] public string? Template { get; set; }
+    [Parameter] public string? Class { get; set; }
+    [Parameter] public string? Title { get; set; }
+
+    private DateTime? _utcValue => OffsetValue?.UtcDateTime ?? ToUtc(Value);
+
+    private string DisplayFormat => Display switch
+    {
+        BrowserTimeDisplay.Date => "d",
+        BrowserTimeDisplay.LongDate => "D",
+        BrowserTimeDisplay.Time => "t",
+        BrowserTimeDisplay.DateTime => "g",
+        BrowserTimeDisplay.LongDateTime => "MMM d, yyyy, HH:mm",
+        BrowserTimeDisplay.FullDateTime => "f",
+        BrowserTimeDisplay.MonthDay => "MMM d",
+        BrowserTimeDisplay.MonthDayTime => "MMM d, HH:mm",
+        BrowserTimeDisplay.WeekdayDate => "ddd, dd MMM",
+        _ => "g"
+    };
+
+    private string FormattedText
+    {
+        get
+        {
+            var formatted = UserTimeZoneProvider.Format(_utcValue!.Value, DisplayFormat);
+            return string.IsNullOrWhiteSpace(Template)
+                ? formatted
+                : Template.Replace("{0}", formatted, StringComparison.Ordinal);
+        }
+    }
+
+    protected override Task OnInitializedAsync()
+    {
+        return UserTimeZoneProvider.EnsureLoadedAsync();
+    }
+
+    private static DateTime? ToUtc(DateTime? value)
+    {
+        if (!value.HasValue)
+        {
+            return null;
+        }
+
+        var utc = value.Value.Kind switch
+        {
+            DateTimeKind.Utc => value.Value,
+            DateTimeKind.Local => value.Value.ToUniversalTime(),
+            _ => DateTime.SpecifyKind(value.Value, DateTimeKind.Utc)
+        };
+        return utc;
+    }
+}

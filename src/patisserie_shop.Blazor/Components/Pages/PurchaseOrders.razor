@@ -158,6 +158,11 @@
                         <SoftText Typo="Typo.body2">@(context.Item.ExpectedDeliveryDate?.ToString("MMM d, yyyy") ?? "-")</SoftText>
                     </CellTemplate>
                 </TemplateColumn>
+                <TemplateColumn T="PurchaseOrderDto" Title="@OpsL["CreatedAt"]" SortBy="x => x.CreationTime">
+                    <CellTemplate>
+                        <SoftText Typo="Typo.body2"><BrowserLocalTime Value="@context.Item.CreationTime" Display="BrowserTimeDisplay.DateTime" /></SoftText>
+                    </CellTemplate>
+                </TemplateColumn>
                 <TemplateColumn T="PurchaseOrderDto" Title="@OpsL["TotalAmount"]" SortBy="x => x.TotalAmount">
                     <CellTemplate>
                         <SoftText Style="font-weight:600;">@($"{context.Item.TotalAmount:N2} {context.Item.Currency}")</SoftText>
