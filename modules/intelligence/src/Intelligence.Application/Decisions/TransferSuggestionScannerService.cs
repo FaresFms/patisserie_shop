@@ -57,6 +57,8 @@ public class TransferSuggestionScannerService : ITransientDependency
 
     public async Task ScanAsync()
     {
+        using var contentCulture = PersistedContentCulture.UseArabic();
+
         var rulesQuery = (await _ruleRepository.GetQueryableAsync())
             .Where(r => r.IsActive && r.RuleType == InventoryRuleTypes.TransferSuggestion)
             .OrderByDescending(r => r.Priority);

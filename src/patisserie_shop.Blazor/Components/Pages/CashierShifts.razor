@@ -73,15 +73,15 @@
                 <PropertyColumn T="CashierShiftDto" TProperty="string" Property="x => x.BranchName" Title="@L["CashierShifts:Branch"]" />
                 <TemplateColumn T="CashierShiftDto" Title="@L["CashierShifts:Opened"]" SortBy="x => x.OpenedAt">
                     <CellTemplate>
-                        <SoftText Typo="Typo.body2">@context.Item.OpenedAt.ToLocalTime().ToString("g", CultureInfo.CurrentCulture)</SoftText>
+                        <SoftText Typo="Typo.body2"><BrowserLocalTime Value="@context.Item.OpenedAt" Display="BrowserTimeDisplay.DateTime" /></SoftText>
                     </CellTemplate>
                 </TemplateColumn>
                 <TemplateColumn T="CashierShiftDto" Title="@L["CashierShifts:Closed"]" SortBy="x => x.ClosedAt">
                     <CellTemplate>
                         <SoftText Typo="Typo.body2">
-                            @(context.Item.ClosedAt.HasValue
-                                ? context.Item.ClosedAt.Value.ToLocalTime().ToString("g", CultureInfo.CurrentCulture)
-                                : L["CashierShifts:Dash"])
+                            <BrowserLocalTime Value="@context.Item.ClosedAt"
+                                              Display="BrowserTimeDisplay.DateTime"
+                                              Fallback="@L["CashierShifts:Dash"]" />
                         </SoftText>
                     </CellTemplate>
                 </TemplateColumn>

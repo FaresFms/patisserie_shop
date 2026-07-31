@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Intelligence;
 using Intelligence.Decisions;
 using Intelligence.Entities;
+using Intelligence.Localization;
 using Inventory.BranchInventory;
 using Inventory.Entities;
 using Microsoft.AspNetCore.Authorization;
@@ -56,6 +57,7 @@ public class CashierReportAppService : patisserie_shopAppService, ICashierReport
 
     public async Task ReportLowStockAsync(ReportLowStockInput input)
     {
+        using var contentCulture = PersistedContentCulture.UseArabic();
         EnsureBranchAllowed(input.BranchId);
 
         // Dedup: one open report per product+branch. If the manager hasn't actioned the

@@ -150,9 +150,14 @@
                 <PropertyColumn T="StockTransferDto" TProperty="string" Property="x => x.Reference" Title="@OpsL["TransferRef"]" Sortable="false" />
                 <PropertyColumn T="StockTransferDto" TProperty="string" Property="x => x.FromBranchName" Title="@OpsL["FromBranch"]" />
                 <PropertyColumn T="StockTransferDto" TProperty="string" Property="x => x.ToBranchName" Title="@OpsL["ToBranch"]" />
+                <TemplateColumn T="StockTransferDto" Title="@OpsL["CreatedAt"]" SortBy="x => x.CreationTime">
+                    <CellTemplate>
+                        <SoftText Typo="Typo.body2"><BrowserLocalTime Value="@context.Item.CreationTime" Display="BrowserTimeDisplay.DateTime" /></SoftText>
+                    </CellTemplate>
+                </TemplateColumn>
                 <PropertyColumn T="StockTransferDto" TProperty="DateTime" Property="x => x.RequestedDate" Title="@OpsL["RequestedDate"]">
                     <CellTemplate>
-                        <SoftText Typo="Typo.body2">@context.Item.RequestedDate.ToString("MMM d, yyyy")</SoftText>
+                        <SoftText Typo="Typo.body2"><BrowserLocalTime Value="@context.Item.RequestedDate" Display="BrowserTimeDisplay.LongDate" /></SoftText>
                     </CellTemplate>
                 </PropertyColumn>
                 <TemplateColumn T="StockTransferDto" Title="@OpsL["Items"]" Sortable="false">
@@ -300,7 +305,11 @@
 
                         <MudDatePicker Label="@OpsL["RequestedDate"]" Variant="Variant.Outlined"
                                        Margin="Margin.Dense" Class="sts-date"
-                                       @bind-Date="_newRequestedDate" />
+                                       Date="_newRequestedDate"
+                                       DateChanged="OnRequestedDateChanged"
+                                       Required="true"
+                                       Error="_requestedDateError"
+                                       ErrorText="@L["ThisFieldIsRequired", OpsL["RequestedDate"]]" />
 
                         <div>
                             <div class="sts-items-title">
@@ -688,6 +697,7 @@
 
     // Inline validation for the create dialog — shown at the field, not just a toast.
     private bool _toError;
+    private bool _requestedDateError;
     private bool _itemsError;
 
     public record StatusOption(string Value, string Label);
@@ -949,6 +959,7 @@
         _pendingItemQty = null;
         _sourceDecisionId = null;
         _toError = false;
+        _requestedDateError = false;
         _itemsError = false;
         _newItems.Clear();
         _newItems.Add(new NewTransferItemRow());
@@ -970,25 +981,36 @@
 
     private void CloseCreate() => _createVisible = false;
 
+    private void OnRequestedDateChanged(DateTime? value)
+    {
+        _newRequestedDate = value;
+        _requestedDateError = !value.HasValue;
+    }
+
     private async Task ConfirmCreateAsync()
     {
         // Inline validation first: flag the specific fields, then a single summary
         // toast so the user knows both *what* is wrong and *where* to fix it.
         _toError = !_newToId.HasValue;
+        _requestedDateError = !_newRequestedDate.HasValue;
         _itemsError = !_newItems.Any(r => r.ProductId.HasValue && r.Quantity > 0);
 
-        if (_toError || _itemsError)
+        if (_toError || _requestedDateError || _itemsError)
         {
             Snackbar.Add(OpsL["NewTransferFixHighlighted"], Severity.Warning);
             return;
         }
-        if (_newFromId.HasValue && _newFromId == _newToId)
+
+        var toBranchId = _newToId.GetValueOrDefault();
+        var requestedDate = _newRequestedDate.GetValueOrDefault();
+
+        if (_newFromId.HasValue && _newFromId == toBranchId)
         {
             Snackbar.Add(OpsL["SameBranchWarning"], Severity.Warning);
             return;
         }
         if (!_canManageAllBranches && !_newFromId.HasValue
-            && !_destinationBranches.Any(b => b.Id == _newToId.Value))
+            && !_destinationBranches.Any(b => b.Id == toBranchId))
         {
             Snackbar.Add(OpsL["SourceRequiredForOtherBranch"], Severity.Warning);
             return;
@@ -1000,8 +1022,8 @@
             var created = await StockTransferAppService.CreateAsync(new CreateStockTransferDto
             {
                 FromBranchId = _canChooseBranches ? _newFromId : null,
-                ToBranchId = _newToId.Value,
-                RequestedDate = _newRequestedDate.Value,
+                ToBranchId = toBranchId,
+                RequestedDate = requestedDate,
                 Notes = _newNotes
             });
 

@@ -259,7 +259,10 @@
                                     @IntL[$"Outcome:{item.Outcome}"]
                                 </SoftChip>
                             }
-                            <div class="dl-time">@TimeAgo(item.CreationTime)</div>
+                            <div class="dl-time">
+                                @TimeAgo(item.CreationTime) ·
+                                <BrowserLocalTime Value="@item.CreationTime" Display="BrowserTimeDisplay.MonthDayTime" />
+                            </div>
                             @if (item.Status == DecisionLogStatuses.Executed
                                  && item.ExecutedActionType == DecisionActionTypes.StockAdjustment)
                             {
@@ -282,10 +285,9 @@
                             @if (item.Status != "Pending" && item.AcknowledgedAt.HasValue)
                             {
                                 <div class="dl-ack">
-                                    @string.Format(
-                                        IntL["DecisionLog:AcknowledgedBy"],
-                                        ResolveUserName(item.AcknowledgedByUserId),
-                                        item.AcknowledgedAt.Value.ToLocalTime().ToString("MMM d, HH:mm"))
+                                    <BrowserLocalTime Value="@item.AcknowledgedAt.Value"
+                                                      Display="BrowserTimeDisplay.MonthDayTime"
+                                                      Template="@AcknowledgedTemplate(item.AcknowledgedByUserId)" />
                                 </div>
                             }
                             @if (_canAcknowledge && item.Status == "Pending")
@@ -993,6 +995,11 @@
 
     private string ResolveUserName(Guid? userId)
         => userId.HasValue && _userNames.TryGetValue(userId.Value, out var name) ? name : "—";
+
+    private string AcknowledgedTemplate(Guid? userId)
+        => IntL["DecisionLog:AcknowledgedBy"].Value
+            .Replace("{0}", ResolveUserName(userId), StringComparison.Ordinal)
+            .Replace("{1}", "{0}", StringComparison.Ordinal);
 
     private async Task OnFilterKeyUpAsync(KeyboardEventArgs e)
     {

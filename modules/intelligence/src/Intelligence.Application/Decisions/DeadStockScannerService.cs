@@ -58,6 +58,8 @@ public class DeadStockScannerService : ITransientDependency
 
     public async Task ScanAsync()
     {
+        using var contentCulture = PersistedContentCulture.UseArabic();
+
         // Active DeadStock rules, highest Priority first so RuleScopeMatcher picks the
         // winning rule inside each scope class.
         var rulesQuery = (await _ruleRepository.GetQueryableAsync())

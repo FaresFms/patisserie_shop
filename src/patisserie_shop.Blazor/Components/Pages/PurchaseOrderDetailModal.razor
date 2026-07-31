@@ -57,7 +57,6 @@
                     @{
                         var orderDateText    = FormatDate(_po.OrderDate);
                         var expectedDateText = _po.ExpectedDeliveryDate.HasValue ? FormatDate(_po.ExpectedDeliveryDate.Value) : "-";
-                        var actualDateText   = _po.ActualDeliveryDate.HasValue ? FormatDate(_po.ActualDeliveryDate.Value) : "-";
                         var createdByText    = _po.CreatorUserName ?? "-";
                         var totalText        = $"{_po.TotalAmount:N2} {_po.Currency}";
                     }
@@ -67,7 +66,8 @@
                         <div class="po-info-grid">
                             <InfoRow Label="@OpsL["OrderDate"]" Value="@orderDateText" />
                             <InfoRow Label="@OpsL["ExpectedDeliveryDate"]" Value="@expectedDateText" />
-                            <InfoRow Label="@OpsL["ActualDeliveryDate"]" Value="@actualDateText" />
+                            <InfoRow Label="@OpsL["CreatedAt"]"><BrowserLocalTime Value="@_po.CreationTime" Display="BrowserTimeDisplay.LongDateTime" /></InfoRow>
+                            <InfoRow Label="@OpsL["ActualDeliveryDate"]"><BrowserLocalTime Value="@_po.ActualDeliveryDate" Display="BrowserTimeDisplay.LongDateTime" Fallback="-" /></InfoRow>
                             <InfoRow Label="@OpsL["CreatedBy"]" Value="@createdByText" />
                             <InfoRow Label="@OpsL["Currency"]" Value="@_po.Currency" />
                             <InfoRow Label="@OpsL["TotalAmount"]" Value="@totalText" Strong="true" />

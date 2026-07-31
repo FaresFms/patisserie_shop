@@ -69,6 +69,7 @@ public class ExpiryScannerService : ITransientDependency
 
     public async Task ScanAsync()
     {
+        using var contentCulture = PersistedContentCulture.UseArabic();
         var today = DateTime.UtcNow.Date;
 
         // Branch lookup for names + active filtering, shared by both passes

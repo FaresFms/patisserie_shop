@@ -4,15 +4,18 @@ using System.Threading.Tasks;
 using Intelligence;
 using Intelligence.Decisions;
 using Intelligence.Entities;
+using Intelligence.Localization;
 using Inventory.Entities;
 using Microsoft.Extensions.Localization;
 using Operations.Events;
 using patisserie_shop.Localization;
+using patisserie_shop.Settings;
 using Volo.Abp.DependencyInjection;
 using Volo.Abp.Domain.Repositories;
 using Volo.Abp.EventBus.Distributed;
 using Volo.Abp.Guids;
 using Volo.Abp.Identity;
+using Volo.Abp.Settings;
 
 namespace patisserie_shop.Cashier;
 
@@ -24,23 +27,28 @@ public class CashierShiftVarianceEventHandler
     private readonly IRepository<IdentityUser, Guid> _userRepository;
     private readonly IGuidGenerator _guidGenerator;
     private readonly IStringLocalizer<patisserie_shopResource> _localizer;
+    private readonly ISettingProvider _settingProvider;
 
     public CashierShiftVarianceEventHandler(
         IRepository<AppDecisionLog, Guid> decisionLogRepository,
         IRepository<AppBranch, Guid> branchRepository,
         IRepository<IdentityUser, Guid> userRepository,
         IGuidGenerator guidGenerator,
-        IStringLocalizer<patisserie_shopResource> localizer)
+        IStringLocalizer<patisserie_shopResource> localizer,
+        ISettingProvider settingProvider)
     {
         _decisionLogRepository = decisionLogRepository;
         _branchRepository = branchRepository;
         _userRepository = userRepository;
         _guidGenerator = guidGenerator;
         _localizer = localizer;
+        _settingProvider = settingProvider;
     }
 
     public async Task HandleEventAsync(CashierShiftVarianceEto eventData)
     {
+        using var contentCulture = PersistedContentCulture.UseArabic();
+
         if (eventData.Variance == 0)
         {
             return;
@@ -62,15 +70,16 @@ public class CashierShiftVarianceEventHandler
         var varianceKind = eventData.Variance > 0
             ? _localizer["CashierVariance:Over"]
             : _localizer["CashierVariance:Short"];
+        var currency = await GetDefaultCurrencyAsync();
 
         var reasoning = _localizer[
             "CashierVariance:Reasoning",
             cashierName,
             shiftToken,
             branchName,
-            FormatMoney(eventData.ExpectedCash),
-            FormatMoney(eventData.CountedCash),
-            FormatMoney(eventData.Variance),
+            FormatMoney(eventData.ExpectedCash, currency),
+            FormatMoney(eventData.CountedCash, currency),
+            FormatMoney(eventData.Variance, currency),
             varianceKind];
 
         var log = new AppDecisionLog(
@@ -85,6 +94,15 @@ public class CashierShiftVarianceEventHandler
         await _decisionLogRepository.InsertAsync(log, autoSave: true);
     }
 
-    private static string FormatMoney(decimal value)
-        => $"{value.ToString("N2", CultureInfo.CurrentCulture)} SYP";
+    private async Task<string> GetDefaultCurrencyAsync()
+    {
+        var currency = (await _settingProvider.GetOrNullAsync(patisserie_shopSettings.DefaultCurrency))
+            ?.Trim()
+            .ToUpperInvariant();
+
+        return currency?.Length == 3 ? currency : "USD";
+    }
+
+    private static string FormatMoney(decimal value, string currency)
+        => $"{value.ToString("N2", CultureInfo.CurrentCulture)} {currency}";
 }

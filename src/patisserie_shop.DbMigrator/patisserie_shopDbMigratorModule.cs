@@ -16,12 +16,19 @@ public class patisserie_shopDbMigratorModule : AbpModule
     {
         Configure<AbpDataSeedOptions>(options =>
         {
-            // Production demo data depends on the branches/products/users created
-            // by the earlier contributors. Sales history still runs last.
+            // Keep the presentation pipeline deterministic on a completely empty database:
+            // ABP creates its built-in admin first, then we create accounts, master data,
+            // production workflows, and finally the historical sales ledger.
+            options.Contributors.Remove<IdentityDataSeedContributor>();
+            options.Contributors.Remove<PatisserieDataSeedContributor>();
             options.Contributors.Remove<ProductionDemoSeedContributor>();
             options.Contributors.Remove<SalesHistorySeedContributor>();
+            options.Contributors.Remove<GraduationOperationsSeedContributor>();
+            options.Contributors.Add<IdentityDataSeedContributor>();
+            options.Contributors.Add<PatisserieDataSeedContributor>();
             options.Contributors.Add<ProductionDemoSeedContributor>();
             options.Contributors.Add<SalesHistorySeedContributor>();
+            options.Contributors.Add<GraduationOperationsSeedContributor>();
         });
     }
 }

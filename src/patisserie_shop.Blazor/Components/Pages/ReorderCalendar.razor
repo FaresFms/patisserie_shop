@@ -45,7 +45,7 @@
             <div class="rc-monthnav">
                 <SoftIconButton Icon="@Icons.Material.Filled.ChevronLeft"
                                 Size="Size.Small" OnClick="PrevMonthAsync" Disabled="_loading" />
-                <span class="rc-month-label">@_anchor.ToString("MMMM yyyy", CultureInfo.InvariantCulture)</span>
+                <span class="rc-month-label">@_anchor.ToString("Y", CultureInfo.CurrentCulture)</span>
                 <SoftIconButton Icon="@Icons.Material.Filled.ChevronRight"
                                 Size="Size.Small" OnClick="NextMonthAsync" Disabled="_loading" />
                 <SoftButton Variant="Variant.Text" Color="Color.Primary" Size="Size.Small"
@@ -156,7 +156,7 @@
                 var selectedEvents = EventsOn(_selectedDay.Value);
                 <section class="rc-detail">
                     <header class="rc-detail-head">
-                        <h2 class="rc-detail-title">@_selectedDay.Value.ToString("dddd, MMMM d", CultureInfo.InvariantCulture)</h2>
+                        <h2 class="rc-detail-title">@_selectedDay.Value.ToString("D", CultureInfo.CurrentCulture)</h2>
                         <SoftIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="ClearSelection" />
                     </header>
                     @if (selectedEvents.Count == 0)
@@ -209,7 +209,7 @@
                         @foreach (var ev in upcoming)
                         {
                             <li class="rc-event @EventClass(ev.EventType)">
-                                <span class="rc-event-date">@ev.Date.ToString("MMM d", CultureInfo.InvariantCulture)</span>
+                                <span class="rc-event-date">@ev.Date.ToString("M", CultureInfo.CurrentCulture)</span>
                                 <span class="rc-event-dot"></span>
                                 <div class="rc-event-body">
                                     <div class="rc-event-title">
@@ -425,7 +425,9 @@
 </style>
 
 @code {
-    private static readonly string[] WeekdayHeaders = { "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat" };
+    private static IEnumerable<string> WeekdayHeaders =>
+        Enumerable.Range(0, 7)
+            .Select(day => CultureInfo.CurrentCulture.DateTimeFormat.GetAbbreviatedDayName((DayOfWeek)day));
     private const int UpcomingDays = 14;
     private const int UpcomingLimit = 30;
 
@@ -486,7 +488,7 @@
         }
         catch (Exception ex)
         {
-            _error = $"{ex.GetType().Name}: {ex.Message}";
+            _error = GetFriendlyErrorMessage(ex);
             await HandleErrorAsync(ex);
         }
         finally
@@ -598,5 +600,5 @@
     };
 
     private string PillTitle(string eventType, int count)
-        => $"{count} {EventTypeLabel(eventType)}";
+        => IntL["ReorderCalendar:PillTitle", EventTypeLabel(eventType), count];
 }

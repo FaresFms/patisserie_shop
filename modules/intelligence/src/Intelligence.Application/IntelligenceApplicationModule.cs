@@ -23,6 +23,7 @@ public class IntelligenceApplicationModule : AbpModule
     public override void ConfigureServices(ServiceConfigurationContext context)
     {
         context.Services.AddMapperlyObjectMapper<IntelligenceApplicationModule>();
+        context.Services.AddSingleton<IntelligenceBackgroundJobScheduleNotifier>();
         context.Services.AddTransient<DeadStockScannerWorker>();
         context.Services.AddTransient<TransferSuggestionScannerWorker>();
         context.Services.AddTransient<VelocityScannerWorker>();

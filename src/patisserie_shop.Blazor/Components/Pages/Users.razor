@@ -6,17 +6,23 @@
 @using Volo.Abp.Application.Dtos
 @using Volo.Abp.AspNetCore.Components.Web.Theming.Layout
 @using Volo.Abp.Identity
+@using patisserie_shop.Blazor.Services
+@using patisserie_shop.Users
 @using Color = MudBlazor.Color
 @using Variant = MudBlazor.Variant
 @using Size = MudBlazor.Size
 @using Margin = MudBlazor.Margin
 @inherits patisserie_shopComponentBase
+@implements IDisposable
 @inject IIdentityUserAppService UserAppService
+@inject IUserDirectoryAppService UserDirectoryAppService
+@inject UserPresenceTracker PresenceTracker
 @inject PageLayout PageLayout
 @inject ISnackbar Snackbar
+@inject NavigationManager Navigation
 
 @{
-    PageLayout.Title = "Users";
+    PageLayout.Title = L["Users"];
 }
 
 <SoftCard Elevation="2" Class="pa-2 page-flat">
@@ -30,7 +36,7 @@
             {
                 <SoftButton Variant="Variant.Filled" Color="Color.Primary"
                             StartIcon="@Icons.Material.Filled.Add" OnClick="OpenCreateDialog">
-                    New user
+                    @L["Users:New"]
                 </SoftButton>
             }
         </div>
@@ -48,6 +54,18 @@
                            Immediate="true"
                            Class="toolbar-search"
                            Style="max-width: 320px;" />
+            <div class="filter-chip">
+                <SoftLookupSelect TItem="IdentityRoleDto" TValue="Guid?"
+                                  Items="_allRoles"
+                                  ToValue="@(role => (Guid?)role.Id)"
+                                  ToLabel="@(role => DisplayRoleName(role.Name))"
+                                  Value="_roleFilter"
+                                  ValueChanged="OnRoleFilterChangedAsync"
+                                  Label="@L["Users:AllRoles"]"
+                                  Margin="Margin.Dense"
+                                  Clearable="true"
+                                  Dense="true" />
+            </div>
             <div class="toolbar-right">
                 <SoftButton Variant="Variant.Text" Color="Color.Primary"
                             StartIcon="@Icons.Material.Filled.Refresh" OnClick="ReloadAsync">
@@ -62,21 +80,33 @@
                       Dense="true" Hover="true" Bordered="false" Striped="true"
                       Loading="_loading" SortMode="SortMode.Single">
             <Columns>
-                <PropertyColumn T="IdentityUserDto" TProperty="string" Property="x => x.UserName" Title="Username" />
-                <TemplateColumn T="IdentityUserDto" Title="Name" Sortable="false">
+                <TemplateColumn T="IdentityUserDto" Title="@L["Users:Username"]"
+                                Sortable="true" SortBy="x => x.UserName">
+                    <CellTemplate>
+                        <span class="user-presence-cell">
+                            <SoftTooltip Text="@(IsOnline(context.Item.Id) ? L["Users:Online"] : L["Users:Offline"])">
+                                <span class="user-presence-dot @(IsOnline(context.Item.Id) ? "is-online" : "is-offline")"
+                                      role="img"
+                                      aria-label="@(IsOnline(context.Item.Id) ? L["Users:Online"] : L["Users:Offline"])"></span>
+                            </SoftTooltip>
+                            <span>@context.Item.UserName</span>
+                        </span>
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn T="IdentityUserDto" Title="@L["Users:FullName"]" Sortable="false">
                     <CellTemplate>@($"{context.Item.Name} {context.Item.Surname}".Trim())</CellTemplate>
                 </TemplateColumn>
-                <PropertyColumn T="IdentityUserDto" TProperty="string" Property="x => x.Email!" Title="Email" Sortable="false" />
-                <PropertyColumn T="IdentityUserDto" TProperty="string" Property="x => x.PhoneNumber!" Title="Phone" Sortable="false" />
-                <TemplateColumn T="IdentityUserDto" Title="Status" Sortable="true" SortBy="x => x.IsActive">
+                <PropertyColumn T="IdentityUserDto" TProperty="string" Property="x => x.Email!" Title="@L["Users:Email"]" Sortable="false" />
+                <PropertyColumn T="IdentityUserDto" TProperty="string" Property="x => x.PhoneNumber!" Title="@L["Users:Phone"]" Sortable="false" />
+                <TemplateColumn T="IdentityUserDto" Title="@L["Users:Status"]" Sortable="true" SortBy="x => x.IsActive">
                     <CellTemplate>
                         @if (context.Item.IsActive)
                         {
-                            <SoftChip T="string" Color="Color.Success" Size="Size.Small" Variant="Variant.Filled">Active</SoftChip>
+                            <SoftChip T="string" Color="Color.Success" Size="Size.Small" Variant="Variant.Filled">@L["Users:Active"]</SoftChip>
                         }
                         else
                         {
-                            <SoftChip T="string" Color="Color.Default" Size="Size.Small" Variant="Variant.Outlined">Inactive</SoftChip>
+                            <SoftChip T="string" Color="Color.Default" Size="Size.Small" Variant="Variant.Outlined">@L["Users:Inactive"]</SoftChip>
                         }
                     </CellTemplate>
                 </TemplateColumn>
@@ -84,6 +114,11 @@
                     <CellTemplate>
                         <span class="row-actions">
                             <SoftStack Row="true" Spacing="1">
+                                <SoftTooltip Text="@L["Users:ViewDetails"]">
+                                    <SoftIconButton Icon="@Icons.Material.Filled.Visibility"
+                                                    Color="Color.Default" Size="Size.Small"
+                                                    OnClick="() => OpenDetails(context.Item.Id)" />
+                                </SoftTooltip>
                                 @if (_canManagePermissions)
                                 {
                                     <SoftIconButton Icon="@Icons.Material.Filled.Security"
@@ -124,7 +159,7 @@
                         <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
                             <SoftIcon Icon="@(_editingId.HasValue ? Icons.Material.Filled.Edit : Icons.Material.Filled.AddCircle)"
                                       Color="Color.Primary" Size="Size.Medium" />
-                            <SoftText Typo="Typo.h6">@(_editingId.HasValue ? "Edit user" : "New user")</SoftText>
+                            <SoftText Typo="Typo.h6">@(_editingId.HasValue ? L["Users:Edit"] : L["Users:New"])</SoftText>
                         </SoftStack>
                     </CardHeaderContent>
                     <CardHeaderActions>
@@ -134,34 +169,34 @@
                 <SoftDivider />
                 <SoftCardContent Class="pa-4 glass-modal-body" Style="max-height: 65vh; overflow-y: auto;">
                     <SoftStack Spacing="3">
-                        <SoftTextField T="string" Label="Username" @bind-Value="_editUserName"
+                        <SoftTextField T="string" Label="@L["Users:Username"]" @bind-Value="_editUserName"
                                        Variant="Variant.Outlined" MaxLength="256" Required="true" Immediate="true" />
                         <SoftStack Row="true" Spacing="2">
-                            <SoftTextField T="string" Label="Name" @bind-Value="_editName"
+                            <SoftTextField T="string" Label="@L["Users:FirstName"]" @bind-Value="_editName"
                                            Variant="Variant.Outlined" MaxLength="64" />
-                            <SoftTextField T="string" Label="Surname" @bind-Value="_editSurname"
+                            <SoftTextField T="string" Label="@L["Users:LastName"]" @bind-Value="_editSurname"
                                            Variant="Variant.Outlined" MaxLength="64" />
                         </SoftStack>
-                        <SoftTextField T="string" Label="@(_editingId.HasValue ? "New password (leave blank to keep)" : "Password")"
+                        <SoftTextField T="string" Label="@(_editingId.HasValue ? L["Users:NewPasswordOptional"] : L["Users:Password"])"
                                        @bind-Value="_editPassword" Variant="Variant.Outlined"
                                        InputType="InputType.Password" MaxLength="128"
                                        Required="@(!_editingId.HasValue)" />
                         <SoftStack Row="true" Spacing="2">
-                            <SoftTextField T="string" Label="Email" @bind-Value="_editEmail"
+                            <SoftTextField T="string" Label="@L["Users:Email"]" @bind-Value="_editEmail"
                                            Variant="Variant.Outlined" InputType="InputType.Email" MaxLength="256" Required="true" />
-                            <SoftTextField T="string" Label="Phone" @bind-Value="_editPhone"
+                            <SoftTextField T="string" Label="@L["Users:Phone"]" @bind-Value="_editPhone"
                                            Variant="Variant.Outlined" MaxLength="32" />
                         </SoftStack>
                         <SoftStack Row="true" Spacing="3">
-                            <SoftCheckBox T="bool" @bind-Value="_editIsActive" Label="Active" Color="Color.Primary" />
-                            <SoftCheckBox T="bool" @bind-Value="_editLockoutEnabled" Label="Lockout enabled" Color="Color.Primary" />
+                            <SoftCheckBox T="bool" @bind-Value="_editIsActive" Label="@L["Users:Active"]" Color="Color.Primary" />
+                            <SoftCheckBox T="bool" @bind-Value="_editLockoutEnabled" Label="@L["Users:LockoutEnabled"]" Color="Color.Primary" />
                         </SoftStack>
 
                         <SoftDivider />
-                        <SoftText Typo="Typo.subtitle2">Roles</SoftText>
+                        <SoftText Typo="Typo.subtitle2">@L["Users:AssignedRoles"]</SoftText>
                         @if (_allRoles.Count == 0)
                         {
-                            <SoftText Style="color: var(--fg-3);">No roles available.</SoftText>
+                            <SoftText Style="color: var(--fg-3);">@L["Users:NoRolesAvailable"]</SoftText>
                         }
                         else
                         {
@@ -172,7 +207,7 @@
                                         <SoftCheckBox T="bool"
                                                       Value="@_selectedRoles.Contains(role.Name)"
                                                       ValueChanged="@(v => ToggleRole(role.Name, v))"
-                                                      Label="@role.Name"
+                                                      Label="@DisplayRoleName(role.Name)"
                                                       Color="Color.Primary" />
                                     </div>
                                 }
@@ -230,15 +265,45 @@
                  CanManage="_canManagePermissions"
                  OnClose="OnPermissionsClosed" />
 
+<style>
+    .user-presence-cell {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.55rem;
+        min-width: 0;
+    }
+
+    .user-presence-dot {
+        display: inline-block;
+        width: 0.62rem;
+        height: 0.62rem;
+        flex: 0 0 0.62rem;
+        border-radius: 50%;
+        border: 2px solid var(--surface);
+    }
+
+    .user-presence-dot.is-online {
+        background: var(--success);
+        box-shadow: 0 0 0 2px color-mix(in srgb, var(--success) 22%, transparent);
+    }
+
+    .user-presence-dot.is-offline {
+        background: var(--fg-4);
+        box-shadow: 0 0 0 1px var(--bd-2);
+    }
+</style>
+
 @code {
     private SoftDataGrid<IdentityUserDto> _grid = null!;
     private bool _loading;
     private string? _filter;
+    private Guid? _roleFilter;
 
     private bool _canCreate;
     private bool _canUpdate;
     private bool _canDelete;
     private bool _canManagePermissions;
+    private HashSet<Guid> _onlineUserIds = [];
 
     private List<IdentityRoleDto> _allRoles = new();
 
@@ -264,6 +329,9 @@
 
     protected override async Task OnInitializedAsync()
     {
+        PresenceTracker.PresenceChanged += OnPresenceChanged;
+        _onlineUserIds = PresenceTracker.GetOnlineUserIds().ToHashSet();
+
         _canCreate = await AuthorizationService.IsGrantedAsync(IdentityPermissions.Users.Create);
         _canUpdate = await AuthorizationService.IsGrantedAsync(IdentityPermissions.Users.Update);
         _canDelete = await AuthorizationService.IsGrantedAsync(IdentityPermissions.Users.Delete);
@@ -285,9 +353,10 @@
                 sorting = $"{sort.SortBy} {(sort.Descending ? "desc" : "asc")}";
             }
 
-            var result = await UserAppService.GetListAsync(new GetIdentityUsersInput
+            var result = await UserDirectoryAppService.GetListAsync(new GetUsersInput
             {
                 Filter = _filter,
+                RoleId = _roleFilter,
                 SkipCount = state.Page * state.PageSize,
                 MaxResultCount = state.PageSize,
                 Sorting = sorting
@@ -313,6 +382,17 @@
     private async Task ReloadAsync()
     {
         if (_grid != null) await _grid.ReloadServerData();
+    }
+
+    private async Task OnRoleFilterChangedAsync(Guid? roleId)
+    {
+        _roleFilter = roleId;
+        await ReloadAsync();
+    }
+
+    private void OpenDetails(Guid userId)
+    {
+        Navigation.NavigateTo($"/identity/users/{userId}");
     }
 
     private void ToggleRole(string roleName, bool selected)
@@ -377,7 +457,7 @@
     {
         if (string.IsNullOrWhiteSpace(_editUserName))
         {
-            Snackbar.Add(L["ThisFieldIsRequired", "Username"], Severity.Warning);
+            Snackbar.Add(L["ThisFieldIsRequired", L["Users:Username"]], Severity.Warning);
             return;
         }
 
@@ -464,4 +544,37 @@
         _permUserId = null;
         _permUserName = null;
     }
+
+    private bool IsOnline(Guid userId) => _onlineUserIds.Contains(userId);
+
+    private void OnPresenceChanged(Guid userId, bool isOnline)
+    {
+        _ = InvokeAsync(() =>
+        {
+            if (isOnline)
+            {
+                _onlineUserIds.Add(userId);
+            }
+            else
+            {
+                _onlineUserIds.Remove(userId);
+            }
+
+            StateHasChanged();
+        });
+    }
+
+    public void Dispose()
+    {
+        PresenceTracker.PresenceChanged -= OnPresenceChanged;
+    }
+
+    private string DisplayRoleName(string roleName) => roleName switch
+    {
+        "admin" => L["Roles:DisplayName:Admin"],
+        "BranchManager" => L["Roles:DisplayName:BranchManager"],
+        "Cashier" => L["Roles:DisplayName:Cashier"],
+        "KitchenManager" => L["Roles:DisplayName:KitchenManager"],
+        _ => roleName
+    };
 }

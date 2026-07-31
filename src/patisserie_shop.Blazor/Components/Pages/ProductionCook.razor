@@ -163,7 +163,7 @@
 
                         @if (HasShortage)
                         {
-                            <SoftAlert Severity="Severity.Warning">@ProdL["Error:Production:205"]</SoftAlert>
+                            <SoftAlert Severity="Severity.Warning">@ProdL["Production:205"]</SoftAlert>
                         }
 
                         <SoftText Typo="Typo.subtitle2">@ProdL["Availability"]</SoftText>
@@ -371,6 +371,10 @@
     private string _completeWasteReasonCode = ProductionWasteReasons.Other;
     private string? _completeOtherWasteReason;
     private string? _completeNotes;
+    private string? _completeOriginalNotes;
+    private string? _completeInitialDisplayNotes;
+
+    private const string ShortageDemoMarker = "[DEMO-PRODUCTION-AR-SHORTAGE]";
 
     private bool HasShortage => _detail?.Availability.Any(x => x.HasShortage) == true;
 
@@ -546,7 +550,9 @@
             _completeWasteReasonCode = ProductionWasteReasons.Other;
             _completeOtherWasteReason = _detail.WasteReason;
         }
-        _completeNotes = _detail.Notes;
+        _completeOriginalNotes = _detail.Notes;
+        _completeInitialDisplayNotes = WithoutMarker(_detail.Notes, ShortageDemoMarker);
+        _completeNotes = _completeInitialDisplayNotes;
         _completeVisible = true;
     }
 
@@ -563,7 +569,7 @@
                 RejectedQuantity = _completeRejectedQuantity,
                 ExpiryDate = _completeExpiryDate,
                 WasteReason = ResolveCompletionWasteReason(),
-                Notes = _completeNotes
+                Notes = CompletionNotesForSave()
             });
             _completeVisible = false;
             Snackbar.Add(ProdL["CompletedSuccessfully"], Severity.Success);
@@ -573,6 +579,35 @@
         {
             await HandleErrorAsync(ex);
         }
+    }
+
+    private string? CompletionNotesForSave()
+    {
+        if (string.Equals(_completeNotes, _completeInitialDisplayNotes, StringComparison.Ordinal))
+        {
+            return _completeOriginalNotes;
+        }
+
+        var editedNotes = WithoutMarker(_completeNotes, ShortageDemoMarker);
+        if (_completeOriginalNotes?.Contains(ShortageDemoMarker, StringComparison.Ordinal) != true)
+        {
+            return editedNotes;
+        }
+
+        return string.IsNullOrWhiteSpace(editedNotes)
+            ? ShortageDemoMarker
+            : $"{editedNotes} {ShortageDemoMarker}";
+    }
+
+    private static string? WithoutMarker(string? notes, string marker)
+    {
+        if (string.IsNullOrWhiteSpace(notes))
+        {
+            return notes;
+        }
+
+        var visibleNotes = notes.Replace(marker, string.Empty, StringComparison.Ordinal).Trim();
+        return visibleNotes.Length == 0 ? null : visibleNotes;
     }
 
     private async Task CancelOrderAsync()

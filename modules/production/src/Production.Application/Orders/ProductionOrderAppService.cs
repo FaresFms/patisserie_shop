@@ -14,6 +14,7 @@ using Production.Waste;
 using Volo.Abp;
 using Volo.Abp.Application.Dtos;
 using Volo.Abp.Domain.Repositories;
+using Volo.Abp.Localization;
 using Volo.Abp.Settings;
 
 namespace Production.Orders;
@@ -142,6 +143,7 @@ public class ProductionOrderAppService : ProductionAppService, IProductionOrderA
     [Authorize(ProductionPermissions.Ingredients.CheckAvailability)]
     public async Task<CreateIngredientPurchaseOrdersResultDto> CreateDraftIngredientPurchaseOrdersAsync(Guid id)
     {
+        using var contentCulture = CultureHelper.Use("ar-SY", "ar-SY");
         var order = await _orderRepository.GetWithDetailsAsync(id);
         var availability = await _orderManager.CheckAvailabilityAsync(order);
         var shortages = availability
@@ -261,6 +263,7 @@ public class ProductionOrderAppService : ProductionAppService, IProductionOrderA
         var order = await _orderRepository.GetWithDetailsAsync(id);
         var finishedProduct = await _productRepository.GetAsync(order.FinishedProductId);
         var expiryDate = ResolveExpiryDate(input.ExpiryDate, finishedProduct, order);
+        var completionNotes = NormalizeSystemNotesForPersistence(order, input.Notes);
 
         var completion = order.Complete(
             input.ActualOutputQuantity,
@@ -269,7 +272,7 @@ public class ProductionOrderAppService : ProductionAppService, IProductionOrderA
             expiryDate,
             input.WasteReason,
             CurrentUser.Id,
-            input.Notes);
+            completionNotes);
         var output = completion.Output;
         await _orderManager.ApplyAllocationReleasesAsync(completion.ReleasedAllocations);
 
@@ -301,9 +304,14 @@ public class ProductionOrderAppService : ProductionAppService, IProductionOrderA
             var rejectedUnitCost = input.ActualOutputQuantity > 0
                 ? Math.Round(order.TotalProductionCost / input.ActualOutputQuantity, 4)
                 : order.UnitProductionCost;
-            var wasteNotes = string.IsNullOrWhiteSpace(input.WasteReason) || ProductionWasteReasons.IsValid(input.WasteReason)
-                ? input.Notes
-                : AppendNote(input.Notes, L["OriginalWasteReason", input.WasteReason.Trim()]);
+            string? wasteNotes;
+            using (CultureHelper.Use("ar-SY", "ar-SY"))
+            {
+                wasteNotes = string.IsNullOrWhiteSpace(input.WasteReason) ||
+                             ProductionWasteReasons.IsValid(input.WasteReason)
+                    ? completionNotes
+                    : AppendNote(completionNotes, L["OriginalWasteReason", input.WasteReason.Trim()]);
+            }
 
             var waste = await _wasteManager.CreateAsync(
                 productionOrderId: order.Id,
@@ -405,7 +413,7 @@ public class ProductionOrderAppService : ProductionAppService, IProductionOrderA
             TotalProductionCost = order.TotalProductionCost,
             UnitProductionCost = order.UnitProductionCost,
             WasteReason = order.WasteReason,
-            Notes = order.Notes
+            Notes = FriendlySystemNotes(order.Notes, order.ProductionPlanId.HasValue)
         };
 
         var branch = await _branchRepository.FindAsync(order.KitchenBranchId);
@@ -482,6 +490,62 @@ public class ProductionOrderAppService : ProductionAppService, IProductionOrderA
         }
 
         return dto;
+    }
+
+    private string? FriendlySystemNotes(string? notes, bool wasCreatedFromPlan)
+    {
+        if (!TryGetLegacyPlanNumber(notes, wasCreatedFromPlan, out var planNumber))
+        {
+            return notes;
+        }
+
+        return L["ProductionOrderFromPlanNote", planNumber].Value;
+    }
+
+    private string? NormalizeSystemNotesForPersistence(
+        AppProductionOrder order,
+        string? submittedNotes)
+    {
+        if (!TryGetLegacyPlanNumber(
+                order.Notes,
+                order.ProductionPlanId.HasValue,
+                out var planNumber))
+        {
+            return submittedNotes;
+        }
+
+        var callerDisplayText = L["ProductionOrderFromPlanNote", planNumber].Value;
+        var noteWasNotEdited =
+            string.Equals(submittedNotes, order.Notes, StringComparison.Ordinal) ||
+            string.Equals(submittedNotes, callerDisplayText, StringComparison.Ordinal);
+        if (!noteWasNotEdited)
+        {
+            return submittedNotes;
+        }
+
+        using var contentCulture = CultureHelper.Use("ar-SY", "ar-SY");
+        return L["ProductionOrderFromPlanNote", planNumber].Value;
+    }
+
+    private static bool TryGetLegacyPlanNumber(
+        string? notes,
+        bool wasCreatedFromPlan,
+        out string planNumber)
+    {
+        const string legacyPlanPrefix = "From plan ";
+
+        planNumber = string.Empty;
+        if (!wasCreatedFromPlan ||
+            string.IsNullOrWhiteSpace(notes) ||
+            !notes.StartsWith(legacyPlanPrefix, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        planNumber = notes[legacyPlanPrefix.Length..].Trim();
+        return planNumber.StartsWith("PLAN-", StringComparison.Ordinal) &&
+               planNumber.All(character =>
+                   char.IsLetterOrDigit(character) || character == '-');
     }
 
     private async Task<string> GetDefaultCurrencyAsync()

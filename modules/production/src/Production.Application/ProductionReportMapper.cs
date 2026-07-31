@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Localization;
 using Production.Analytics;
 using Production.Dashboard;
 using Production.Reports;
@@ -6,7 +7,9 @@ namespace Production;
 
 internal static class ProductionReportMapper
 {
-    public static ProductionDashboardDto MapDashboard(ProductionDashboardReadModel model)
+    public static ProductionDashboardDto MapDashboard(
+        ProductionDashboardReadModel model,
+        IStringLocalizer localizer)
     {
         var dto = new ProductionDashboardDto
         {
@@ -29,8 +32,8 @@ internal static class ProductionReportMapper
             {
                 Type = item.Type,
                 Severity = item.Severity,
-                Title = item.Title,
-                Detail = item.Detail,
+                Title = localizer[$"DashboardAction:{item.Type}:Title"],
+                Detail = localizer[$"DashboardAction:{item.Type}:Detail"],
                 Url = item.Url,
                 Count = item.Count
             });

@@ -9,6 +9,7 @@
 @using Microsoft.JSInterop
 @using Volo.Abp.Settings
 @using patisserie_shop.Localization
+@using patisserie_shop.Blazor.Shared.Services
 @inherits Volo.Abp.AspNetCore.Components.Web.LeptonXLiteTheme.Themes.LeptonXLite.MainLayout
 @attribute [ExposeServices(typeof(Volo.Abp.AspNetCore.Components.Web.LeptonXLiteTheme.Themes.LeptonXLite.MainLayout))]
 @attribute [Dependency(ReplaceServices = true)]
@@ -18,20 +19,24 @@
 @inject PageLayout PageLayout
 @inject IJSRuntime JS
 @inject ISettingProvider SettingProvider
+@inject IUserTimeZoneProvider UserTimeZoneProvider
 
 
 <MudThemeProvider Theme="_theme" IsDarkMode="_isDarkMode" />
-<MudPopoverProvider />      @* 👈 this was missing! *@
-<MudDialogProvider />
-<MudSnackbarProvider />
-<SoftLayout>
+<SoftRtlProvider RightToLeft="_isArabic">
+    <MudPopoverProvider />
+    <MudDialogProvider />
+    <MudSnackbarProvider />
+    <div @key="_timeZoneVersion" style="display: contents">
+    <SoftLayout>
 
     <!-- ─── Top AppBar ─────────────────────────────────────────── -->
     <SoftAppBar Elevation="1" Dense="true" Color="MudBlazor.Color.Primary">
         <SoftIconButton Icon="@Icons.Material.Filled.Menu"
                        Color="MudBlazor.Color.Inherit"
                        Edge="Edge.Start"
-                       OnClick="ToggleDrawer" />
+                       OnClick="ToggleDrawer"
+                       aria-label="@L["Nav:ToggleMenu"]" />
 
         <SoftText Typo="Typo.h6" Class="ml-2">@_shopName</SoftText>
 
@@ -43,12 +48,13 @@
         <SoftSpacer />
 
         @* ── Language toggle (AR / EN) ── *@
-        <SoftTooltip Text="@(_isArabic ? "Switch to English" : "التبديل إلى العربية")" Placement="MudBlazor.Placement.Bottom">
+        <SoftTooltip Text="@(_isArabic ? L["Nav:SwitchToEnglish"] : L["Nav:SwitchToArabic"])" Placement="MudBlazor.Placement.Bottom">
             <SoftButton Variant="MudBlazor.Variant.Text"
                         Color="MudBlazor.Color.Inherit"
                         Size="MudBlazor.Size.Small"
                         OnClick="ToggleLanguage"
-                        Style="min-width:42px; font-weight:700; letter-spacing:0.5px; margin-right:2px;">
+                        aria-label="@(_isArabic ? L["Nav:SwitchToEnglish"] : L["Nav:SwitchToArabic"])"
+                        Style="min-width:42px; font-weight:700; letter-spacing:0.5px; margin-inline-end:2px;">
                 @(_isArabic ? "EN" : "AR")
             </SoftButton>
         </SoftTooltip>
@@ -73,7 +79,8 @@
                            Color="MudBlazor.Color.Inherit"
                            Size="MudBlazor.Size.Medium"
                            OnClick="() => ToggleDarkMode()"
-                           Style="transition: transform 0.3s ease; margin-right: 4px;" />
+                           aria-label="@(_isDarkMode ? L["Nav:SwitchToLight"] : L["Nav:SwitchToDark"])"
+                           Style="transition: transform 0.3s ease; margin-inline-end: 4px;" />
         </SoftTooltip>
 
         @if (CurrentUser.IsAuthenticated)
@@ -190,7 +197,9 @@
         </SoftContainer>
     </SoftMainContent>
 
-</SoftLayout>
+    </SoftLayout>
+    </div>
+</SoftRtlProvider>
 
 @code {
     // Resolved by name so the shared theme project stays free of a reference
@@ -212,12 +221,14 @@
     private bool _drawerOpen = true;
     private bool _isDarkMode = false;
     private bool _isArabic = false;
-    private string _shopName = "Patisserie Shop";
+    private string _shopName = string.Empty;
     private List<ApplicationMenuItem> _menuItems = new();
+    private int _timeZoneVersion;
 
     protected override async Task OnInitializedAsync()
     {
         await base.OnInitializedAsync();
+        await UserTimeZoneProvider.EnsureLoadedAsync();
 
         _isArabic = CultureInfo.CurrentCulture.Name.StartsWith("ar", StringComparison.OrdinalIgnoreCase);
 
@@ -226,11 +237,14 @@
         // back to the literal default rather than breaking the whole shell.
         try
         {
-            _shopName = await SettingProvider.GetOrNullAsync("patisserie_shop.Shop.Name") ?? "Patisserie Shop";
+            var configuredShopName = await SettingProvider.GetOrNullAsync("patisserie_shop.Shop.Name");
+            _shopName = string.IsNullOrWhiteSpace(configuredShopName)
+                ? L["AppName"].Value
+                : configuredShopName;
         }
         catch
         {
-            _shopName = "Patisserie Shop";
+            _shopName = L["AppName"].Value;
         }
 
         var menu = await MenuManager.GetAsync(StandardMenus.Main);
@@ -247,6 +261,15 @@
 
         try
         {
+            var browserTimeZone = await JS.InvokeAsync<string?>("getBrowserTimezone");
+            if (await UserTimeZoneProvider.SetBrowserTimeZoneAsync(browserTimeZone))
+            {
+                // Recreate the displayed subtree once so timestamps initially
+                // rendered with the fallback timezone use the browser timezone.
+                _timeZoneVersion++;
+                StateHasChanged();
+            }
+
             // Restore dark mode preference from localStorage.
             var isDarkModeStr = await JS.InvokeAsync<string?>("localStorage.getItem", "ewallet-darkMode");
             if (bool.TryParse(isDarkModeStr, out var savedLegacyDarkMode))
@@ -269,6 +292,15 @@
         catch (JSDisconnectedException)
         {
             // The circuit can be disposed during navigation/auth redirects.
+        }
+        catch (InvalidOperationException)
+        {
+            // JavaScript interop can be unavailable during prerendering.
+        }
+        catch (JSException)
+        {
+            // Browser detection is best effort; the configured timezone or UTC
+            // fallback loaded during initialization remains active.
         }
     }
     private void SanitizeMenuUrls(List<ApplicationMenuItem> items)

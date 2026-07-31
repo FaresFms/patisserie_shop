@@ -9,6 +9,8 @@ using patisserie_shop.Blazor.Shared.Components.SoftComponents;
 using patisserie_shop.Localization;
 using patisserie_shop.Settings;
 using Microsoft.AspNetCore.Components;
+using Microsoft.Extensions.Logging;
+using Volo.Abp.AspNetCore.ExceptionHandling;
 using Volo.Abp.AspNetCore.Components;
 using Volo.Abp.Settings;
 using Volo.Abp.Validation;
@@ -19,6 +21,8 @@ public abstract class patisserie_shopComponentBase : AbpComponentBase
 {
     [Inject] protected IDialogService DialogService { get; set; } = null!;
     [Inject] protected ISettingProvider AppSettingProvider { get; set; } = null!;
+    [Inject] protected IExceptionToErrorInfoConverter ExceptionToErrorInfoConverter { get; set; } = null!;
+    [Inject] protected ILogger<patisserie_shopComponentBase> AppLogger { get; set; } = null!;
 
     protected string ShopCurrency { get; private set; } = "USD";
 
@@ -46,6 +50,22 @@ public abstract class patisserie_shopComponentBase : AbpComponentBase
 
     protected string FormatShopMoney(decimal value, int decimals = 2)
         => $"{value.ToString($"N{decimals}", CultureInfo.CurrentCulture)} {ShopCurrency}";
+
+    protected string GetFriendlyErrorMessage(
+        Exception ex,
+        string fallbackResourceKey = "Error:UnexpectedTryAgain")
+    {
+        AppLogger.LogError(ex, "A user-facing operation failed.");
+
+        var errorInfo = ExceptionToErrorInfoConverter.Convert(ex, includeSensitiveDetails: false);
+        if (!string.IsNullOrWhiteSpace(errorInfo.Code) &&
+            !string.IsNullOrWhiteSpace(errorInfo.Message))
+        {
+            return errorInfo.Message;
+        }
+
+        return L[fallbackResourceKey].Value;
+    }
 
     private static string NormalizeCurrency(string? currency)
     {
@@ -75,7 +95,7 @@ public abstract class patisserie_shopComponentBase : AbpComponentBase
         await DialogService.ShowAsync<ValidationErrorDialog>(null, parameters, options);
     }
 
-    private static bool TryGetValidationErrors(
+    private bool TryGetValidationErrors(
         Exception ex,
         out IReadOnlyList<ValidationErrorDialog.ValidationErrorItem> errors)
     {
@@ -89,7 +109,9 @@ public abstract class patisserie_shopComponentBase : AbpComponentBase
         errors = validationEx.ValidationErrors
             .Select(r => new ValidationErrorDialog.ValidationErrorItem(
                 FormatFieldName(r),
-                string.IsNullOrWhiteSpace(r.ErrorMessage) ? "Invalid value." : r.ErrorMessage!))
+                string.IsNullOrWhiteSpace(r.ErrorMessage)
+                    ? L["Validation:InvalidValue"].Value
+                    : r.ErrorMessage!))
             .ToList();
 
         return true;

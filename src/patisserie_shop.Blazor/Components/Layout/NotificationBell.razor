@@ -1,5 +1,6 @@
 @using System
 @using System.Collections.Generic
+@using System.Globalization
 @using System.Linq
 @using System.Threading.Tasks
 @using Microsoft.AspNetCore.Authorization
@@ -35,7 +36,9 @@
 @if (_canView)
 {
     <div class="notif-bell">
-        <SoftTooltip Text="@L["Notifications"]" Placement="Placement.Bottom">
+        <SoftTooltip Text="@L["Notifications"]"
+                     Placement="Placement.Bottom"
+                     Disabled="@_open">
             <SoftBadge Content="@TotalBadgeCount"
                        Max="99"
                        Color="Color.Error"
@@ -51,6 +54,13 @@
         @if (_open)
         {
             <div class="notif-backdrop" @onclick="CloseDropdown"></div>
+        }
+
+        <SoftPopover Open="@_open"
+                     AnchorOrigin="@NotificationAnchorOrigin"
+                     TransformOrigin="@NotificationTransformOrigin"
+                     OverflowBehavior="OverflowBehavior.FlipAlways"
+                     Paper="false">
             <div class="notif-popover" @onclick:stopPropagation="true">
                 <div class="notif-head">
                     <span class="notif-head-title">@L["Notifications"]</span>
@@ -132,7 +142,7 @@
                     </div>
                 }
             </div>
-        }
+        </SoftPopover>
     </div>
 
     <style>
@@ -140,7 +150,7 @@
             position: relative;
             display: inline-flex;
             align-items: center;
-            margin-right: 2px;
+            margin-inline-end: 2px;
         }
 
         .notif-backdrop {
@@ -151,17 +161,16 @@
         }
 
         .notif-popover {
-            position: absolute;
-            top: calc(100% + 10px);
-            right: 0;
-            width: 340px;
-            max-width: 90vw;
-            z-index: 1400;
+            width: min(340px, calc(100vw - 16px));
+            max-height: calc(100dvh - 64px);
+            margin-top: 8px;
             background: var(--surface);
             border: 1px solid var(--bd-2);
             border-radius: var(--r-md);
             box-shadow: var(--shadow-md);
-            overflow: hidden;
+            overflow-x: hidden;
+            overflow-y: auto;
+            overscroll-behavior: contain;
         }
 
         .notif-head {
@@ -254,7 +263,7 @@
             font-size: 0.66rem;
             font-weight: 600;
             padding: 1px 7px;
-            margin-right: 6px;
+            margin-inline-end: 6px;
             border-radius: 999px;
             background: var(--accent-soft);
             color: var(--accent);
@@ -296,6 +305,30 @@
             color: var(--accent-hover);
             text-decoration: underline;
         }
+
+        @@media (max-width: 600px) {
+            .notif-popover {
+                width: calc(100vw - 16px);
+            }
+
+            .notif-list {
+                max-height: none;
+                overflow: visible;
+            }
+
+            .notif-item {
+                gap: 8px;
+                padding-inline: 12px;
+            }
+
+            .notif-item-text {
+                display: -webkit-box;
+                overflow: hidden;
+                white-space: normal;
+                -webkit-box-orient: vertical;
+                -webkit-line-clamp: 2;
+            }
+        }
     </style>
 }
 
@@ -313,6 +346,10 @@
     private int _pendingBranchRequests;
     private List<DecisionLogDto> _recent = new();
     private StockTransferActionSummaryDto? _transferSummary;
+
+    private bool IsRightToLeft => CultureInfo.CurrentUICulture.TextInfo.IsRightToLeft;
+    private Origin NotificationAnchorOrigin => IsRightToLeft ? Origin.BottomLeft : Origin.BottomRight;
+    private Origin NotificationTransformOrigin => IsRightToLeft ? Origin.TopLeft : Origin.TopRight;
 
     private int TotalBadgeCount => _pendingCount + (_transferSummary?.Total ?? 0) + _pendingBranchRequests;
 

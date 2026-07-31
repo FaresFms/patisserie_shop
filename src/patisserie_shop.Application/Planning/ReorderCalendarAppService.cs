@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Threading.Tasks;
+using Intelligence.Localization;
 using Intelligence.Permissions;
 using Intelligence.Velocity;
 using Inventory.BranchInventory;
@@ -9,8 +11,10 @@ using Inventory.Entities;
 using Inventory.Permissions;
 using Inventory.StockBatches;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.Extensions.Localization;
 using Operations;
 using Operations.Entities;
+using Operations.Localization;
 using Volo.Abp.Domain.Repositories;
 
 namespace patisserie_shop.Planning;
@@ -38,6 +42,8 @@ public class ReorderCalendarAppService : patisserie_shopAppService, IReorderCale
     private readonly IRepository<AppBranch, Guid> _branchRepository;
     private readonly IRepository<AppSupplier, Guid> _supplierRepository;
     private readonly IBranchInventoryAppService _branchInventoryAppService;
+    private readonly IStringLocalizer<IntelligenceResource> _intelligenceLocalizer;
+    private readonly IStringLocalizer<OperationsResource> _operationsLocalizer;
 
     public ReorderCalendarAppService(
         IProductVelocityRepository velocityRepository,
@@ -45,7 +51,9 @@ public class ReorderCalendarAppService : patisserie_shopAppService, IReorderCale
         IRepository<AppPurchaseOrder, Guid> purchaseOrderRepository,
         IRepository<AppBranch, Guid> branchRepository,
         IRepository<AppSupplier, Guid> supplierRepository,
-        IBranchInventoryAppService branchInventoryAppService)
+        IBranchInventoryAppService branchInventoryAppService,
+        IStringLocalizer<IntelligenceResource> intelligenceLocalizer,
+        IStringLocalizer<OperationsResource> operationsLocalizer)
     {
         _velocityRepository = velocityRepository;
         _batchRepository = batchRepository;
@@ -53,6 +61,8 @@ public class ReorderCalendarAppService : patisserie_shopAppService, IReorderCale
         _branchRepository = branchRepository;
         _supplierRepository = supplierRepository;
         _branchInventoryAppService = branchInventoryAppService;
+        _intelligenceLocalizer = intelligenceLocalizer;
+        _operationsLocalizer = operationsLocalizer;
     }
 
     public async Task<ReorderCalendarDto> GetAsync(GetReorderCalendarInput input)
@@ -166,13 +176,20 @@ public class ReorderCalendarAppService : patisserie_shopAppService, IReorderCale
                 continue;
             }
 
-            var branchName = branchNames.GetValueOrDefault(velocity.BranchId, "(deleted branch)");
+            var branchName = branchNames.GetValueOrDefault(
+                velocity.BranchId,
+                _intelligenceLocalizer["ReorderCalendar:DeletedBranch"].Value);
+            var averageDailySales = velocity.AvgDailySales30.ToString("0.##", CultureInfo.CurrentCulture);
             result.Add(new CalendarEventDto
             {
                 Date = date,
                 EventType = CalendarEventTypes.Stockout,
                 Title = row.ProductName,
-                Detail = $"{branchName} · {row.CurrentStock} on hand · ~{velocity.AvgDailySales30:0.##}/day",
+                Detail = _intelligenceLocalizer[
+                    "ReorderCalendar:Event:StockoutDetail",
+                    branchName,
+                    row.CurrentStock,
+                    averageDailySales].Value,
                 ProductId = velocity.ProductId,
                 BranchId = velocity.BranchId,
                 BranchName = branchName,
@@ -197,13 +214,19 @@ public class ReorderCalendarAppService : patisserie_shopAppService, IReorderCale
 
         return rows.ConvertAll(r =>
         {
-            var branchName = r.Branch?.Name ?? branchNames.GetValueOrDefault(r.Batch.BranchId, "(deleted branch)");
+            var branchName = r.Branch?.Name ?? branchNames.GetValueOrDefault(
+                r.Batch.BranchId,
+                _intelligenceLocalizer["ReorderCalendar:DeletedBranch"].Value);
             return new CalendarEventDto
             {
                 Date = r.Batch.ExpiryDate.Date,
                 EventType = CalendarEventTypes.Expiry,
                 Title = r.Product.Name,
-                Detail = $"{branchName} · {r.Batch.QuantityRemaining} units left · batch {r.Batch.BatchNumber}",
+                Detail = _intelligenceLocalizer[
+                    "ReorderCalendar:Event:ExpiryDetail",
+                    branchName,
+                    r.Batch.QuantityRemaining,
+                    r.Batch.BatchNumber].Value,
                 ProductId = r.Batch.ProductId,
                 BranchId = r.Batch.BranchId,
                 BranchName = branchName,
@@ -250,14 +273,23 @@ public class ReorderCalendarAppService : patisserie_shopAppService, IReorderCale
 
         return orders.ConvertAll(po =>
         {
-            var branchName = branchNames.GetValueOrDefault(po.DestBranchId, "(deleted branch)");
-            var supplierName = supplierNames.GetValueOrDefault(po.SupplierId, "(unknown supplier)");
+            var branchName = branchNames.GetValueOrDefault(
+                po.DestBranchId,
+                _intelligenceLocalizer["ReorderCalendar:DeletedBranch"].Value);
+            var supplierName = supplierNames.GetValueOrDefault(
+                po.SupplierId,
+                _intelligenceLocalizer["ReorderCalendar:UnknownSupplier"].Value);
+            var statusLabel = _operationsLocalizer[$"Status:{po.Status}"].Value;
             return new CalendarEventDto
             {
                 Date = po.ExpectedDeliveryDate!.Value.Date,
                 EventType = CalendarEventTypes.Delivery,
                 Title = po.PONumber,
-                Detail = $"{supplierName} → {branchName} · {po.Status}",
+                Detail = _intelligenceLocalizer[
+                    "ReorderCalendar:Event:DeliveryDetail",
+                    supplierName,
+                    branchName,
+                    statusLabel].Value,
                 ProductId = null,
                 BranchId = po.DestBranchId,
                 BranchName = branchName,

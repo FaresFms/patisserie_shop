@@ -87,7 +87,9 @@
             {
                 <span class="stocktake-snapshot">
                     <SoftIcon Icon="@Icons.Material.Outlined.Schedule" Size="Size.Small" />
-                    @string.Format(InvL["Stocktake:Snapshot"], _session.SnapshotAt.ToString("g"))
+                    <BrowserLocalTime Value="@_session.SnapshotAt"
+                                      Display="BrowserTimeDisplay.DateTime"
+                                      Template="@InvL["Stocktake:Snapshot"]" />
                 </span>
                 @if (IsDraftSession)
                 {
@@ -430,10 +432,11 @@
                 <SoftDataGrid T="StocktakeSessionListDto" Items="_history" Dense="true" Hover="true"
                               Bordered="false" Striped="false" Class="stocktake-history-grid">
                     <Columns>
-                        <PropertyColumn T="StocktakeSessionListDto" TProperty="DateTime"
-                                        Property="session => session.SnapshotAt"
+                        <TemplateColumn T="StocktakeSessionListDto"
                                         Title="@InvL["Stocktake:StartedAt"]"
-                                        Format="g" />
+                                        SortBy="session => session.SnapshotAt">
+                            <CellTemplate><BrowserLocalTime Value="@context.Item.SnapshotAt" Display="BrowserTimeDisplay.DateTime" /></CellTemplate>
+                        </TemplateColumn>
                         <TemplateColumn T="StocktakeSessionListDto" Title="@InvL["Stocktake:Status"]">
                             <CellTemplate>
                                 <SoftChip T="string" Size="Size.Small"
@@ -465,7 +468,9 @@
                         </TemplateColumn>
                         <TemplateColumn T="StocktakeSessionListDto" Title="@InvL["Stocktake:ClosedAt"]">
                             <CellTemplate>
-                                @(context.Item.ClosedAt?.ToString("g") ?? InvL["Stocktake:NotClosed"])
+                                <BrowserLocalTime Value="@context.Item.ClosedAt"
+                                                  Display="BrowserTimeDisplay.DateTime"
+                                                  Fallback="@InvL["Stocktake:NotClosed"]" />
                             </CellTemplate>
                         </TemplateColumn>
                         <TemplateColumn T="StocktakeSessionListDto" Title="@L["Actions"]" Sortable="false">
@@ -633,7 +638,10 @@
                             <SoftIcon Icon="@Icons.Material.Filled.History" Color="Color.Primary" Size="Size.Medium" />
                             <div>
                                 <SoftText Typo="Typo.h6">@InvL["Stocktake:DetailsTitle"]</SoftText>
-                                <SoftText Typo="Typo.caption">@_detailSession.SnapshotAt.ToString("g") · @InvL[$"Stocktake:Status:{_detailSession.Status}"]</SoftText>
+                                <SoftText Typo="Typo.caption">
+                                    <BrowserLocalTime Value="@_detailSession.SnapshotAt" Display="BrowserTimeDisplay.DateTime" />
+                                    · @InvL[$"Stocktake:Status:{_detailSession.Status}"]
+                                </SoftText>
                             </div>
                         </SoftStack>
                     </CardHeaderContent>
@@ -652,9 +660,9 @@
                     <div class="stocktake-detail-summary mb-3">
                         <div><span>@InvL["Stocktake:StartedBy"]</span><strong>@(_detailSession.StartedByName ?? "—")</strong></div>
                         <div><span>@InvL["Stocktake:SubmittedBy"]</span><strong>@(_detailSession.SubmittedByName ?? "—")</strong></div>
-                        <div><span>@InvL["Stocktake:SubmittedAt"]</span><strong>@(_detailSession.SubmittedAt?.ToString("g") ?? "—")</strong></div>
+                        <div><span>@InvL["Stocktake:SubmittedAt"]</span><strong><BrowserLocalTime Value="@_detailSession.SubmittedAt" Display="BrowserTimeDisplay.DateTime" /></strong></div>
                         <div><span>@InvL["Stocktake:ReviewedBy"]</span><strong>@(_detailSession.ReviewedByName ?? "—")</strong></div>
-                        <div><span>@InvL["Stocktake:ReviewedAt"]</span><strong>@(_detailSession.ReviewedAt?.ToString("g") ?? "—")</strong></div>
+                        <div><span>@InvL["Stocktake:ReviewedAt"]</span><strong><BrowserLocalTime Value="@_detailSession.ReviewedAt" Display="BrowserTimeDisplay.DateTime" /></strong></div>
                     </div>
                     @if (!string.IsNullOrWhiteSpace(_detailSession.Notes))
                     {

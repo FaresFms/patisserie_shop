@@ -21,6 +21,7 @@ using Volo.Abp.BackgroundJobs;
 using Volo.Abp.Emailing;
 using Volo.Abp.FeatureManagement;
 using Volo.Abp.Identity;
+using Volo.Abp.Timing;
 
 namespace patisserie_shop;
 
@@ -46,6 +47,13 @@ public class patisserie_shopDomainModule : AbpModule
 {
     public override void ConfigureServices(ServiceConfigurationContext context)
     {
+        // Persist every instant as genuine UTC. BrowserLocalTime converts these
+        // UTC values to each user's browser timezone when they are displayed.
+        Configure<AbpClockOptions>(options =>
+        {
+            options.Kind = DateTimeKind.Utc;
+        });
+
         Configure<AbpMultiTenancyOptions>(options =>
         {
             options.IsEnabled = MultiTenancyConsts.IsEnabled;

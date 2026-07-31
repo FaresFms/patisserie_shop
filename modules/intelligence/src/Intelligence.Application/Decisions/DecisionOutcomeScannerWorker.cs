@@ -1,6 +1,5 @@
-using System;
 using System.Threading.Tasks;
-using Microsoft.Extensions.Configuration;
+using Intelligence.Settings;
 using Microsoft.Extensions.DependencyInjection;
 using Volo.Abp.BackgroundWorkers;
 using Volo.Abp.Threading;
@@ -13,28 +12,22 @@ namespace Intelligence.Decisions;
 /// other scanner workers, the logic lives in the service; the worker owns only the
 /// schedule and the unit-of-work boundary.
 ///
-/// Interval comes from configuration: "BackgroundJobs:DecisionOutcomeScanIntervalMinutes".
-/// Default is 360 (6 hours) — outcomes are judged 48h after creation, so a few runs a
-/// day is plenty.
+/// Interval comes from the ABP setting
+/// <see cref="IntelligenceSettings.DecisionOutcomeScanIntervalMinutes"/>.
 /// </summary>
-public class DecisionOutcomeScannerWorker : AsyncPeriodicBackgroundWorkerBase
+public class DecisionOutcomeScannerWorker : SettingBasedScannerWorkerBase
 {
-    private const int DefaultIntervalMinutes = 360; // 6 hours
-
     public DecisionOutcomeScannerWorker(
         AbpAsyncTimer timer,
         IServiceScopeFactory serviceScopeFactory,
-        IConfiguration configuration)
-        : base(timer, serviceScopeFactory)
+        IntelligenceBackgroundJobScheduleNotifier scheduleNotifier)
+        : base(
+            timer,
+            serviceScopeFactory,
+            scheduleNotifier,
+            IntelligenceSettings.DecisionOutcomeScanIntervalMinutes,
+            IntelligenceSettings.DecisionOutcomeDefaultIntervalMinutes)
     {
-        var minutes = configuration.GetValue<int?>("BackgroundJobs:DecisionOutcomeScanIntervalMinutes")
-                      ?? DefaultIntervalMinutes;
-        if (minutes <= 0)
-        {
-            minutes = DefaultIntervalMinutes;
-        }
-
-        Timer.Period = (int)TimeSpan.FromMinutes(minutes).TotalMilliseconds;
     }
 
     protected override async Task DoWorkAsync(PeriodicBackgroundWorkerContext workerContext)

@@ -31,7 +31,7 @@
             <div class="page-sub">
                 @if (_lastRefresh.HasValue)
                 {
-                    <span>@ProdL["ProductionDashboardSubtitle"] · @_lastRefresh.Value.ToString("HH:mm", CultureInfo.CurrentCulture)</span>
+                    <span>@ProdL["ProductionDashboardSubtitle"] · <BrowserLocalTime Value="@_lastRefresh.Value" Display="BrowserTimeDisplay.Time" /></span>
                 }
                 else
                 {
@@ -467,11 +467,11 @@
             {
                 KitchenBranchId = _kitchenBranchId
             });
-            _lastRefresh = DateTime.Now;
+            _lastRefresh = DateTime.UtcNow;
         }
         catch (Exception ex)
         {
-            _error = $"{ex.GetType().Name}: {ex.Message}";
+            _error = GetFriendlyErrorMessage(ex, "Error:LoadTryAgain");
             await HandleErrorAsync(ex);
         }
         finally

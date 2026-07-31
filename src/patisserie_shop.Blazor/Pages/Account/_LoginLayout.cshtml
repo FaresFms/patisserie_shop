@@ -1,12 +1,18 @@
+@using System.Globalization
+@using Microsoft.AspNetCore.Mvc.Localization
+@using patisserie_shop.Localization
+@using Volo.Abp.Localization
+@inject IHtmlLocalizer<patisserie_shopResource> L
 @{
     Layout = null;
+    var direction = CultureHelper.IsRtl ? "rtl" : "ltr";
 }
 <!DOCTYPE html>
-<html lang="en" data-theme="light">
+<html lang="@CultureInfo.CurrentUICulture.Name" dir="@direction" data-theme="light">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Sign in — Patisserie</title>
+    <title>@L["Account:Login:SignIn"] — @L["AppName"]</title>
 
     @await RenderSectionAsync("styles", required: false)
 
@@ -17,7 +23,7 @@
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Outlined" rel="stylesheet">
 
     <!-- Warm login CSS -->
-    <link rel="stylesheet" href="~/css/login-warm.css" />
+    <link rel="stylesheet" href="~/css/login-warm.css" asp-append-version="true" />
 
     <!-- Restore saved theme before paint to avoid flash -->
     <script src="~/js/theme-bridge.js"></script>

@@ -6,8 +6,10 @@ using Blazorise.Bootstrap5;
 using Blazorise.Icons.FontAwesome;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Components.Server.Circuits;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -45,6 +47,7 @@ using Volo.Abp.Identity;
 using Volo.Abp.Autofac;
 using Volo.Abp.Mapperly;
 using patisserie_shop.Blazor.HealthChecks;
+using patisserie_shop.Blazor.Services;
 using Volo.Abp.Identity.Blazor.Server;
 using Volo.Abp.SettingManagement.Blazor.Server;
 using Volo.Abp.FeatureManagement.Blazor.Server;
@@ -53,6 +56,7 @@ using Volo.Abp.Localization;
 using Volo.Abp.Modularity;
 using Volo.Abp.OpenIddict;
 using Volo.Abp.Swashbuckle;
+using Volo.Abp.Timing;
 using Volo.Abp.UI.Navigation;
 using Volo.Abp.UI.Navigation.Urls;
 using Volo.Abp.VirtualFileSystem;
@@ -137,6 +141,7 @@ public class patisserie_shopBlazorModule : AbpModule
         // Add services to the container.
         context.Services.AddRazorComponents()
             .AddInteractiveServerComponents();
+        context.Services.AddScoped<CircuitHandler, UserPresenceCircuitHandler>();
 
         if (!configuration.GetValue<bool>("App:DisablePII"))
         {
@@ -189,6 +194,36 @@ public class patisserie_shopBlazorModule : AbpModule
         context.Services.Configure<AbpClaimsPrincipalFactoryOptions>(options =>
         {
             options.IsDynamicClaimsEnabled = true;
+        });
+
+        context.Services.ConfigureApplicationCookie(options =>
+        {
+            var previousOnSignedIn = options.Events.OnSignedIn;
+
+            options.Events.OnSignedIn = async signedInContext =>
+            {
+                if (previousOnSignedIn is not null)
+                {
+                    await previousOnSignedIn(signedInContext);
+                }
+
+                var userIdValue = signedInContext.Principal?
+                    .FindFirst(AbpClaimTypes.UserId)?
+                    .Value;
+
+                if (!Guid.TryParse(userIdValue, out var userId))
+                {
+                    return;
+                }
+
+                var services = signedInContext.HttpContext.RequestServices;
+                var userManager = services.GetRequiredService<IdentityUserManager>();
+                var clock = services.GetRequiredService<IClock>();
+                var user = await userManager.GetByIdAsync(userId);
+
+                user.SetLastSignInTime(clock.Now);
+                (await userManager.UpdateAsync(user)).CheckErrors();
+            };
         });
     }
 

@@ -94,7 +94,7 @@
                     <CellTemplate>@context.Item.RemainingToDispatch @context.Item.Unit</CellTemplate>
                 </TemplateColumn>
                 <TemplateColumn T="ProductionOrderListItemDto" Title="@ProdL["CompletedAt"]" SortBy="x => x.CompletedAt">
-                    <CellTemplate>@(context.Item.CompletedAt?.ToString("yyyy-MM-dd") ?? "-")</CellTemplate>
+                    <CellTemplate><BrowserLocalTime Value="@context.Item.CompletedAt" Display="BrowserTimeDisplay.DateTime" Fallback="-" /></CellTemplate>
                 </TemplateColumn>
                 <TemplateColumn T="ProductionOrderListItemDto" Title="@ProdL["Actions"]" Sortable="false">
                     <CellTemplate>

@@ -2,7 +2,16 @@
 
 <div class="po-info-row">
     <div class="po-info-label">@Label</div>
-    <div class="po-info-value @(Strong ? "po-info-strong" : "")">@Value</div>
+    <div class="po-info-value @(Strong ? "po-info-strong" : "")">
+        @if (ChildContent is not null)
+        {
+            @ChildContent
+        }
+        else
+        {
+            @Value
+        }
+    </div>
 </div>
 
 <style>
@@ -29,6 +38,7 @@
 
 @code {
     [Parameter, EditorRequired] public string Label { get; set; } = default!;
-    [Parameter, EditorRequired] public string Value { get; set; } = default!;
+    [Parameter] public string? Value { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
     [Parameter] public bool Strong { get; set; }
 }

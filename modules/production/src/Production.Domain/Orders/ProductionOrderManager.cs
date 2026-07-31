@@ -4,13 +4,16 @@ using System.Linq;
 using System.Threading.Tasks;
 using Inventory.Entities;
 using Inventory.StockBatches;
+using Microsoft.Extensions.Localization;
 using Production.BranchRequests;
 using Production.Costing;
 using Production.Entities;
 using Production.Formulas;
+using Production.Localization;
 using Volo.Abp;
 using Volo.Abp.Domain.Repositories;
 using Volo.Abp.Domain.Services;
+using Volo.Abp.Localization;
 
 namespace Production.Orders;
 
@@ -22,6 +25,7 @@ public class ProductionOrderManager : DomainService
     private readonly IRepository<AppProduct, Guid> _productRepository;
     private readonly IStockBatchRepository _stockBatchRepository;
     private readonly IBranchProductionRequestRepository _requestRepository;
+    private readonly IStringLocalizer<ProductionResource> _localizer;
 
     public ProductionOrderManager(
         IProductionOrderRepository orderRepository,
@@ -29,7 +33,8 @@ public class ProductionOrderManager : DomainService
         IRepository<AppBranchInventory, Guid> inventoryRepository,
         IRepository<AppProduct, Guid> productRepository,
         IStockBatchRepository stockBatchRepository,
-        IBranchProductionRequestRepository requestRepository)
+        IBranchProductionRequestRepository requestRepository,
+        IStringLocalizer<ProductionResource> localizer)
     {
         _orderRepository = orderRepository;
         _formulaRepository = formulaRepository;
@@ -37,12 +42,14 @@ public class ProductionOrderManager : DomainService
         _productRepository = productRepository;
         _stockBatchRepository = stockBatchRepository;
         _requestRepository = requestRepository;
+        _localizer = localizer;
     }
 
     public async Task<List<AppProductionOrder>> CreateFromPlanAsync(
         AppProductionPlan plan,
         Guid? createdByUserId)
     {
+        using var contentCulture = CultureHelper.Use("ar-SY", "ar-SY");
         Check.NotNull(plan, nameof(plan));
 
         if (plan.Status != ProductionPlanStatuses.Confirmed)
@@ -85,7 +92,7 @@ public class ProductionOrderManager : DomainService
                 line.PlannedQuantity,
                 ProductionPriorities.Normal,
                 createdByUserId,
-                $"From plan {plan.PlanNumber}",
+                _localizer["ProductionOrderFromPlanNote", plan.PlanNumber],
                 sequence++);
 
             var remainingForRequests = line.PlannedQuantity;

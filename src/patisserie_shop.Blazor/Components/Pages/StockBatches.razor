@@ -1,5 +1,6 @@
 @page "/inventory/stock-batches"
 @attribute [Authorize(InventoryPermissions.BranchInventory.Default)]
+@using System.Globalization
 @using System.Threading
 @using System.Threading.Tasks
 @using Microsoft.AspNetCore.Authorization
@@ -102,7 +103,7 @@
                 </TemplateColumn>
                 <TemplateColumn T="StockBatchDto" Title="@InvL["ExpiryDate"]" SortBy="x => x.ExpiryDate">
                     <CellTemplate>
-                        <SoftText Typo="Typo.body2">@context.Item.ExpiryDate.ToString("MMM d, yyyy")</SoftText>
+                        <SoftText Typo="Typo.body2">@context.Item.ExpiryDate.ToString("d", CultureInfo.CurrentCulture)</SoftText>
                     </CellTemplate>
                 </TemplateColumn>
                 <TemplateColumn T="StockBatchDto" Title="@InvL["ExpiryStatus"]" Sortable="false">

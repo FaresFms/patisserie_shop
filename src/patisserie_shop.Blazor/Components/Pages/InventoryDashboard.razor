@@ -31,7 +31,9 @@
                 <MudText Typo="Typo.body2" Class="dash-subtitle">
                     @if (_lastRefreshed.HasValue)
                     {
-                        <span>@L["InvDash:LastUpdated", _lastRefreshed.Value.ToString("HH:mm:ss", System.Globalization.CultureInfo.CurrentCulture)]</span>
+                        <BrowserLocalTime Value="@_lastRefreshed.Value"
+                                          Display="BrowserTimeDisplay.Time"
+                                          Template="@L["InvDash:LastUpdated"]" />
                     }
                     else
                     {
@@ -399,7 +401,9 @@
                                             <span class="mv-qty">
                                                 @(mv.Quantity > 0 ? $"+{mv.Quantity}" : mv.Quantity.ToString()) @mv.ProductUnit
                                             </span>
-                                            <span class="mv-time">@mv.CreationTime.ToString("MMM d, HH:mm", System.Globalization.CultureInfo.CurrentCulture)</span>
+                                            <BrowserLocalTime Value="@mv.CreationTime"
+                                                              Display="BrowserTimeDisplay.MonthDayTime"
+                                                              Class="mv-time" />
                                         </div>
                                     </div>
                                 </div>
@@ -901,7 +905,7 @@
                 new() { Label = L["InvDash:LowStock"].Value, Count = _data.LowStockCount },
                 new() { Label = L["InvDash:OutOfStock"].Value, Count = _data.OutOfStockCount }
             };
-            _lastRefreshed = DateTime.Now;
+            _lastRefreshed = DateTime.UtcNow;
         }
         catch (Exception ex)
         {
@@ -922,13 +926,9 @@
         _     => Color.Error
     };
 
-    private string FormatMovementType(string type) => type switch
+    private string FormatMovementType(string type)
     {
-        "Purchase"         => L["InvDash:Purchase"].Value,
-        "Sale"             => L["InvDash:Sale"].Value,
-        "TransferIn"       => L["InvDash:TransferIn"].Value,
-        "TransferOut"      => L["InvDash:TransferOut"].Value,
-        "ManualAdjustment" => L["InvDash:Adjustment"].Value,
-        _                  => type
-    };
+        var localized = InvL[$"MovementType:{type}"];
+        return localized.ResourceNotFound ? type : localized.Value;
+    }
 }

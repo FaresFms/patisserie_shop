@@ -1,0 +1,23 @@
+@namespace patisserie_shop.Blazor.Components.Shared
+@using patisserie_shop.Blazor.Shared.Services
+@inject IUserTimeZoneProvider UserTimeZoneProvider
+
+<span>@Greeting</span>
+
+@code {
+    [Parameter, EditorRequired] public string Morning { get; set; } = string.Empty;
+    [Parameter, EditorRequired] public string Afternoon { get; set; } = string.Empty;
+    [Parameter, EditorRequired] public string Evening { get; set; } = string.Empty;
+
+    private string Greeting => UserTimeZoneProvider.UserNow.Hour switch
+    {
+        < 12 => Morning,
+        < 18 => Afternoon,
+        _ => Evening
+    };
+
+    protected override Task OnInitializedAsync()
+    {
+        return UserTimeZoneProvider.EnsureLoadedAsync();
+    }
+}

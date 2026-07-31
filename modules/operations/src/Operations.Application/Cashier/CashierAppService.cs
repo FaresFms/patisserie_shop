@@ -358,29 +358,68 @@ public class CashierAppService : OperationsAppService, ICashierAppService
 
         var rows = await _saleRepository.GetRecentByCashierAsync(branchId, userId, since);
 
-        var now = Clock.Now;
-        return rows.ConvertAll(r => new RecentSaleDto
+        return MapRecentSales(rows, window, canVoidAnytime: false);
+    }
+
+    public async Task<List<RecentSaleDto>> GetRecentSalesForCurrentUserAsync(int withinMinutes = 60)
+    {
+        var window = withinMinutes <= 0 ? VoidWindowMinutes : withinMinutes;
+        var since = Clock.Now.AddMinutes(-window);
+        var canViewAllShifts = await AuthorizationService.IsGrantedAsync(
+            OperationsPermissions.Cashier.ViewAllShifts);
+
+        if (!canViewAllShifts)
         {
-            SaleId = r.Sale.Id,
-            InvoiceNumber = r.Sale.InvoiceNumber,
-            SaleDate = r.Sale.SaleDate,
-            Total = r.Sale.TotalAmount,
-            ItemCount = r.ItemCount,
-            IsVoided = r.Sale.IsVoided,
-            CanVoid = !r.Sale.IsVoided && r.Sale.SaleDate >= now.AddMinutes(-window)
-        });
+            var branchId = GetAssignedBranchId();
+            if (branchId is null)
+            {
+                return new List<RecentSaleDto>();
+            }
+
+            var cashierRows = await _saleRepository.GetRecentByCashierAsync(
+                branchId.Value, CurrentUser.GetId(), since);
+            return MapRecentSales(cashierRows, window, canVoidAnytime: false);
+        }
+
+        IReadOnlyCollection<Guid>? branchScope = null;
+        var canManageAllSales = await AuthorizationService.IsGrantedAsync(
+            OperationsPermissions.Sales.ManageAll);
+        if (!canManageAllSales)
+        {
+            branchScope = await GetAccessibleBranchIdsAsync();
+        }
+
+        var rows = await _saleRepository.GetFilteredListAsync(
+            branchScope,
+            branchId: null,
+            fromDate: since,
+            toDate: null,
+            filter: null,
+            sorting: "SaleDate desc",
+            skipCount: 0,
+            maxResultCount: 100);
+
+        return MapRecentSales(rows, window, canManageAllSales);
     }
 
     public async Task<SaleDto> GetSaleDetailsAsync(Guid saleId)
     {
         var sale = await _saleRepository.GetWithItemsAsync(saleId);
-        EnsureBranchAllowed(sale.BranchId);
 
-        var canViewAnyCashierSale = await AuthorizationService.IsGrantedAsync(OperationsPermissions.Sales.ManageAll);
-        if (!canViewAnyCashierSale && sale.CreatorId != CurrentUser.GetId())
+        var canViewAllShifts = await AuthorizationService.IsGrantedAsync(
+            OperationsPermissions.Cashier.ViewAllShifts);
+        if (canViewAllShifts)
         {
-            throw new BusinessException(OperationsErrorCodes.CashierSaleAccessDenied)
-                .WithData("SaleId", sale.Id);
+            await EnsureSupervisorBranchAccessAsync(sale.BranchId);
+        }
+        else
+        {
+            EnsureBranchAllowed(sale.BranchId);
+            if (sale.CreatorId != CurrentUser.GetId())
+            {
+                throw new BusinessException(OperationsErrorCodes.CashierSaleAccessDenied)
+                    .WithData("SaleId", sale.Id);
+            }
         }
 
         return await ProjectSaleAsync(sale);
@@ -390,18 +429,21 @@ public class CashierAppService : OperationsAppService, ICashierAppService
     {
         var sale = await _saleRepository.GetWithItemsAsync(input.SaleId);
 
-        // Branch isolation: a cashier may only void sales at their assigned branch.
-        // Managers with Sales.ManageAll (no branch claim) are unaffected.
-        EnsureBranchAllowed(sale.BranchId);
-
-        // Ownership: a non-manager may only void their own sale. Managers with
-        // Sales.ManageAll may void any sale at an allowed branch. Mirrors the
-        // access rule GetSaleDetailsAsync already enforces.
         var canManageAnySale = await AuthorizationService.IsGrantedAsync(OperationsPermissions.Sales.ManageAll);
-        if (!canManageAnySale && sale.CreatorId != CurrentUser.GetId())
+        var canViewAllShifts = await AuthorizationService.IsGrantedAsync(
+            OperationsPermissions.Cashier.ViewAllShifts);
+        if (canViewAllShifts)
         {
-            throw new BusinessException(OperationsErrorCodes.CashierSaleAccessDenied)
-                .WithData("SaleId", sale.Id);
+            await EnsureSupervisorBranchAccessAsync(sale.BranchId);
+        }
+        else
+        {
+            EnsureBranchAllowed(sale.BranchId);
+            if (sale.CreatorId != CurrentUser.GetId())
+            {
+                throw new BusinessException(OperationsErrorCodes.CashierSaleAccessDenied)
+                    .WithData("SaleId", sale.Id);
+            }
         }
 
         if (sale.IsVoided)
@@ -517,6 +559,40 @@ public class CashierAppService : OperationsAppService, ICashierAppService
             throw new BusinessException(OperationsErrorCodes.BranchNotAssignedToCashier)
                 .WithData("BranchId", branchId);
         }
+    }
+
+    private async Task EnsureSupervisorBranchAccessAsync(Guid branchId)
+    {
+        if (await AuthorizationService.IsGrantedAsync(OperationsPermissions.Sales.ManageAll))
+        {
+            return;
+        }
+
+        var userId = CurrentUser.Id;
+        if (userId is null ||
+            !await _branchRepository.AnyAsync(b => b.Id == branchId && b.ManagerUserId == userId))
+        {
+            throw new BusinessException(OperationsErrorCodes.CashierSaleAccessDenied)
+                .WithData("BranchId", branchId);
+        }
+    }
+
+    private List<RecentSaleDto> MapRecentSales(
+        List<SaleListRow> rows,
+        int windowMinutes,
+        bool canVoidAnytime)
+    {
+        var cutoff = Clock.Now.AddMinutes(-windowMinutes);
+        return rows.ConvertAll(r => new RecentSaleDto
+        {
+            SaleId = r.Sale.Id,
+            InvoiceNumber = r.Sale.InvoiceNumber,
+            SaleDate = r.Sale.SaleDate,
+            Total = r.Sale.TotalAmount,
+            ItemCount = r.ItemCount,
+            IsVoided = r.Sale.IsVoided,
+            CanVoid = !r.Sale.IsVoided && (canVoidAnytime || r.Sale.SaleDate >= cutoff)
+        });
     }
 
     private async Task<CashierShiftDto> ProjectShiftAsync(AppCashierShift shift, ShiftSalesTotals? totals = null)

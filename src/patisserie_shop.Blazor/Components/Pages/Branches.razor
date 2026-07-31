@@ -106,7 +106,9 @@
                         }
                     </CellTemplate>
                 </TemplateColumn>
-                <PropertyColumn T="BranchDto" TProperty="DateTime" Property="x => x.CreationTime" Title="@InvL["CreationTime"]" Format="g" />
+                <TemplateColumn T="BranchDto" Title="@InvL["CreationTime"]" SortBy="x => x.CreationTime">
+                    <CellTemplate><BrowserLocalTime Value="@context.Item.CreationTime" Display="BrowserTimeDisplay.DateTime" /></CellTemplate>
+                </TemplateColumn>
                 <TemplateColumn T="BranchDto" Title="@InvL["Actions"]" Sortable="false">
                     <CellTemplate>
                         <span class="row-actions">

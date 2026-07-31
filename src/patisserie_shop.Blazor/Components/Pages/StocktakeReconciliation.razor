@@ -125,7 +125,9 @@
             <div class="sr-print-meta">
                 <strong>@SelectedBranchName</strong>
                 <span>@_data.FromDate.ToString("d") — @_data.ToDate.ToString("d")</span>
-                <span>@string.Format(InvL["StocktakeReconciliation:GeneratedAt"], DateTime.Now.ToString("g"))</span>
+                <BrowserLocalTime Value="@_generatedAtUtc"
+                                  Display="BrowserTimeDisplay.DateTime"
+                                  Template="@InvL["StocktakeReconciliation:GeneratedAt"]" />
             </div>
 
             <section class="sr-guide sr-no-print">
@@ -660,6 +662,7 @@
     private static readonly int[] RangeOptions = { 7, 30, 90 };
 
     private StocktakeReconciliationDto? _data;
+    private DateTime _generatedAtUtc = DateTime.UtcNow;
     private StocktakeReconciliationProductDto? _selectedProduct;
     private List<BranchLookupDto> _accessibleBranches = new();
     private int _days = 30;
@@ -715,6 +718,7 @@
                 Days = _days,
                 BranchId = _branchId
             });
+            _generatedAtUtc = DateTime.UtcNow;
         }
         catch (Exception ex)
         {

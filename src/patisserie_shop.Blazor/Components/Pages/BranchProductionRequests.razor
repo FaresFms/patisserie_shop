@@ -258,9 +258,9 @@
                 <SoftCardContent Class="pa-4 glass-modal-body">
                     <SoftStack Spacing="3">
                         <SoftText Typo="Typo.body2">@_detail.BranchName · @_detail.NeededByDate.ToString("yyyy-MM-dd") · @PriorityLabel(_detail.Priority)</SoftText>
-                        @if (!string.IsNullOrWhiteSpace(_detail.Notes))
+                        @if (FriendlyRequestNotes(_detail.Notes) is { Length: > 0 } requestNotes)
                         {
-                            <SoftAlert Severity="Severity.Info">@_detail.Notes</SoftAlert>
+                            <SoftAlert Severity="Severity.Info">@requestNotes</SoftAlert>
                         }
                         @if (!string.IsNullOrWhiteSpace(_detail.DecisionReason))
                         {
@@ -341,6 +341,9 @@
 }
 
 @code {
+    private const string DemoMarker = "[DEMO-PRODUCTION-AR]";
+    private const string ShortageDemoMarker = "[DEMO-PRODUCTION-AR-SHORTAGE]";
+
     private SoftDataGrid<BranchProductionRequestListItemDto>? _grid;
     private bool _loading;
     private bool _canApprove;
@@ -554,6 +557,7 @@
         }
 
         CloseCreateDialog();
+
         await ReloadAsync();
     }
 
@@ -588,6 +592,21 @@
     }
 
     private void CloseDetail() => _detailVisible = false;
+
+    private static string? FriendlyRequestNotes(string? notes)
+    {
+        if (string.IsNullOrWhiteSpace(notes))
+        {
+            return notes;
+        }
+
+        var visibleNotes = notes
+            .Replace(ShortageDemoMarker, string.Empty, StringComparison.Ordinal)
+            .Replace(DemoMarker, string.Empty, StringComparison.Ordinal)
+            .Trim();
+
+        return visibleNotes.Length == 0 ? null : visibleNotes;
+    }
 
     private async Task ApproveAsync()
     {
