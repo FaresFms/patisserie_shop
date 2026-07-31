@@ -1,6 +1,5 @@
-using System;
 using System.Threading.Tasks;
-using Microsoft.Extensions.Configuration;
+using Intelligence.Settings;
 using Microsoft.Extensions.DependencyInjection;
 using Volo.Abp.BackgroundWorkers;
 using Volo.Abp.Threading;
@@ -14,27 +13,22 @@ namespace Intelligence.Decisions;
 /// and the unit-of-work boundary. One run = velocity computation, then the StockoutRisk
 /// sweep (sequential, same unit of work).
 ///
-/// Interval comes from configuration: "BackgroundJobs:VelocityScanIntervalMinutes".
-/// Production default is 1440 (24 hours).
+/// Interval comes from the ABP setting
+/// <see cref="IntelligenceSettings.VelocityScanIntervalMinutes"/>.
 /// </summary>
-public class VelocityScannerWorker : AsyncPeriodicBackgroundWorkerBase
+public class VelocityScannerWorker : SettingBasedScannerWorkerBase
 {
-    private const int DefaultIntervalMinutes = 1440; // 24 hours (production default)
-
     public VelocityScannerWorker(
         AbpAsyncTimer timer,
         IServiceScopeFactory serviceScopeFactory,
-        IConfiguration configuration)
-        : base(timer, serviceScopeFactory)
+        IntelligenceBackgroundJobScheduleNotifier scheduleNotifier)
+        : base(
+            timer,
+            serviceScopeFactory,
+            scheduleNotifier,
+            IntelligenceSettings.VelocityScanIntervalMinutes,
+            IntelligenceSettings.VelocityDefaultIntervalMinutes)
     {
-        var minutes = configuration.GetValue<int?>("BackgroundJobs:VelocityScanIntervalMinutes")
-                      ?? DefaultIntervalMinutes;
-        if (minutes <= 0)
-        {
-            minutes = DefaultIntervalMinutes;
-        }
-
-        Timer.Period = (int)TimeSpan.FromMinutes(minutes).TotalMilliseconds;
     }
 
     protected override async Task DoWorkAsync(PeriodicBackgroundWorkerContext workerContext)

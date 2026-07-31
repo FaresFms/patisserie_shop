@@ -319,7 +319,6 @@ body.abp-application-layout .mud-chip-filled.mud-chip-color-error {
 }
 
 /* --- Inputs ------------------------------------------------------------ */
-body.abp-application-layout .mud-input-control,
 body.abp-application-layout .mud-input-root,
 body.abp-application-layout .mud-input,
 body.abp-application-layout .mud-input-outlined .mud-input-slot,
@@ -331,6 +330,15 @@ body.abp-application-layout .mud-input-outlined select {
     box-shadow: none !important;
     color: var(--fg-1) !important;
 }
+
+/* MudInputControl wraps both the outlined input and its helper text. Keeping
+   this wrapper transparent prevents a mismatched surface strip underneath any
+   field that has HelperText; only the actual input box receives --surface. */
+body.abp-application-layout .mud-input-control,
+body.abp-application-layout .mud-input-control-helper-container {
+    background: transparent !important;
+}
+
 body.abp-application-layout .mud-input-outlined .mud-input-outlined-border {
     border-color: var(--bd-2);
     border-radius: var(--r-sm);
@@ -1167,7 +1175,6 @@ body.abp-application-layout .mud-input-outlined:focus-within .mud-input-outlined
     border-color: var(--accent) !important;
     border-width: 1px !important;
 }
-body.abp-application-layout .mud-input-control.mud-focused,
 body.abp-application-layout .mud-input-outlined.mud-focused,
 body.abp-application-layout .mud-input-outlined:focus-within {
     box-shadow: 0 0 0 3px var(--accent-soft) !important;
@@ -1266,3 +1273,62 @@ body.abp-application-layout .mud-picker .mud-picker-stick-inner.mud-theme-primar
 .perm-group-body { display: flex; flex-direction: column; gap: 2px; margin-top: 4px; }
 .perm-item { line-height: 1.4; }
 .perm-item .mud-checkbox { margin: 0; }
+
+/* ========================================================================
+   Shop settings tabs and background-job fields
+   ======================================================================== */
+body.abp-application-layout .shop-settings-tabs {
+    background: transparent !important;
+    border: 0 !important;
+    box-shadow: none !important;
+}
+
+body.abp-application-layout .shop-settings-tabs .mud-tabs-tabbar {
+    background: var(--surface) !important;
+    border: 1px solid var(--bd-1);
+    border-radius: var(--r-md) !important;
+    box-shadow: var(--shadow-sm);
+}
+
+body.abp-application-layout .shop-settings-tabs .mud-tab {
+    color: var(--fg-2) !important;
+    min-height: 46px;
+    text-transform: none;
+    letter-spacing: 0;
+}
+
+body.abp-application-layout .shop-settings-tabs .mud-tab:hover {
+    background: var(--hover) !important;
+}
+
+body.abp-application-layout .shop-settings-tabs .mud-tab.mud-tab-active {
+    background: var(--accent-soft) !important;
+    color: var(--accent) !important;
+}
+
+body.abp-application-layout .shop-settings-tabs .mud-tab-slider {
+    background: var(--accent) !important;
+    height: 2px;
+}
+
+body.abp-application-layout .shop-settings-tabs .mud-tabs-panels {
+    background: transparent !important;
+}
+
+body.abp-application-layout .shop-settings-job-fields .mud-input-helper-text {
+    color: var(--fg-2) !important;
+    line-height: 1.55;
+}
+
+/* Logical padding keeps values clear of numeric spinner controls in both
+   English and Arabic. */
+body.abp-application-layout .shop-settings-job-fields .mud-input-number-control input {
+    padding-inline: 14px 42px !important;
+    color: var(--fg-1) !important;
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+}
+
+html[dir="rtl"] body.abp-application-layout .shop-settings-job-fields .mud-input-number-control input {
+    text-align: right;
+}

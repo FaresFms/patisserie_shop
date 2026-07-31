@@ -21,10 +21,11 @@
 
 
 <MudThemeProvider Theme="_theme" IsDarkMode="_isDarkMode" />
-<MudPopoverProvider />      @* 👈 this was missing! *@
-<MudDialogProvider />
-<MudSnackbarProvider />
-<SoftLayout>
+<SoftRtlProvider RightToLeft="_isArabic">
+    <MudPopoverProvider />
+    <MudDialogProvider />
+    <MudSnackbarProvider />
+    <SoftLayout>
 
     <!-- ─── Top AppBar ─────────────────────────────────────────── -->
     <SoftAppBar Elevation="1" Dense="true" Color="MudBlazor.Color.Primary">
@@ -193,7 +194,8 @@
         </SoftContainer>
     </SoftMainContent>
 
-</SoftLayout>
+    </SoftLayout>
+</SoftRtlProvider>
 
 @code {
     // Resolved by name so the shared theme project stays free of a reference

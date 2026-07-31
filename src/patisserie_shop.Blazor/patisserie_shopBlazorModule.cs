@@ -6,6 +6,7 @@ using Blazorise.Bootstrap5;
 using Blazorise.Icons.FontAwesome;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Components.Server.Circuits;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
@@ -46,6 +47,7 @@ using Volo.Abp.Identity;
 using Volo.Abp.Autofac;
 using Volo.Abp.Mapperly;
 using patisserie_shop.Blazor.HealthChecks;
+using patisserie_shop.Blazor.Services;
 using Volo.Abp.Identity.Blazor.Server;
 using Volo.Abp.SettingManagement.Blazor.Server;
 using Volo.Abp.FeatureManagement.Blazor.Server;
@@ -139,6 +141,7 @@ public class patisserie_shopBlazorModule : AbpModule
         // Add services to the container.
         context.Services.AddRazorComponents()
             .AddInteractiveServerComponents();
+        context.Services.AddScoped<CircuitHandler, UserPresenceCircuitHandler>();
 
         if (!configuration.GetValue<bool>("App:DisablePII"))
         {

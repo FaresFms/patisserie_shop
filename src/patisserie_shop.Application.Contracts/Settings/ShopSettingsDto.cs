@@ -31,4 +31,19 @@ public class ShopSettingsDto
     public int DefaultMinimumStock { get; set; } = 5;
 
     public bool AutopilotEnabled { get; set; } = false;
+
+    [Range(1, 10080)]
+    public int DeadStockScanIntervalMinutes { get; set; } = 2;
+
+    [Range(1, 10080)]
+    public int TransferSuggestionScanIntervalMinutes { get; set; } = 2;
+
+    [Range(1, 10080)]
+    public int VelocityScanIntervalMinutes { get; set; } = 2;
+
+    [Range(1, 10080)]
+    public int DecisionOutcomeScanIntervalMinutes { get; set; } = 360;
+
+    [Range(1, 10080)]
+    public int ExpiryScanIntervalMinutes { get; set; } = 2;
 }

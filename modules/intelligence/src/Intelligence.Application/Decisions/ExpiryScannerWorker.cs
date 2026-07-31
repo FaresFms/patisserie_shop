@@ -1,6 +1,5 @@
-using System;
 using System.Threading.Tasks;
-using Microsoft.Extensions.Configuration;
+using Intelligence.Settings;
 using Microsoft.Extensions.DependencyInjection;
 using Volo.Abp.BackgroundWorkers;
 using Volo.Abp.Threading;
@@ -13,27 +12,22 @@ namespace Intelligence.Decisions;
 /// lives in the service (testable, mirrors how the other scanner/worker pairs split);
 /// the worker only owns the schedule and the unit-of-work boundary.
 ///
-/// Interval comes from configuration: "BackgroundJobs:ExpiryScanIntervalMinutes".
-/// Development/demo uses 5; production should use 1440 (24 hours).
+/// Interval comes from the ABP setting
+/// <see cref="IntelligenceSettings.ExpiryScanIntervalMinutes"/>.
 /// </summary>
-public class ExpiryScannerWorker : AsyncPeriodicBackgroundWorkerBase
+public class ExpiryScannerWorker : SettingBasedScannerWorkerBase
 {
-    private const int DefaultIntervalMinutes = 1440; // 24 hours (production default)
-
     public ExpiryScannerWorker(
         AbpAsyncTimer timer,
         IServiceScopeFactory serviceScopeFactory,
-        IConfiguration configuration)
-        : base(timer, serviceScopeFactory)
+        IntelligenceBackgroundJobScheduleNotifier scheduleNotifier)
+        : base(
+            timer,
+            serviceScopeFactory,
+            scheduleNotifier,
+            IntelligenceSettings.ExpiryScanIntervalMinutes,
+            IntelligenceSettings.ExpiryDefaultIntervalMinutes)
     {
-        var minutes = configuration.GetValue<int?>("BackgroundJobs:ExpiryScanIntervalMinutes")
-                      ?? DefaultIntervalMinutes;
-        if (minutes <= 0)
-        {
-            minutes = DefaultIntervalMinutes;
-        }
-
-        Timer.Period = (int)TimeSpan.FromMinutes(minutes).TotalMilliseconds;
     }
 
     protected override async Task DoWorkAsync(PeriodicBackgroundWorkerContext workerContext)
