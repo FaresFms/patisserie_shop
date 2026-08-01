@@ -55,8 +55,7 @@
     @if (_loading && _data == null)
     {
         <div class="dash-loading-wrap">
-            <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Large" />
-            <MudText Typo="Typo.body1" Class="mt-4" Style="opacity:.6">@L["InvDash:LoadingDashboard"]</MudText>
+            <SoftDonutLoader Fill="true" Label="@L["InvDash:LoadingDashboard"]" />
         </div>
     }
     else if (_data != null)

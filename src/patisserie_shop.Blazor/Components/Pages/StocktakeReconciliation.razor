@@ -110,15 +110,7 @@
         }
         else if (_loading && _data is null)
         {
-            <div class="sr-skeletons">
-                @for (var i = 0; i < 8; i++)
-                {
-                    <SoftSkeleton SkeletonType="SkeletonType.Rectangle" Height="76px" Width="100%" />
-                }
-            </div>
-            <div class="sr-skeleton-table">
-                <SoftSkeleton SkeletonType="SkeletonType.Rectangle" Height="340px" Width="100%" />
-            </div>
+            <SoftDonutLoader Fill="true" />
         }
         else if (_data is not null)
         {

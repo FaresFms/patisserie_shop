@@ -76,16 +76,7 @@
         }
         else if (_data == null)
         {
-            <div class="pa-skeleton-row">
-                @for (var i = 0; i < 5; i++)
-                {
-                    <SoftSkeleton SkeletonType="SkeletonType.Rectangle" Height="72px" Width="100%" />
-                }
-            </div>
-            <div class="pa-two">
-                <SoftSkeleton SkeletonType="SkeletonType.Rectangle" Height="320px" Width="100%" />
-                <SoftSkeleton SkeletonType="SkeletonType.Rectangle" Height="320px" Width="100%" />
-            </div>
+            <SoftDonutLoader Fill="true" />
         }
         else
         {

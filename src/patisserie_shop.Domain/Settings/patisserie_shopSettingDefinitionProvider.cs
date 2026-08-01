@@ -1,4 +1,5 @@
 using patisserie_shop.Localization;
+using Inventory.Settings;
 using Volo.Abp.Localization;
 using Volo.Abp.Settings;
 
@@ -45,7 +46,7 @@ public class patisserie_shopSettingDefinitionProvider : SettingDefinitionProvide
 
             new SettingDefinition(
                 patisserie_shopSettings.DefaultCurrency,
-                defaultValue: "USD",
+                defaultValue: ShopCurrencySettings.Fallback,
                 displayName: L("Setting:DefaultCurrency"),
                 description: L("Setting:DefaultCurrency:Desc"),
                 isVisibleToClients: true),

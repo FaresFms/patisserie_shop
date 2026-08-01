@@ -677,6 +677,10 @@
     "Account:Login:ForgotPassword": "Forgot password?",
     "Account:Login:RememberMe": "Keep me signed in",
     "Account:Login:NeedAccess": "Need access?",
-    "Account:Login:ContactAdministrator": "Contact your administrator."
+    "Account:Login:ContactAdministrator": "Contact your administrator.",
+    "Account:AccessDeniedTitle": "You don't have access to this page",
+    "Account:AccessDeniedDescription": "Your account is signed in, but it does not have the permission required to open this page.",
+    "Account:ReturnHome": "Return to home",
+    "Account:RedirectingToLogin": "Taking you to sign in…"
   }
 }

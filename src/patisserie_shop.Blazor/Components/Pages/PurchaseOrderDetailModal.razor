@@ -58,7 +58,7 @@
                         var orderDateText    = FormatDate(_po.OrderDate);
                         var expectedDateText = _po.ExpectedDeliveryDate.HasValue ? FormatDate(_po.ExpectedDeliveryDate.Value) : "-";
                         var createdByText    = _po.CreatorUserName ?? "-";
-                        var totalText        = $"{_po.TotalAmount:N2} {_po.Currency}";
+                        var totalText        = FormatShopMoney(_po.TotalAmount);
                     }
                     <div>
                         <SoftText Typo="Typo.overline" Color="Color.Primary">@OpsL["OrderInfo"]</SoftText>
@@ -69,7 +69,7 @@
                             <InfoRow Label="@OpsL["CreatedAt"]"><BrowserLocalTime Value="@_po.CreationTime" Display="BrowserTimeDisplay.LongDateTime" /></InfoRow>
                             <InfoRow Label="@OpsL["ActualDeliveryDate"]"><BrowserLocalTime Value="@_po.ActualDeliveryDate" Display="BrowserTimeDisplay.LongDateTime" Fallback="-" /></InfoRow>
                             <InfoRow Label="@OpsL["CreatedBy"]" Value="@createdByText" />
-                            <InfoRow Label="@OpsL["Currency"]" Value="@_po.Currency" />
+                            <InfoRow Label="@OpsL["Currency"]" Value="@ShopCurrency" />
                             <InfoRow Label="@OpsL["TotalAmount"]" Value="@totalText" Strong="true" />
                         </div>
                         @if (!string.IsNullOrWhiteSpace(_po.Notes))
@@ -192,8 +192,8 @@
                                             <SoftText Color="Color.Default">-</SoftText>
                                         }
                                     </MudTd>
-                                    <MudTd Style="text-align:right;">@($"{item.UnitPrice:N2}")</MudTd>
-                                    <MudTd Style="text-align:right;"><strong>@($"{item.Subtotal:N2}")</strong></MudTd>
+                                    <MudTd Style="text-align:right;">@FormatShopMoney(item.UnitPrice)</MudTd>
+                                    <MudTd Style="text-align:right;"><strong>@FormatShopMoney(item.Subtotal)</strong></MudTd>
                                     <MudTd>
                                         @if (_po.Status == PurchaseOrderStatuses.Draft && _canEdit)
                                         {
@@ -281,14 +281,14 @@
                                               @bind-Value="_newItemPrice"
                                               Variant="Variant.Outlined" Min="0"
                                               Adornment="Adornment.Start"
-                                              AdornmentText="$" />
+                                              AdornmentText="@ShopCurrency" />
                         </SoftStack>
                         @{
                             var preview = _newItemQty * _newItemPrice;
                         }
                         <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
                             <SoftText Typo="Typo.caption" Color="Color.Default">@OpsL["Subtotal"]:</SoftText>
-                            <SoftText Typo="Typo.body1" Style="font-weight:600;">@($"{preview:N2} {_po.Currency}")</SoftText>
+                            <SoftText Typo="Typo.body1" Style="font-weight:600;">@FormatShopMoney(preview)</SoftText>
                         </SoftStack>
                     </SoftStack>
                 </SoftCardContent>
@@ -596,6 +596,7 @@
 
     protected override async Task OnInitializedAsync()
     {
+        await LoadShopCurrencyAsync();
         _canEdit    = await AuthorizationService.IsGrantedAsync(OperationsPermissions.PurchaseOrders.Edit);
         _canSubmit  = await AuthorizationService.IsGrantedAsync(OperationsPermissions.PurchaseOrders.Submit);
         _canApprove = await AuthorizationService.IsGrantedAsync(OperationsPermissions.PurchaseOrders.Approve);

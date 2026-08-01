@@ -36,10 +36,7 @@
     <SoftCardContent>
         @if (_loading)
         {
-            <SoftStack Spacing="3">
-                <SoftSkeleton Height="150px" />
-                <SoftSkeleton Height="240px" />
-            </SoftStack>
+            <SoftDonutLoader Fill="true" />
         }
         else if (_user is null)
         {

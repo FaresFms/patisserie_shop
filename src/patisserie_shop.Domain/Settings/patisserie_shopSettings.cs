@@ -1,3 +1,5 @@
+using Inventory.Settings;
+
 namespace patisserie_shop.Settings;
 
 /// <summary>
@@ -34,7 +36,7 @@ public static class patisserie_shopSettings
     /// ISO 4217 currency code used as the default for new products, purchase
     /// orders, and sales when none is supplied. Default "USD".
     /// </summary>
-    public const string DefaultCurrency = OperationsPrefix + ".DefaultCurrency";
+    public const string DefaultCurrency = ShopCurrencySettings.Name;
 
     /// <summary>
     /// Default minimum-stock level pre-filled when initializing a product at a

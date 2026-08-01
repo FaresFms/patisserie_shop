@@ -709,6 +709,10 @@
     "Account:Login:ForgotPassword": "نسيت كلمة المرور؟",
     "Account:Login:RememberMe": "خلّيني مسجّل دخول",
     "Account:Login:NeedAccess": "بدك صلاحية دخول؟",
-    "Account:Login:ContactAdministrator": "تواصل مع مسؤول النظام."
+    "Account:Login:ContactAdministrator": "تواصل مع مسؤول النظام.",
+    "Account:AccessDeniedTitle": "ما عندك صلاحية تفتح هالصفحة",
+    "Account:AccessDeniedDescription": "حسابك مسجّل دخول، بس ما عنده الصلاحية المطلوبة للوصول لهالصفحة.",
+    "Account:ReturnHome": "الرجوع للرئيسية",
+    "Account:RedirectingToLogin": "عم نحوّلك لتسجيل الدخول…"
   }
 }

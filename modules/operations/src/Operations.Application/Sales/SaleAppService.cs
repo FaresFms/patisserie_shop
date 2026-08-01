@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Inventory;
 using Inventory.BranchInventory;
 using Inventory.Entities;
+using Inventory.Settings;
 using Inventory.StockBatches;
 using Microsoft.AspNetCore.Authorization;
 using Operations.Entities;
@@ -13,6 +14,7 @@ using Volo.Abp;
 using Volo.Abp.Application.Dtos;
 using Volo.Abp.Domain.Repositories;
 using Volo.Abp.Identity;
+using Volo.Abp.Settings;
 
 namespace Operations.Sales;
 
@@ -27,6 +29,7 @@ public class SaleAppService : OperationsAppService, ISaleAppService
     private readonly BranchInventoryManager _inventoryManager;
     private readonly IRepository<IdentityUser, Guid> _userRepository;
     private readonly IStockBatchRepository _stockBatchRepository;
+    private readonly ISettingProvider _settingProvider;
 
     public SaleAppService(
         ISaleRepository saleRepository,
@@ -36,7 +39,8 @@ public class SaleAppService : OperationsAppService, ISaleAppService
         SaleManager manager,
         BranchInventoryManager inventoryManager,
         IRepository<IdentityUser, Guid> userRepository,
-        IStockBatchRepository stockBatchRepository)
+        IStockBatchRepository stockBatchRepository,
+        ISettingProvider settingProvider)
     {
         _saleRepository = saleRepository;
         _branchRepository = branchRepository;
@@ -46,6 +50,7 @@ public class SaleAppService : OperationsAppService, ISaleAppService
         _inventoryManager = inventoryManager;
         _userRepository = userRepository;
         _stockBatchRepository = stockBatchRepository;
+        _settingProvider = settingProvider;
     }
 
     // ─── Queries ───
@@ -83,6 +88,7 @@ public class SaleAppService : OperationsAppService, ISaleAppService
 
         var branchNames = await GetBranchNamesAsync(branchIds);
         var creatorNames = await GetUserNamesAsync(creatorIds.ToList());
+        var currency = await GetShopCurrencyAsync();
 
         var items = rows.ConvertAll(r => new SaleDto
         {
@@ -92,7 +98,7 @@ public class SaleAppService : OperationsAppService, ISaleAppService
             BranchName = branchNames.GetValueOrDefault(r.Sale.BranchId, "-"),
             SaleDate = r.Sale.SaleDate,
             TotalAmount = r.Sale.TotalAmount,
-            Currency = r.Sale.Currency,
+            Currency = currency,
             Notes = r.Sale.Notes,
             CreationTime = r.Sale.CreationTime,
             CreatorId = r.Sale.CreatorId,
@@ -110,6 +116,7 @@ public class SaleAppService : OperationsAppService, ISaleAppService
         var rows = await _branchInventoryRepository.GetAvailableProductsAsync(branchId, onlySellable: true);
         var nonExpired = await _stockBatchRepository.GetNonExpiredQuantitiesByProductAsync(
             branchId, Clock.Now.ToUniversalTime().Date);
+        var currency = await GetShopCurrencyAsync();
 
         return rows.ConvertAll(r => new SaleProductLookupDto
         {
@@ -118,7 +125,7 @@ public class SaleAppService : OperationsAppService, ISaleAppService
             SKU = r.Product.SKU,
             Unit = r.Product.Unit,
             SalePrice = r.Product.SalePrice,
-            Currency = r.Product.Currency,
+            Currency = currency,
             QuantityOnHand = StockBatchManager.GetUsableQuantity(r.Product, r.Inventory, nonExpired)
         });
     }
@@ -150,11 +157,12 @@ public class SaleAppService : OperationsAppService, ISaleAppService
         await _branchRepository.GetAsync(input.BranchId);
 
         // 1) Create the draft (assigns invoice number + uniqueness check).
+        var currency = await GetShopCurrencyAsync();
         var sale = await _manager.CreateDraftAsync(
             input.BranchId,
             input.InvoiceNumber,
             input.SaleDate,
-            input.Currency,
+            currency,
             input.Notes);
 
         // 2) Materialise items on the aggregate (each AddItem validates qty/price).
@@ -315,6 +323,7 @@ public class SaleAppService : OperationsAppService, ISaleAppService
         var productIds = sale.Items.Select(i => i.ProductId).Distinct().ToList();
         var products = await _productRepository.GetListAsync(p => productIds.Contains(p.Id));
         var productMap = products.ToDictionary(p => p.Id);
+        var currency = await GetShopCurrencyAsync();
 
         return new SaleDto
         {
@@ -324,7 +333,7 @@ public class SaleAppService : OperationsAppService, ISaleAppService
             BranchName = branch.Name,
             SaleDate = sale.SaleDate,
             TotalAmount = sale.TotalAmount,
-            Currency = sale.Currency,
+            Currency = currency,
             Notes = sale.Notes,
             CreationTime = sale.CreationTime,
             CreatorId = sale.CreatorId,
@@ -359,4 +368,8 @@ public class SaleAppService : OperationsAppService, ISaleAppService
         var users = await _userRepository.GetListAsync(u => ids.Contains(u.Id));
         return users.ToDictionary(u => u.Id, u => u.UserName);
     }
+
+    private async Task<string> GetShopCurrencyAsync()
+        => ShopCurrencySettings.Normalize(
+            await _settingProvider.GetOrNullAsync(ShopCurrencySettings.Name));
 }

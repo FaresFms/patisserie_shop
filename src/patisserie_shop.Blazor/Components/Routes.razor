@@ -1,4 +1,3 @@
-@using Volo.Abp.AspNetCore.Components.Web.LeptonXLiteTheme.Themes.LeptonXLite
 @using Volo.Abp.AspNetCore.Components.Web.Theming.Routing
 @using Microsoft.Extensions.Options
 @using MudBlazor
@@ -7,9 +6,10 @@
 <MudSnackbarProvider />
 <Router AppAssembly="typeof(Program).Assembly" AdditionalAssemblies="RouterOptions.Value.AdditionalAssemblies">
     <Found Context="routeData">
-        <AuthorizeRouteView RouteData="routeData" DefaultLayout="typeof(MainLayout)">
-            <NotAuthorized>
-                <RedirectToLogin />
+        <AuthorizeRouteView RouteData="routeData"
+                            DefaultLayout="typeof(patisserie_shop.Blazor.Shared.Themes.MainLayout)">
+            <NotAuthorized Context="authenticationState">
+                <RouteAccessDenied AuthenticationState="authenticationState" />
             </NotAuthorized>
         </AuthorizeRouteView>
     </Found>

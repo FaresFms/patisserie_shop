@@ -5,8 +5,10 @@ using System.Threading.Tasks;
 using Production.Costing;
 using Production.Entities;
 using Production.Permissions;
+using Inventory.Settings;
 using Microsoft.AspNetCore.Authorization;
 using Volo.Abp.Application.Dtos;
+using Volo.Abp.Settings;
 
 namespace Production.Formulas;
 
@@ -15,13 +17,16 @@ public class ProductionFormulaAppService : ProductionAppService, IProductionForm
 {
     private readonly IProductionFormulaRepository _formulaRepository;
     private readonly ProductionFormulaManager _formulaManager;
+    private readonly ISettingProvider _settingProvider;
 
     public ProductionFormulaAppService(
         IProductionFormulaRepository formulaRepository,
-        ProductionFormulaManager formulaManager)
+        ProductionFormulaManager formulaManager,
+        ISettingProvider settingProvider)
     {
         _formulaRepository = formulaRepository;
         _formulaManager = formulaManager;
+        _settingProvider = settingProvider;
     }
 
     public async Task<ProductionFormulaDto> GetAsync(Guid id)
@@ -162,6 +167,7 @@ public class ProductionFormulaAppService : ProductionAppService, IProductionForm
             OverheadCost = result.OverheadCost,
             PlannedTotalCost = result.PlannedTotalCost,
             PlannedUnitCost = result.PlannedUnitCost,
+            Currency = await GetShopCurrencyAsync(),
             HasZeroCostIngredient = result.HasZeroCostIngredient,
             Lines = result.Lines.Select(line =>
             {
@@ -183,14 +189,29 @@ public class ProductionFormulaAppService : ProductionAppService, IProductionForm
     public async Task<List<ProductLookupDto>> GetProducibleFinishedProductsLookupAsync(string? filter = null)
     {
         var products = await _formulaRepository.GetProducibleFinishedProductsLookupAsync(filter, maxResults: 200);
-        return products.ConvertAll(p => ObjectMapper.Map<ProductionProductLookup, ProductLookupDto>(p));
+        return await MapProductLookupsAsync(products);
     }
 
     public async Task<List<ProductLookupDto>> GetIngredientProductsLookupAsync(string? filter = null)
     {
         var products = await _formulaRepository.GetIngredientProductsLookupAsync(filter, maxResults: 200);
-        return products.ConvertAll(p => ObjectMapper.Map<ProductionProductLookup, ProductLookupDto>(p));
+        return await MapProductLookupsAsync(products);
     }
+
+    private async Task<List<ProductLookupDto>> MapProductLookupsAsync(List<ProductionProductLookup> products)
+    {
+        var currency = await GetShopCurrencyAsync();
+        return products.ConvertAll(product =>
+        {
+            var dto = ObjectMapper.Map<ProductionProductLookup, ProductLookupDto>(product);
+            dto.Currency = currency;
+            return dto;
+        });
+    }
+
+    private async Task<string> GetShopCurrencyAsync()
+        => ShopCurrencySettings.Normalize(
+            await _settingProvider.GetOrNullAsync(ShopCurrencySettings.Name));
 
     // ── Helpers ──
 

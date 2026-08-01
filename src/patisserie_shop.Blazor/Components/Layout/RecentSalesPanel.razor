@@ -52,7 +52,7 @@
                     @if (_loading)
                     {
                         <div class="recent-state">
-                            <SoftProgressCircular Indeterminate="true" Color="Color.Primary" Size="Size.Small" />
+                            <SoftDonutLoader Compact="true" />
                         </div>
                     }
                     else if (!_canViewAllShifts && _shift is null)

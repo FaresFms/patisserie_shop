@@ -5,11 +5,13 @@ using System.Globalization;
 using System.Linq;
 using System.Threading.Tasks;
 using MudBlazor;
+using Inventory.Settings;
 using patisserie_shop.Blazor.Shared.Components.SoftComponents;
 using patisserie_shop.Localization;
 using patisserie_shop.Settings;
 using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.Logging;
+using Volo.Abp.Authorization;
 using Volo.Abp.AspNetCore.ExceptionHandling;
 using Volo.Abp.AspNetCore.Components;
 using Volo.Abp.Settings;
@@ -23,8 +25,9 @@ public abstract class patisserie_shopComponentBase : AbpComponentBase
     [Inject] protected ISettingProvider AppSettingProvider { get; set; } = null!;
     [Inject] protected IExceptionToErrorInfoConverter ExceptionToErrorInfoConverter { get; set; } = null!;
     [Inject] protected ILogger<patisserie_shopComponentBase> AppLogger { get; set; } = null!;
+    [Inject] protected NavigationManager AppNavigationManager { get; set; } = null!;
 
-    protected string ShopCurrency { get; private set; } = "USD";
+    protected string ShopCurrency { get; private set; } = ShopCurrencySettings.Fallback;
 
     protected patisserie_shopComponentBase()
     {
@@ -33,6 +36,13 @@ public abstract class patisserie_shopComponentBase : AbpComponentBase
 
     protected override async Task HandleErrorAsync(Exception ex)
     {
+        if (IsAuthorizationFailure(ex))
+        {
+            AppLogger.LogWarning(ex, "Authorization failed while rendering {Uri}", AppNavigationManager.Uri);
+            AppNavigationManager.NavigateTo("/Account/AccessDenied", forceLoad: true);
+            return;
+        }
+
         if (TryGetValidationErrors(ex, out var errors))
         {
             await ShowValidationErrorsAsync(errors);
@@ -45,7 +55,7 @@ public abstract class patisserie_shopComponentBase : AbpComponentBase
     protected async Task LoadShopCurrencyAsync()
     {
         var currency = await AppSettingProvider.GetOrNullAsync(patisserie_shopSettings.DefaultCurrency);
-        ShopCurrency = NormalizeCurrency(currency);
+        ShopCurrency = ShopCurrencySettings.Normalize(currency);
     }
 
     protected string FormatShopMoney(decimal value, int decimals = 2)
@@ -65,12 +75,6 @@ public abstract class patisserie_shopComponentBase : AbpComponentBase
         }
 
         return L[fallbackResourceKey].Value;
-    }
-
-    private static string NormalizeCurrency(string? currency)
-    {
-        currency = currency?.Trim().ToUpperInvariant();
-        return currency?.Length == 3 ? currency : "USD";
     }
 
     protected async Task ShowValidationErrorsAsync(IReadOnlyList<ValidationErrorDialog.ValidationErrorItem> errors)
@@ -125,6 +129,21 @@ public abstract class patisserie_shopComponentBase : AbpComponentBase
             ex = ex.InnerException;
         }
         return null;
+    }
+
+    private static bool IsAuthorizationFailure(Exception? ex)
+    {
+        while (ex != null)
+        {
+            if (ex is AbpAuthorizationException or UnauthorizedAccessException)
+            {
+                return true;
+            }
+
+            ex = ex.InnerException;
+        }
+
+        return false;
     }
 
     private static string? FormatFieldName(ValidationResult result)

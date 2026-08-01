@@ -1,12 +1,10 @@
 @page "/cashier"
 @attribute [Authorize(OperationsPermissions.Cashier.Default)]
-@using System.Globalization
 @using System.Text.Json
 @using System.Threading.Tasks
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.JSInterop
 @using Volo.Abp.AspNetCore.Components.Web.Theming.Layout
-@using Volo.Abp.Settings
 @using Operations.Cashier
 @using Operations.Permissions
 @using patisserie_shop.Cashier
@@ -19,7 +17,6 @@
 @inject ISnackbar Snackbar
 @inject IJSRuntime JS
 @inject PageLayout PageLayout
-@inject Volo.Abp.Settings.ISettingProvider SettingProvider
 
 @{
     PageLayout.Title = L["Cashier:Title"];
@@ -29,7 +26,7 @@
     @if (_loading)
     {
         <div class="pos-center">
-            <SoftProgressCircular Indeterminate="true" Color="Color.Primary" />
+            <SoftDonutLoader Fill="true" />
         </div>
     }
     else if (_myBranch is null)
@@ -117,7 +114,7 @@
 
                 @if (_tilesLoading)
                 {
-                    <div class="pos-center"><SoftProgressCircular Indeterminate="true" Color="Color.Primary" /></div>
+                    <div class="pos-center"><SoftDonutLoader Compact="true" /></div>
                 }
                 else if (_tiles.Count == 0)
                 {
@@ -534,7 +531,6 @@
     private string? _shopAddress;
     private string? _shopPhone;
     private string? _receiptFooter;
-    private string _currency = "USD";
 
     private Guid BranchId => _shift?.BranchId ?? _myBranch?.Id ?? Guid.Empty;
     private decimal CartTotal => _cart.Sum(l => l.Subtotal);
@@ -546,11 +542,11 @@
         // failure never blocks the cashier from opening a shift or selling.
         try
         {
-            _shopName = await SettingProvider.GetOrNullAsync("patisserie_shop.Shop.Name") ?? "Patisserie Shop";
-            _shopAddress = await SettingProvider.GetOrNullAsync("patisserie_shop.Shop.Address");
-            _shopPhone = await SettingProvider.GetOrNullAsync("patisserie_shop.Shop.Phone");
-            _receiptFooter = await SettingProvider.GetOrNullAsync("patisserie_shop.Shop.ReceiptFooterMessage");
-            _currency = (await SettingProvider.GetOrNullAsync("patisserie_shop.Operations.DefaultCurrency") ?? "USD").Trim().ToUpperInvariant();
+            _shopName = await AppSettingProvider.GetOrNullAsync("patisserie_shop.Shop.Name") ?? "Patisserie Shop";
+            _shopAddress = await AppSettingProvider.GetOrNullAsync("patisserie_shop.Shop.Address");
+            _shopPhone = await AppSettingProvider.GetOrNullAsync("patisserie_shop.Shop.Phone");
+            _receiptFooter = await AppSettingProvider.GetOrNullAsync("patisserie_shop.Shop.ReceiptFooterMessage");
+            await LoadShopCurrencyAsync();
         }
         catch
         {
@@ -1190,9 +1186,7 @@
     };
 
     // ─── formatting ───
-    // Currency comes from the shop's DefaultCurrency setting (loaded in OnInitializedAsync),
-    // so the till and printed receipt match the rest of the system instead of a baked-in code.
-    private string FormatMoney(decimal v) => $"{v.ToString("N2", CultureInfo.CurrentCulture)} {_currency}";
+    private string FormatMoney(decimal v) => FormatShopMoney(v);
 
     private static string Initial(string name)
         => string.IsNullOrWhiteSpace(name) ? "?" : name.Trim()[0].ToString().ToUpperInvariant();

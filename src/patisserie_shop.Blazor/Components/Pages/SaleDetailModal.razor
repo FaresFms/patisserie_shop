@@ -39,7 +39,7 @@
                 <SoftStack Spacing="4">
 
                     @{
-                        var totalText = $"{_sale.TotalAmount:N2} {_sale.Currency}";
+                        var totalText = FormatShopMoney(_sale.TotalAmount);
                         var recordedByText = _sale.CreatorUserName ?? "-";
                     }
 
@@ -56,7 +56,7 @@
                             <InfoRow Label="@OpsL["Branch"]" Value="@_sale.BranchName" />
                             <InfoRow Label="@OpsL["TotalAmount"]" Value="@totalText" Strong="true" />
                             <InfoRow Label="@OpsL["RecordedBy"]" Value="@recordedByText" />
-                            <InfoRow Label="@OpsL["Currency"]" Value="@_sale.Currency" />
+                            <InfoRow Label="@OpsL["Currency"]" Value="@ShopCurrency" />
                         </div>
                         @if (!string.IsNullOrWhiteSpace(_sale.Notes))
                         {
@@ -87,13 +87,13 @@
                                     </SoftStack>
                                 </MudTd>
                                 <MudTd Style="text-align:right;">@item.Quantity @item.ProductUnit</MudTd>
-                                <MudTd Style="text-align:right;">@($"{item.UnitPrice:N2}")</MudTd>
-                                <MudTd Style="text-align:right;"><strong>@($"{item.Subtotal:N2}")</strong></MudTd>
+                                <MudTd Style="text-align:right;">@FormatShopMoney(item.UnitPrice)</MudTd>
+                                <MudTd Style="text-align:right;"><strong>@FormatShopMoney(item.Subtotal)</strong></MudTd>
                             </RowTemplate>
                             <FooterContent>
                                 <MudTd colspan="3" Style="text-align:right; font-weight:600;">@OpsL["TotalAmount"]</MudTd>
                                 <MudTd Style="text-align:right;">
-                                    <strong>@($"{_sale.TotalAmount:N2} {_sale.Currency}")</strong>
+                                    <strong>@FormatShopMoney(_sale.TotalAmount)</strong>
                                 </MudTd>
                             </FooterContent>
                         </MudTable>
@@ -147,6 +147,7 @@
 
     protected override async Task OnInitializedAsync()
     {
+        await LoadShopCurrencyAsync();
         try { _sale = await SaleAppService.GetAsync(SaleId); }
         catch (Exception ex) { await HandleErrorAsync(ex); }
     }

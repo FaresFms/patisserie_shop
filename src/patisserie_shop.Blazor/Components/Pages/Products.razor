@@ -130,7 +130,7 @@
                 <PropertyColumn T="ProductDto" TProperty="string" Property="x => x.Unit" Title="@InvL["Unit"]" Sortable="false" />
                 <TemplateColumn T="ProductDto" Title="@InvL["SalePrice"]" SortBy="x => x.SalePrice">
                     <CellTemplate>
-                        <SoftText>@FormatMoney(context.Item.SalePrice, context.Item.Currency)</SoftText>
+                        <SoftText>@FormatShopMoney(context.Item.SalePrice)</SoftText>
                     </CellTemplate>
                 </TemplateColumn>
                 <TemplateColumn T="ProductDto" Title="@InvL["ShelfLife"]" SortBy="x => x.ShelfLifeDays">
@@ -320,7 +320,7 @@
                                                       Min="0"
                                                       HideSpinButtons="true"
                                                       Adornment="Adornment.Start"
-                                                      AdornmentText="@_editCurrency" />
+                                                      AdornmentText="@ShopCurrency" />
                                     <SoftNumericField T="decimal"
                                                       Label="@InvL["SalePrice"]"
                                                       @bind-Value="_editSalePrice"
@@ -328,17 +328,7 @@
                                                       Min="0"
                                                       HideSpinButtons="true"
                                                       Adornment="Adornment.Start"
-                                                      AdornmentText="@_editCurrency" />
-                                    <SoftSelect T="string"
-                                                Label="@InvL["Currency"]"
-                                                @bind-Value="_editCurrency"
-                                                Variant="Variant.Outlined"
-                                                Required="true">
-                                        @foreach (var currency in _currencyOptions)
-                                        {
-                                            <MudSelectItem T="string" Value="@currency">@CurrencyLabel(currency)</MudSelectItem>
-                                        }
-                                    </SoftSelect>
+                                                      AdornmentText="@ShopCurrency" />
                                 </div>
                             </section>
 
@@ -570,8 +560,6 @@
     private List<CategoryDto> _categories = new();
     private List<SupplierDto> _suppliers = new();
     private Dictionary<Guid, string> _categoryNames = new();
-    private readonly List<string> _currencyOptions = new() { "USD", "EUR", "GBP" };
-
     private bool _dialogVisible;
     private Guid? _editingId;
     private string _editName = string.Empty;
@@ -582,7 +570,6 @@
     private string _editUnit = "pcs";
     private decimal _editCostPrice;
     private decimal _editSalePrice;
-    private string _editCurrency = "USD";
     private int _editReorderLevel = 5;
     private string? _editImageUrl;
     private string? _editImagePreviewUrl;
@@ -612,11 +599,6 @@
     protected override async Task OnInitializedAsync()
     {
         await LoadShopCurrencyAsync();
-        if (!_currencyOptions.Contains(ShopCurrency))
-        {
-            _currencyOptions.Insert(0, ShopCurrency);
-        }
-
         _canManage = await AuthorizationService.IsGrantedAsync(InventoryPermissions.Products.Manage);
         _canInitializeStock = await AuthorizationService.IsGrantedAsync(InventoryPermissions.BranchInventory.Initialize);
         if (_canInitializeStock)
@@ -665,19 +647,6 @@
     }
 
     private string GetCategoryName(Guid id) => _categoryNames.TryGetValue(id, out var n) ? n : "-";
-
-    private static string FormatMoney(decimal amount, string currency)
-    {
-        return $"{amount:N2} {currency}";
-    }
-
-    private static string CurrencyLabel(string code) => code switch
-    {
-        "USD" => "USD - $",
-        "EUR" => "EUR - €",
-        "GBP" => "GBP - £",
-        _ => code
-    };
 
     private static Color ProductTypeColor(string productType) => productType switch
     {
@@ -761,7 +730,6 @@
         _editUnit = "pcs";
         _editCostPrice = 0m;
         _editSalePrice = 0m;
-        _editCurrency = ShopCurrency;
         _editReorderLevel = 5;
         _editImageUrl = null;
         _editImagePreviewUrl = null;
@@ -787,7 +755,6 @@
         _editUnit = p.Unit;
         _editCostPrice = p.CostPrice;
         _editSalePrice = p.SalePrice;
-        _editCurrency = p.Currency;
         _editReorderLevel = p.ReorderLevel;
         _editImageUrl = p.ImageUrl;
         _editImagePreviewUrl = p.ImageUrl;
@@ -898,12 +865,6 @@
             Snackbar.Add(L["ThisFieldIsRequired", InvL["Unit"]], Severity.Warning);
             return;
         }
-        if (string.IsNullOrWhiteSpace(_editCurrency) || _editCurrency.Length != 3)
-        {
-            Snackbar.Add(L["ThisFieldIsRequired", InvL["Currency"]], Severity.Warning);
-            return;
-        }
-
         _saving = true;
         try
         {
@@ -920,7 +881,7 @@
                     Unit = _editUnit,
                     CostPrice = _editCostPrice,
                     SalePrice = _editSalePrice,
-                    Currency = _editCurrency.ToUpper(),
+                    Currency = ShopCurrency,
                     ReorderLevel = _editReorderLevel,
                     ImageUrl = imageUrl,
                     IsActive = _editIsActive,
@@ -943,7 +904,7 @@
                     Unit = _editUnit,
                     CostPrice = _editCostPrice,
                     SalePrice = _editSalePrice,
-                    Currency = _editCurrency.ToUpper(),
+                    Currency = ShopCurrency,
                     ReorderLevel = _editReorderLevel,
                     ImageUrl = imageUrl,
                     IsActive = _editIsActive,

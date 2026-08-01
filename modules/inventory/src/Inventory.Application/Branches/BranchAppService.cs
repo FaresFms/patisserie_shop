@@ -11,7 +11,6 @@ using Volo.Abp.Domain.Repositories;
 
 namespace Inventory.Branches;
 
-[Authorize(InventoryPermissions.Branches.Default)]
 public class BranchAppService : InventoryAppService, IBranchAppService
 {
     private readonly IRepository<AppBranch, Guid> _branchRepository;
@@ -25,12 +24,14 @@ public class BranchAppService : InventoryAppService, IBranchAppService
         _branchManager = branchManager;
     }
 
+    [Authorize(InventoryPermissions.Branches.Default)]
     public async Task<BranchDto> GetAsync(Guid id)
     {
         var branch = await _branchRepository.GetAsync(id);
         return ObjectMapper.Map<AppBranch, BranchDto>(branch);
     }
 
+    [Authorize(InventoryPermissions.Branches.Default)]
     public async Task<PagedResultDto<BranchDto>> GetListAsync(GetBranchesInput input)
     {
         var queryable = await BuildFilteredQueryAsync(input);
@@ -46,6 +47,10 @@ public class BranchAppService : InventoryAppService, IBranchAppService
             items.Select(b => ObjectMapper.Map<AppBranch, BranchDto>(b)).ToList());
     }
 
+    // Branch names are shared lookup data used by permission-scoped screens in
+    // several modules. The consuming screen/service still enforces its feature
+    // permission and branch scope; this endpoint only requires authentication.
+    [Authorize]
     public async Task<List<BranchLookupDto>> GetLookupAsync()
     {
         var queryable = (await _branchRepository.GetQueryableAsync())

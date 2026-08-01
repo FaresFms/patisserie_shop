@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Inventory;
 using Inventory.BranchInventory;
 using Inventory.Entities;
+using Inventory.Settings;
 using Microsoft.AspNetCore.Authorization;
 using Operations.Entities;
 using Operations.Permissions;
@@ -12,6 +13,7 @@ using Volo.Abp;
 using Volo.Abp.Application.Dtos;
 using Volo.Abp.Domain.Repositories;
 using Volo.Abp.Identity;
+using Volo.Abp.Settings;
 
 namespace Operations.PurchaseOrders;
 
@@ -26,6 +28,7 @@ public class PurchaseOrderAppService : OperationsAppService, IPurchaseOrderAppSe
     private readonly PurchaseOrderManager _manager;
     private readonly BranchInventoryManager _inventoryManager;
     private readonly IRepository<IdentityUser, Guid> _userRepository;
+    private readonly ISettingProvider _settingProvider;
 
     public PurchaseOrderAppService(
         IPurchaseOrderRepository poRepository,
@@ -35,7 +38,8 @@ public class PurchaseOrderAppService : OperationsAppService, IPurchaseOrderAppSe
         IRepository<AppBranchInventory, Guid> branchInventoryRepository,
         PurchaseOrderManager manager,
         BranchInventoryManager inventoryManager,
-        IRepository<IdentityUser, Guid> userRepository)
+        IRepository<IdentityUser, Guid> userRepository,
+        ISettingProvider settingProvider)
     {
         _poRepository = poRepository;
         _supplierRepository = supplierRepository;
@@ -45,6 +49,7 @@ public class PurchaseOrderAppService : OperationsAppService, IPurchaseOrderAppSe
         _manager = manager;
         _inventoryManager = inventoryManager;
         _userRepository = userRepository;
+        _settingProvider = settingProvider;
     }
 
     public async Task<PurchaseOrderDto> GetAsync(Guid id)
@@ -73,6 +78,7 @@ public class PurchaseOrderAppService : OperationsAppService, IPurchaseOrderAppSe
         var supplierNames = await GetSupplierNamesAsync(supplierIds);
         var branchNames   = await GetBranchNamesAsync(branchIds);
         var creatorNames  = await GetUserNamesAsync(creatorIds);
+        var currency = await GetShopCurrencyAsync();
 
         var items = pos.Select(p => new PurchaseOrderDto
         {
@@ -87,7 +93,7 @@ public class PurchaseOrderAppService : OperationsAppService, IPurchaseOrderAppSe
             ExpectedDeliveryDate = p.ExpectedDeliveryDate,
             ActualDeliveryDate = p.ActualDeliveryDate,
             TotalAmount = p.TotalAmount,
-            Currency = p.Currency,
+            Currency = currency,
             Notes = p.Notes,
             CreationTime = p.CreationTime,
             CreatorId = p.CreatorId,
@@ -129,12 +135,13 @@ public class PurchaseOrderAppService : OperationsAppService, IPurchaseOrderAppSe
         await _branchRepository.GetAsync(input.DestBranchId);
         await EnsureBranchAccessAsync(input.DestBranchId);
 
+        var currency = await GetShopCurrencyAsync();
         var po = await _manager.CreateDraftAsync(
             input.SupplierId,
             input.DestBranchId,
             input.OrderDate,
             input.ExpectedDeliveryDate,
-            input.Currency,
+            currency,
             input.Notes);
 
         await _poRepository.InsertAsync(po, autoSave: true);
@@ -318,6 +325,7 @@ public class PurchaseOrderAppService : OperationsAppService, IPurchaseOrderAppSe
         var productQ = await _productRepository.GetQueryableAsync();
         var products = await AsyncExecuter.ToListAsync(productQ.Where(p => productIds.Contains(p.Id)));
         var productMap = products.ToDictionary(p => p.Id);
+        var currency = await GetShopCurrencyAsync();
 
         return new PurchaseOrderDto
         {
@@ -332,7 +340,7 @@ public class PurchaseOrderAppService : OperationsAppService, IPurchaseOrderAppSe
             ExpectedDeliveryDate = po.ExpectedDeliveryDate,
             ActualDeliveryDate = po.ActualDeliveryDate,
             TotalAmount = po.TotalAmount,
-            Currency = po.Currency,
+            Currency = currency,
             Notes = po.Notes,
             CreationTime = po.CreationTime,
             CreatorId = po.CreatorId,
@@ -411,4 +419,8 @@ public class PurchaseOrderAppService : OperationsAppService, IPurchaseOrderAppSe
         var branches = await _branchRepository.GetListAsync(b => b.ManagerUserId == userId);
         return branches.ConvertAll(b => b.Id);
     }
+
+    private async Task<string> GetShopCurrencyAsync()
+        => ShopCurrencySettings.Normalize(
+            await _settingProvider.GetOrNullAsync(ShopCurrencySettings.Name));
 }

@@ -6,7 +6,6 @@
 @using Microsoft.AspNetCore.Components
 @using Volo.Abp.Application.Dtos
 @using Volo.Abp.AspNetCore.Components.Web.Theming.Layout
-@using Volo.Abp.Settings
 @using Operations
 @using Operations.PurchaseOrders
 @using Operations.Permissions
@@ -26,7 +25,6 @@
 @inject PageLayout PageLayout
 @inject ISnackbar Snackbar
 @inject IStringLocalizer<OperationsResource> OpsL
-@inject Volo.Abp.Settings.ISettingProvider SettingProvider
 
 @{
     PageLayout.Title = OpsL["PurchaseOrders"];
@@ -165,7 +163,7 @@
                 </TemplateColumn>
                 <TemplateColumn T="PurchaseOrderDto" Title="@OpsL["TotalAmount"]" SortBy="x => x.TotalAmount">
                     <CellTemplate>
-                        <SoftText Style="font-weight:600;">@($"{context.Item.TotalAmount:N2} {context.Item.Currency}")</SoftText>
+                        <SoftText Style="font-weight:600;">@FormatShopMoney(context.Item.TotalAmount)</SoftText>
                     </CellTemplate>
                 </TemplateColumn>
                 <PropertyColumn T="PurchaseOrderDto" TProperty="string" Property="x => x.CreatorUserName!" Title="@OpsL["CreatedBy"]" Sortable="false" />
@@ -236,16 +234,6 @@
                                            @bind-Date="_newOrderDate" />
                             <MudDatePicker Label="@OpsL["ExpectedDeliveryDate"]" Variant="Variant.Outlined"
                                            @bind-Date="_newExpectedDate" Clearable="true" />
-                            <SoftSelect T="string" Label="@OpsL["Currency"]"
-                                        @bind-Value="_newCurrency"
-                                        Variant="Variant.Outlined"
-                                        Required="true"
-                                        Style="max-width: 160px;">
-                                @foreach (var ccode in _currencyOptions)
-                                {
-                                    <MudSelectItem T="string" Value="@ccode">@CurrencyLabel(ccode)</MudSelectItem>
-                                }
-                            </SoftSelect>
                         </SoftStack>
                         <SoftTextField T="string"
                                        Label="@OpsL["Notes"]"
@@ -333,26 +321,7 @@
     private Guid? _newBranchId;
     private DateTime? _newOrderDate = DateTime.Today;
     private DateTime? _newExpectedDate;
-    private string _newCurrency = "USD";
     private string? _newNotes;
-
-    // Shop-wide default currency for new purchase orders, from settings.
-    private string _defaultCurrency = "USD";
-
-    // Currency codes offered by the New PO dialog's select. The shop's configured
-    // default is inserted at load time if it isn't already one of these.
-    private readonly List<string> _currencyOptions = new() { "USD", "EUR", "GBP" };
-
-    // Friendly label with a symbol for the codes we know; bare code otherwise.
-    private static string CurrencyLabel(string code) => code switch
-    {
-        "USD" => "USD — $",
-        "EUR" => "EUR — €",
-        "GBP" => "GBP — £",
-        "SAR" => "SAR — ﷼",
-        "AED" => "AED — د.إ",
-        _ => code
-    };
 
     // Pre-fill handoff from the Decision Log's "Take action" button: the first
     // line to add after the header is created, and the decision to mark executed.
@@ -389,6 +358,7 @@
 
     protected override async Task OnInitializedAsync()
     {
+        await LoadShopCurrencyAsync();
         _canCreate = await AuthorizationService.IsGrantedAsync(OperationsPermissions.PurchaseOrders.Create);
         _canSubmit = await AuthorizationService.IsGrantedAsync(OperationsPermissions.PurchaseOrders.Submit);
         _canApprove = await AuthorizationService.IsGrantedAsync(OperationsPermissions.PurchaseOrders.Approve);
@@ -414,23 +384,6 @@
             await HandleErrorAsync(ex);
         }
 
-        // Shop-wide default currency for new orders (falls back to USD).
-        try
-        {
-            _defaultCurrency = (await SettingProvider.GetOrNullAsync("patisserie_shop.Operations.DefaultCurrency") ?? "USD").ToUpperInvariant();
-        }
-        catch
-        {
-            _defaultCurrency = "USD";
-        }
-        // The select offers the common codes; make sure the shop's configured
-        // default is always present so it never renders as an empty box.
-        if (!_currencyOptions.Contains(_defaultCurrency))
-        {
-            _currencyOptions.Insert(0, _defaultCurrency);
-        }
-        _newCurrency = _defaultCurrency;
-
         if (OpenNew && _canCreate)
         {
             OpenCreateDialogPrefilled();
@@ -444,7 +397,6 @@
         _newBranchId = NewPoBranchId;
         _newOrderDate = DateTime.Today;
         _newExpectedDate = null;
-        _newCurrency = _defaultCurrency;
         _newNotes = NewPoNotes;
         _pendingItemProductId = NewPoProductId;
         _pendingItemQty = NewPoQuantity;
@@ -529,7 +481,6 @@
         _newBranchId = null;
         _newOrderDate = DateTime.Today;
         _newExpectedDate = null;
-        _newCurrency = _defaultCurrency;
         _newNotes = null;
         _pendingItemProductId = null;
         _pendingItemQty = null;
@@ -567,7 +518,7 @@
                 DestBranchId = _newBranchId.Value,
                 OrderDate = _newOrderDate.Value,
                 ExpectedDeliveryDate = _newExpectedDate,
-                Currency = (_newCurrency ?? "USD").ToUpper(),
+                Currency = ShopCurrency,
                 Notes = _newNotes
             });
 

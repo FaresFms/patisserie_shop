@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Inventory;
 using Inventory.BranchInventory;
 using Inventory.Entities;
+using Inventory.Settings;
 using Microsoft.AspNetCore.Authorization;
 using Operations.PurchaseOrders;
 using Production.Entities;
@@ -549,13 +550,8 @@ public class ProductionOrderAppService : ProductionAppService, IProductionOrderA
     }
 
     private async Task<string> GetDefaultCurrencyAsync()
-    {
-        var currency = (await _settingProvider.GetOrNullAsync("patisserie_shop.Operations.DefaultCurrency"))
-            ?.Trim()
-            .ToUpperInvariant();
-
-        return currency?.Length == 3 ? currency : "USD";
-    }
+        => ShopCurrencySettings.Normalize(
+            await _settingProvider.GetOrNullAsync(ShopCurrencySettings.Name));
 
     private async Task RefreshPlanLifecycleAsync(Guid? productionPlanId)
     {

@@ -157,9 +157,7 @@
         <div class="dl-list">
             @if (_loading && _items.Count == 0)
             {
-                <SoftStack AlignItems="AlignItems.Center" Spacing="2" Class="pa-6">
-                    <SoftProgressCircular Indeterminate="true" Color="Color.Primary" />
-                </SoftStack>
+                <SoftDonutLoader Compact="true" />
             }
             else if (_items.Count == 0)
             {

@@ -14,6 +14,8 @@ namespace Inventory.BranchInventory;
 
 public class BranchAccessChecker : ITransientDependency
 {
+    private const string AssignedBranchIdClaim = "AssignedBranchId";
+
     private readonly IRepository<AppBranch, Guid> _branchRepository;
     private readonly IAuthorizationService _authorizationService;
     private readonly ICurrentUser _currentUser;
@@ -58,6 +60,16 @@ public class BranchAccessChecker : ITransientDependency
         var userId = _currentUser.Id;
         if (userId == null) return new List<Guid>();
 
+        var assignedBranchId = GetAssignedBranchId();
+        if (assignedBranchId.HasValue)
+        {
+            var assignedBranchIsActive = await _branchRepository.AnyAsync(
+                b => b.Id == assignedBranchId.Value && b.IsActive);
+            return assignedBranchIsActive
+                ? new List<Guid> { assignedBranchId.Value }
+                : new List<Guid>();
+        }
+
         var mine = await _branchRepository.GetListAsync(b => b.IsActive && b.ManagerUserId == userId);
         return mine.Select(b => b.Id).ToList();
     }
@@ -72,7 +84,19 @@ public class BranchAccessChecker : ITransientDependency
         var userId = _currentUser.Id;
         if (userId == null) return new List<Guid>();
 
+        var assignedBranchId = GetAssignedBranchId();
+        if (assignedBranchId.HasValue)
+        {
+            return new List<Guid> { assignedBranchId.Value };
+        }
+
         var mine = await _branchRepository.GetListAsync(b => b.ManagerUserId == userId);
         return mine.Select(b => b.Id).ToList();
+    }
+
+    private Guid? GetAssignedBranchId()
+    {
+        var value = _currentUser.FindClaimValue(AssignedBranchIdClaim);
+        return Guid.TryParse(value, out var branchId) ? branchId : null;
     }
 }
