@@ -326,7 +326,14 @@ body {
    Account management page (/account/manage)
    Reuses the warm tokens above; standalone full-page shell.
    ========================================================= */
+.account-layout-body {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
 .acct-topbar {
+  width: 100%;
+  flex: 0 0 60px;
   height: 60px; display: flex; align-items: center; justify-content: space-between;
   padding: 0 28px; border-bottom: 1px solid var(--bd-1); background: var(--surface);
 }
@@ -398,3 +405,73 @@ body {
 .acct-alert ul { margin: 0; padding-inline-start: 16px; }
 
 .acct-validation { color: var(--danger); font-size: 12px; margin-top: 4px; display: block; }
+
+/* ---- Custom access-denied page (replaces ABP's account shell) ---- */
+.access-page-shell {
+  width: 100%;
+  min-height: calc(100vh - 64px);
+  display: grid;
+  place-items: center;
+  padding: 36px 22px;
+}
+.access-page-card {
+  width: min(100%, 520px);
+  padding: 42px 38px;
+  border: 1px solid var(--bd-2);
+  border-radius: 18px;
+  background: var(--surface);
+  box-shadow: 0 18px 52px rgba(44, 37, 32, .10);
+  text-align: center;
+}
+.access-page-mark {
+  width: 68px;
+  height: 68px;
+  margin: 0 auto 16px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.access-page-mark .material-icons-outlined { font-size: 34px; }
+.access-page-code {
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 750;
+  letter-spacing: .18em;
+}
+.access-page-card h1 {
+  margin: 7px 0 10px;
+  color: var(--fg-1);
+  font-family: 'Source Serif 4', Georgia, serif;
+  font-size: clamp(29px, 5vw, 40px);
+  font-weight: 500;
+  line-height: 1.15;
+}
+.access-page-card p {
+  max-width: 390px;
+  margin: 0 auto 24px;
+  color: var(--fg-2);
+  font-size: 14px;
+}
+.access-page-action {
+  min-height: 44px;
+  padding: 0 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: 10px;
+  background: var(--accent);
+  color: var(--accent-fg);
+  font-weight: 650;
+  text-decoration: none;
+  transition: background .16s ease, transform .16s ease;
+}
+.access-page-action:hover { background: var(--accent-hover); transform: translateY(-1px); }
+.access-page-action .material-icons-outlined { font-size: 19px; }
+@media (max-width: 560px) {
+  .access-page-card { padding: 34px 24px; border-radius: 14px; }
+  .acct-topbar { padding: 0 14px; }
+  .acct-back { width: 32px; padding: 0; justify-content: center; font-size: 0; }
+}

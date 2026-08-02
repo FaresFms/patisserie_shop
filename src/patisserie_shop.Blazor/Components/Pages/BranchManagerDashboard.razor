@@ -60,16 +60,7 @@
         }
         else if (_data == null)
         {
-            <div class="bm-skeleton-row">
-                @for (var i = 0; i < 4; i++)
-                {
-                    <SoftSkeleton SkeletonType="SkeletonType.Rectangle" Height="120px" Width="100%" />
-                }
-            </div>
-            <div class="bm-skeleton-row" style="margin-top:20px;">
-                <SoftSkeleton SkeletonType="SkeletonType.Rectangle" Height="360px" Width="100%" />
-                <SoftSkeleton SkeletonType="SkeletonType.Rectangle" Height="360px" Width="100%" />
-            </div>
+            <SoftDonutLoader Fill="true" Label="@L["MgrDash:Loading"]" />
         }
         else if (!_data.HasBranchAssigned)
         {

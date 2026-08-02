@@ -261,9 +261,7 @@
                         @* ── Card view ─────────────────────────────────── *@
                         @if (_loading && _cardItems.Count == 0)
                         {
-                            <SoftStack AlignItems="AlignItems.Center" Class="pa-6">
-                                <SoftProgressCircular Indeterminate="true" Color="Color.Primary" />
-                            </SoftStack>
+                            <SoftDonutLoader Compact="true" />
                         }
                         else if (_cardItems.Count == 0)
                         {

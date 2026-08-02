@@ -14,7 +14,6 @@ using Volo.Abp.Timing;
 
 namespace Inventory.BranchInventory;
 
-[Authorize(InventoryPermissions.BranchInventory.Default)]
 public class BranchInventoryAppService : InventoryAppService, IBranchInventoryAppService
 {
     private readonly IBranchInventoryRepository _inventoryRepository;
@@ -45,6 +44,7 @@ public class BranchInventoryAppService : InventoryAppService, IBranchInventoryAp
 
     private DateTime TodayUtc => _clock.Now.ToUniversalTime().Date;
 
+    [Authorize(InventoryPermissions.BranchInventory.Default)]
     public async Task<BranchInventoryDto> GetAsync(Guid id)
     {
         var row = await _inventoryRepository.GetWithProductAsync(id);
@@ -54,6 +54,7 @@ public class BranchInventoryAppService : InventoryAppService, IBranchInventoryAp
         return Project(row, expired);
     }
 
+    [Authorize(InventoryPermissions.BranchInventory.Default)]
     public async Task<PagedResultDto<BranchInventoryDto>> GetListAsync(GetBranchInventoryInput input)
     {
         if (input.BranchId == Guid.Empty)
@@ -85,6 +86,7 @@ public class BranchInventoryAppService : InventoryAppService, IBranchInventoryAp
             [.. rows.Select(r => Project(r, expiredByProduct.GetValueOrDefault(r.Product.Id, 0)))]);
     }
 
+    [Authorize(InventoryPermissions.BranchInventory.Default)]
     public async Task<BranchInventoryStatsDto> GetStatsAsync(Guid branchId)
     {
         await _branchAccess.EnsureAccessAsync(branchId);
@@ -104,6 +106,7 @@ public class BranchInventoryAppService : InventoryAppService, IBranchInventoryAp
         return stats;
     }
 
+    [Authorize(InventoryPermissions.BranchInventory.Default)]
     public async Task<List<ProductBranchStockDto>> GetProductStockAcrossBranchesAsync(Guid productId)
     {
         var product = await _productRepository.GetAsync(productId);
@@ -125,6 +128,10 @@ public class BranchInventoryAppService : InventoryAppService, IBranchInventoryAp
         })];
     }
 
+    // This returns only the caller's own scoped branch ids and is used by other
+    // independently-authorized modules. Requiring BranchInventory.Default here
+    // made a valid Intelligence grant fail inside the Intelligence services.
+    [Authorize]
     public Task<List<Guid>> GetAccessibleBranchIdsAsync()
         => _branchAccess.GetAccessibleBranchIdsAsync();
 

@@ -15,13 +15,14 @@
     var switchLanguageLabel = isArabic
         ? L["Nav:SwitchToEnglish"].Value
         : L["Nav:SwitchToArabic"].Value;
+    var pageTitle = ViewData["Title"] as string ?? L["Account:Title"].Value;
 }
 <!DOCTYPE html>
 <html lang="@CultureInfo.CurrentUICulture.Name" dir="@direction" data-theme="light">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>@L["Account:Title"] — @L["AppName"]</title>
+    <title>@pageTitle — @L["AppName"]</title>
 
     @await RenderSectionAsync("styles", required: false)
 
@@ -34,7 +35,7 @@
 
     <script src="~/js/theme-bridge.js"></script>
 </head>
-<body>
+<body class="account-layout-body">
     <div class="acct-topbar">
         <div class="acct-brand">
             <span class="acct-brand-mark"><span class="material-icons-outlined">storefront</span></span>

@@ -9,9 +9,12 @@
     document.documentElement.classList.toggle('dark-mode', isDark);
   };
 
-  // On page load, restore saved preference
+  // Restore the preference before stylesheets load. The legacy key keeps
+  // existing users flash-free on their first refresh after this update.
   try {
     const saved = localStorage.getItem('warm-theme');
-    if (saved === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+    const legacySaved = localStorage.getItem('ewallet-darkMode');
+    const isDark = saved === 'dark' || (saved === null && legacySaved === 'true');
+    document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light');
   } catch (e) {}
 })();

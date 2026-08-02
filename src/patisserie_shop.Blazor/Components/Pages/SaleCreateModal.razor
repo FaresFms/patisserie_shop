@@ -1,7 +1,6 @@
 @using System.Threading
 @using System.Threading.Tasks
 @using Microsoft.AspNetCore.Components
-@using Volo.Abp.Settings
 @using Operations.Sales
 @using Operations.Localization
 @using Inventory.Branches
@@ -13,7 +12,6 @@
 @inject ISaleAppService SaleAppService
 @inject ISnackbar Snackbar
 @inject IStringLocalizer<OperationsResource> OpsL
-@inject Volo.Abp.Settings.ISettingProvider SettingProvider
 
 <div class="soft-modal-backdrop" @onclick="CloseAsync">
     <div class="soft-modal-container soft-modal-container--xl" @onclick:stopPropagation="true">
@@ -54,11 +52,6 @@
                                 }
                                 <MudDatePicker Label="@OpsL["SaleDate"]" Variant="Variant.Outlined"
                                                @bind-Date="_saleDate" />
-                                <SoftTextField T="string" Label="@OpsL["Currency"]"
-                                               @bind-Value="_currency"
-                                               Variant="Variant.Outlined"
-                                               MaxLength="3"
-                                               Style="max-width: 110px;" />
                             </SoftStack>
                             <SoftTextField T="string"
                                            Label="@OpsL["Notes"]"
@@ -133,10 +126,12 @@
                                     <MudTd Style="text-align:right;">
                                         <SoftNumericField T="decimal" @bind-Value="row.UnitPrice"
                                                           Variant="Variant.Outlined" Margin="Margin.Dense"
-                                                          Min="0" Class="soft-qty" />
+                                                          Min="0" Class="soft-qty"
+                                                          Adornment="Adornment.Start"
+                                                          AdornmentText="@ShopCurrency" />
                                     </MudTd>
                                     <MudTd Style="text-align:right;">
-                                        <strong>@($"{(row.Quantity * row.UnitPrice):N2}")</strong>
+                                        <strong>@FormatShopMoney(row.Quantity * row.UnitPrice)</strong>
                                     </MudTd>
                                     <MudTd>
                                         <SoftIconButton Icon="@Icons.Material.Filled.Delete"
@@ -150,7 +145,7 @@
                             <div class="sale-total">
                                 <SoftText Typo="Typo.caption" Color="Color.Default">@OpsL["RunningTotal"]:</SoftText>
                                 <SoftText Typo="Typo.h6" Style="font-weight:700;">
-                                    @($"{RunningTotal:N2} {(_currency ?? "USD").ToUpper()}")
+                                    @FormatShopMoney(RunningTotal)
                                 </SoftText>
                             </div>
                         }
@@ -208,8 +203,6 @@
 
     private Guid? _branchId;
     private DateTime? _saleDate = DateTime.Today;
-    private string _currency = "USD";
-    private string _defaultCurrency = "USD";
     private string? _notes;
 
     private List<SaleProductLookupDto> _availableProducts = new();
@@ -235,16 +228,7 @@
 
     protected override async Task OnInitializedAsync()
     {
-        // Shop-wide default currency for new sales (falls back to USD).
-        try
-        {
-            _defaultCurrency = (await SettingProvider.GetOrNullAsync("patisserie_shop.Operations.DefaultCurrency") ?? "USD").ToUpperInvariant();
-        }
-        catch
-        {
-            _defaultCurrency = "USD";
-        }
-        _currency = _defaultCurrency;
+        await LoadShopCurrencyAsync();
 
         // Single accessible branch (branch manager) — preselect it. Awaited so the
         // available-products load completes before first render, otherwise the
@@ -321,7 +305,7 @@
                 BranchId = _branchId!.Value,
                 InvoiceNumber = null, // auto-generated as INV-YYYY-NNNN by SaleManager
                 SaleDate = _saleDate!.Value,
-                Currency = (_currency ?? "USD").ToUpper(),
+                Currency = ShopCurrency,
                 Notes = _notes,
                 Items = _rows.Select(r => new CreateSaleItemDto
                 {

@@ -9,6 +9,7 @@ using Inventory.BranchInventory;
 using Inventory.Entities;
 using Inventory.Permissions;
 using Inventory.StockBatches;
+using Inventory.Settings;
 using Inventory.StockMovements;
 using Microsoft.AspNetCore.Authorization;
 using Operations.Sales;
@@ -330,11 +331,6 @@ public class BranchHealthAppService : patisserie_shopAppService, IBranchHealthAp
         => $"{value.ToString("N0", CultureInfo.CurrentCulture)} {currency}";
 
     private async Task<string> GetDefaultCurrencyAsync()
-    {
-        var currency = (await _settingProvider.GetOrNullAsync("patisserie_shop.Operations.DefaultCurrency"))
-            ?.Trim()
-            .ToUpperInvariant();
-
-        return currency?.Length == 3 ? currency : "USD";
-    }
+        => ShopCurrencySettings.Normalize(
+            await _settingProvider.GetOrNullAsync(ShopCurrencySettings.Name));
 }

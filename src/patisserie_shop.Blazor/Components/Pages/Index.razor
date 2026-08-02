@@ -26,15 +26,13 @@
             </div>
         </div>
         <SoftCardContent>
-            <SoftStack AlignItems="AlignItems.Center" Spacing="2" Class="pa-6">
-                <SoftProgressCircular Indeterminate="true" Color="MudBlazor.Color.Primary" />
-            </SoftStack>
+            <SoftDonutLoader Fill="true" Label="@L["Dashboard:Loading"]" />
         </SoftCardContent>
     </SoftCard>
 }
 else if (_role == DashboardRole.Admin)
 {
-    <AdminDashboard />
+    <OwnerDashboard />
 }
 else if (_role == DashboardRole.BranchManager)
 {

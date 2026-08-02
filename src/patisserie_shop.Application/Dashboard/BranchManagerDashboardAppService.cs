@@ -6,12 +6,14 @@ using Intelligence.Decisions;
 using Intelligence.Entities;
 using Inventory.BranchInventory;
 using Inventory.Entities;
+using Inventory.Settings;
 using Microsoft.AspNetCore.Authorization;
 using Operations;
 using Operations.Sales;
 using Operations.StockTransfers;
 using Volo.Abp.Domain.Repositories;
 using Volo.Abp.Users;
+using Volo.Abp.Settings;
 
 namespace patisserie_shop.Dashboard;
 
@@ -32,6 +34,7 @@ public class BranchManagerDashboardAppService : patisserie_shopAppService, IBran
     private readonly ISaleRepository _saleRepository;
     private readonly IStockTransferRepository _stockTransferRepository;
     private readonly ICurrentUser _currentUser;
+    private readonly ISettingProvider _settingProvider;
 
     public BranchManagerDashboardAppService(
         IRepository<AppBranch, Guid> branchRepository,
@@ -40,7 +43,8 @@ public class BranchManagerDashboardAppService : patisserie_shopAppService, IBran
         IDecisionLogRepository decisionLogRepository,
         ISaleRepository saleRepository,
         IStockTransferRepository stockTransferRepository,
-        ICurrentUser currentUser)
+        ICurrentUser currentUser,
+        ISettingProvider settingProvider)
     {
         _branchRepository = branchRepository;
         _productRepository = productRepository;
@@ -49,6 +53,7 @@ public class BranchManagerDashboardAppService : patisserie_shopAppService, IBran
         _saleRepository = saleRepository;
         _stockTransferRepository = stockTransferRepository;
         _currentUser = currentUser;
+        _settingProvider = settingProvider;
     }
 
     public async Task<BranchDashboardDto> GetBranchDashboardAsync()
@@ -129,6 +134,8 @@ public class BranchManagerDashboardAppService : patisserie_shopAppService, IBran
             sorting: string.Empty,
             skipCount: 0,
             maxResultCount: RecentSalesLimit);
+        var currency = ShopCurrencySettings.Normalize(
+            await _settingProvider.GetOrNullAsync(ShopCurrencySettings.Name));
 
         var recentSales = recentSaleRows.Select(r => new RecentSaleDto
         {
@@ -136,7 +143,7 @@ public class BranchManagerDashboardAppService : patisserie_shopAppService, IBran
             InvoiceNumber = r.Sale.InvoiceNumber,
             SaleDate = r.Sale.SaleDate,
             TotalAmount = r.Sale.TotalAmount,
-            Currency = r.Sale.Currency,
+            Currency = currency,
             ItemCount = r.ItemCount
         }).ToList();
 

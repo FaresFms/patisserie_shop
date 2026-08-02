@@ -27,6 +27,12 @@
     <MudPopoverProvider />
     <MudDialogProvider />
     <MudSnackbarProvider />
+    @if (_isRouteLoading)
+    {
+        <div class="soft-route-loader is-active" role="status" aria-live="polite">
+            <SoftDonutLoader Label="@L["Dashboard:Loading"]" Fill="true" />
+        </div>
+    }
     <div @key="_timeZoneVersion" style="display: contents">
     <SoftLayout>
 
@@ -224,6 +230,9 @@
     private string _shopName = string.Empty;
     private List<ApplicationMenuItem> _menuItems = new();
     private int _timeZoneVersion;
+    private bool _isRouteLoading;
+    private int _routeLoadingRenderCount;
+    private System.Threading.CancellationTokenSource? _routeLoaderSafetyCts;
 
     protected override async Task OnInitializedAsync()
     {
@@ -254,10 +263,23 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        if (_isRouteLoading)
+        {
+            _routeLoadingRenderCount++;
+            if (_routeLoadingRenderCount >= 2)
+            {
+                _isRouteLoading = false;
+                _routeLoaderSafetyCts?.Cancel();
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+
         if (!firstRender)
         {
             return;
         }
+
+        Navigation.LocationChanged += HandleLocationChanged;
 
         try
         {
@@ -302,6 +324,35 @@
             // Browser detection is best effort; the configured timezone or UTC
             // fallback loaded during initialization remains active.
         }
+    }
+
+    private void HandleLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs args)
+    {
+        _routeLoaderSafetyCts?.Cancel();
+        _routeLoaderSafetyCts?.Dispose();
+        _routeLoaderSafetyCts = new System.Threading.CancellationTokenSource();
+        var cancellationToken = _routeLoaderSafetyCts.Token;
+
+        _ = InvokeAsync(async () =>
+        {
+            _isRouteLoading = true;
+            _routeLoadingRenderCount = 0;
+            StateHasChanged();
+
+            try
+            {
+                await Task.Delay(TimeSpan.FromSeconds(15), cancellationToken);
+                if (_isRouteLoading)
+                {
+                    _isRouteLoading = false;
+                    StateHasChanged();
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // The new route rendered and dismissed the safety timeout.
+            }
+        });
     }
     private void SanitizeMenuUrls(List<ApplicationMenuItem> items)
     {

@@ -20,34 +20,63 @@
 @inject PageLayout PageLayout
 @inject IStringLocalizer<ProductionResource> ProdL
 
-@{
+@if (!Embedded)
+{
     PageLayout.Title = ProdL["ProductionDashboard"];
 }
 
-<SoftCard Elevation="2" Class="pa-2 page-flat prod-dash">
-    <div class="page-head">
-        <div>
-            <h1 class="page-title">@ProdL["ProductionDashboard"]</h1>
-            <div class="page-sub">
-                @if (_lastRefresh.HasValue)
-                {
-                    <span>@ProdL["ProductionDashboardSubtitle"] · <BrowserLocalTime Value="@_lastRefresh.Value" Display="BrowserTimeDisplay.Time" /></span>
-                }
-                else
-                {
-                    <span>@ProdL["ProductionDashboardSubtitle"]</span>
-                }
+<SoftCard Elevation="2" Class="@($"pa-2 page-flat prod-dash{(Embedded ? " prod-dash--embedded" : string.Empty)}")">
+    @if (!Embedded)
+    {
+        <div class="page-head">
+            <div>
+                <h1 class="page-title">@ProdL["ProductionDashboard"]</h1>
+                <div class="page-sub">
+                    @if (_lastRefresh.HasValue)
+                    {
+                        <span>@ProdL["ProductionDashboardSubtitle"] · <BrowserLocalTime Value="@_lastRefresh.Value" Display="BrowserTimeDisplay.Time" /></span>
+                    }
+                    else
+                    {
+                        <span>@ProdL["ProductionDashboardSubtitle"]</span>
+                    }
+                </div>
+            </div>
+            <div class="page-head-actions">
+                <SoftButton Variant="Variant.Text" Color="Color.Primary"
+                            StartIcon="@Icons.Material.Filled.Refresh"
+                            OnClick="LoadAsync"
+                            Disabled="_loading">
+                    @ProdL["Refresh"]
+                </SoftButton>
             </div>
         </div>
-        <div class="page-head-actions">
-            <SoftButton Variant="Variant.Text" Color="Color.Primary"
+    }
+    else
+    {
+        <div class="pd-embedded-toolbar">
+            <div>
+                <span class="pd-embedded-kicker">@ProdL["ProductionDashboard"]</span>
+                <span class="pd-embedded-time">
+                    @if (_lastRefresh.HasValue)
+                    {
+                        <span>@ProdL["ProductionDashboardSubtitle"] · <BrowserLocalTime Value="@_lastRefresh.Value" Display="BrowserTimeDisplay.Time" /></span>
+                    }
+                    else
+                    {
+                        <span>@ProdL["ProductionDashboardSubtitle"]</span>
+                    }
+                </span>
+            </div>
+            <SoftButton Variant="Variant.Text"
+                        Color="Color.Primary"
                         StartIcon="@Icons.Material.Filled.Refresh"
                         OnClick="LoadAsync"
                         Disabled="_loading">
                 @ProdL["Refresh"]
             </SoftButton>
         </div>
-    </div>
+    }
 
     <SoftCardContent>
         <div class="toolbar">
@@ -78,16 +107,7 @@
         }
         else if (_data == null)
         {
-            <div class="pd-skeleton-row">
-                @for (var i = 0; i < 6; i++)
-                {
-                    <SoftSkeleton SkeletonType="SkeletonType.Rectangle" Height="86px" Width="100%" />
-                }
-            </div>
-            <div class="pd-two">
-                <SoftSkeleton SkeletonType="SkeletonType.Rectangle" Height="320px" Width="100%" />
-                <SoftSkeleton SkeletonType="SkeletonType.Rectangle" Height="320px" Width="100%" />
-            </div>
+            <SoftDonutLoader Fill="true" />
         }
         else
         {
@@ -261,6 +281,23 @@
 <style>
     .prod-dash { animation: pd-fade .22s ease-out; }
     @@keyframes pd-fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+    .pd-embedded-toolbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        margin: 0 32px 6px;
+        padding: 7px 0 10px;
+        border-bottom: 1px solid var(--bd-1);
+    }
+    .pd-embedded-toolbar > div { display: flex; flex-direction: column; min-width: 0; }
+    .pd-embedded-kicker {
+        color: var(--fg-1);
+        font-family: var(--font-serif);
+        font-size: 17px;
+        font-weight: 650;
+    }
+    .pd-embedded-time { color: var(--fg-3); font-size: 12px; }
     .pd-skeleton-row, .pd-kpis {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
@@ -419,9 +456,17 @@
     html[dir="rtl"] .prod-dash { direction: rtl; text-align: right; }
     html[dir="rtl"] .prod-dash .pd-kpi { border-left: 1px solid var(--bd-1); border-right: 4px solid var(--pd-accent, var(--accent)); }
     html[dir="rtl"] .prod-dash .pd-action { border-left: 1px solid var(--bd-1); border-right: 3px solid var(--pd-action-color, var(--accent)); }
+    @@media (max-width: 640px) {
+        .pd-embedded-toolbar { margin-inline: 12px; }
+        .prod-dash--embedded .pd-kpis,
+        .prod-dash--embedded .pd-two { padding-inline: 12px; }
+        .prod-dash--embedded .pd-section--wide { margin-inline: 12px; }
+    }
 </style>
 
 @code {
+    [Parameter] public bool Embedded { get; set; }
+
     private ProductionDashboardDto? _data;
     private List<BranchLookupDto> _branches = new();
     private Guid? _kitchenBranchId;

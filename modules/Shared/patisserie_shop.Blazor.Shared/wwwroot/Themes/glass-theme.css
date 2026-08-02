@@ -1003,12 +1003,8 @@ body.abp-application-layout .page-flat .mud-card-content {
     border-bottom: 0 !important;
 }
 
-/* Row action icons — neutral, visible on hover only */
+/* Row action icons — neutral and always visible */
 .page-flat .mud-table-body .row-actions {
-    opacity: 0;
-    transition: opacity .12s;
-}
-.page-flat .mud-table-body .mud-table-row:hover .row-actions {
     opacity: 1;
 }
 .page-flat .mud-table-body .mud-icon-button {
@@ -1207,6 +1203,280 @@ body.abp-application-layout .mud-progress-linear-bar.mud-primary-text {
     background: var(--accent) !important;
 }
 
+/* ── Animated shop loader ────────────────────────────────────────────────
+   A warm pastry donut is progressively removed in eight discrete bites.
+   SoftDataGrid and SoftTable use the compact variant automatically; full
+   screen loading states opt into --fill. All colors flow from theme tokens. */
+.soft-donut-loader {
+    --donut-dough-light: color-mix(in srgb, var(--warn) 68%, #fff 32%);
+    --donut-dough-mid: color-mix(in srgb, var(--warn) 78%, var(--accent) 22%);
+    --donut-dough-dark: color-mix(in srgb, var(--accent) 72%, #6b321f 28%);
+    --donut-icing-light: color-mix(in srgb, var(--accent) 72%, #fff 28%);
+    --donut-icing-dark: var(--accent-hover);
+    --donut-sprinkle: color-mix(in srgb, var(--surface) 82%, #fff 18%);
+    --donut-shadow: var(--accent-line);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    width: 100%;
+    min-height: 170px;
+    padding: 22px;
+    color: var(--donut-shadow);
+    text-align: center;
+}
+
+.soft-donut-loader--compact {
+    min-height: 138px;
+    padding: 16px;
+    gap: 7px;
+}
+
+.soft-donut-loader--fill {
+    min-height: min(52vh, 430px);
+}
+
+/* MudDataGrid renders both LoadingContent and no-records content inside this
+   cell. Theme the cell itself so its first paint never falls back to white. */
+.mud-table-empty-row {
+    color: var(--fg-2) !important;
+    background: var(--surface) !important;
+}
+
+.soft-donut-loader__stage {
+    position: relative;
+    width: 108px;
+    height: 108px;
+    border-radius: 50%;
+    background: radial-gradient(circle, var(--accent-soft) 0%, transparent 68%);
+}
+
+.soft-donut-loader--compact .soft-donut-loader__stage {
+    width: 78px;
+    height: 78px;
+}
+
+.soft-donut-loader__art {
+    display: block;
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+    animation: soft-donut-float 3.6s ease-in-out infinite;
+}
+
+.soft-donut-loader__dough-light { stop-color: var(--donut-dough-light); }
+.soft-donut-loader__dough-mid { stop-color: var(--donut-dough-mid); }
+.soft-donut-loader__dough-dark { stop-color: var(--donut-dough-dark); }
+.soft-donut-loader__icing-light { stop-color: var(--donut-icing-light); }
+.soft-donut-loader__icing-dark { stop-color: var(--donut-icing-dark); }
+
+.soft-donut-loader__shine {
+    stroke: color-mix(in srgb, var(--surface) 74%, transparent 26%);
+    stroke-width: 3.2;
+    opacity: .58;
+}
+
+.soft-donut-loader__sprinkles path {
+    fill: none;
+    stroke: var(--donut-sprinkle);
+    stroke-width: 2.3;
+    stroke-linecap: round;
+    opacity: .9;
+}
+
+.soft-donut-loader__bite {
+    transform-box: fill-box;
+    transform-origin: center;
+    transform: scale(0);
+}
+
+.soft-donut-loader__bite.bite-1 { animation: soft-donut-bite-1 3.6s steps(1, end) infinite; }
+.soft-donut-loader__bite.bite-2 { animation: soft-donut-bite-2 3.6s steps(1, end) infinite; }
+.soft-donut-loader__bite.bite-3 { animation: soft-donut-bite-3 3.6s steps(1, end) infinite; }
+.soft-donut-loader__bite.bite-4 { animation: soft-donut-bite-4 3.6s steps(1, end) infinite; }
+.soft-donut-loader__bite.bite-5 { animation: soft-donut-bite-5 3.6s steps(1, end) infinite; }
+.soft-donut-loader__bite.bite-6 { animation: soft-donut-bite-6 3.6s steps(1, end) infinite; }
+.soft-donut-loader__bite.bite-7 { animation: soft-donut-bite-7 3.6s steps(1, end) infinite; }
+.soft-donut-loader__bite.bite-8 { animation: soft-donut-bite-8 3.6s steps(1, end) infinite; }
+
+.soft-donut-loader__crumbs {
+    fill: var(--accent);
+    transform-origin: 78px 30px;
+    animation: soft-donut-crumbs 3.6s ease-out infinite;
+}
+
+.soft-donut-loader__label {
+    color: var(--fg-2);
+    font-family: var(--font-sans);
+    font-size: .83rem;
+    font-weight: 650;
+    letter-spacing: .025em;
+    animation: soft-donut-label 1.8s ease-in-out infinite;
+}
+
+.soft-donut-loader--compact .soft-donut-loader__label {
+    font-size: .76rem;
+}
+
+html[data-theme="dark"] .soft-donut-loader {
+    --donut-dough-light: color-mix(in srgb, var(--warn) 78%, #f6d6ad 22%);
+    --donut-dough-mid: color-mix(in srgb, var(--warn) 70%, var(--accent) 30%);
+    --donut-dough-dark: color-mix(in srgb, var(--accent) 72%, #4f2519 28%);
+    --donut-icing-light: color-mix(in srgb, var(--accent) 80%, #ffd0be 20%);
+    --donut-sprinkle: color-mix(in srgb, var(--surface-2) 60%, #f7ead9 40%);
+}
+
+@keyframes soft-donut-float {
+    0%, 100% { transform: translateY(0) rotate(-3deg) scale(1); }
+    45% { transform: translateY(-4px) rotate(2deg) scale(1.025); }
+    92% { transform: translateY(1px) rotate(-1deg) scale(.98); }
+}
+
+@keyframes soft-donut-bite-1 { 0%, 8% { transform: scale(0); } 9%, 92% { transform: scale(1); } 96%, 100% { transform: scale(0); } }
+@keyframes soft-donut-bite-2 { 0%, 17% { transform: scale(0); } 18%, 92% { transform: scale(1); } 96%, 100% { transform: scale(0); } }
+@keyframes soft-donut-bite-3 { 0%, 26% { transform: scale(0); } 27%, 92% { transform: scale(1); } 96%, 100% { transform: scale(0); } }
+@keyframes soft-donut-bite-4 { 0%, 35% { transform: scale(0); } 36%, 92% { transform: scale(1); } 96%, 100% { transform: scale(0); } }
+@keyframes soft-donut-bite-5 { 0%, 44% { transform: scale(0); } 45%, 92% { transform: scale(1); } 96%, 100% { transform: scale(0); } }
+@keyframes soft-donut-bite-6 { 0%, 53% { transform: scale(0); } 54%, 92% { transform: scale(1); } 96%, 100% { transform: scale(0); } }
+@keyframes soft-donut-bite-7 { 0%, 62% { transform: scale(0); } 63%, 92% { transform: scale(1); } 96%, 100% { transform: scale(0); } }
+@keyframes soft-donut-bite-8 { 0%, 71% { transform: scale(0); } 72%, 92% { transform: scale(1); } 96%, 100% { transform: scale(0); } }
+
+@keyframes soft-donut-crumbs {
+    0%, 7%, 96%, 100% { opacity: 0; transform: translate(0, 0) scale(.55); }
+    10% { opacity: 1; transform: translate(0, 0) scale(1); }
+    25% { opacity: 0; transform: translate(7px, -7px) scale(.7); }
+}
+
+@keyframes soft-donut-label {
+    0%, 100% { opacity: .58; transform: translateY(0); }
+    50% { opacity: 1; transform: translateY(-1px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .soft-donut-loader__art,
+    .soft-donut-loader__crumbs,
+    .soft-donut-loader__label,
+    .soft-donut-loader__bite {
+        animation: none !important;
+    }
+
+    .soft-donut-loader__bite.bite-1,
+    .soft-donut-loader__bite.bite-2 {
+        transform: scale(1);
+    }
+}
+
+/* Route transitions are deliberately delayed: quick refreshes and route
+   changes should complete without flashing a full-screen veil. Longer loads
+   reveal only the themed donut card over the unchanged screen. */
+.soft-route-loader {
+    position: fixed;
+    inset: 0;
+    z-index: 2100;
+    display: grid;
+    place-items: center;
+    padding: 1.5rem;
+    color: var(--fg-1);
+    background: transparent;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    opacity: 0;
+    visibility: visible;
+    pointer-events: none;
+}
+
+.soft-route-loader.is-active {
+    animation: soft-route-loader-reveal 160ms ease-out 220ms forwards;
+}
+
+.soft-route-loader .soft-donut-loader {
+    width: min(22rem, calc(100vw - 3rem));
+    min-height: 15rem;
+    padding: 2rem;
+    border: 1px solid var(--bd-2);
+    border-radius: var(--r-lg);
+    background: color-mix(in srgb, var(--surface) 93%, transparent);
+    box-shadow: var(--shadow-modal);
+}
+
+.soft-route-loader.is-active .soft-donut-loader {
+    animation: soft-route-loader-card-in 180ms ease-out 220ms both;
+}
+
+@keyframes soft-route-loader-reveal {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes soft-route-loader-card-in {
+    from { transform: translateY(7px) scale(.97); }
+    to { transform: translateY(0) scale(1); }
+}
+
+body.soft-route-loading {
+    overflow: hidden;
+}
+
+@media (max-width: 600px) {
+    .soft-route-loader .soft-donut-loader {
+        min-height: 13rem;
+        padding: 1.5rem;
+    }
+}
+
+/* Authenticated routes without permission stay inside the warm application
+   shell instead of falling back to Lepton/ABP's legacy 403 layout. */
+.route-access-denied {
+    min-height: min(72vh, 680px);
+    display: grid;
+    place-items: center;
+    padding: 2rem 1.25rem;
+}
+
+.route-access-denied__card {
+    width: min(100%, 34rem);
+    padding: clamp(2rem, 6vw, 3.25rem);
+    border: 1px solid var(--bd-2);
+    border-radius: var(--r-lg);
+    background: var(--surface);
+    box-shadow: var(--shadow-md);
+    text-align: center;
+}
+
+.route-access-denied__mark {
+    width: 4.25rem;
+    height: 4.25rem;
+    margin: 0 auto 1rem;
+    display: grid;
+    place-items: center;
+    border-radius: 50%;
+    background: var(--accent-soft);
+    color: var(--accent);
+}
+
+.route-access-denied__mark .mud-icon-root { font-size: 2.15rem; }
+.route-access-denied__code {
+    color: var(--accent);
+    font-size: .76rem;
+    font-weight: 750;
+    letter-spacing: .18em;
+}
+.route-access-denied__card h1 {
+    margin: .45rem 0 .65rem;
+    color: var(--fg-1);
+    font-family: var(--font-serif);
+    font-size: clamp(2rem, 5vw, 2.7rem);
+    font-weight: 500;
+    line-height: 1.15;
+}
+.route-access-denied__card p {
+    max-width: 25rem;
+    margin: 0 auto 1.5rem;
+    color: var(--fg-2);
+    line-height: 1.65;
+}
+
 /* =========================================================
    Date / time picker — recolor MudBlazor's default blue
    (mud-theme-primary) to the warm terracotta accent.
@@ -1264,15 +1534,480 @@ body.abp-application-layout .mud-picker .mud-picker-stick-inner.mud-theme-primar
 
 
 /* =========================================================
-   Permission / role checklist (Users & Roles management modals)
+   Permission workspace (Users & Roles management)
    ========================================================= */
-.perm-toolbar { padding: 2px 0; }
-.perm-group { padding: 8px 0; border-bottom: 1px solid var(--bd-1); }
-.perm-group:last-child { border-bottom: 0; }
-.perm-group-head { font-weight: 600; }
-.perm-group-body { display: flex; flex-direction: column; gap: 2px; margin-top: 4px; }
-.perm-item { line-height: 1.4; }
-.perm-item .mud-checkbox { margin: 0; }
+.permission-modal-container {
+    max-width: 980px;
+}
+
+.permission-modal {
+    height: min(760px, calc(100vh - 32px));
+    display: flex;
+    flex-direction: column;
+}
+
+.permission-modal-header {
+    min-height: 86px;
+    padding: 18px 22px !important;
+    background: var(--bg-2);
+    border-bottom: 1px solid var(--bd-1);
+}
+
+.permission-modal-mark {
+    width: 42px;
+    height: 42px;
+    display: grid;
+    place-items: center;
+    flex: 0 0 auto;
+    color: var(--accent);
+    background: var(--accent-soft);
+    border: 1px solid var(--accent-line);
+    border-radius: 12px;
+}
+
+.permission-modal-title {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.permission-modal-title .mud-typography-h6 {
+    color: var(--fg-1);
+    font-family: var(--font-serif);
+    font-weight: 600;
+}
+
+.permission-modal-title .mud-typography-caption {
+    color: var(--fg-3);
+}
+
+.permission-modal-loading {
+    padding: 0 22px;
+}
+
+.permission-search-bar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 18px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--bd-1);
+}
+
+.permission-search-input .mud-input-control {
+    margin: 0;
+}
+
+.permission-search-input .mud-input-outlined-border {
+    border-color: var(--bd-2) !important;
+}
+
+.permission-search-clear {
+    color: var(--fg-3) !important;
+}
+
+.permission-workspace {
+    min-height: 0;
+    flex: 1 1 auto;
+    display: grid;
+    grid-template-columns: 236px minmax(0, 1fr);
+    overflow: hidden;
+    background: var(--surface);
+}
+
+.permission-category-rail {
+    min-width: 0;
+    overflow-y: auto;
+    padding: 16px 12px;
+    background: var(--surface-2);
+    border-inline-end: 1px solid var(--bd-1);
+}
+
+.permission-category-caption {
+    padding: 0 12px 9px;
+    color: var(--fg-4);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .09em;
+    text-transform: uppercase;
+}
+
+body.abp-application-layout .permission-category-button {
+    min-height: 42px;
+    margin-bottom: 4px;
+    padding-inline: 12px !important;
+    color: var(--fg-2) !important;
+    border-radius: 10px;
+    justify-content: flex-start;
+    text-transform: none;
+}
+
+body.abp-application-layout .permission-category-button .mud-button-label {
+    width: 100%;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+body.abp-application-layout .permission-category-button .mud-button-icon-start {
+    color: var(--fg-3);
+}
+
+body.abp-application-layout .permission-category-button:hover {
+    color: var(--fg-1) !important;
+    background: var(--hover) !important;
+}
+
+body.abp-application-layout .permission-category-button--active {
+    color: var(--accent) !important;
+    background: var(--accent-soft) !important;
+    box-shadow: inset 3px 0 0 var(--accent);
+}
+
+[dir="rtl"] body.abp-application-layout .permission-category-button--active {
+    box-shadow: inset -3px 0 0 var(--accent);
+}
+
+body.abp-application-layout .permission-category-button--active .mud-button-icon-start {
+    color: var(--accent) !important;
+}
+
+.permission-category-label {
+    min-width: 0;
+    flex: 1 1 auto;
+    overflow: hidden;
+    text-align: start;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.permission-category-count {
+    min-width: 40px;
+    padding: 2px 7px;
+    color: var(--fg-3);
+    background: var(--surface);
+    border: 1px solid var(--bd-1);
+    border-radius: 999px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    line-height: 1.4;
+    text-align: center;
+}
+
+.permission-content {
+    min-width: 0;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 18px;
+    background: var(--surface);
+}
+
+.permission-content-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 14px;
+}
+
+.permission-content-head .mud-typography-h6 {
+    color: var(--fg-1);
+    font-family: var(--font-serif);
+    font-weight: 600;
+}
+
+.permission-content-head .mud-typography-caption {
+    color: var(--fg-3);
+}
+
+.permission-sections {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.permission-section {
+    overflow: hidden;
+    background: var(--surface);
+    border: 1px solid var(--bd-1);
+    border-radius: 12px;
+}
+
+.permission-section-head {
+    min-height: 60px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 10px 14px 10px 16px;
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--bd-1);
+}
+
+.permission-section-name {
+    color: var(--fg-1);
+    font-size: 14px;
+    font-weight: 700;
+}
+
+.permission-section-summary {
+    margin-top: 2px;
+    color: var(--fg-3);
+    font-size: 11px;
+}
+
+.permission-feature-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    padding: 12px;
+}
+
+.permission-feature {
+    min-width: 0;
+    align-self: start;
+    background: var(--bg-2);
+    border: 1px solid var(--bd-1);
+    border-radius: 10px;
+    transition: border-color 140ms ease, box-shadow 140ms ease, background 140ms ease;
+}
+
+.permission-feature:hover {
+    border-color: var(--bd-3);
+}
+
+.permission-feature--expanded {
+    grid-column: 1 / -1;
+    border-color: var(--accent-line);
+    box-shadow: var(--shadow-sm);
+}
+
+.permission-feature-head {
+    min-height: 50px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 6px 8px 6px 10px;
+}
+
+.permission-feature-head > .mud-checkbox {
+    min-width: 0;
+    flex: 1 1 auto;
+}
+
+.permission-feature-head > .mud-input-control {
+    min-width: 0;
+    overflow: hidden;
+    flex: 1 1 auto;
+}
+
+.permission-feature-head > .mud-input-control .mud-input-control-input-container,
+.permission-feature-head > .mud-input-control .mud-input {
+    min-width: 0;
+}
+
+.permission-feature-head .mud-checkbox label {
+    width: 100%;
+    min-width: 0;
+}
+
+.permission-feature-head .mud-checkbox .mud-typography {
+    overflow: hidden;
+    color: var(--fg-1);
+    font-size: 13px;
+    font-weight: 600;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.permission-feature-meta {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex: 0 0 auto;
+    color: var(--fg-4);
+    font-family: var(--font-mono);
+    font-size: 9px;
+}
+
+.permission-feature-toggle {
+    color: var(--fg-3) !important;
+}
+
+.permission-feature-children {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 4px 12px;
+    padding: 8px 12px 12px;
+    background: var(--surface-2);
+    border-top: 1px solid var(--bd-1);
+}
+
+.permission-child {
+    min-width: 0;
+    border-radius: 8px;
+}
+
+.permission-child:hover {
+    background: var(--hover);
+}
+
+.permission-child .mud-checkbox {
+    width: 100%;
+    margin: 0;
+}
+
+.permission-child .mud-checkbox .mud-typography {
+    color: var(--fg-2);
+    font-size: 12px;
+}
+
+.permission-depth-2 { padding-inline-start: 16px; }
+.permission-depth-3 { padding-inline-start: 30px; }
+
+.permission-empty-state {
+    min-height: 360px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 30px;
+    color: var(--fg-3);
+    text-align: center;
+}
+
+.permission-empty-state .mud-icon-root {
+    color: var(--accent);
+}
+
+.permission-empty-state--search {
+    min-height: 280px;
+    background: var(--surface-2);
+    border: 1px dashed var(--bd-2);
+    border-radius: 12px;
+}
+
+.permission-modal-footer {
+    min-height: 66px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 11px 14px 11px 20px;
+    background: var(--bg-2);
+    border-top: 1px solid var(--bd-1);
+}
+
+.permission-total {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    color: var(--fg-3);
+    font-size: 11px;
+}
+
+.permission-total-value {
+    color: var(--accent);
+    font-family: var(--font-mono);
+    font-size: 17px;
+    font-weight: 700;
+}
+
+.permission-readonly {
+    margin-inline-start: 8px;
+    color: var(--amber-text);
+}
+
+.permission-footer-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+@media (max-width: 760px) {
+    .permission-modal-container {
+        max-width: 100%;
+    }
+
+    .permission-modal {
+        height: calc(100vh - 20px);
+    }
+
+    .permission-search-bar {
+        grid-template-columns: minmax(0, 1fr) auto;
+        padding: 10px 12px;
+    }
+
+    .permission-search-clear {
+        display: none !important;
+    }
+
+    .permission-workspace {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto minmax(0, 1fr);
+    }
+
+    .permission-category-rail {
+        display: flex;
+        gap: 6px;
+        overflow-x: auto;
+        padding: 9px 10px;
+        border-inline-end: 0;
+        border-bottom: 1px solid var(--bd-1);
+    }
+
+    .permission-category-caption {
+        display: none;
+    }
+
+    body.abp-application-layout .permission-category-button {
+        width: auto !important;
+        min-width: max-content;
+        margin: 0;
+    }
+
+    body.abp-application-layout .permission-category-button--active,
+    [dir="rtl"] body.abp-application-layout .permission-category-button--active {
+        box-shadow: inset 0 -2px 0 var(--accent);
+    }
+
+    .permission-category-count {
+        min-width: 34px;
+    }
+
+    .permission-content {
+        padding: 12px;
+    }
+
+    .permission-content-head,
+    .permission-section-head {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 4px;
+    }
+
+    .permission-feature-list,
+    .permission-feature-children {
+        grid-template-columns: 1fr;
+    }
+
+    .permission-feature--expanded {
+        grid-column: auto;
+    }
+
+    .permission-total {
+        display: none;
+    }
+
+    .permission-modal-footer {
+        justify-content: flex-end;
+        padding: 9px 12px;
+    }
+}
 
 /* ========================================================================
    Shop settings tabs and background-job fields

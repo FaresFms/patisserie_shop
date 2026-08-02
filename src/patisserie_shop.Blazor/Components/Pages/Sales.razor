@@ -115,7 +115,7 @@
                 </TemplateColumn>
                 <TemplateColumn T="SaleDto" Title="@OpsL["TotalAmount"]" SortBy="x => x.TotalAmount">
                     <CellTemplate>
-                        <SoftText Style="font-weight:600;">@($"{context.Item.TotalAmount:N2} {context.Item.Currency}")</SoftText>
+                        <SoftText Style="font-weight:600;">@FormatShopMoney(context.Item.TotalAmount)</SoftText>
                     </CellTemplate>
                 </TemplateColumn>
                 <PropertyColumn T="SaleDto" TProperty="string" Property="x => x.CreatorUserName!" Title="@OpsL["RecordedBy"]" Sortable="false" />
@@ -230,6 +230,7 @@
 
     protected override async Task OnInitializedAsync()
     {
+        await LoadShopCurrencyAsync();
         _canManage = await AuthorizationService.IsGrantedAsync(OperationsPermissions.Sales.Manage);
         _canDelete = await AuthorizationService.IsGrantedAsync(OperationsPermissions.Sales.Delete);
 

@@ -16,19 +16,51 @@
 @inject PageLayout PageLayout
 @inject IStringLocalizer<InventoryResource> InvL
 
-@{
+@if (!Embedded)
+{
     PageLayout.Title = L["InvDash:Title"].Value;
 }
 
-<div class="dashboard-root">
+<div class="dashboard-root @(Embedded ? "dashboard-root--embedded" : null)">
 
     @* ── Header Bar ── *@
-    <div class="dash-header mb-5">
-        <div class="dash-header-left">
-            <MudIcon Icon="@Icons.Material.Filled.Dashboard" Class="dash-header-icon" />
+    @if (!Embedded)
+    {
+        <div class="dash-header mb-5">
+            <div class="dash-header-left">
+                <MudIcon Icon="@Icons.Material.Filled.Dashboard" Class="dash-header-icon" />
+                <div>
+                    <MudText Typo="Typo.h5" Class="dash-title">@L["InvDash:Title"]</MudText>
+                    <MudText Typo="Typo.body2" Class="dash-subtitle">
+                        @if (_lastRefreshed.HasValue)
+                        {
+                            <BrowserLocalTime Value="@_lastRefreshed.Value"
+                                              Display="BrowserTimeDisplay.Time"
+                                              Template="@L["InvDash:LastUpdated"]" />
+                        }
+                        else
+                        {
+                            <span>@L["InvDash:LoadingData"]</span>
+                        }
+                    </MudText>
+                </div>
+            </div>
+            <MudButton Variant="Variant.Outlined"
+                       Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.Refresh"
+                       OnClick="RefreshAsync"
+                       Disabled="_loading"
+                       Class="dash-refresh-btn">
+                @(_loading ? L["InvDash:Refreshing"] : L["InvDash:Refresh"])
+            </MudButton>
+        </div>
+    }
+    else
+    {
+        <div class="dash-embedded-toolbar">
             <div>
-                <MudText Typo="Typo.h5" Class="dash-title">@L["InvDash:Title"]</MudText>
-                <MudText Typo="Typo.body2" Class="dash-subtitle">
+                <span class="dash-embedded-kicker">@L["OwnerDash:InventorySnapshot"]</span>
+                <span class="dash-embedded-time">
                     @if (_lastRefreshed.HasValue)
                     {
                         <BrowserLocalTime Value="@_lastRefreshed.Value"
@@ -37,26 +69,24 @@
                     }
                     else
                     {
-                        <span>@L["InvDash:LoadingData"]</span>
+                        @L["InvDash:LoadingData"]
                     }
-                </MudText>
+                </span>
             </div>
+            <SoftButton Variant="Variant.Text"
+                        Color="Color.Primary"
+                        StartIcon="@Icons.Material.Filled.Refresh"
+                        OnClick="RefreshAsync"
+                        Disabled="_loading">
+                @(_loading ? L["InvDash:Refreshing"] : L["InvDash:Refresh"])
+            </SoftButton>
         </div>
-        <MudButton Variant="Variant.Outlined"
-                   Color="Color.Primary"
-                   StartIcon="@Icons.Material.Filled.Refresh"
-                   OnClick="RefreshAsync"
-                   Disabled="_loading"
-                   Class="dash-refresh-btn">
-            @(_loading ? L["InvDash:Refreshing"] : L["InvDash:Refresh"])
-        </MudButton>
-    </div>
+    }
 
     @if (_loading && _data == null)
     {
         <div class="dash-loading-wrap">
-            <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Large" />
-            <MudText Typo="Typo.body1" Class="mt-4" Style="opacity:.6">@L["InvDash:LoadingDashboard"]</MudText>
+            <SoftDonutLoader Fill="true" Label="@L["InvDash:LoadingDashboard"]" />
         </div>
     }
     else if (_data != null)
@@ -423,6 +453,25 @@
         padding: 4px 0;
         max-width: 1400px;
     }
+    .dashboard-root--embedded { max-width: none; }
+
+    .dash-embedded-toolbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        margin: 0 24px 14px;
+        padding: 7px 0 10px;
+        border-bottom: 1px solid var(--bd-1);
+    }
+    .dash-embedded-toolbar > div { display: flex; flex-direction: column; min-width: 0; }
+    .dash-embedded-kicker {
+        color: var(--fg-1);
+        font-family: var(--font-serif);
+        font-size: 17px;
+        font-weight: 650;
+    }
+    .dash-embedded-time { color: var(--fg-3); font-size: 12px; }
 
     /* ─── Header ────────────────────────────────────────── */
     .dash-header {
@@ -853,6 +902,8 @@
 </style>
 
 @code {
+    [Parameter] public bool Embedded { get; set; }
+
     private InventoryDashboardDto? _data;
     private bool _loading;
     private DateTime? _lastRefreshed;

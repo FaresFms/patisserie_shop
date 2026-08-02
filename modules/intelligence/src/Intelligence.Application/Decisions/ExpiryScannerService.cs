@@ -8,12 +8,14 @@ using Intelligence.Localization;
 using Intelligence.Rules;
 using Inventory.Entities;
 using Inventory.StockBatches;
+using Inventory.Settings;
 using Microsoft.Extensions.Localization;
 using Microsoft.Extensions.Logging;
 using Volo.Abp.DependencyInjection;
 using Volo.Abp.Domain.Repositories;
 using Volo.Abp.Guids;
 using Volo.Abp.Linq;
+using Volo.Abp.Settings;
 
 namespace Intelligence.Decisions;
 
@@ -46,6 +48,7 @@ public class ExpiryScannerService : ITransientDependency
     private readonly IAsyncQueryableExecuter _asyncExecuter;
     private readonly IStringLocalizer<IntelligenceResource> _localizer;
     private readonly ILogger<ExpiryScannerService> _logger;
+    private readonly ISettingProvider _settingProvider;
 
     public ExpiryScannerService(
         IStockBatchRepository batchRepository,
@@ -55,7 +58,8 @@ public class ExpiryScannerService : ITransientDependency
         IGuidGenerator guidGenerator,
         IAsyncQueryableExecuter asyncExecuter,
         IStringLocalizer<IntelligenceResource> localizer,
-        ILogger<ExpiryScannerService> logger)
+        ILogger<ExpiryScannerService> logger,
+        ISettingProvider settingProvider)
     {
         _batchRepository = batchRepository;
         _ruleRepository = ruleRepository;
@@ -65,6 +69,7 @@ public class ExpiryScannerService : ITransientDependency
         _asyncExecuter = asyncExecuter;
         _localizer = localizer;
         _logger = logger;
+        _settingProvider = settingProvider;
     }
 
     public async Task ScanAsync()
@@ -232,6 +237,7 @@ public class ExpiryScannerService : ITransientDependency
 
         // Pending-dedup per product+branch+type, same convention as the other passes.
         var seen = await LoadPendingPairsAsync(DecisionTypes.WasteWriteOff);
+        var currency = await GetShopCurrencyAsync();
 
         var created = 0;
 
@@ -271,9 +277,9 @@ public class ExpiryScannerService : ITransientDependency
                 ordered.Count,
                 oldest.BatchNumber,
                 DescribeExpiry(oldest.ExpiryDate, today),
-                FormatMoney(wasteCost, product.Currency),
+                FormatMoney(wasteCost, currency),
                 expiredQty,
-                FormatMoney(product.CostPrice, product.Currency),
+                FormatMoney(product.CostPrice, currency),
                 rule.RuleName];
 
             var log = new AppDecisionLog(
@@ -326,4 +332,8 @@ public class ExpiryScannerService : ITransientDependency
 
     private static string FormatMoney(decimal value, string currency)
         => $"{value.ToString("N2", CultureInfo.CurrentCulture)} {currency}";
+
+    private async Task<string> GetShopCurrencyAsync()
+        => ShopCurrencySettings.Normalize(
+            await _settingProvider.GetOrNullAsync(ShopCurrencySettings.Name));
 }

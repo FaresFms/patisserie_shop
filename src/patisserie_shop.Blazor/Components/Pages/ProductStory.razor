@@ -79,13 +79,7 @@
             }
             else if (_data == null)
             {
-                <div class="ps-skeletons">
-                    <SoftSkeleton SkeletonType="SkeletonType.Rectangle" Height="64px" Width="100%" />
-                    @for (var i = 0; i < 5; i++)
-                    {
-                        <SoftSkeleton SkeletonType="SkeletonType.Rectangle" Height="56px" Width="100%" />
-                    }
-                </div>
+                <SoftDonutLoader Fill="true" />
             }
             else
             {

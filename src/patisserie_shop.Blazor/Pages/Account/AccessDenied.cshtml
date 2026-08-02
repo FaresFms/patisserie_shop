@@ -1,0 +1,24 @@
+@page
+@using Microsoft.AspNetCore.Mvc.Localization
+@using patisserie_shop.Localization
+@model Volo.Abp.Account.Web.Pages.Account.AccessDeniedModel
+@inject IHtmlLocalizer<patisserie_shopResource> L
+@{
+    Layout = "_AccountLayout";
+    ViewData["Title"] = L["Account:AccessDeniedTitle"].Value;
+}
+
+<main class="access-page-shell" role="main">
+    <section class="access-page-card" role="alert" aria-labelledby="access-page-title">
+        <div class="access-page-mark" aria-hidden="true">
+            <span class="material-icons-outlined">lock_person</span>
+        </div>
+        <div class="access-page-code">403</div>
+        <h1 id="access-page-title">@L["Account:AccessDeniedTitle"]</h1>
+        <p>@L["Account:AccessDeniedDescription"]</p>
+        <a class="access-page-action" href="/">
+            <span class="material-icons-outlined">home</span>
+            @L["Account:ReturnHome"]
+        </a>
+    </section>
+</main>

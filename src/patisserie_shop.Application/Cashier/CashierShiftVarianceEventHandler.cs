@@ -6,10 +6,10 @@ using Intelligence.Decisions;
 using Intelligence.Entities;
 using Intelligence.Localization;
 using Inventory.Entities;
+using Inventory.Settings;
 using Microsoft.Extensions.Localization;
 using Operations.Events;
 using patisserie_shop.Localization;
-using patisserie_shop.Settings;
 using Volo.Abp.DependencyInjection;
 using Volo.Abp.Domain.Repositories;
 using Volo.Abp.EventBus.Distributed;
@@ -95,13 +95,8 @@ public class CashierShiftVarianceEventHandler
     }
 
     private async Task<string> GetDefaultCurrencyAsync()
-    {
-        var currency = (await _settingProvider.GetOrNullAsync(patisserie_shopSettings.DefaultCurrency))
-            ?.Trim()
-            .ToUpperInvariant();
-
-        return currency?.Length == 3 ? currency : "USD";
-    }
+        => ShopCurrencySettings.Normalize(
+            await _settingProvider.GetOrNullAsync(ShopCurrencySettings.Name));
 
     private static string FormatMoney(decimal value, string currency)
         => $"{value.ToString("N2", CultureInfo.CurrentCulture)} {currency}";

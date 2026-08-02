@@ -2,6 +2,7 @@ using System;
 using System.Globalization;
 using System.Threading.Tasks;
 using Intelligence.Decisions;
+using Inventory.Settings;
 using Microsoft.AspNetCore.Authorization;
 using patisserie_shop.Permissions;
 using Volo.Abp;
@@ -43,7 +44,8 @@ public class ShopSettingsAppService : patisserie_shopAppService, IShopSettingsAp
             ShopAddress = await _settingProvider.GetOrNullAsync(patisserie_shopSettings.ShopAddress),
             ShopPhone = await _settingProvider.GetOrNullAsync(patisserie_shopSettings.ShopPhone),
             ReceiptFooterMessage = await _settingProvider.GetOrNullAsync(patisserie_shopSettings.ReceiptFooterMessage),
-            DefaultCurrency = await _settingProvider.GetOrNullAsync(patisserie_shopSettings.DefaultCurrency) ?? "USD",
+            DefaultCurrency = ShopCurrencySettings.Normalize(
+                await _settingProvider.GetOrNullAsync(patisserie_shopSettings.DefaultCurrency)),
             DefaultMinimumStock = await _settingProvider.GetAsync(patisserie_shopSettings.DefaultMinimumStock, defaultValue: 5),
             AutopilotEnabled = await _settingProvider.GetAsync(patisserie_shopSettings.AutopilotEnabled, defaultValue: false),
             DeadStockScanIntervalMinutes = await _settingProvider.GetAsync<int>(
@@ -68,7 +70,7 @@ public class ShopSettingsAppService : patisserie_shopAppService, IShopSettingsAp
             throw new BusinessException(patisserie_shopDomainErrorCodes.ShopNameRequired);
         }
 
-        var currency = (input.DefaultCurrency ?? "USD").Trim().ToUpperInvariant();
+        var currency = input.DefaultCurrency?.Trim().ToUpperInvariant() ?? string.Empty;
         if (currency.Length != 3)
         {
             throw new BusinessException(patisserie_shopDomainErrorCodes.InvalidCurrencyCode)

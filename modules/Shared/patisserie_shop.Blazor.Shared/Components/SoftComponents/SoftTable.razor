@@ -3,3 +3,12 @@
 @{
     base.BuildRenderTree(__builder);
 }
+
+@code {
+    protected override void OnInitialized()
+    {
+        LoadingContent ??= @<SoftDonutLoader Compact="true" />;
+        LoadingProgressColor = MudBlazor.Color.Primary;
+        base.OnInitialized();
+    }
+}

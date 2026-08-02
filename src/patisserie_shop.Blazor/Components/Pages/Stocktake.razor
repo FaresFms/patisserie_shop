@@ -130,10 +130,7 @@
 
         @if (_loading)
         {
-            <SoftStack Spacing="2" Class="py-6">
-                <SoftSkeleton Height="74px" />
-                <SoftSkeleton Height="320px" />
-            </SoftStack>
+            <SoftDonutLoader Fill="true" />
         }
         else if (_accessibleBranches.Count == 0)
         {
@@ -421,7 +418,7 @@
         <SoftCardContent>
             @if (_historyLoading)
             {
-                <SoftSkeleton Height="150px" />
+                <SoftDonutLoader Compact="true" />
             }
             else if (_history.Count == 0)
             {

@@ -3,12 +3,14 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Inventory.Entities;
+using Inventory.Settings;
 using Microsoft.AspNetCore.Authorization;
 using Production.Entities;
 using Production.Formulas;
 using Production.Permissions;
 using Volo.Abp.Application.Dtos;
 using Volo.Abp.Domain.Repositories;
+using Volo.Abp.Settings;
 
 namespace Production.BranchRequests;
 
@@ -21,6 +23,7 @@ public class BranchProductionRequestAppService : ProductionAppService, IBranchPr
     private readonly IRepository<AppBranch, Guid> _branchRepository;
     private readonly IRepository<AppProduct, Guid> _productRepository;
     private readonly IAuthorizationService _authorizationService;
+    private readonly ISettingProvider _settingProvider;
 
     public BranchProductionRequestAppService(
         IBranchProductionRequestRepository requestRepository,
@@ -28,7 +31,8 @@ public class BranchProductionRequestAppService : ProductionAppService, IBranchPr
         IProductionFormulaRepository formulaRepository,
         IRepository<AppBranch, Guid> branchRepository,
         IRepository<AppProduct, Guid> productRepository,
-        IAuthorizationService authorizationService)
+        IAuthorizationService authorizationService,
+        ISettingProvider settingProvider)
     {
         _requestRepository = requestRepository;
         _requestManager = requestManager;
@@ -36,6 +40,7 @@ public class BranchProductionRequestAppService : ProductionAppService, IBranchPr
         _branchRepository = branchRepository;
         _productRepository = productRepository;
         _authorizationService = authorizationService;
+        _settingProvider = settingProvider;
     }
 
     public async Task<BranchProductionRequestDto> GetAsync(Guid id)
@@ -149,10 +154,14 @@ public class BranchProductionRequestAppService : ProductionAppService, IBranchPr
     public async Task<List<ProductLookupDto>> GetRequestableProductsLookupAsync(string? filter = null)
     {
         var products = await _formulaRepository.GetProducibleFinishedProductsLookupAsync(filter, maxResults: 200);
+        var currency = ShopCurrencySettings.Normalize(
+            await _settingProvider.GetOrNullAsync(ShopCurrencySettings.Name));
         var dtos = new List<ProductLookupDto>();
         foreach (var product in products)
         {
-            dtos.Add(ObjectMapper.Map<ProductionProductLookup, ProductLookupDto>(product));
+            var dto = ObjectMapper.Map<ProductionProductLookup, ProductLookupDto>(product);
+            dto.Currency = currency;
+            dtos.Add(dto);
         }
         return dtos;
     }

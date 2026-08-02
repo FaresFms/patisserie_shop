@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Inventory;
 using Inventory.BranchInventory;
 using Inventory.Entities;
+using Inventory.Settings;
 using Inventory.StockBatches;
 using Microsoft.AspNetCore.Authorization;
 using Operations.Cashiers;
@@ -528,10 +529,8 @@ public class CashierAppService : OperationsAppService, ICashierAppService
     /// key is referenced by its literal name (same pattern as ProductionOrderAppService).
     /// </summary>
     private async Task<string> GetDefaultCurrencyAsync()
-    {
-        var currency = await _settingProvider.GetOrNullAsync("patisserie_shop.Operations.DefaultCurrency");
-        return string.IsNullOrWhiteSpace(currency) ? "USD" : currency.Trim().ToUpperInvariant();
-    }
+        => ShopCurrencySettings.Normalize(
+            await _settingProvider.GetOrNullAsync(ShopCurrencySettings.Name));
 
     /// <summary>
     /// The branch a cashier is assigned to, parsed from their persistent
@@ -633,7 +632,7 @@ public class CashierAppService : OperationsAppService, ICashierAppService
             BranchName = branch.Name,
             SaleDate = sale.SaleDate,
             TotalAmount = sale.TotalAmount,
-            Currency = sale.Currency,
+            Currency = await GetDefaultCurrencyAsync(),
             Notes = sale.Notes,
             CreationTime = sale.CreationTime,
             CreatorId = sale.CreatorId,

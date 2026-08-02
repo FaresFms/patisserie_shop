@@ -1,0 +1,381 @@
+@using System.Globalization
+@using Intelligence.Permissions
+@using Production.Permissions
+@using Volo.Abp.AspNetCore.Components.Web.Theming.Layout
+@inherits patisserie_shopComponentBase
+@inject PageLayout PageLayout
+
+@{
+    PageLayout.Title = L["OwnerDash:PageTitle"].Value;
+}
+
+<div class="owner-dashboard">
+    <section class="owner-hero">
+        <div class="owner-hero-copy">
+            <div class="owner-live-label">
+                <span class="owner-live-dot"></span>
+                @L["OwnerDash:LiveLabel"]
+            </div>
+            <h1>@L["OwnerDash:Title"]</h1>
+            <p>@L["OwnerDash:Subtitle"]</p>
+        </div>
+
+        <div class="owner-hero-actions">
+            <div class="owner-date-card">
+                <span class="owner-date-icon">
+                    <SoftIcon Icon="@Icons.Material.Outlined.CalendarMonth" />
+                </span>
+                <span>
+                    <small>@L["OwnerDash:Today"]</small>
+                    <strong>
+                        <BrowserLocalTime Value="@_renderedAtUtc" Display="BrowserTimeDisplay.LongDate" />
+                    </strong>
+                </span>
+            </div>
+
+            @if (_canViewIntelligence)
+            {
+                <SoftButton Variant="Variant.Outlined"
+                        Color="MudBlazor.Color.Primary"
+                            StartIcon="@Icons.Material.Outlined.EventNote"
+                            Href="/intelligence/reorder-calendar"
+                            Class="owner-planner-link">
+                    @L["OwnerDash:OpenPlanner"]
+                </SoftButton>
+            }
+        </div>
+    </section>
+
+    <div class="owner-dashboard-tabs" role="tablist" aria-label="@L["OwnerDash:PageTitle"]">
+        <SoftButton Variant="Variant.Text"
+                    StartIcon="@Icons.Material.Filled.QueryStats"
+                    Class="@TabButtonClass(0)"
+                    OnClick="@(() => SelectTab(0))"
+                    id="owner-tab-overview"
+                    role="tab"
+                    aria-controls="owner-panel-overview"
+                    aria-selected="@AriaSelected(0)"
+                    tabindex="@TabIndex(0)">
+            @L["OwnerDash:Tab:Overview"]
+        </SoftButton>
+
+        <SoftButton Variant="Variant.Text"
+                    StartIcon="@Icons.Material.Filled.Inventory2"
+                    Class="@TabButtonClass(1)"
+                    OnClick="@(() => SelectTab(1))"
+                    id="owner-tab-inventory"
+                    role="tab"
+                    aria-controls="owner-panel-inventory"
+                    aria-selected="@AriaSelected(1)"
+                    tabindex="@TabIndex(1)">
+            @L["OwnerDash:Tab:Inventory"]
+        </SoftButton>
+
+        @if (_canViewIntelligence)
+        {
+            <SoftButton Variant="Variant.Text"
+                        StartIcon="@Icons.Material.Filled.Insights"
+                        Class="@TabButtonClass(2)"
+                        OnClick="@(() => SelectTab(2))"
+                        id="owner-tab-intelligence"
+                        role="tab"
+                        aria-controls="owner-panel-intelligence"
+                        aria-selected="@AriaSelected(2)"
+                        tabindex="@TabIndex(2)">
+                @L["OwnerDash:Tab:Intelligence"]
+            </SoftButton>
+        }
+
+        @if (_canViewProduction)
+        {
+            <SoftButton Variant="Variant.Text"
+                        StartIcon="@Icons.Material.Filled.Factory"
+                        Class="@TabButtonClass(ProductionTabIndex)"
+                        OnClick="@(() => SelectTab(ProductionTabIndex))"
+                        id="owner-tab-production"
+                        role="tab"
+                        aria-controls="owner-panel-production"
+                        aria-selected="@AriaSelected(ProductionTabIndex)"
+                        tabindex="@TabIndex(ProductionTabIndex)">
+                @L["OwnerDash:Tab:Production"]
+            </SoftButton>
+        }
+    </div>
+
+    @if (_visitedTabs.Contains(0))
+    {
+        <section id="owner-panel-overview"
+                 class="owner-tab-panel"
+                 role="tabpanel"
+                 aria-labelledby="owner-tab-overview"
+                 hidden="@(_activeTabIndex != 0)">
+            <AdminDashboard Embedded="true" />
+        </section>
+    }
+
+    @if (_visitedTabs.Contains(1))
+    {
+        <section id="owner-panel-inventory"
+                 class="owner-tab-panel"
+                 role="tabpanel"
+                 aria-labelledby="owner-tab-inventory"
+                 hidden="@(_activeTabIndex != 1)">
+            <InventoryDashboard Embedded="true" />
+        </section>
+    }
+
+    @if (_canViewIntelligence && _visitedTabs.Contains(2))
+    {
+        <section id="owner-panel-intelligence"
+                 class="owner-tab-panel"
+                 role="tabpanel"
+                 aria-labelledby="owner-tab-intelligence"
+                 hidden="@(_activeTabIndex != 2)">
+            <OwnerIntelligenceDashboard />
+        </section>
+    }
+
+    @if (_canViewProduction && _visitedTabs.Contains(ProductionTabIndex))
+    {
+        <section id="owner-panel-production"
+                 class="owner-tab-panel"
+                 role="tabpanel"
+                 aria-labelledby="owner-tab-production"
+                 hidden="@(_activeTabIndex != ProductionTabIndex)">
+            <ProductionDashboard Embedded="true" />
+        </section>
+    }
+</div>
+
+<style>
+    .owner-dashboard {
+        width: 100%;
+        min-width: 0;
+        animation: owner-enter .28s ease-out;
+    }
+
+    @@keyframes owner-enter {
+        from { opacity: 0; transform: translateY(5px); }
+        to { opacity: 1; transform: none; }
+    }
+
+    .owner-hero {
+        position: relative;
+        isolation: isolate;
+        overflow: hidden;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 24px;
+        margin: 4px 24px 16px;
+        padding: 22px 24px;
+        background:
+            radial-gradient(circle at 92% 12%, color-mix(in srgb, var(--accent) 18%, transparent), transparent 34%),
+            linear-gradient(135deg, var(--surface), color-mix(in srgb, var(--accent-soft) 58%, var(--surface)));
+        border: 1px solid var(--accent-line);
+        border-radius: var(--r-lg);
+        box-shadow: var(--shadow-sm);
+    }
+
+    .owner-hero::after {
+        content: "";
+        position: absolute;
+        z-index: -1;
+        width: 190px;
+        height: 190px;
+        inset-inline-end: -76px;
+        bottom: -116px;
+        border: 22px solid color-mix(in srgb, var(--accent) 8%, transparent);
+        border-radius: 50%;
+    }
+
+    .owner-hero-copy { min-width: 0; }
+
+    .owner-live-label {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        color: var(--accent);
+        font-size: 10.5px;
+        font-weight: 750;
+        letter-spacing: .1em;
+        text-transform: uppercase;
+    }
+
+    .owner-live-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--success);
+        box-shadow: 0 0 0 4px color-mix(in srgb, var(--success) 14%, transparent);
+        animation: owner-pulse 2s ease-out infinite;
+    }
+
+    @@keyframes owner-pulse {
+        0%, 100% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--success) 14%, transparent); }
+        50% { box-shadow: 0 0 0 8px color-mix(in srgb, var(--success) 3%, transparent); }
+    }
+
+    .owner-hero h1 {
+        margin: 6px 0 4px;
+        color: var(--fg-1);
+        font-family: var(--font-serif);
+        font-size: clamp(25px, 3vw, 36px);
+        font-weight: 650;
+        letter-spacing: -.025em;
+    }
+
+    .owner-hero p {
+        max-width: 680px;
+        margin: 0;
+        color: var(--fg-2);
+        font-size: 13.5px;
+        line-height: 1.55;
+    }
+
+    .owner-hero-actions {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 12px;
+        flex-wrap: wrap;
+    }
+
+    .owner-date-card {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        min-width: 210px;
+        padding: 9px 12px;
+        background: color-mix(in srgb, var(--surface) 82%, transparent);
+        border: 1px solid var(--bd-1);
+        border-radius: var(--r-md);
+    }
+
+    .owner-date-icon {
+        width: 34px;
+        height: 34px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: var(--r-sm);
+        background: var(--accent-soft);
+        color: var(--accent);
+        flex: none;
+    }
+
+    .owner-date-icon .mud-icon-root { font-size: 19px; }
+    .owner-date-card > span:last-child { display: flex; flex-direction: column; min-width: 0; }
+    .owner-date-card small {
+        color: var(--fg-3);
+        font-size: 9.5px;
+        font-weight: 700;
+        letter-spacing: .08em;
+        text-transform: uppercase;
+    }
+    .owner-date-card strong {
+        overflow: hidden;
+        color: var(--fg-1);
+        font-family: var(--font-serif);
+        font-size: 13px;
+        font-weight: 600;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .owner-planner-link { white-space: nowrap; }
+
+    .owner-dashboard-tabs {
+        display: flex;
+        align-items: stretch;
+        min-width: 0;
+        margin: 0 24px;
+        background: var(--surface) !important;
+        border: 1px solid var(--bd-1);
+        border-radius: var(--r-md);
+        box-shadow: var(--shadow-sm);
+        overflow-x: auto;
+        scrollbar-color: var(--bd-2) transparent;
+        scrollbar-width: thin;
+    }
+
+    .owner-tab-button {
+        position: relative;
+        flex: 1 0 160px;
+        min-height: 52px;
+        border-radius: 0 !important;
+        color: var(--fg-2) !important;
+        font-size: 13px;
+        font-weight: 650;
+        letter-spacing: 0;
+        text-transform: none;
+    }
+
+    .owner-tab-button:not(:last-child) { border-inline-end: 1px solid var(--bd-1); }
+    .owner-tab-button:hover { background: var(--hover) !important; }
+    .owner-tab-button--active {
+        background: var(--accent-soft) !important;
+        color: var(--accent) !important;
+    }
+    .owner-tab-button--active::after {
+        content: "";
+        position: absolute;
+        inset-inline: 0;
+        bottom: 0;
+        height: 3px;
+        background: var(--accent) !important;
+    }
+    .owner-tab-panel { min-width: 0; padding-top: 12px; }
+    .owner-tab-panel[hidden] { display: none !important; }
+
+    html[dir="rtl"] .owner-dashboard { direction: rtl; text-align: right; }
+
+    @@media (max-width: 900px) {
+        .owner-hero { align-items: flex-start; flex-direction: column; }
+        .owner-hero-actions { width: 100%; justify-content: flex-start; }
+    }
+
+    @@media (max-width: 640px) {
+        .owner-hero { margin-inline: 10px; padding: 18px; }
+        .owner-dashboard-tabs { margin-inline: 10px; }
+        .owner-tab-button { flex-basis: 145px; padding-inline: 10px; font-size: 11.5px; }
+        .owner-date-card { min-width: 0; flex: 1 1 190px; }
+    }
+
+    @@media (prefers-reduced-motion: reduce) {
+        .owner-dashboard, .owner-live-dot { animation: none; }
+    }
+</style>
+
+@code {
+    private readonly DateTime _renderedAtUtc = DateTime.UtcNow;
+    private readonly HashSet<int> _visitedTabs = new() { 0 };
+    private bool _canViewIntelligence;
+    private bool _canViewProduction;
+    private int _activeTabIndex;
+    private int ProductionTabIndex => _canViewIntelligence ? 3 : 2;
+
+    private void SelectTab(int index)
+    {
+        _activeTabIndex = index;
+        _visitedTabs.Add(index);
+    }
+
+    private string TabButtonClass(int index) =>
+        _activeTabIndex == index ? "owner-tab-button owner-tab-button--active" : "owner-tab-button";
+
+    private string AriaSelected(int index) => _activeTabIndex == index ? "true" : "false";
+    private int TabIndex(int index) => _activeTabIndex == index ? 0 : -1;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var intelligencePermissionTask = AuthorizationService.IsGrantedAsync(
+            IntelligencePermissions.DecisionLogs.Default);
+        var productionPermissionTask = AuthorizationService.IsGrantedAsync(
+            ProductionPermissions.Dashboard.Default);
+
+        await Task.WhenAll(intelligencePermissionTask, productionPermissionTask);
+        _canViewIntelligence = await intelligencePermissionTask;
+        _canViewProduction = await productionPermissionTask;
+    }
+}

@@ -1,4 +1,4 @@
-﻿@using System.Globalization
+@using System.Globalization
 @using Microsoft.Extensions.Hosting
 @using Volo.Abp.AspNetCore.Components.Server.LeptonXLiteTheme.Bundling
 @using Volo.Abp.Localization
@@ -19,6 +19,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>@L["AppName"]</title>
     <base href="/" />
+
+    @* Restore the saved theme before any stylesheet is parsed. Keeping this
+       parser-blocking prevents a light first paint when dark mode is saved. *@
+    <script src="js/theme-bridge.js"></script>
 
     <AbpStyles BundleName="@BlazorLeptonXLiteThemeBundles.Styles.Global" />
 
@@ -50,7 +54,6 @@
     <AbpScripts BundleName="@BlazorLeptonXLiteThemeBundles.Scripts.Global" />
 
     <script src="_content/MudBlazor/MudBlazor.min.js"></script>
-    <script src="js/theme-bridge.js"></script>
     <script src="js/browser-timezone.js"></script>
     <script src="js/pos-print.js"></script>
     <script src="js/report-tools.js"></script>
