@@ -1,0 +1,757 @@
+@using System.Globalization
+@using Intelligence.Decisions
+@using Intelligence.Localization
+@using Intelligence.Velocity
+@using patisserie_shop.Planning
+@inherits patisserie_shopComponentBase
+@inject IReorderCalendarAppService CalendarAppService
+@inject IDecisionLogAppService DecisionLogAppService
+@inject IProductVelocityAppService VelocityAppService
+@inject IStringLocalizer<IntelligenceResource> IntL
+
+<div class="owner-intelligence">
+    <div class="oi-toolbar">
+        <div>
+            <span class="oi-kicker">@L["OwnerDash:IntelligenceSnapshot"]</span>
+            <span class="oi-toolbar-sub">@L["OwnerDash:IntelligenceSnapshotSub"]</span>
+        </div>
+        <div class="oi-toolbar-actions">
+            <SoftButton Variant="Variant.Text"
+                        Color="MudBlazor.Color.Primary"
+                        StartIcon="@Icons.Material.Filled.Refresh"
+                        OnClick="LoadAsync"
+                        Disabled="_loading">
+                @(_loading ? L["AdminDash:Refreshing"] : L["Refresh"])
+            </SoftButton>
+            <SoftButton Variant="Variant.Outlined"
+                        Color="MudBlazor.Color.Primary"
+                        StartIcon="@Icons.Material.Outlined.OpenInNew"
+                        Href="/intelligence/decision-log">
+                @L["OwnerDash:OpenDecisionLog"]
+            </SoftButton>
+        </div>
+    </div>
+
+    @if (_error != null)
+    {
+        <SoftAlert Severity="Severity.Error" Variant="Variant.Filled" Class="ma-4">
+            <strong>@L["OwnerDash:IntelligenceLoadFailed"]</strong> @_error
+        </SoftAlert>
+    }
+    else if (_calendar == null || _summary == null)
+    {
+        <SoftDonutLoader Fill="true" Label="@L["OwnerDash:LoadingIntelligence"]" />
+    }
+    else
+    {
+        <div class="oi-signal-grid">
+            <article class="oi-signal oi-signal--danger">
+                <span class="oi-signal-icon"><SoftIcon Icon="@Icons.Material.Outlined.CrisisAlert" /></span>
+                <span class="oi-signal-copy">
+                    <strong>@_calendar.StockoutCount</strong>
+                    <span>@IntL["ReorderCalendar:Summary:Stockouts"]</span>
+                    <small>@L["OwnerDash:ThisMonth"]</small>
+                </span>
+            </article>
+
+            <article class="oi-signal oi-signal--warn">
+                <span class="oi-signal-icon"><SoftIcon Icon="@Icons.Material.Outlined.Inventory" /></span>
+                <span class="oi-signal-copy">
+                    <strong>@_calendar.ExpiryCount</strong>
+                    <span>@IntL["ReorderCalendar:Summary:Expiries"]</span>
+                    <small>@L["OwnerDash:ThisMonth"]</small>
+                </span>
+            </article>
+
+            <article class="oi-signal oi-signal--success">
+                <span class="oi-signal-icon"><SoftIcon Icon="@Icons.Material.Outlined.LocalShipping" /></span>
+                <span class="oi-signal-copy">
+                    <strong>@_calendar.DeliveryCount</strong>
+                    <span>@IntL["ReorderCalendar:Summary:Deliveries"]</span>
+                    <small>@L["OwnerDash:ThisMonth"]</small>
+                </span>
+            </article>
+
+            <article class="oi-signal oi-signal--accent">
+                <span class="oi-signal-icon"><SoftIcon Icon="@Icons.Material.Outlined.Rule" /></span>
+                <span class="oi-signal-copy">
+                    <strong>@_summary.TotalPending</strong>
+                    <span>@IntL["DecisionLog:Summary:TotalPending"]</span>
+                    <small>@L["OwnerDash:ResolvedToday", _summary.ResolvedToday]</small>
+                </span>
+            </article>
+        </div>
+
+        <div class="oi-planning-grid">
+            <section class="oi-card oi-calendar-card">
+                <header class="oi-card-head oi-calendar-head">
+                    <div>
+                        <h2>@L["OwnerDash:PlanningCalendar"]</h2>
+                        <p>@IntL["ReorderCalendar:Subtitle"]</p>
+                    </div>
+                    <div class="oi-month-nav">
+                        <SoftIconButton Icon="@PreviousMonthIcon"
+                                        Size="MudBlazor.Size.Small"
+                                        OnClick="PreviousMonthAsync"
+                                        aria-label="@L["OwnerDash:PreviousMonth"]"
+                                        title="@L["OwnerDash:PreviousMonth"]"
+                                        Disabled="_loading" />
+                        <strong>@_anchor.ToString("Y", CultureInfo.CurrentCulture)</strong>
+                        <SoftIconButton Icon="@NextMonthIcon"
+                                        Size="MudBlazor.Size.Small"
+                                        OnClick="NextMonthAsync"
+                                        aria-label="@L["OwnerDash:NextMonth"]"
+                                        title="@L["OwnerDash:NextMonth"]"
+                                        Disabled="_loading" />
+                    </div>
+                </header>
+
+                <div class="oi-calendar-legend">
+                    <span><i class="oi-dot oi-dot--danger"></i>@IntL["ReorderCalendar:Legend:Stockout"]</span>
+                    <span><i class="oi-dot oi-dot--warn"></i>@IntL["ReorderCalendar:Legend:Expiry"]</span>
+                    <span><i class="oi-dot oi-dot--success"></i>@IntL["ReorderCalendar:Legend:Delivery"]</span>
+                </div>
+
+                <div class="oi-weekdays">
+                    @foreach (var weekday in WeekdayHeaders)
+                    {
+                        <span>@weekday</span>
+                    }
+                </div>
+
+                <div class="oi-month-grid">
+                    @foreach (var day in _gridDays)
+                    {
+                        var events = EventsOn(day);
+                        var classes = "oi-day"
+                            + (day.Month != _calendar.MonthStart.Month ? " oi-day--muted" : "")
+                            + (day == _calendar.TodayUtc.Date ? " oi-day--today" : "")
+                            + (_selectedDay == day ? " oi-day--selected" : "");
+
+                        <button type="button" class="@classes" @onclick="() => SelectDay(day)">
+                            <span class="oi-day-number">@day.Day</span>
+                            @if (events.Count > 0)
+                            {
+                                <span class="oi-day-event-count">@events.Count</span>
+                                <span class="oi-day-dots">
+                                    @foreach (var type in events.Select(e => e.EventType).Distinct().OrderBy(TypeRank))
+                                    {
+                                        <i class="oi-dot @DotClass(type)"></i>
+                                    }
+                                </span>
+                            }
+                        </button>
+                    }
+                </div>
+
+                <div class="oi-calendar-footer">
+                    <SoftButton Variant="Variant.Text"
+                                Color="MudBlazor.Color.Primary"
+                                StartIcon="@Icons.Material.Outlined.CalendarMonth"
+                                Href="/intelligence/reorder-calendar">
+                        @L["OwnerDash:OpenFullCalendar"]
+                    </SoftButton>
+                    @if (_calendar.Truncated)
+                    {
+                        <span>@IntL["ReorderCalendar:Truncated"]</span>
+                    }
+                </div>
+            </section>
+
+            <section class="oi-card oi-agenda-card">
+                <header class="oi-card-head">
+                    <div>
+                        <h2>@(_selectedDay.HasValue ? _selectedDay.Value.ToString("D", CultureInfo.CurrentCulture) : L["OwnerDash:UpcomingSignals"])</h2>
+                        <p>@L["OwnerDash:AgendaSub"]</p>
+                    </div>
+                    @if (_selectedDay.HasValue)
+                    {
+                        <SoftIconButton Icon="@Icons.Material.Filled.Close"
+                                        Size="MudBlazor.Size.Small"
+                                        aria-label="@L["Close"]"
+                                        title="@L["Close"]"
+                                        OnClick="ClearSelectedDay" />
+                    }
+                </header>
+
+                @{
+                    var agenda = AgendaEvents();
+                }
+                @if (agenda.Count == 0)
+                {
+                    <div class="oi-empty">
+                        <SoftIcon Icon="@Icons.Material.Outlined.EventAvailable" />
+                        <span>@IntL["ReorderCalendar:Empty"]</span>
+                    </div>
+                }
+                else
+                {
+                    <div class="oi-agenda-list">
+                        @foreach (var item in agenda)
+                        {
+                            <article class="oi-agenda-item @EventToneClass(item.EventType)">
+                                <time>@item.Date.ToString("MMM d", CultureInfo.CurrentCulture)</time>
+                                <i class="oi-dot @DotClass(item.EventType)"></i>
+                                <div>
+                                    <strong>@item.Title</strong>
+                                    <span>@EventTypeLabel(item.EventType) · @item.BranchName</span>
+                                    @if (!string.IsNullOrWhiteSpace(item.Detail))
+                                    {
+                                        <small>@item.Detail</small>
+                                    }
+                                </div>
+                            </article>
+                        }
+                    </div>
+                }
+            </section>
+        </div>
+
+        <div class="oi-insight-grid">
+            <section class="oi-card oi-watch-card">
+                <header class="oi-card-head">
+                    <div>
+                        <h2>@L["OwnerDash:RiskWatchlist"]</h2>
+                        <p>@L["OwnerDash:RiskWatchlistSub"]</p>
+                    </div>
+                    <SoftButton Variant="Variant.Text"
+                                Color="MudBlazor.Color.Primary"
+                                Href="/intelligence/product-velocity">
+                        @L["AdminDash:ViewAll"]
+                    </SoftButton>
+                </header>
+
+                @if (_velocity.Count == 0)
+                {
+                    <div class="oi-empty">
+                        <SoftIcon Icon="@Icons.Material.Outlined.QueryStats" />
+                        <span>@IntL["ProductVelocity:Empty"]</span>
+                    </div>
+                }
+                else
+                {
+                    <div class="oi-velocity-list">
+                        @foreach (var item in _velocity)
+                        {
+                            var coverTone = CoverTone(item.DaysOfCover);
+                            <article class="oi-velocity-row @coverTone">
+                                <span class="oi-abc oi-abc--@item.AbcClass.ToLowerInvariant()">@item.AbcClass</span>
+                                <div class="oi-product-copy">
+                                    <strong>@item.ProductName</strong>
+                                    <span>@item.BranchName · @item.ProductSku</span>
+                                </div>
+                                <div class="oi-cover">
+                                    <strong>@CoverText(item.DaysOfCover)</strong>
+                                    <span>@IntL["ProductVelocity:DaysOfCover"]</span>
+                                    <i><b style="width:@CoverBarWidth(item.DaysOfCover)%"></b></i>
+                                </div>
+                                <div class="oi-demand">
+                                    <strong>@item.CurrentStock</strong>
+                                    <span>@L["OwnerDash:OnHand"]</span>
+                                    <small>@L["OwnerDash:ForecastSevenDays", item.Next7DaysForecast?.ToString("0.#") ?? "—"]</small>
+                                </div>
+                            </article>
+                        }
+                    </div>
+                }
+            </section>
+
+            <section class="oi-card oi-decisions-card">
+                <header class="oi-card-head">
+                    <div>
+                        <h2>@L["OwnerDash:DecisionQueue"]</h2>
+                        <p>@L["OwnerDash:DecisionQueueSub"]</p>
+                    </div>
+                    <span class="oi-pending-badge">@_summary.TotalPending</span>
+                </header>
+
+                @if (_pendingDecisions.Count == 0)
+                {
+                    <div class="oi-empty oi-empty--success">
+                        <SoftIcon Icon="@Icons.Material.Filled.CheckCircle" />
+                        <span>@IntL["DecisionLog:EmptyPending"]</span>
+                    </div>
+                }
+                else
+                {
+                    <div class="oi-decision-list">
+                        @foreach (var item in _pendingDecisions)
+                        {
+                            <a class="oi-decision-item" href="/intelligence/decision-log">
+                                <span class="oi-decision-type">@DecisionTypeLabel(item.DecisionType)</span>
+                                <strong>@(item.ProductName ?? item.RuleName ?? item.DecisionType)</strong>
+                                <span>@item.BranchName</span>
+                                <p>@Truncate(item.Reasoning, 92)</p>
+                                <BrowserLocalTime Value="@item.CreationTime" Display="BrowserTimeDisplay.MonthDayTime" />
+                            </a>
+                        }
+                    </div>
+                }
+            </section>
+        </div>
+    }
+</div>
+
+<style>
+    .owner-intelligence { min-width: 0; padding: 0 24px 24px; }
+
+    .oi-toolbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 7px 0 10px;
+        border-bottom: 1px solid var(--bd-1);
+    }
+    .oi-toolbar > div:first-child { display: flex; flex-direction: column; min-width: 0; }
+    .oi-kicker { color: var(--fg-1); font-family: var(--font-serif); font-size: 17px; font-weight: 650; }
+    .oi-toolbar-sub { color: var(--fg-3); font-size: 12px; }
+    .oi-toolbar-actions { display: flex; align-items: center; gap: 8px; }
+
+    .oi-signal-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(150px, 1fr));
+        gap: 12px;
+        margin-top: 14px;
+    }
+    .oi-signal {
+        position: relative;
+        overflow: hidden;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        min-height: 98px;
+        padding: 15px;
+        background: var(--surface);
+        border: 1px solid var(--bd-1);
+        border-radius: var(--r-md);
+        box-shadow: var(--shadow-sm);
+    }
+    .oi-signal::after {
+        content: "";
+        position: absolute;
+        width: 72px;
+        height: 72px;
+        inset-inline-end: -33px;
+        top: -32px;
+        border: 12px solid currentColor;
+        border-radius: 50%;
+        opacity: .045;
+    }
+    .oi-signal-icon {
+        width: 40px;
+        height: 40px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: var(--r-sm);
+        background: color-mix(in srgb, currentColor 12%, transparent);
+        flex: none;
+    }
+    .oi-signal-icon .mud-icon-root { font-size: 21px; }
+    .oi-signal-copy { display: flex; flex-direction: column; min-width: 0; }
+    .oi-signal-copy strong { color: var(--fg-1); font-family: var(--font-serif); font-size: 27px; line-height: 1; }
+    .oi-signal-copy span { color: var(--fg-2); font-size: 12px; font-weight: 650; margin-top: 5px; }
+    .oi-signal-copy small { color: var(--fg-3); font-size: 10.5px; margin-top: 1px; }
+    .oi-signal--danger { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 24%, var(--bd-1)); }
+    .oi-signal--warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 26%, var(--bd-1)); }
+    .oi-signal--success { color: var(--success); border-color: color-mix(in srgb, var(--success) 24%, var(--bd-1)); }
+    .oi-signal--accent { color: var(--accent); border-color: var(--accent-line); }
+
+    .oi-planning-grid, .oi-insight-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1.55fr) minmax(280px, .75fr);
+        gap: 14px;
+        margin-top: 14px;
+    }
+    .oi-insight-grid { grid-template-columns: minmax(0, 1.35fr) minmax(300px, .85fr); }
+
+    .oi-card {
+        min-width: 0;
+        padding: 16px;
+        background: var(--surface);
+        border: 1px solid var(--bd-1);
+        border-radius: var(--r-md);
+        box-shadow: var(--shadow-sm);
+    }
+    .oi-card-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 12px;
+    }
+    .oi-card-head h2 { margin: 0; color: var(--fg-1); font-family: var(--font-serif); font-size: 18px; font-weight: 650; }
+    .oi-card-head p { margin: 2px 0 0; color: var(--fg-3); font-size: 11.5px; line-height: 1.4; }
+
+    .oi-month-nav { display: inline-flex; align-items: center; gap: 4px; flex: none; }
+    .oi-month-nav strong { min-width: 128px; color: var(--fg-1); font-family: var(--font-serif); font-size: 13px; text-align: center; }
+
+    .oi-calendar-legend { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 10px; }
+    .oi-calendar-legend span { display: inline-flex; align-items: center; gap: 5px; color: var(--fg-3); font-size: 10.5px; }
+    .oi-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; flex: none; }
+    .oi-dot--danger { background: var(--danger); }
+    .oi-dot--warn { background: var(--warn); }
+    .oi-dot--success { background: var(--success); }
+
+    .oi-weekdays, .oi-month-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px; }
+    .oi-weekdays { margin-bottom: 5px; }
+    .oi-weekdays span {
+        padding-block: 3px;
+        color: var(--fg-3);
+        font-size: 9.5px;
+        font-weight: 750;
+        letter-spacing: .05em;
+        text-align: center;
+        text-transform: uppercase;
+    }
+    .oi-day {
+        position: relative;
+        min-width: 0;
+        min-height: 58px;
+        padding: 6px;
+        background: var(--bg-2);
+        border: 1px solid var(--bd-1);
+        border-radius: var(--r-sm);
+        color: var(--fg-2);
+        cursor: pointer;
+        font-family: var(--font-sans);
+        text-align: start;
+        transition: border-color .12s, background .12s, transform .12s;
+    }
+    .oi-day:hover { background: var(--hover); border-color: var(--bd-2); transform: translateY(-1px); }
+    .oi-day--muted { opacity: .46; }
+    .oi-day--today { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+    .oi-day--today .oi-day-number { color: var(--accent); }
+    .oi-day--selected { background: var(--accent-soft); border-color: var(--accent); }
+    .oi-day-number { color: var(--fg-2); font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; }
+    .oi-day-event-count {
+        position: absolute;
+        inset-inline-end: 5px;
+        top: 5px;
+        min-width: 17px;
+        height: 17px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding-inline: 4px;
+        background: var(--surface);
+        border: 1px solid var(--bd-1);
+        border-radius: 999px;
+        color: var(--fg-2);
+        font-size: 9px;
+        font-weight: 750;
+    }
+    .oi-day-dots { position: absolute; inset-inline-start: 6px; bottom: 6px; display: flex; gap: 3px; }
+    .oi-calendar-footer { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 9px; }
+    .oi-calendar-footer > span { color: var(--fg-3); font-size: 10.5px; }
+
+    .oi-agenda-list { display: flex; flex-direction: column; }
+    .oi-agenda-item {
+        display: grid;
+        grid-template-columns: 48px 8px minmax(0, 1fr);
+        align-items: start;
+        gap: 9px;
+        padding: 10px 4px;
+        border-bottom: 1px solid var(--bd-1);
+    }
+    .oi-agenda-item:last-child { border-bottom: 0; }
+    .oi-agenda-item time { color: var(--fg-3); font-size: 10px; font-weight: 650; }
+    .oi-agenda-item > .oi-dot { margin-top: 4px; }
+    .oi-agenda-item > div { display: flex; flex-direction: column; min-width: 0; }
+    .oi-agenda-item strong { overflow: hidden; color: var(--fg-1); font-size: 12.5px; text-overflow: ellipsis; white-space: nowrap; }
+    .oi-agenda-item span { color: var(--fg-2); font-size: 10.5px; }
+    .oi-agenda-item small { margin-top: 2px; color: var(--fg-3); font-size: 10.5px; line-height: 1.35; }
+
+    .oi-velocity-list, .oi-decision-list { display: flex; flex-direction: column; }
+    .oi-velocity-row {
+        display: grid;
+        grid-template-columns: 30px minmax(125px, 1.2fr) minmax(118px, .8fr) minmax(108px, .65fr);
+        align-items: center;
+        gap: 10px;
+        padding: 10px 5px;
+        border-bottom: 1px solid var(--bd-1);
+    }
+    .oi-velocity-row:last-child { border-bottom: 0; }
+    .oi-abc {
+        width: 26px;
+        height: 26px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: var(--r-sm);
+        color: var(--fg-1);
+        font-size: 11px;
+        font-weight: 800;
+        background: var(--hover);
+        border: 1px solid var(--bd-1);
+    }
+    .oi-abc--a { color: var(--danger); background: color-mix(in srgb, var(--danger) 10%, var(--surface)); }
+    .oi-abc--b { color: var(--accent); background: var(--accent-soft); }
+    .oi-product-copy, .oi-cover, .oi-demand { display: flex; flex-direction: column; min-width: 0; }
+    .oi-product-copy strong { overflow: hidden; color: var(--fg-1); font-size: 12.5px; text-overflow: ellipsis; white-space: nowrap; }
+    .oi-product-copy span, .oi-cover span, .oi-demand span { color: var(--fg-3); font-size: 9.5px; }
+    .oi-cover strong, .oi-demand strong { color: var(--fg-1); font-size: 13px; font-variant-numeric: tabular-nums; }
+    .oi-cover i { height: 4px; margin-top: 5px; overflow: hidden; background: var(--hover); border-radius: 999px; }
+    .oi-cover i b { display: block; height: 100%; background: var(--success); border-radius: inherit; }
+    .oi-cover-danger .oi-cover i b { background: var(--danger); }
+    .oi-cover-warn .oi-cover i b { background: var(--warn); }
+    .oi-demand small { margin-top: 2px; color: var(--fg-2); font-size: 9.5px; }
+
+    .oi-pending-badge {
+        min-width: 30px;
+        height: 30px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding-inline: 8px;
+        border-radius: 999px;
+        background: var(--accent-soft);
+        color: var(--accent);
+        font-size: 12px;
+        font-weight: 800;
+        font-variant-numeric: tabular-nums;
+    }
+    .oi-decision-item {
+        position: relative;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 2px 8px;
+        padding: 10px 5px;
+        border-bottom: 1px solid var(--bd-1);
+        color: inherit;
+        text-decoration: none;
+    }
+    .oi-decision-item:last-child { border-bottom: 0; }
+    .oi-decision-item:hover { background: var(--hover); }
+    .oi-decision-type { grid-column: 1; color: var(--accent); font-size: 9px; font-weight: 750; letter-spacing: .05em; text-transform: uppercase; }
+    .oi-decision-item > strong { grid-column: 1; color: var(--fg-1); font-size: 12.5px; }
+    .oi-decision-item > span:not(.oi-decision-type) { grid-column: 1; color: var(--fg-3); font-size: 10px; }
+    .oi-decision-item p { grid-column: 1 / -1; margin: 4px 0 0; color: var(--fg-2); font-family: var(--font-serif); font-size: 11.5px; line-height: 1.35; }
+    .oi-decision-item time { grid-column: 2; grid-row: 1 / span 2; color: var(--fg-3); font-size: 9.5px; white-space: nowrap; }
+
+    .oi-empty { min-height: 150px; display: flex; align-items: center; justify-content: center; gap: 9px; color: var(--fg-3); font-size: 12px; text-align: center; }
+    .oi-empty .mud-icon-root { font-size: 24px; }
+    .oi-empty--success { color: var(--success); }
+
+    html[dir="rtl"] .owner-intelligence { direction: rtl; text-align: right; }
+
+    @@media (max-width: 1100px) {
+        .oi-signal-grid { grid-template-columns: repeat(2, minmax(150px, 1fr)); }
+        .oi-planning-grid, .oi-insight-grid { grid-template-columns: 1fr; }
+    }
+
+    @@media (max-width: 680px) {
+        .owner-intelligence { padding-inline: 10px; }
+        .oi-toolbar { align-items: flex-start; flex-direction: column; }
+        .oi-toolbar-actions { width: 100%; flex-wrap: wrap; }
+        .oi-signal-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
+        .oi-signal { min-height: 88px; padding: 11px; }
+        .oi-signal-icon { width: 34px; height: 34px; }
+        .oi-calendar-head { flex-direction: column; }
+        .oi-month-nav { align-self: stretch; justify-content: space-between; }
+        .oi-month-nav strong { min-width: 0; }
+        .oi-day { min-height: 48px; padding: 4px; }
+        .oi-day-event-count { display: none; }
+        .oi-velocity-row { grid-template-columns: 28px minmax(0, 1fr) 92px; }
+        .oi-demand { display: none; }
+    }
+</style>
+
+@code {
+    private const int AgendaDays = 14;
+    private ReorderCalendarDto? _calendar;
+    private DecisionLogSummaryDto? _summary;
+    private List<DecisionLogDto> _pendingDecisions = new();
+    private List<ProductVelocityDto> _velocity = new();
+    private List<DateTime> _gridDays = new();
+    private Dictionary<DateTime, List<CalendarEventDto>> _eventsByDay = new();
+    private DateTime _anchor = new(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1, 0, 0, 0, DateTimeKind.Utc);
+    private DateTime? _selectedDay;
+    private bool _loading;
+    private string? _error;
+
+    private static IEnumerable<string> WeekdayHeaders =>
+        Enumerable.Range(0, 7)
+            .Select(day => CultureInfo.CurrentCulture.DateTimeFormat.GetAbbreviatedDayName((DayOfWeek)day));
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error = null;
+        try
+        {
+            var calendarTask = CalendarAppService.GetAsync(new GetReorderCalendarInput { Month = _anchor });
+            var summaryTask = DecisionLogAppService.GetSummaryAsync();
+            var decisionsTask = DecisionLogAppService.GetListAsync(new GetDecisionLogsInput
+            {
+                Status = DecisionLogStatuses.Pending,
+                Sorting = "CreationTime desc",
+                MaxResultCount = 5
+            });
+            var velocityTask = VelocityAppService.GetListAsync(new GetProductVelocitiesInput
+            {
+                Sorting = "DaysOfCover asc",
+                MaxResultCount = 6
+            });
+
+            await Task.WhenAll(calendarTask, summaryTask, decisionsTask, velocityTask);
+
+            _calendar = await calendarTask;
+            _summary = await summaryTask;
+            _pendingDecisions = (await decisionsTask).Items.ToList();
+            _velocity = (await velocityTask).Items.ToList();
+            BuildCalendarIndex();
+
+            _selectedDay = _calendar.TodayUtc.Date >= _calendar.GridStart.Date &&
+                           _calendar.TodayUtc.Date <= _calendar.GridEnd.Date
+                ? _calendar.TodayUtc.Date
+                : null;
+        }
+        catch (Exception ex)
+        {
+            _error = GetFriendlyErrorMessage(ex, "Error:LoadTryAgain");
+            await HandleErrorAsync(ex);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void BuildCalendarIndex()
+    {
+        _gridDays = new List<DateTime>();
+        _eventsByDay = new Dictionary<DateTime, List<CalendarEventDto>>();
+        if (_calendar == null) return;
+
+        for (var day = _calendar.GridStart.Date; day <= _calendar.GridEnd.Date; day = day.AddDays(1))
+        {
+            _gridDays.Add(day);
+        }
+
+        foreach (var item in _calendar.Events)
+        {
+            if (!_eventsByDay.TryGetValue(item.Date.Date, out var list))
+            {
+                list = new List<CalendarEventDto>();
+                _eventsByDay[item.Date.Date] = list;
+            }
+            list.Add(item);
+        }
+    }
+
+    private List<CalendarEventDto> EventsOn(DateTime day) =>
+        _eventsByDay.TryGetValue(day.Date, out var list) ? list : new List<CalendarEventDto>();
+
+    private List<CalendarEventDto> AgendaEvents()
+    {
+        if (_calendar == null) return new List<CalendarEventDto>();
+        if (_selectedDay.HasValue)
+        {
+            return EventsOn(_selectedDay.Value)
+                .OrderBy(item => TypeRank(item.EventType))
+                .Take(8)
+                .ToList();
+        }
+
+        var from = _calendar.TodayUtc.Date;
+        var to = from.AddDays(AgendaDays);
+        return _calendar.Events
+            .Where(item => item.Date.Date >= from && item.Date.Date <= to)
+            .OrderBy(item => item.Date)
+            .ThenBy(item => TypeRank(item.EventType))
+            .Take(8)
+            .ToList();
+    }
+
+    private void SelectDay(DateTime day) => _selectedDay = day.Date;
+    private void ClearSelectedDay() => _selectedDay = null;
+
+    private async Task PreviousMonthAsync()
+    {
+        _anchor = _anchor.AddMonths(-1);
+        await LoadAsync();
+    }
+
+    private async Task NextMonthAsync()
+    {
+        _anchor = _anchor.AddMonths(1);
+        await LoadAsync();
+    }
+
+    private static int TypeRank(string eventType) => eventType switch
+    {
+        CalendarEventTypes.Stockout => 0,
+        CalendarEventTypes.Expiry => 1,
+        CalendarEventTypes.Delivery => 2,
+        _ => 3
+    };
+
+    private bool IsRtl => CultureInfo.CurrentUICulture.TextInfo.IsRightToLeft;
+    private string PreviousMonthIcon => IsRtl
+        ? Icons.Material.Filled.ChevronRight
+        : Icons.Material.Filled.ChevronLeft;
+    private string NextMonthIcon => IsRtl
+        ? Icons.Material.Filled.ChevronLeft
+        : Icons.Material.Filled.ChevronRight;
+
+    private static string DotClass(string eventType) => eventType switch
+    {
+        CalendarEventTypes.Stockout => "oi-dot--danger",
+        CalendarEventTypes.Expiry => "oi-dot--warn",
+        CalendarEventTypes.Delivery => "oi-dot--success",
+        _ => ""
+    };
+
+    private static string EventToneClass(string eventType) => eventType switch
+    {
+        CalendarEventTypes.Stockout => "oi-agenda--danger",
+        CalendarEventTypes.Expiry => "oi-agenda--warn",
+        CalendarEventTypes.Delivery => "oi-agenda--success",
+        _ => ""
+    };
+
+    private string EventTypeLabel(string eventType) => eventType switch
+    {
+        CalendarEventTypes.Stockout => IntL["ReorderCalendar:Type:Stockout"],
+        CalendarEventTypes.Expiry => IntL["ReorderCalendar:Type:Expiry"],
+        CalendarEventTypes.Delivery => IntL["ReorderCalendar:Type:Delivery"],
+        _ => eventType
+    };
+
+    private string DecisionTypeLabel(string type) => type switch
+    {
+        DecisionTypes.LowStockAlert => L["AdminDash:DecTypeLowStock"],
+        DecisionTypes.ExcessStockAlert => L["AdminDash:DecTypeExcessStock"],
+        DecisionTypes.DeadStockFlag => L["AdminDash:DecTypeDeadStock"],
+        DecisionTypes.TransferSuggestion => L["AdminDash:DecTypeTransfer"],
+        DecisionTypes.ReorderSuggestion => L["AdminDash:DecTypeReorder"],
+        DecisionTypes.CashierVariance => L["AdminDash:DecTypeCashierVariance"],
+        _ => type
+    };
+
+    private static string CoverTone(decimal? days) => days switch
+    {
+        null => "",
+        <= 3 => "oi-cover-danger",
+        <= 7 => "oi-cover-warn",
+        _ => "oi-cover-ok"
+    };
+
+    private string CoverText(decimal? days) =>
+        days.HasValue ? L["OwnerDash:DaysValue", days.Value.ToString("0.#")] : "—";
+
+    private static double CoverBarWidth(decimal? days) =>
+        days.HasValue ? Math.Clamp((double)(days.Value / 14m * 100m), 4d, 100d) : 0d;
+
+    private static string Truncate(string? value, int max) =>
+        string.IsNullOrWhiteSpace(value) || value.Length <= max
+            ? value ?? string.Empty
+            : value[..max].TrimEnd() + "…";
+}

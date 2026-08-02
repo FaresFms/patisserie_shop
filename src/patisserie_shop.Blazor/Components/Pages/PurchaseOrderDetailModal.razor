@@ -279,7 +279,9 @@
                                               Variant="Variant.Outlined" Min="1" />
                             <SoftNumericField T="decimal" Label="@OpsL["UnitPrice"]"
                                               @bind-Value="_newItemPrice"
-                                              Variant="Variant.Outlined" Min="0"
+                                              Variant="Variant.Outlined" Min="0" Step="0.01m"
+                                              InputMode="@(MudBlazor.InputMode.@decimal)" Format="0.00"
+                                              Immediate="true"
                                               Adornment="Adornment.Start"
                                               AdornmentText="@ShopCurrency" />
                         </SoftStack>

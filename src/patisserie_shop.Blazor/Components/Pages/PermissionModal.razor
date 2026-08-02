@@ -1,95 +1,222 @@
 @using System.Threading.Tasks
+@using Microsoft.AspNetCore.Components.Web
 @using Volo.Abp.PermissionManagement
 @using Color = MudBlazor.Color
 @using Variant = MudBlazor.Variant
 @using Size = MudBlazor.Size
+@using Margin = MudBlazor.Margin
+@using Adornment = MudBlazor.Adornment
 @inherits patisserie_shopComponentBase
 @inject IPermissionAppService PermissionAppService
 
 @if (Visible)
 {
     <div class="glass-modal-backdrop" @onclick="CloseAsync">
-        <div class="glass-modal-container glass-modal-container--md" @onclick:stopPropagation="true">
-            <SoftCard Elevation="24" Class="glass-modal">
-                <SoftCardHeader Class="pa-4">
+        <div class="glass-modal-container glass-modal-container--lg permission-modal-container" @onclick:stopPropagation="true">
+            <SoftCard Elevation="24" Class="glass-modal permission-modal">
+                <SoftCardHeader Class="permission-modal-header">
                     <CardHeaderContent>
                         <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                            <SoftIcon Icon="@Icons.Material.Filled.Security" Color="Color.Primary" Size="Size.Medium" />
-                            <div>
+                            <div class="permission-modal-mark" aria-hidden="true">
+                                <SoftIcon Icon="@Icons.Material.Filled.AdminPanelSettings" Size="Size.Medium" />
+                            </div>
+                            <div class="permission-modal-title">
                                 <SoftText Typo="Typo.h6">@L["Permissions"]</SoftText>
                                 @if (!string.IsNullOrWhiteSpace(EntityName))
                                 {
-                                    <SoftText Typo="Typo.caption" Style="color: var(--fg-3);">@EntityName</SoftText>
+                                    <SoftText Typo="Typo.caption">@EntityName</SoftText>
                                 }
                             </div>
                         </SoftStack>
                     </CardHeaderContent>
                     <CardHeaderActions>
-                        <SoftIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="CloseAsync" />
+                        <SoftIconButton Icon="@Icons.Material.Filled.Close"
+                                        Size="Size.Small"
+                                        OnClick="CloseAsync" />
                     </CardHeaderActions>
                 </SoftCardHeader>
-                <SoftDivider />
-                <SoftCardContent Class="pa-4 glass-modal-body" Style="max-height: 60vh; overflow-y: auto;">
-                    @if (_loading)
-                    {
-                        <SoftProgressLinear Indeterminate="true" Color="Color.Primary" />
-                    }
-                    else if (_groups.Count == 0)
-                    {
-                        <SoftText Style="color: var(--fg-3);">@L["NoPermissionsAvailable"]</SoftText>
-                    }
-                    else
-                    {
-                        <div class="perm-toolbar">
-                            <SoftCheckBox T="bool"
-                                          Value="@AllGranted"
-                                          ValueChanged="@(v => ToggleAll(v))"
-                                          Label="@L["SelectAllInAllTabs"]"
-                                          Color="Color.Primary"
-                                          Disabled="@(!CanManage)" />
-                        </div>
-                        <SoftDivider Class="my-2" />
 
-                        @foreach (var group in _groups)
+                @if (_loading)
+                {
+                    <div class="permission-modal-loading">
+                        <SoftProgressLinear Indeterminate="true" Color="Color.Primary" />
+                    </div>
+                }
+                else if (_groups.Count == 0)
+                {
+                    <div class="permission-empty-state">
+                        <SoftIcon Icon="@Icons.Material.Filled.LockOpen" Size="Size.Large" />
+                        <SoftText Typo="Typo.h6">@L["NoPermissionsAvailable"]</SoftText>
+                    </div>
+                }
+                else
+                {
+                    <div class="permission-search-bar">
+                        <SoftTextField T="string"
+                                       @bind-Value="_searchInput"
+                                       Placeholder="@L["Permissions:SearchPlaceholder"]"
+                                       Variant="Variant.Outlined"
+                                       Margin="Margin.Dense"
+                                       Immediate="true"
+                                       Adornment="Adornment.Start"
+                                       AdornmentIcon="@Icons.Material.Filled.Search"
+                                       OnKeyDown="OnSearchKeyDown"
+                                       Class="permission-search-input" />
+                        <SoftButton Variant="Variant.Filled"
+                                    Color="Color.Primary"
+                                    StartIcon="@Icons.Material.Filled.Search"
+                                    OnClick="ApplySearch">
+                            @L["Permissions:Search"]
+                        </SoftButton>
+                        @if (!string.IsNullOrWhiteSpace(_searchInput) || SearchActive)
                         {
-                            <div class="perm-group">
-                                <div class="perm-group-head">
-                                    <SoftCheckBox T="bool"
-                                                  Value="@IsGroupAllGranted(group)"
-                                                  ValueChanged="@(v => ToggleGroup(group, v))"
-                                                  Label="@group.DisplayName"
-                                                  Color="Color.Primary"
-                                                  Disabled="@(!CanManage)" />
+                            <SoftIconButton Icon="@Icons.Material.Filled.Close"
+                                            Size="Size.Small"
+                                            OnClick="ClearSearch"
+                                            Class="permission-search-clear" />
+                        }
+                    </div>
+
+                    <div class="permission-workspace">
+                        <nav class="permission-category-rail" aria-label="@L["Permissions:Sections"]">
+                            <div class="permission-category-caption">@L["Permissions:Sections"]</div>
+                            @foreach (var category in AvailableCategories)
+                            {
+                                <SoftButton Variant="Variant.Text"
+                                            StartIcon="@category.Icon"
+                                            FullWidth="true"
+                                            Class="@CategoryButtonClass(category.Key)"
+                                            OnClick="@(() => SelectCategory(category.Key))">
+                                    <span class="permission-category-label">@category.Label</span>
+                                    <span class="permission-category-count">
+                                        @($"{GetGrantedCount(category.Key)}/{GetPermissionCount(category.Key)}")
+                                    </span>
+                                </SoftButton>
+                            }
+                        </nav>
+
+                        <section class="permission-content" aria-live="polite">
+                            <div class="permission-content-head">
+                                <div>
+                                    <SoftText Typo="Typo.h6">@ActiveCategoryLabel</SoftText>
+                                    <SoftText Typo="Typo.caption">
+                                        @L["Permissions:SectionSummary", GetGrantedCount(_activeCategory), GetPermissionCount(_activeCategory)]
+                                    </SoftText>
                                 </div>
-                                <div class="perm-group-body">
-                                    @foreach (var perm in group.Permissions)
+                                <SoftCheckBox T="bool"
+                                              Value="@AreVisiblePermissionsGranted"
+                                              ValueChanged="ToggleVisiblePermissions"
+                                              Label="@L["Permissions:SelectVisible"]"
+                                              Color="Color.Primary"
+                                              Disabled="@(!CanManage)" />
+                            </div>
+
+                            @if (VisibleGroups.Count == 0)
+                            {
+                                <div class="permission-empty-state permission-empty-state--search">
+                                    <SoftIcon Icon="@Icons.Material.Filled.SearchOff" Size="Size.Large" />
+                                    <SoftText Typo="Typo.h6">@L["Permissions:NoMatches"]</SoftText>
+                                    <SoftText Typo="Typo.body2">@L["Permissions:NoMatchesHint"]</SoftText>
+                                    <SoftButton Variant="Variant.Text" Color="Color.Primary" OnClick="ClearSearch">
+                                        @L["Permissions:ClearSearch"]
+                                    </SoftButton>
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="permission-sections">
+                                    @foreach (var group in VisibleGroups)
                                     {
-                                        <div class="perm-item" style="@($"padding-left: {Depth(perm) * 22}px;")">
-                                            <SoftCheckBox T="bool"
-                                                          Value="@_state[perm.Name]"
-                                                          ValueChanged="@(v => TogglePermission(group, perm, v))"
-                                                          Label="@perm.DisplayName"
-                                                          Color="Color.Primary"
-                                                          Disabled="@(!CanManage)" />
-                                        </div>
+                                        <section class="permission-section">
+                                            <header class="permission-section-head">
+                                                <div>
+                                                    <div class="permission-section-name">@group.DisplayName</div>
+                                                    <div class="permission-section-summary">
+                                                        @L["Permissions:SectionSummary", GrantedInGroup(group), group.Permissions.Count]
+                                                    </div>
+                                                </div>
+                                                <SoftCheckBox T="bool"
+                                                              Value="@IsGroupAllGranted(group)"
+                                                              ValueChanged="@(v => ToggleGroup(group, v))"
+                                                              Label="@L["Permissions:SelectSection"]"
+                                                              Color="Color.Primary"
+                                                              Disabled="@(!CanManage)" />
+                                            </header>
+
+                                            <div class="permission-feature-list">
+                                                @foreach (var root in GetVisibleRoots(group))
+                                                {
+                                                    var descendants = GetDescendants(group, root.Name);
+                                                    var expanded = descendants.Count > 0 && IsFeatureExpanded(root);
+                                                    <article class="@FeatureCardClass(expanded)">
+                                                        <div class="permission-feature-head">
+                                                            <SoftCheckBox T="bool"
+                                                                          Value="@_state[root.Name]"
+                                                                          ValueChanged="@(v => TogglePermission(group, root, v))"
+                                                                          Label="@root.DisplayName"
+                                                                          Color="Color.Primary"
+                                                                          Disabled="@(!CanManage)" />
+                                                            <div class="permission-feature-meta">
+                                                                @if (descendants.Count > 0)
+                                                                {
+                                                                    <span>@($"{GrantedInFeature(root, descendants)}/{descendants.Count + 1}")</span>
+                                                                    <SoftIconButton Icon="@(expanded ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)"
+                                                                                    Size="Size.Small"
+                                                                                    OnClick="@(() => ToggleFeature(root.Name))"
+                                                                                    Class="permission-feature-toggle" />
+                                                                }
+                                                            </div>
+                                                        </div>
+
+                                                        @if (expanded)
+                                                        {
+                                                            <div class="permission-feature-children">
+                                                                @foreach (var permission in GetVisibleDescendants(group, root))
+                                                                {
+                                                                    <div class="@PermissionItemClass(permission)">
+                                                                        <SoftCheckBox T="bool"
+                                                                                      Value="@_state[permission.Name]"
+                                                                                      ValueChanged="@(v => TogglePermission(group, permission, v))"
+                                                                                      Label="@permission.DisplayName"
+                                                                                      Color="Color.Primary"
+                                                                                      Disabled="@(!CanManage)" />
+                                                                    </div>
+                                                                }
+                                                            </div>
+                                                        }
+                                                    </article>
+                                                }
+                                            </div>
+                                        </section>
                                     }
                                 </div>
-                            </div>
+                            }
+                        </section>
+                    </div>
+                }
+
+                <div class="permission-modal-footer">
+                    <div class="permission-total">
+                        <span class="permission-total-value">@GrantedTotal</span>
+                        <span>@L["Permissions:GrantedOfTotal", _state.Count]</span>
+                        @if (!CanManage)
+                        {
+                            <span class="permission-readonly">@L["Permissions:ReadOnlyHint"]</span>
                         }
-                    }
-                </SoftCardContent>
-                <SoftDivider />
-                <div class="pa-3 d-flex justify-end" style="gap: 8px;">
-                    <SoftButton Variant="Variant.Text" OnClick="CloseAsync">@L["Cancel"]</SoftButton>
-                    @if (CanManage)
-                    {
-                        <SoftButton Variant="Variant.Filled" Color="Color.Primary"
-                                    StartIcon="@Icons.Material.Filled.Save"
-                                    Disabled="@(_loading || _saving)"
-                                    OnClick="SaveAsync">
-                            @L["Save"]
-                        </SoftButton>
-                    }
+                    </div>
+                    <div class="permission-footer-actions">
+                        <SoftButton Variant="Variant.Text" OnClick="CloseAsync">@L["Cancel"]</SoftButton>
+                        @if (CanManage)
+                        {
+                            <SoftButton Variant="Variant.Filled"
+                                        Color="Color.Primary"
+                                        StartIcon="@Icons.Material.Filled.Save"
+                                        Disabled="@(_loading || _saving)"
+                                        OnClick="SaveAsync">
+                                @L["Save"]
+                            </SoftButton>
+                        }
+                    </div>
                 </div>
             </SoftCard>
         </div>
@@ -97,6 +224,14 @@
 }
 
 @code {
+    private const string AllCategory = "all";
+    private const string InventoryCategory = "inventory";
+    private const string OperationsCategory = "operations";
+    private const string IntelligenceCategory = "intelligence";
+    private const string ProductionCategory = "production";
+    private const string SetupCategory = "setup";
+    private const string AdministrationCategory = "administration";
+
     [Parameter] public bool Visible { get; set; }
     [Parameter] public string ProviderName { get; set; } = "R";
     [Parameter] public string? ProviderKey { get; set; }
@@ -107,14 +242,49 @@
     private bool _loading;
     private bool _saving;
     private string? _loadedKey;
+    private string _activeCategory = AllCategory;
+    private string _searchInput = string.Empty;
+    private string _searchTerm = string.Empty;
     private List<PermissionGroupDto> _groups = new();
     private readonly Dictionary<string, bool> _state = new();
+    private readonly HashSet<string> _expandedPermissions = new(StringComparer.Ordinal);
 
-    private bool AllGranted => _state.Count > 0 && _state.Values.All(v => v);
+    private sealed record PermissionCategory(string Key, string Label, string Icon);
+
+    private IReadOnlyList<PermissionCategory> Categories =>
+    [
+        new(AllCategory, L["Permissions:AllSections"], Icons.Material.Filled.Apps),
+        new(InventoryCategory, L["Permissions:Inventory"], Icons.Material.Filled.Inventory2),
+        new(OperationsCategory, L["Permissions:Operations"], Icons.Material.Filled.ReceiptLong),
+        new(IntelligenceCategory, L["Permissions:Intelligence"], Icons.Material.Filled.Psychology),
+        new(ProductionCategory, L["Permissions:Production"], Icons.Material.Filled.PrecisionManufacturing),
+        new(SetupCategory, L["Permissions:Setup"], Icons.Material.Filled.Settings),
+        new(AdministrationCategory, L["Permissions:Administration"], Icons.Material.Filled.ManageAccounts)
+    ];
+
+    private IEnumerable<PermissionCategory> AvailableCategories => Categories.Where(category =>
+        category.Key == AllCategory || _groups.Any(group => CategoryFor(group) == category.Key));
+
+    private List<PermissionGroupDto> VisibleGroups => _groups
+        .Where(GroupIsInActiveCategory)
+        .Where(group => GetVisibleRoots(group).Count > 0)
+        .ToList();
+
+    private bool SearchActive => !string.IsNullOrWhiteSpace(_searchTerm);
+    private int GrantedTotal => _state.Count(item => item.Value);
+    private string ActiveCategoryLabel => Categories.First(category => category.Key == _activeCategory).Label;
+    private bool AreVisiblePermissionsGranted
+    {
+        get
+        {
+            var names = GetVisiblePermissionNames();
+            return names.Count > 0 && names.All(name => _state[name]);
+        }
+    }
 
     protected override async Task OnParametersSetAsync()
     {
-        if (Visible && ProviderKey != null && _loadedKey != ProviderKey)
+        if (Visible && ProviderKey != null && _loadedKey != $"{ProviderName}:{ProviderKey}")
         {
             await LoadAsync();
         }
@@ -132,11 +302,19 @@
             var result = await PermissionAppService.GetAsync(ProviderName, ProviderKey!);
             _groups = result.Groups.ToList();
             _state.Clear();
-            foreach (var perm in _groups.SelectMany(g => g.Permissions))
+            _expandedPermissions.Clear();
+            _activeCategory = _groups.Any(group => CategoryFor(group) == InventoryCategory)
+                ? InventoryCategory
+                : AllCategory;
+            _searchInput = string.Empty;
+            _searchTerm = string.Empty;
+
+            foreach (var permission in _groups.SelectMany(group => group.Permissions))
             {
-                _state[perm.Name] = perm.IsGranted;
+                _state[permission.Name] = permission.IsGranted;
             }
-            _loadedKey = ProviderKey;
+
+            _loadedKey = $"{ProviderName}:{ProviderKey}";
         }
         catch (Exception ex)
         {
@@ -148,34 +326,168 @@
         }
     }
 
-    private int Depth(PermissionGrantInfoDto perm)
+    private static string CategoryFor(PermissionGroupDto group)
+    {
+        var name = group.Name ?? string.Empty;
+        if (name.Contains("Inventory", StringComparison.OrdinalIgnoreCase)) return InventoryCategory;
+        if (name.Contains("Operations", StringComparison.OrdinalIgnoreCase)) return OperationsCategory;
+        if (name.Contains("Intelligence", StringComparison.OrdinalIgnoreCase)) return IntelligenceCategory;
+        if (name.Contains("Production", StringComparison.OrdinalIgnoreCase)) return ProductionCategory;
+        if (name.Contains("patisserie_shop", StringComparison.OrdinalIgnoreCase) ||
+            name.Contains("Shop", StringComparison.OrdinalIgnoreCase)) return SetupCategory;
+        return AdministrationCategory;
+    }
+
+    private bool GroupIsInActiveCategory(PermissionGroupDto group)
+        => _activeCategory == AllCategory || CategoryFor(group) == _activeCategory;
+
+    private void SelectCategory(string key)
+    {
+        _activeCategory = key;
+        _searchInput = string.Empty;
+        _searchTerm = string.Empty;
+    }
+
+    private string CategoryButtonClass(string key)
+        => key == _activeCategory
+            ? "permission-category-button permission-category-button--active"
+            : "permission-category-button";
+
+    private string FeatureCardClass(bool expanded)
+        => expanded ? "permission-feature permission-feature--expanded" : "permission-feature";
+
+    private string PermissionItemClass(PermissionGrantInfoDto permission)
+        => $"permission-child permission-depth-{Math.Min(Depth(permission), 3)}";
+
+    private void ApplySearch()
+    {
+        _searchTerm = _searchInput.Trim();
+        if (SearchActive)
+        {
+            _activeCategory = AllCategory;
+        }
+    }
+
+    private void ClearSearch()
+    {
+        _searchInput = string.Empty;
+        _searchTerm = string.Empty;
+    }
+
+    private void OnSearchKeyDown(KeyboardEventArgs args)
+    {
+        if (args.Key == "Enter")
+        {
+            ApplySearch();
+        }
+    }
+
+    private int Depth(PermissionGrantInfoDto permission)
     {
         var depth = 0;
-        var current = perm;
-        var lookup = _groups.SelectMany(g => g.Permissions).ToDictionary(p => p.Name, p => p);
+        var current = permission;
+        var lookup = _groups.SelectMany(group => group.Permissions).ToDictionary(item => item.Name, item => item);
         while (!string.IsNullOrEmpty(current.ParentName) && lookup.TryGetValue(current.ParentName, out var parent))
         {
             depth++;
             current = parent;
         }
+
         return depth;
     }
 
-    private bool IsGroupAllGranted(PermissionGroupDto group)
-        => group.Permissions.Count > 0 && group.Permissions.All(p => _state[p.Name]);
+    private bool PermissionMatches(PermissionGrantInfoDto permission)
+        => !SearchActive ||
+           permission.DisplayName.Contains(_searchTerm, StringComparison.CurrentCultureIgnoreCase) ||
+           permission.Name.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase);
 
-    private void TogglePermission(PermissionGroupDto group, PermissionGrantInfoDto perm, bool granted)
+    private List<PermissionGrantInfoDto> GetVisibleRoots(PermissionGroupDto group)
+        => group.Permissions
+            .Where(permission => string.IsNullOrWhiteSpace(permission.ParentName))
+            .Where(permission => PermissionMatches(permission) ||
+                                 GetDescendants(group, permission.Name).Any(PermissionMatches))
+            .ToList();
+
+    private List<PermissionGrantInfoDto> GetDescendants(PermissionGroupDto group, string parentName)
     {
-        _state[perm.Name] = granted;
-        var all = _groups.SelectMany(g => g.Permissions).ToList();
+        var descendants = new List<PermissionGrantInfoDto>();
+        AddDescendants(group, parentName, descendants);
+        return descendants;
+    }
+
+    private static void AddDescendants(
+        PermissionGroupDto group,
+        string parentName,
+        ICollection<PermissionGrantInfoDto> descendants)
+    {
+        foreach (var child in group.Permissions.Where(permission => permission.ParentName == parentName))
+        {
+            descendants.Add(child);
+            AddDescendants(group, child.Name, descendants);
+        }
+    }
+
+    private List<PermissionGrantInfoDto> GetVisibleDescendants(
+        PermissionGroupDto group,
+        PermissionGrantInfoDto root)
+    {
+        var descendants = GetDescendants(group, root.Name);
+        if (!SearchActive || PermissionMatches(root))
+        {
+            return descendants;
+        }
+
+        return descendants
+            .Where(permission => PermissionMatches(permission) ||
+                                 GetDescendants(group, permission.Name).Any(PermissionMatches))
+            .ToList();
+    }
+
+    private bool IsFeatureExpanded(PermissionGrantInfoDto permission)
+        => SearchActive || _expandedPermissions.Contains(permission.Name);
+
+    private void ToggleFeature(string permissionName)
+    {
+        if (!_expandedPermissions.Add(permissionName))
+        {
+            _expandedPermissions.Remove(permissionName);
+        }
+    }
+
+    private int GetPermissionCount(string categoryKey)
+        => _groups
+            .Where(group => categoryKey == AllCategory || CategoryFor(group) == categoryKey)
+            .Sum(group => group.Permissions.Count);
+
+    private int GetGrantedCount(string categoryKey)
+        => _groups
+            .Where(group => categoryKey == AllCategory || CategoryFor(group) == categoryKey)
+            .SelectMany(group => group.Permissions)
+            .Count(permission => _state.GetValueOrDefault(permission.Name));
+
+    private int GrantedInGroup(PermissionGroupDto group)
+        => group.Permissions.Count(permission => _state.GetValueOrDefault(permission.Name));
+
+    private int GrantedInFeature(
+        PermissionGrantInfoDto root,
+        IReadOnlyCollection<PermissionGrantInfoDto> descendants)
+        => (_state.GetValueOrDefault(root.Name) ? 1 : 0) +
+           descendants.Count(permission => _state.GetValueOrDefault(permission.Name));
+
+    private bool IsGroupAllGranted(PermissionGroupDto group)
+        => group.Permissions.Count > 0 && group.Permissions.All(permission => _state[permission.Name]);
+
+    private void TogglePermission(PermissionGroupDto group, PermissionGrantInfoDto permission, bool granted)
+    {
+        _state[permission.Name] = granted;
+        var all = _groups.SelectMany(item => item.Permissions).ToList();
 
         if (granted)
         {
-            // Grant ancestors so a child permission is not orphaned.
-            var current = perm;
+            var current = permission;
             while (!string.IsNullOrEmpty(current.ParentName))
             {
-                var parent = all.FirstOrDefault(p => p.Name == current.ParentName);
+                var parent = all.FirstOrDefault(item => item.Name == current.ParentName);
                 if (parent == null) break;
                 _state[parent.Name] = true;
                 current = parent;
@@ -183,14 +495,13 @@
         }
         else
         {
-            // Revoke descendants.
-            RevokeDescendants(perm.Name, all);
+            RevokeDescendants(permission.Name, all);
         }
     }
 
     private void RevokeDescendants(string parentName, List<PermissionGrantInfoDto> all)
     {
-        foreach (var child in all.Where(p => p.ParentName == parentName))
+        foreach (var child in all.Where(permission => permission.ParentName == parentName))
         {
             _state[child.Name] = false;
             RevokeDescendants(child.Name, all);
@@ -199,17 +510,42 @@
 
     private void ToggleGroup(PermissionGroupDto group, bool granted)
     {
-        foreach (var perm in group.Permissions)
+        foreach (var permission in group.Permissions)
         {
-            _state[perm.Name] = granted;
+            _state[permission.Name] = granted;
         }
     }
 
-    private void ToggleAll(bool granted)
+    private List<string> GetVisiblePermissionNames()
     {
-        foreach (var key in _state.Keys.ToList())
+        var groups = _groups.Where(GroupIsInActiveCategory);
+        if (!SearchActive)
         {
-            _state[key] = granted;
+            return groups.SelectMany(group => group.Permissions).Select(permission => permission.Name).ToList();
+        }
+
+        return groups
+            .SelectMany(group => GetVisibleRoots(group)
+                .SelectMany(root => new[] { root }.Concat(GetVisibleDescendants(group, root))))
+            .Select(permission => permission.Name)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+    }
+
+    private void ToggleVisiblePermissions(bool granted)
+    {
+        foreach (var name in GetVisiblePermissionNames())
+        {
+            _state[name] = granted;
+        }
+
+        if (!granted)
+        {
+            var all = _groups.SelectMany(group => group.Permissions).ToList();
+            foreach (var name in GetVisiblePermissionNames())
+            {
+                RevokeDescendants(name, all);
+            }
         }
     }
 
@@ -222,7 +558,7 @@
             var input = new UpdatePermissionsDto
             {
                 Permissions = _state
-                    .Select(kvp => new UpdatePermissionDto { Name = kvp.Key, IsGranted = kvp.Value })
+                    .Select(item => new UpdatePermissionDto { Name = item.Key, IsGranted = item.Value })
                     .ToArray()
             };
             await PermissionAppService.UpdateAsync(ProviderName, ProviderKey!, input);

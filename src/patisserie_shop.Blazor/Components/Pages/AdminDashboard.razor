@@ -12,31 +12,59 @@
 @inject NavigationManager Nav
 @inject IStringLocalizer<InventoryResource> InvL
 
-<SoftCard Elevation="2" Class="pa-2 page-flat admin-dash">
-    <div class="page-head">
-        <div>
-            <h1 class="page-title">@L["AdminDash:Title"]</h1>
-            <div class="page-sub">
-                @if (_lastRefresh.HasValue)
-                {
-                    <BrowserLocalTime Value="@_lastRefresh.Value"
-                                      Display="BrowserTimeDisplay.MonthDayTime"
-                                      Template="@L["AdminDash:LastUpdated"]" />
-                }
-                else
-                {
-                    <span>@L["AdminDash:Loading"]</span>
-                }
+<SoftCard Elevation="2" Class="@($"pa-2 page-flat admin-dash{(Embedded ? " admin-dash--embedded" : string.Empty)}")">
+    @if (!Embedded)
+    {
+        <div class="page-head">
+            <div>
+                <h1 class="page-title">@L["AdminDash:Title"]</h1>
+                <div class="page-sub">
+                    @if (_lastRefresh.HasValue)
+                    {
+                        <BrowserLocalTime Value="@_lastRefresh.Value"
+                                          Display="BrowserTimeDisplay.MonthDayTime"
+                                          Template="@L["AdminDash:LastUpdated"]" />
+                    }
+                    else
+                    {
+                        <span>@L["AdminDash:Loading"]</span>
+                    }
+                </div>
+            </div>
+            <div class="page-head-actions">
+                <SoftButton Variant="Variant.Text" Color="Color.Primary"
+                            StartIcon="@Icons.Material.Filled.Refresh"
+                            OnClick="LoadAsync" Disabled="_loading">
+                    @(_loading ? L["AdminDash:Refreshing"] : L["AdminDash:Refresh"])
+                </SoftButton>
             </div>
         </div>
-        <div class="page-head-actions">
+    }
+    else
+    {
+        <div class="ad-embedded-toolbar">
+            <div>
+                <span class="ad-embedded-kicker">@L["OwnerDash:OverviewSnapshot"]</span>
+                <span class="ad-embedded-time">
+                    @if (_lastRefresh.HasValue)
+                    {
+                        <BrowserLocalTime Value="@_lastRefresh.Value"
+                                          Display="BrowserTimeDisplay.MonthDayTime"
+                                          Template="@L["AdminDash:LastUpdated"]" />
+                    }
+                    else
+                    {
+                        @L["AdminDash:Loading"]
+                    }
+                </span>
+            </div>
             <SoftButton Variant="Variant.Text" Color="Color.Primary"
                         StartIcon="@Icons.Material.Filled.Refresh"
                         OnClick="LoadAsync" Disabled="_loading">
                 @(_loading ? L["AdminDash:Refreshing"] : L["AdminDash:Refresh"])
             </SoftButton>
         </div>
-    </div>
+    }
 
     <SoftCardContent>
 
@@ -451,6 +479,24 @@
 <style>
     .admin-dash { animation: ad-fade .25s ease-out; }
     @@keyframes ad-fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+    .ad-embedded-toolbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        margin: 0 32px 6px;
+        padding: 7px 0 10px;
+        border-bottom: 1px solid var(--bd-1);
+    }
+    .ad-embedded-toolbar > div { display: flex; flex-direction: column; min-width: 0; }
+    .ad-embedded-kicker {
+        color: var(--fg-1);
+        font-family: var(--font-serif);
+        font-size: 17px;
+        font-weight: 650;
+    }
+    .ad-embedded-time { color: var(--fg-3); font-size: 12px; }
 
     .ad-skeleton-row {
         display: grid;
@@ -912,9 +958,17 @@
         margin-left: 0;
         margin-right: auto;
     }
+
+    @@media (max-width: 640px) {
+        .ad-embedded-toolbar { margin-inline: 12px; }
+        .admin-dash--embedded .ad-kpi-grid,
+        .admin-dash--embedded .ad-row-2 { padding-inline: 12px; }
+    }
 </style>
 
 @code {
+    [Parameter] public bool Embedded { get; set; }
+
     private AdminDashboardDto? _data;
     private List<BranchHealthDto>? _health;
     private Guid? _expandedBranch;

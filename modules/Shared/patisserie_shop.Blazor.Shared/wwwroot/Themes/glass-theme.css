@@ -1003,12 +1003,8 @@ body.abp-application-layout .page-flat .mud-card-content {
     border-bottom: 0 !important;
 }
 
-/* Row action icons — neutral, visible on hover only */
+/* Row action icons — neutral and always visible */
 .page-flat .mud-table-body .row-actions {
-    opacity: 0;
-    transition: opacity .12s;
-}
-.page-flat .mud-table-body .mud-table-row:hover .row-actions {
     opacity: 1;
 }
 .page-flat .mud-table-body .mud-icon-button {
@@ -1538,15 +1534,480 @@ body.abp-application-layout .mud-picker .mud-picker-stick-inner.mud-theme-primar
 
 
 /* =========================================================
-   Permission / role checklist (Users & Roles management modals)
+   Permission workspace (Users & Roles management)
    ========================================================= */
-.perm-toolbar { padding: 2px 0; }
-.perm-group { padding: 8px 0; border-bottom: 1px solid var(--bd-1); }
-.perm-group:last-child { border-bottom: 0; }
-.perm-group-head { font-weight: 600; }
-.perm-group-body { display: flex; flex-direction: column; gap: 2px; margin-top: 4px; }
-.perm-item { line-height: 1.4; }
-.perm-item .mud-checkbox { margin: 0; }
+.permission-modal-container {
+    max-width: 980px;
+}
+
+.permission-modal {
+    height: min(760px, calc(100vh - 32px));
+    display: flex;
+    flex-direction: column;
+}
+
+.permission-modal-header {
+    min-height: 86px;
+    padding: 18px 22px !important;
+    background: var(--bg-2);
+    border-bottom: 1px solid var(--bd-1);
+}
+
+.permission-modal-mark {
+    width: 42px;
+    height: 42px;
+    display: grid;
+    place-items: center;
+    flex: 0 0 auto;
+    color: var(--accent);
+    background: var(--accent-soft);
+    border: 1px solid var(--accent-line);
+    border-radius: 12px;
+}
+
+.permission-modal-title {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.permission-modal-title .mud-typography-h6 {
+    color: var(--fg-1);
+    font-family: var(--font-serif);
+    font-weight: 600;
+}
+
+.permission-modal-title .mud-typography-caption {
+    color: var(--fg-3);
+}
+
+.permission-modal-loading {
+    padding: 0 22px;
+}
+
+.permission-search-bar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 18px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--bd-1);
+}
+
+.permission-search-input .mud-input-control {
+    margin: 0;
+}
+
+.permission-search-input .mud-input-outlined-border {
+    border-color: var(--bd-2) !important;
+}
+
+.permission-search-clear {
+    color: var(--fg-3) !important;
+}
+
+.permission-workspace {
+    min-height: 0;
+    flex: 1 1 auto;
+    display: grid;
+    grid-template-columns: 236px minmax(0, 1fr);
+    overflow: hidden;
+    background: var(--surface);
+}
+
+.permission-category-rail {
+    min-width: 0;
+    overflow-y: auto;
+    padding: 16px 12px;
+    background: var(--surface-2);
+    border-inline-end: 1px solid var(--bd-1);
+}
+
+.permission-category-caption {
+    padding: 0 12px 9px;
+    color: var(--fg-4);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .09em;
+    text-transform: uppercase;
+}
+
+body.abp-application-layout .permission-category-button {
+    min-height: 42px;
+    margin-bottom: 4px;
+    padding-inline: 12px !important;
+    color: var(--fg-2) !important;
+    border-radius: 10px;
+    justify-content: flex-start;
+    text-transform: none;
+}
+
+body.abp-application-layout .permission-category-button .mud-button-label {
+    width: 100%;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+body.abp-application-layout .permission-category-button .mud-button-icon-start {
+    color: var(--fg-3);
+}
+
+body.abp-application-layout .permission-category-button:hover {
+    color: var(--fg-1) !important;
+    background: var(--hover) !important;
+}
+
+body.abp-application-layout .permission-category-button--active {
+    color: var(--accent) !important;
+    background: var(--accent-soft) !important;
+    box-shadow: inset 3px 0 0 var(--accent);
+}
+
+[dir="rtl"] body.abp-application-layout .permission-category-button--active {
+    box-shadow: inset -3px 0 0 var(--accent);
+}
+
+body.abp-application-layout .permission-category-button--active .mud-button-icon-start {
+    color: var(--accent) !important;
+}
+
+.permission-category-label {
+    min-width: 0;
+    flex: 1 1 auto;
+    overflow: hidden;
+    text-align: start;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.permission-category-count {
+    min-width: 40px;
+    padding: 2px 7px;
+    color: var(--fg-3);
+    background: var(--surface);
+    border: 1px solid var(--bd-1);
+    border-radius: 999px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    line-height: 1.4;
+    text-align: center;
+}
+
+.permission-content {
+    min-width: 0;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 18px;
+    background: var(--surface);
+}
+
+.permission-content-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 14px;
+}
+
+.permission-content-head .mud-typography-h6 {
+    color: var(--fg-1);
+    font-family: var(--font-serif);
+    font-weight: 600;
+}
+
+.permission-content-head .mud-typography-caption {
+    color: var(--fg-3);
+}
+
+.permission-sections {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.permission-section {
+    overflow: hidden;
+    background: var(--surface);
+    border: 1px solid var(--bd-1);
+    border-radius: 12px;
+}
+
+.permission-section-head {
+    min-height: 60px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 10px 14px 10px 16px;
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--bd-1);
+}
+
+.permission-section-name {
+    color: var(--fg-1);
+    font-size: 14px;
+    font-weight: 700;
+}
+
+.permission-section-summary {
+    margin-top: 2px;
+    color: var(--fg-3);
+    font-size: 11px;
+}
+
+.permission-feature-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    padding: 12px;
+}
+
+.permission-feature {
+    min-width: 0;
+    align-self: start;
+    background: var(--bg-2);
+    border: 1px solid var(--bd-1);
+    border-radius: 10px;
+    transition: border-color 140ms ease, box-shadow 140ms ease, background 140ms ease;
+}
+
+.permission-feature:hover {
+    border-color: var(--bd-3);
+}
+
+.permission-feature--expanded {
+    grid-column: 1 / -1;
+    border-color: var(--accent-line);
+    box-shadow: var(--shadow-sm);
+}
+
+.permission-feature-head {
+    min-height: 50px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 6px 8px 6px 10px;
+}
+
+.permission-feature-head > .mud-checkbox {
+    min-width: 0;
+    flex: 1 1 auto;
+}
+
+.permission-feature-head > .mud-input-control {
+    min-width: 0;
+    overflow: hidden;
+    flex: 1 1 auto;
+}
+
+.permission-feature-head > .mud-input-control .mud-input-control-input-container,
+.permission-feature-head > .mud-input-control .mud-input {
+    min-width: 0;
+}
+
+.permission-feature-head .mud-checkbox label {
+    width: 100%;
+    min-width: 0;
+}
+
+.permission-feature-head .mud-checkbox .mud-typography {
+    overflow: hidden;
+    color: var(--fg-1);
+    font-size: 13px;
+    font-weight: 600;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.permission-feature-meta {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex: 0 0 auto;
+    color: var(--fg-4);
+    font-family: var(--font-mono);
+    font-size: 9px;
+}
+
+.permission-feature-toggle {
+    color: var(--fg-3) !important;
+}
+
+.permission-feature-children {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 4px 12px;
+    padding: 8px 12px 12px;
+    background: var(--surface-2);
+    border-top: 1px solid var(--bd-1);
+}
+
+.permission-child {
+    min-width: 0;
+    border-radius: 8px;
+}
+
+.permission-child:hover {
+    background: var(--hover);
+}
+
+.permission-child .mud-checkbox {
+    width: 100%;
+    margin: 0;
+}
+
+.permission-child .mud-checkbox .mud-typography {
+    color: var(--fg-2);
+    font-size: 12px;
+}
+
+.permission-depth-2 { padding-inline-start: 16px; }
+.permission-depth-3 { padding-inline-start: 30px; }
+
+.permission-empty-state {
+    min-height: 360px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 30px;
+    color: var(--fg-3);
+    text-align: center;
+}
+
+.permission-empty-state .mud-icon-root {
+    color: var(--accent);
+}
+
+.permission-empty-state--search {
+    min-height: 280px;
+    background: var(--surface-2);
+    border: 1px dashed var(--bd-2);
+    border-radius: 12px;
+}
+
+.permission-modal-footer {
+    min-height: 66px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 11px 14px 11px 20px;
+    background: var(--bg-2);
+    border-top: 1px solid var(--bd-1);
+}
+
+.permission-total {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    color: var(--fg-3);
+    font-size: 11px;
+}
+
+.permission-total-value {
+    color: var(--accent);
+    font-family: var(--font-mono);
+    font-size: 17px;
+    font-weight: 700;
+}
+
+.permission-readonly {
+    margin-inline-start: 8px;
+    color: var(--amber-text);
+}
+
+.permission-footer-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+@media (max-width: 760px) {
+    .permission-modal-container {
+        max-width: 100%;
+    }
+
+    .permission-modal {
+        height: calc(100vh - 20px);
+    }
+
+    .permission-search-bar {
+        grid-template-columns: minmax(0, 1fr) auto;
+        padding: 10px 12px;
+    }
+
+    .permission-search-clear {
+        display: none !important;
+    }
+
+    .permission-workspace {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto minmax(0, 1fr);
+    }
+
+    .permission-category-rail {
+        display: flex;
+        gap: 6px;
+        overflow-x: auto;
+        padding: 9px 10px;
+        border-inline-end: 0;
+        border-bottom: 1px solid var(--bd-1);
+    }
+
+    .permission-category-caption {
+        display: none;
+    }
+
+    body.abp-application-layout .permission-category-button {
+        width: auto !important;
+        min-width: max-content;
+        margin: 0;
+    }
+
+    body.abp-application-layout .permission-category-button--active,
+    [dir="rtl"] body.abp-application-layout .permission-category-button--active {
+        box-shadow: inset 0 -2px 0 var(--accent);
+    }
+
+    .permission-category-count {
+        min-width: 34px;
+    }
+
+    .permission-content {
+        padding: 12px;
+    }
+
+    .permission-content-head,
+    .permission-section-head {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 4px;
+    }
+
+    .permission-feature-list,
+    .permission-feature-children {
+        grid-template-columns: 1fr;
+    }
+
+    .permission-feature--expanded {
+        grid-column: auto;
+    }
+
+    .permission-total {
+        display: none;
+    }
+
+    .permission-modal-footer {
+        justify-content: flex-end;
+        padding: 9px 12px;
+    }
+}
 
 /* ========================================================================
    Shop settings tabs and background-job fields
