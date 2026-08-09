@@ -71,6 +71,12 @@ public class ProductionFormulaAppService : ProductionAppService, IProductionForm
             input.Notes);
 
         ApplyItems(formula, input.Items);
+        formula.EnsureHasIngredients();
+        ApplyPhase3Details(formula, input);
+        if (input.IsDefault)
+        {
+            await _formulaManager.ApproveAsync(formula, CurrentUser.Id, Clock.Now);
+        }
 
         await _formulaRepository.InsertAsync(formula, autoSave: true);
         return await MapToDtoAsync(formula);
@@ -83,6 +89,10 @@ public class ProductionFormulaAppService : ProductionAppService, IProductionForm
 
         await _formulaManager.EnsureFinishedProductIsProducibleAsync(input.FinishedProductId);
         await _formulaManager.EnsureIngredientsAreValidAsync(input.Items.Select(i => i.IngredientProductId));
+        await _formulaManager.EnsureVersionAvailableAsync(
+            formula.FinishedProductId,
+            input.Version,
+            formula.Id);
 
         formula.UpdateInfo(
             input.FormulaName,
@@ -105,6 +115,8 @@ public class ProductionFormulaAppService : ProductionAppService, IProductionForm
 
         formula.ClearItems();
         ApplyItems(formula, input.Items);
+        formula.EnsureHasIngredients();
+        ApplyPhase3Details(formula, input);
 
         if (input.IsDefault)
         {
@@ -122,7 +134,39 @@ public class ProductionFormulaAppService : ProductionAppService, IProductionForm
     [Authorize(ProductionPermissions.Formulas.Manage)]
     public async Task DeleteAsync(Guid id)
     {
-        await _formulaRepository.DeleteAsync(id);
+        var formula = await _formulaRepository.GetWithItemsAsync(id);
+        if (formula.ApprovalStatus != ProductionFormulaStatuses.Draft)
+        {
+            throw new Volo.Abp.BusinessException(ProductionErrorCodes.FormulaCannotBeDeletedAfterApproval);
+        }
+        await _formulaRepository.DeleteAsync(formula);
+    }
+
+    [Authorize(ProductionPermissions.Formulas.Manage)]
+    public async Task<ProductionFormulaDto> CreateRevisionAsync(Guid sourceFormulaId)
+    {
+        var source = await _formulaRepository.GetWithItemsAsync(sourceFormulaId);
+        var revision = await _formulaManager.CreateDraftRevisionAsync(source);
+        await _formulaRepository.InsertAsync(revision, autoSave: true);
+        return await MapToDtoAsync(revision);
+    }
+
+    [Authorize(ProductionPermissions.Formulas.Manage)]
+    public async Task<ProductionFormulaDto> ApproveAsync(Guid id)
+    {
+        var formula = await _formulaRepository.GetWithItemsAsync(id);
+        await _formulaManager.ApproveAsync(formula, CurrentUser.Id, Clock.Now);
+        await _formulaRepository.UpdateAsync(formula, autoSave: true);
+        return await MapToDtoAsync(formula);
+    }
+
+    [Authorize(ProductionPermissions.Formulas.Manage)]
+    public async Task<ProductionFormulaDto> RetireAsync(Guid id)
+    {
+        var formula = await _formulaRepository.GetWithItemsAsync(id);
+        formula.Retire();
+        await _formulaRepository.UpdateAsync(formula, autoSave: true);
+        return await MapToDtoAsync(formula);
     }
 
     public async Task<PlannedCostDto> CalculatePlannedCostAsync(Guid formulaId, int plannedOutputQuantity)
@@ -161,6 +205,7 @@ public class ProductionFormulaAppService : ProductionAppService, IProductionForm
         {
             FormulaId = formula.Id,
             PlannedOutputQuantity = result.PlannedOutputQuantity,
+            ExpectedGrossOutputQuantity = result.ExpectedGrossOutputQuantity,
             Batches = result.Batches,
             PlannedIngredientCost = result.PlannedIngredientCost,
             LaborCost = result.LaborCost,
@@ -230,11 +275,28 @@ public class ProductionFormulaAppService : ProductionAppService, IProductionForm
         }
     }
 
+    private static void ApplyPhase3Details(
+        AppProductionFormula formula,
+        CreateProductionFormulaDto input)
+    {
+        formula.SetPhase3Details(
+            input.WorkCenterCode,
+            input.PreparationSteps,
+            input.Items.ToDictionary(
+                item => item.IngredientProductId,
+                item => item.Allergens ?? string.Empty));
+    }
+
     /// <summary>Maps the aggregate to its DTO and overlays the joined finished-product name/unit.</summary>
     private async Task<ProductionFormulaDto> MapToDtoAsync(AppProductionFormula formula)
     {
         var dto = ObjectMapper.Map<AppProductionFormula, ProductionFormulaDto>(formula);
         dto.Items = dto.Items.OrderBy(i => i.SortOrder).ToList();
+        var allergens = formula.GetIngredientAllergens();
+        foreach (var item in dto.Items)
+        {
+            item.Allergens = allergens.GetValueOrDefault(item.IngredientProductId);
+        }
 
         var lookup = await _formulaRepository.GetProducibleFinishedProductsLookupAsync(filter: null, maxResults: 1000);
         var product = lookup.FirstOrDefault(p => p.Id == formula.FinishedProductId);

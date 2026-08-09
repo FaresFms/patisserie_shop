@@ -41,7 +41,22 @@ public class ProductionOrderDto : EntityDto<Guid>
     public decimal UnitProductionCost { get; set; }
     public string? WasteReason { get; set; }
     public string? Notes { get; set; }
+    public Guid? ParentProductionOrderId { get; set; }
+    public string? WorkCenterCode { get; set; }
+    public string? ShiftCode { get; set; }
+    public Guid? AssignedOperatorUserId { get; set; }
+    public string? AssignedOperatorName { get; set; }
+    public DateTime? ScheduledStartTime { get; set; }
+    public DateTime? ScheduledEndTime { get; set; }
+    public string FormulaAllergens { get; set; } = string.Empty;
+    public string QualityStatus { get; set; } = ProductionQualityStatuses.NotRequired;
+    public string? QualityReason { get; set; }
+    public DateTime? QualityUpdatedAt { get; set; }
+    public Guid? QualityUpdatedByUserId { get; set; }
+    public Guid? OutputBatchId { get; set; }
+    public string? OutputBatchNumber { get; set; }
     public List<ProductionOrderIngredientDto> Ingredients { get; set; } = new();
+    public List<ProductionIngredientLotDto> IngredientLots { get; set; } = new();
     public List<ProductionIngredientAvailabilityDto> Availability { get; set; } = new();
     public List<ProductionOrderAllocationDto> Allocations { get; set; } = new();
 }

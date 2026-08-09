@@ -97,11 +97,15 @@ public sealed class UserPresenceTracker : ISingletonDependency
         string circuitId,
         CancellationTokenSource cancellation)
     {
-        try
-        {
-            await Task.Delay(DisconnectGracePeriod, cancellation.Token);
-        }
-        catch (OperationCanceledException)
+        var cancellationSignal = new TaskCompletionSource<bool>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        using var cancellationRegistration = cancellation.Token.Register(
+            static state => ((TaskCompletionSource<bool>)state!).TrySetResult(true),
+            cancellationSignal,
+            useSynchronizationContext: false);
+
+        var gracePeriodDelay = Task.Delay(DisconnectGracePeriod);
+        if (await Task.WhenAny(gracePeriodDelay, cancellationSignal.Task) != gracePeriodDelay)
         {
             return;
         }

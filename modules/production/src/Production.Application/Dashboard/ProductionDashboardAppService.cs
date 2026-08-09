@@ -1,6 +1,6 @@
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
-using Production.Decisions;
+using Production.Kitchens;
 using Production.Orders;
 using Production.Permissions;
 
@@ -10,20 +10,25 @@ namespace Production.Dashboard;
 public class ProductionDashboardAppService : ProductionAppService, IProductionDashboardAppService
 {
     private readonly IProductionOrderRepository _orderRepository;
-    private readonly ProductionDecisionScannerService _decisionScanner;
+    private readonly KitchenAccessChecker _kitchenAccessChecker;
 
     public ProductionDashboardAppService(
         IProductionOrderRepository orderRepository,
-        ProductionDecisionScannerService decisionScanner)
+        KitchenAccessChecker kitchenAccessChecker)
     {
         _orderRepository = orderRepository;
-        _decisionScanner = decisionScanner;
+        _kitchenAccessChecker = kitchenAccessChecker;
     }
 
     public async Task<ProductionDashboardDto> GetAsync(GetProductionDashboardInput input)
     {
-        var model = await _orderRepository.GetDashboardAsync(input.KitchenBranchId);
-        await _decisionScanner.ScanDashboardAsync(model, input.KitchenBranchId);
+        if (input.KitchenBranchId.HasValue)
+        {
+            await _kitchenAccessChecker.EnsureAccessAsync(input.KitchenBranchId.Value);
+        }
+
+        var kitchenIds = await _kitchenAccessChecker.GetAccessibleKitchenIdsAsync();
+        var model = await _orderRepository.GetDashboardAsync(input.KitchenBranchId, kitchenIds);
         return ProductionReportMapper.MapDashboard(model, L);
     }
 }

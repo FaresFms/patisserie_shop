@@ -1,4 +1,4 @@
-@page "/production/dispatch"
+@page "/production/workboard/dispatch"
 @attribute [Authorize(ProductionPermissions.Dispatch.Default)]
 @using System.Threading
 @using System.Threading.Tasks
@@ -6,6 +6,7 @@
 @using Microsoft.AspNetCore.Authorization
 @using Production
 @using Production.Dispatch
+@using Production.Kitchens
 @using Production.Localization
 @using Production.Orders
 @using Production.Permissions
@@ -19,31 +20,51 @@
 @inject IProductionOrderAppService OrderAppService
 @inject IProductionDispatchAppService DispatchAppService
 @inject IBranchAppService BranchAppService
+@inject IProductionKitchenAppService KitchenAppService
 @inject IAuthorizationService Authz
 @inject PageLayout PageLayout
 @inject ISnackbar Snackbar
 @inject IStringLocalizer<ProductionResource> ProdL
+@inject NavigationManager Navigation
 
 @{
-    PageLayout.Title = ProdL["DispatchBoard"];
+    PageLayout.Title = ProdL["Workspace:workboard:Title"];
 }
 
-<SoftCard Elevation="2" Class="pa-2 page-flat">
-    <div class="page-head">
-        <div>
-            <h1 class="page-title">@ProdL["DispatchBoard"]</h1>
-            <div class="page-sub">@ProdL["DispatchBoardSubtitle"]</div>
-        </div>
-        <div class="page-head-actions">
-            <SoftButton Variant="Variant.Text" Color="Color.Primary"
-                        StartIcon="@Icons.Material.Filled.Refresh"
-                        OnClick="ReloadAsync">
-                @ProdL["Refresh"]
-            </SoftButton>
-        </div>
-    </div>
+<ProductionWorkspaceHeader Workspace="workboard" ActiveTab="send">
+    <Actions>
+        <SoftButton Variant="Variant.Text" Color="Color.Primary"
+                    StartIcon="@Icons.Material.Filled.Refresh"
+                    OnClick="ReloadAsync">
+            @ProdL["Refresh"]
+        </SoftButton>
+    </Actions>
+</ProductionWorkspaceHeader>
 
+<SoftCard Elevation="2" Class="pa-2 page-flat">
     <SoftCardContent>
+        @if (_lastTransferReference is not null)
+        {
+            <SoftAlert Severity="Severity.Success" Variant="Variant.Outlined" Class="production-next-step">
+                <div class="production-next-step-content">
+                    <span>@ProdL["NextStep:TransferCreated", _lastTransferReference]</span>
+                    <SoftButton Variant="Variant.Filled" Color="Color.Primary"
+                                StartIcon="@Icons.Material.Filled.ReceiptLong"
+                                OnClick="@(() => Navigation.NavigateTo("/operations/stock-transfers"))">
+                        @ProdL["Workspace:TrackTransfers"]
+                    </SoftButton>
+                </div>
+            </SoftAlert>
+        }
+
+        <div class="production-flow-strip" aria-label="@ProdL["Workspace:DispatchFlow"]">
+            <div class="is-current"><span>1</span>@ProdL["Workspace:ReserveStock"]</div>
+            <SoftIcon Icon="@Icons.Material.Filled.ArrowForward" Size="Size.Small" />
+            <div><span>2</span>@ProdL["Workspace:SendTransfer"]</div>
+            <SoftIcon Icon="@Icons.Material.Filled.ArrowForward" Size="Size.Small" />
+            <div><span>3</span>@ProdL["Workspace:BranchReceives"]</div>
+        </div>
+
         <div class="toolbar">
             <SoftTextField T="string" @bind-Value="_filter"
                            Placeholder="@ProdL["Filter"]"
@@ -56,8 +77,8 @@
                            Style="min-width: 220px; max-width: 320px;" />
 
             <div class="filter-chip">
-                <SoftLookupSelect TItem="BranchLookupDto" TValue="Guid?"
-                                  Items="_branches"
+                <SoftLookupSelect TItem="KitchenBranchLookupDto" TValue="Guid?"
+                                  Items="_kitchens"
                                   ToValue="@(b => (Guid?)b.Id)"
                                   ToLabel="@(b => b.Name)"
                                   Value="_kitchenBranchFilter"
@@ -68,6 +89,83 @@
                                   Clearable="true" />
             </div>
         </div>
+
+        <SoftStack Spacing="1" Class="mt-4 mb-2">
+            <SoftText Typo="Typo.h6">@ProdL["AvailableStockDispatch"]</SoftText>
+            <SoftText Typo="Typo.body2" Color="Color.Default">@ProdL["AvailableStockDispatchHint"]</SoftText>
+        </SoftStack>
+
+        @if (!_kitchenBranchFilter.HasValue)
+        {
+            <SoftAlert Severity="Severity.Info" Dense="true">@ProdL["SelectKitchenForDispatch"]</SoftAlert>
+        }
+        else if (_stockQueueLoading)
+        {
+            <SoftProgressLinear Indeterminate="true" Color="Color.Primary" />
+        }
+        else if (_stockQueue.Count == 0)
+        {
+            <SoftAlert Severity="Severity.Success" Dense="true">@ProdL["NoStockDispatchDemand"]</SoftAlert>
+        }
+        else
+        {
+            <SoftTable T="ProductionStockDispatchQueueItemDto" Items="_stockQueue" Dense="true" Hover="true">
+                <HeaderContent>
+                    <MudTh>@ProdL["RequestNumber"]</MudTh>
+                    <MudTh>@ProdL["Branch"]</MudTh>
+                    <MudTh>@ProdL["Product"]</MudTh>
+                    <MudTh>@ProdL["NeededByDate"]</MudTh>
+                    <MudTh>@ProdL["RemainingUnplanned"]</MudTh>
+                    <MudTh>@ProdL["AvailableToDispatch"]</MudTh>
+                    <MudTh>@ProdL["Actions"]</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="@ProdL["RequestNumber"]">
+                        <SoftText Typo="Typo.body2" Style="font-weight:600;">@context.RequestNumber</SoftText>
+                    </MudTd>
+                    <MudTd DataLabel="@ProdL["Branch"]">@context.BranchName</MudTd>
+                    <MudTd DataLabel="@ProdL["Product"]">
+                        <SoftText Typo="Typo.body2">@context.ProductName</SoftText>
+                        <SoftText Typo="Typo.caption" Color="Color.Default">@context.ProductSku</SoftText>
+                    </MudTd>
+                    <MudTd DataLabel="@ProdL["NeededByDate"]">
+                        <BrowserLocalTime Value="context.NeededByDate" Display="BrowserTimeDisplay.Date" />
+                    </MudTd>
+                    <MudTd DataLabel="@ProdL["RemainingUnplanned"]">
+                        @context.RemainingUnplannedQuantity @context.Unit
+                    </MudTd>
+                    <MudTd DataLabel="@ProdL["AvailableToDispatch"]">
+                        @if (context.DispatchableQuantity > 0)
+                        {
+                            <SoftChip T="string" Color="Color.Success" Variant="Variant.Filled" Size="Size.Small">
+                                @context.DispatchableQuantity @context.Unit
+                            </SoftChip>
+                        }
+                        else
+                        {
+                            <SoftChip T="string" Color="Color.Warning" Variant="Variant.Outlined" Size="Size.Small">
+                                @ProdL["NeedsProduction"]
+                            </SoftChip>
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="@ProdL["Actions"]">
+                        <SoftButton Variant="Variant.Text" Color="Color.Primary"
+                                    StartIcon="@Icons.Material.Filled.Inventory"
+                                    Size="Size.Small"
+                                    Disabled="!_canCreateTransfer || context.DispatchableQuantity <= 0"
+                                    OnClick="() => OpenStockDispatch(context)">
+                            @ProdL["SendAvailableStock"]
+                        </SoftButton>
+                    </MudTd>
+                </RowTemplate>
+            </SoftTable>
+        }
+
+        <SoftDivider Class="my-5" />
+        <SoftStack Spacing="1" Class="mb-2">
+            <SoftText Typo="Typo.h6">@ProdL["ProducedAllocations"]</SoftText>
+            <SoftText Typo="Typo.body2" Color="Color.Default">@ProdL["ProducedAllocationsHint"]</SoftText>
+        </SoftStack>
 
         <SoftDataGrid T="ProductionOrderListItemDto"
                       @ref="_grid"
@@ -116,6 +214,78 @@
         </SoftDataGrid>
     </SoftCardContent>
 </SoftCard>
+
+@if (_stockDispatchVisible && _selectedStockTarget != null)
+{
+    <div class="glass-modal-backdrop" @onclick="CloseStockDispatch">
+        <div class="glass-modal-container glass-modal-container--md" @onclick:stopPropagation="true">
+            <SoftCard Elevation="24" Class="glass-modal">
+                <SoftCardHeader Class="pa-4">
+                    <CardHeaderContent>
+                        <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <SoftIcon Icon="@Icons.Material.Filled.Inventory" Color="Color.Primary" Size="Size.Medium" />
+                            <SoftText Typo="Typo.h6">@ProdL["SendAvailableStock"]</SoftText>
+                        </SoftStack>
+                    </CardHeaderContent>
+                    <CardHeaderActions>
+                        <SoftIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="CloseStockDispatch" />
+                    </CardHeaderActions>
+                </SoftCardHeader>
+                <SoftDivider />
+                <SoftCardContent Class="pa-4 glass-modal-body">
+                    <SoftStack Spacing="3">
+                        <SoftAlert Severity="Severity.Info" Dense="true">
+                            @ProdL["StockDispatchReceiptHint"]
+                        </SoftAlert>
+                        <div class="stats">
+                            <div>
+                                <div class="stat-label">@ProdL["RequestNumber"]</div>
+                                <div class="stat-value">@_selectedStockTarget.RequestNumber</div>
+                            </div>
+                            <div>
+                                <div class="stat-label">@ProdL["Branch"]</div>
+                                <div class="stat-value">@_selectedStockTarget.BranchName</div>
+                            </div>
+                            <div>
+                                <div class="stat-label">@ProdL["Product"]</div>
+                                <div class="stat-value">@_selectedStockTarget.ProductName</div>
+                            </div>
+                            <div>
+                                <div class="stat-label">@ProdL["AvailableToDispatch"]</div>
+                                <div class="stat-value">@_selectedStockTarget.DispatchableQuantity @_selectedStockTarget.Unit</div>
+                            </div>
+                        </div>
+                        <SoftGrid>
+                            <SoftGridItem xs="12" md="6">
+                                <SoftNumericField T="int" @bind-Value="_stockDispatchQuantity"
+                                                  Label="@ProdL["DispatchQuantity"]"
+                                                  Variant="Variant.Outlined"
+                                                  Min="1"
+                                                  Max="_selectedStockTarget.DispatchableQuantity"
+                                                  HideSpinButtons="true" />
+                            </SoftGridItem>
+                            <SoftGridItem xs="12" md="6">
+                                <SoftTextField T="string" @bind-Value="_stockDispatchNotes"
+                                               Label="@ProdL["Notes"]"
+                                               Variant="Variant.Outlined" />
+                            </SoftGridItem>
+                        </SoftGrid>
+                    </SoftStack>
+                </SoftCardContent>
+                <SoftDivider />
+                <div class="pa-3 d-flex justify-end flex-wrap" style="gap: 8px;">
+                    <SoftButton Variant="Variant.Text" OnClick="CloseStockDispatch">@ProdL["Cancel"]</SoftButton>
+                    <SoftButton Variant="Variant.Filled" Color="Color.Primary"
+                                StartIcon="@Icons.Material.Filled.LocalShipping"
+                                Disabled="!CanCreateStockDispatch || _savingStockDispatch"
+                                OnClick="CreateStockDispatchTransferAsync">
+                        @ProdL["CreateDispatchTransfer"]
+                    </SoftButton>
+                </div>
+            </SoftCard>
+        </div>
+    </div>
+}
 
 @if (_dispatchVisible && _selectedOrder != null)
 {
@@ -212,9 +382,19 @@
     private bool _loading;
     private bool _canCreateTransfer;
     private bool _savingDispatch;
+    private bool _stockQueueLoading;
+    private string? _lastTransferReference;
+    private bool _savingStockDispatch;
     private string? _filter;
     private Guid? _kitchenBranchFilter;
+    private List<KitchenBranchLookupDto> _kitchens = new();
     private List<BranchLookupDto> _branches = new();
+    private List<ProductionStockDispatchQueueItemDto> _stockQueue = new();
+
+    private bool _stockDispatchVisible;
+    private ProductionStockDispatchQueueItemDto? _selectedStockTarget;
+    private int _stockDispatchQuantity;
+    private string? _stockDispatchNotes;
 
     private bool _dispatchVisible;
     private ProductionOrderDto? _selectedOrder;
@@ -247,10 +427,23 @@
         && _dispatchQuantity <= SelectedDestinationRemaining
         && _dispatchQuantity <= _selectedOrder.RemainingToDispatch;
 
+    private bool CanCreateStockDispatch =>
+        _canCreateTransfer
+        && _kitchenBranchFilter.HasValue
+        && _selectedStockTarget != null
+        && _stockDispatchQuantity > 0
+        && _stockDispatchQuantity <= _selectedStockTarget.DispatchableQuantity;
+
     protected override async Task OnInitializedAsync()
     {
         _canCreateTransfer = await Authz.IsGrantedAsync(ProductionPermissions.Dispatch.CreateTransfer);
+        _kitchens = await KitchenAppService.GetAccessibleLookupAsync();
+        if (_kitchens.Count == 1)
+        {
+            _kitchenBranchFilter = _kitchens[0].Id;
+        }
         _branches = await BranchAppService.GetLookupAsync();
+        await LoadStockQueueAsync();
     }
 
     private async Task<GridData<ProductionOrderListItemDto>> LoadServerData(GridState<ProductionOrderListItemDto> state, CancellationToken cancellationToken)
@@ -289,7 +482,102 @@
         await ReloadAsync();
     }
 
-    private Task ReloadAsync() => _grid?.ReloadServerData() ?? Task.CompletedTask;
+    private async Task ReloadAsync()
+    {
+        await LoadStockQueueAsync();
+        if (_grid != null)
+        {
+            await _grid.ReloadServerData();
+        }
+    }
+
+    private async Task LoadStockQueueAsync()
+    {
+        if (!_kitchenBranchFilter.HasValue)
+        {
+            _stockQueue = new List<ProductionStockDispatchQueueItemDto>();
+            return;
+        }
+
+        _stockQueueLoading = true;
+        try
+        {
+            _stockQueue = await DispatchAppService.GetStockDispatchQueueAsync(
+                new GetProductionStockDispatchQueueInput
+                {
+                    KitchenBranchId = _kitchenBranchFilter.Value,
+                    Filter = _filter
+                });
+        }
+        catch (Exception ex)
+        {
+            _stockQueue = new List<ProductionStockDispatchQueueItemDto>();
+            await HandleErrorAsync(ex);
+        }
+        finally
+        {
+            _stockQueueLoading = false;
+        }
+    }
+
+    private void OpenStockDispatch(ProductionStockDispatchQueueItemDto target)
+    {
+        _selectedStockTarget = target;
+        _stockDispatchQuantity = target.DispatchableQuantity;
+        _stockDispatchNotes = null;
+        _stockDispatchVisible = true;
+    }
+
+    private void CloseStockDispatch()
+    {
+        if (_savingStockDispatch)
+        {
+            return;
+        }
+
+        _stockDispatchVisible = false;
+        _selectedStockTarget = null;
+        _stockDispatchNotes = null;
+    }
+
+    private async Task CreateStockDispatchTransferAsync()
+    {
+        if (!CanCreateStockDispatch
+            || !_kitchenBranchFilter.HasValue
+            || _selectedStockTarget == null)
+        {
+            return;
+        }
+
+        _savingStockDispatch = true;
+        try
+        {
+            var result = await DispatchAppService.CreateRequestStockTransferAsync(
+                new CreateProductionRequestStockTransferDto
+                {
+                    KitchenBranchId = _kitchenBranchFilter.Value,
+                    RequestId = _selectedStockTarget.RequestId,
+                    RequestItemId = _selectedStockTarget.RequestItemId,
+                    Quantity = _stockDispatchQuantity,
+                    Notes = _stockDispatchNotes
+                });
+            Snackbar.Add(
+                ProdL["DispatchTransferCompleted", result.StockTransferReference, result.DispatchedQuantity],
+                Severity.Success);
+            _lastTransferReference = result.StockTransferReference;
+            _stockDispatchVisible = false;
+            _selectedStockTarget = null;
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            await HandleErrorAsync(ex);
+        }
+        finally
+        {
+            _savingStockDispatch = false;
+        }
+    }
 
     private async Task OpenDispatchAsync(ProductionOrderListItemDto row)
     {
@@ -340,6 +628,7 @@
             Snackbar.Add(
                 ProdL["DispatchTransferCompleted", result.StockTransferReference, result.DispatchedQuantity],
                 Severity.Success);
+            _lastTransferReference = result.StockTransferReference;
             _dispatchVisible = false;
             _selectedOrder = null;
             await ReloadAsync();

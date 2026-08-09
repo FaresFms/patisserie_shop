@@ -1,0 +1,54 @@
+@page "/production/demand-planning"
+@attribute [Authorize(ProductionPermissions.BranchRequests.ViewAll)]
+@using Microsoft.AspNetCore.Authorization
+@using Production
+@using Production.Localization
+@using Production.Permissions
+@using Volo.Abp.AspNetCore.Components.Web.Theming.Layout
+@using Color = MudBlazor.Color
+@using Variant = MudBlazor.Variant
+@inject NavigationManager Navigation
+@inject PageLayout PageLayout
+@inject IStringLocalizer<ProductionResource> ProdL
+
+@{
+    PageLayout.Title = ProdL["Workspace:demand:Title"];
+}
+
+<ProductionWorkspaceHeader Workspace="demand" ActiveTab="@ActiveTab">
+    <Actions>
+        <AuthorizeView Policy="@ProductionPermissions.Plans.Default">
+            <Authorized>
+                <SoftButton Variant="Variant.Filled" Color="Color.Primary"
+                            StartIcon="@Icons.Material.Filled.CalendarMonth"
+                            OnClick="@(() => Navigation.NavigateTo("/production/demand-planning/plans"))">
+                    @ProdL["Workspace:OpenPlan"]
+                </SoftButton>
+            </Authorized>
+        </AuthorizeView>
+    </Actions>
+</ProductionWorkspaceHeader>
+
+<BranchProductionRequests @key="ActiveTab"
+                          ReviewMode="true"
+                          ShowPageHeader="false"
+                          InitialStatus="@InitialStatus" />
+
+@code {
+    [Parameter, SupplyParameterFromQuery(Name = "view")]
+    public string? View { get; set; }
+
+    private string ActiveTab => View?.ToLowerInvariant() switch
+    {
+        "approved" => "approved",
+        "history" => "history",
+        _ => "review"
+    };
+
+    private string InitialStatus => ActiveTab switch
+    {
+        "approved" => BranchProductionRequestStatuses.Approved,
+        "history" => BranchProductionRequestStatuses.Fulfilled,
+        _ => BranchProductionRequestStatuses.Submitted
+    };
+}

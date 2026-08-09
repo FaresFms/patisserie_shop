@@ -1,5 +1,5 @@
 @page "/cashier"
-@attribute [Authorize(OperationsPermissions.Cashier.Default)]
+@attribute [Authorize(OperationsPermissions.Cashier.OperatePos)]
 @using System.Text.Json
 @using System.Threading.Tasks
 @using Microsoft.AspNetCore.Authorization
@@ -332,9 +332,9 @@
                             {
                                 <div class="pos-receipt-branch">@_shift!.BranchName</div>
                             }
-                            @if (!string.IsNullOrWhiteSpace(_shopAddress))
+                            @if (!string.IsNullOrWhiteSpace(_myBranch?.Address))
                             {
-                                <div class="pos-receipt-addr">@_shopAddress</div>
+                                <div class="pos-receipt-addr">@_myBranch!.Address</div>
                             }
                             @if (!string.IsNullOrWhiteSpace(_shopPhone))
                             {
@@ -526,9 +526,8 @@
 
     private CashierProductDto? _infoProduct;
 
-    // Shop branding for the printed receipt — loaded from shop settings.
+    // Shop branding for the printed receipt. Location comes from the assigned branch.
     private string _shopName = "Patisserie Shop";
-    private string? _shopAddress;
     private string? _shopPhone;
     private string? _receiptFooter;
 
@@ -543,7 +542,6 @@
         try
         {
             _shopName = await AppSettingProvider.GetOrNullAsync("patisserie_shop.Shop.Name") ?? "Patisserie Shop";
-            _shopAddress = await AppSettingProvider.GetOrNullAsync("patisserie_shop.Shop.Address");
             _shopPhone = await AppSettingProvider.GetOrNullAsync("patisserie_shop.Shop.Phone");
             _receiptFooter = await AppSettingProvider.GetOrNullAsync("patisserie_shop.Shop.ReceiptFooterMessage");
             await LoadShopCurrencyAsync();

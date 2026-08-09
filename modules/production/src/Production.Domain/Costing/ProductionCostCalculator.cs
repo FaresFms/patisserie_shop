@@ -12,8 +12,9 @@ namespace Production.Costing;
 /// you cannot buy/consume a fraction of a base unit. Money/percentages are decimals.
 ///
 /// Formula (FROZEN — later waves depend on it):
-///   batches      = ceil(plannedOutputQuantity / formula.OutputQuantity), min 1
-///   requiredQty  = ceil(plannedOutputQuantity / formula.OutputQuantity
+///   grossOutput  = plannedOutputQuantity / (1 - formula.ExpectedWastePercent/100)
+///   batches      = ceil(grossOutput / formula.OutputQuantity), min 1
+///   requiredQty  = ceil(grossOutput / formula.OutputQuantity
 ///                       * item.Quantity * (1 + item.LossPercent/100))   [integer base units]
 ///   lineCost     = requiredQty * unitCost
 ///   ingredient   = Σ lineCost
@@ -44,9 +45,13 @@ public static class ProductionCostCalculator
                 .WithData("PlannedOutputQuantity", plannedOutputQuantity);
         }
 
-        // Real (fractional) batch multiplier, kept as decimal so the per-ingredient
-        // ceil happens once on the final required quantity (not per integer batch).
-        var batchMultiplier = (decimal)plannedOutputQuantity / formula.OutputQuantity;
+        // Expected output waste reduces sellable yield. Inflate the gross output needed
+        // to still land on the requested accepted quantity, then scale ingredients by
+        // that exact decimal multiplier before rounding each base-unit quantity once.
+        var expectedYieldFactor = 1m - (formula.ExpectedWastePercent / 100m);
+        var grossOutput = plannedOutputQuantity / expectedYieldFactor;
+        var expectedGrossOutputQuantity = (int)Math.Ceiling(grossOutput);
+        var batchMultiplier = grossOutput / formula.OutputQuantity;
 
         // Whole batches to run (labor/overhead are charged per started batch).
         var batches = (int)Math.Ceiling(batchMultiplier);
@@ -84,6 +89,7 @@ public static class ProductionCostCalculator
 
         return new ProductionCostResult(
             plannedOutputQuantity,
+            expectedGrossOutputQuantity,
             batches,
             lines,
             ingredientCost,

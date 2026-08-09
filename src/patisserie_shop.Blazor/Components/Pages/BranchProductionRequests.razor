@@ -1,10 +1,6 @@
-@page "/production/my-requests"
-@page "/production/branch-requests"
-@attribute [Authorize(ProductionPermissions.BranchRequests.Default)]
 @using System.Threading
 @using System.Threading.Tasks
 @using Intelligence.Decisions
-@using Inventory.Branches
 @using Microsoft.AspNetCore.Authorization
 @using Production
 @using Production.BranchRequests
@@ -20,34 +16,52 @@
 @inherits patisserie_shopComponentBase
 @inject IBranchProductionRequestAppService RequestAppService
 @inject IDecisionLogAppService DecisionLogAppService
-@inject IBranchAppService BranchAppService
 @inject IAuthorizationService Authz
 @inject PageLayout PageLayout
 @inject ISnackbar Snackbar
 @inject IStringLocalizer<ProductionResource> ProdL
+@inject NavigationManager Navigation
 
-@{
-    PageLayout.Title = _canApprove ? ProdL["BranchRequests"] : ProdL["MyKitchenRequests"];
+@if (ShowPageHeader)
+{
+    PageLayout.Title = ReviewMode ? ProdL["BranchRequests"] : ProdL["MyKitchenRequests"];
 }
 
 <SoftCard Elevation="2" Class="pa-2 page-flat">
-    <div class="page-head">
-        <div>
-            <h1 class="page-title">@(_canApprove ? ProdL["BranchRequests"] : ProdL["MyKitchenRequests"])</h1>
-            <div class="page-sub">@(_canApprove ? ProdL["BranchRequestsSubtitle"] : ProdL["MyKitchenRequestsSubtitle"])</div>
+    @if (ShowPageHeader)
+    {
+        <div class="page-head">
+            <div>
+                <h1 class="page-title">@(ReviewMode ? ProdL["BranchRequests"] : ProdL["MyKitchenRequests"])</h1>
+                <div class="page-sub">@(ReviewMode ? ProdL["BranchRequestsSubtitle"] : ProdL["MyKitchenRequestsSubtitle"])</div>
+            </div>
+            <div class="page-head-actions">
+                @if (!ReviewMode)
+                {
+                    <SoftButton Variant="Variant.Filled" Color="Color.Primary"
+                                StartIcon="@Icons.Material.Filled.Add" OnClick="OpenCreateDialog">
+                        @ProdL["NewRequest"]
+                    </SoftButton>
+                }
+            </div>
         </div>
-        <div class="page-head-actions">
-            @if (!_canApprove)
-            {
-                <SoftButton Variant="Variant.Filled" Color="Color.Primary"
-                            StartIcon="@Icons.Material.Filled.Add" OnClick="OpenCreateDialog">
-                    @ProdL["NewRequest"]
-                </SoftButton>
-            }
-        </div>
-    </div>
+    }
 
     <SoftCardContent>
+        @if (_nextStepVisible)
+        {
+            <SoftAlert Severity="Severity.Success" Variant="Variant.Outlined" Class="production-next-step">
+                <div class="production-next-step-content">
+                    <span>@ProdL["NextStep:ApprovedDemand"]</span>
+                    <SoftButton Variant="Variant.Filled" Color="Color.Primary"
+                                StartIcon="@Icons.Material.Filled.CalendarMonth"
+                                OnClick="@(() => Navigation.NavigateTo("/production/demand-planning/plans"))">
+                        @ProdL["Workspace:OpenPlan"]
+                    </SoftButton>
+                </div>
+            </SoftAlert>
+        }
+
         <div class="toolbar">
             <SoftTextField T="string" @bind-Value="_filter"
                            Placeholder="@ProdL["Filter"]"
@@ -116,14 +130,15 @@
                                                 Color="Color.Primary"
                                                 Size="Size.Small"
                                                 OnClick="() => OpenDetailAsync(context.Item.Id)" />
-                                @if (!_canApprove && context.Item.Status == BranchProductionRequestStatuses.Draft)
+                                @if (!ReviewMode && context.Item.Status == BranchProductionRequestStatuses.Draft)
                                 {
                                     <SoftIconButton Icon="@Icons.Material.Filled.Send"
                                                     Color="Color.Primary"
                                                     Size="Size.Small"
+                                                    Disabled="@_submittingRequestIds.Contains(context.Item.Id)"
                                                     OnClick="() => SubmitAsync(context.Item.Id)" />
                                 }
-                                @if (!_canApprove && (context.Item.Status == BranchProductionRequestStatuses.Draft || context.Item.Status == BranchProductionRequestStatuses.Submitted))
+                                @if (!ReviewMode && (context.Item.Status == BranchProductionRequestStatuses.Draft || context.Item.Status == BranchProductionRequestStatuses.Submitted))
                                 {
                                     <SoftIconButton Icon="@Icons.Material.Filled.Cancel"
                                                     Color="Color.Error"
@@ -162,13 +177,14 @@
                 <SoftCardContent Class="pa-4 glass-modal-body">
                     <SoftStack Spacing="3">
                         <SoftStack Row="true" Spacing="2">
-                            <SoftLookupSelect TItem="BranchLookupDto" TValue="Guid?"
+                            <SoftLookupSelect TItem="RequestableBranchLookupDto" TValue="Guid?"
                                               Items="_branches"
                                               ToValue="@(b => (Guid?)b.Id)"
                                               ToLabel="@(b => b.Name)"
                                               Value="_editBranchId"
                                               ValueChanged="@(v => _editBranchId = v)"
                                               Label="@ProdL["Branch"]"
+                                              Disabled="@(_branches.Count <= 1)"
                                               Clearable="false" />
                             <SoftDatePicker Label="@ProdL["NeededByDate"]"
                                             Date="_editNeededBy"
@@ -228,6 +244,7 @@
                     <SoftButton Variant="Variant.Text" OnClick="CloseCreateDialog">@ProdL["Cancel"]</SoftButton>
                     <SoftButton Variant="Variant.Filled" Color="Color.Primary"
                                 StartIcon="@Icons.Material.Filled.Save"
+                                Disabled="@_savingRequest"
                                 OnClick="SaveRequestAsync">
                         @ProdL["Save"]
                     </SoftButton>
@@ -309,7 +326,7 @@
                             </RowTemplate>
                         </SoftTable>
 
-                        @if (_canApprove && _detail.Status == BranchProductionRequestStatuses.Submitted)
+                        @if ((_canApprove || _canReject) && _detail.Status == BranchProductionRequestStatuses.Submitted)
                         {
                             <SoftTextField T="string" @bind-Value="_decisionReason"
                                            Label="@ProdL["Reason"]"
@@ -321,18 +338,24 @@
                 <SoftDivider />
                 <div class="pa-3 d-flex justify-end" style="gap: 8px;">
                     <SoftButton Variant="Variant.Text" OnClick="CloseDetail">@ProdL["Cancel"]</SoftButton>
-                    @if (_canApprove && _detail.Status == BranchProductionRequestStatuses.Submitted)
+                    @if ((_canApprove || _canReject) && _detail.Status == BranchProductionRequestStatuses.Submitted)
                     {
-                        <SoftButton Variant="Variant.Outlined" Color="Color.Error"
-                                    StartIcon="@Icons.Material.Filled.Block"
-                                    OnClick="RejectAsync">
-                            @ProdL["Reject"]
-                        </SoftButton>
-                        <SoftButton Variant="Variant.Filled" Color="Color.Primary"
-                                    StartIcon="@Icons.Material.Filled.Check"
-                                    OnClick="ApproveAsync">
-                            @ProdL["Approve"]
-                        </SoftButton>
+                        @if (_canReject)
+                        {
+                            <SoftButton Variant="Variant.Outlined" Color="Color.Error"
+                                        StartIcon="@Icons.Material.Filled.Block"
+                                        OnClick="RejectAsync">
+                                @ProdL["Reject"]
+                            </SoftButton>
+                        }
+                        @if (_canApprove)
+                        {
+                            <SoftButton Variant="Variant.Filled" Color="Color.Primary"
+                                        StartIcon="@Icons.Material.Filled.Check"
+                                        OnClick="ApproveAsync">
+                                @ProdL["Approve"]
+                            </SoftButton>
+                        }
                     }
                 </div>
             </SoftCard>
@@ -347,10 +370,11 @@
     private SoftDataGrid<BranchProductionRequestListItemDto>? _grid;
     private bool _loading;
     private bool _canApprove;
+    private bool _canReject;
     private string? _filter;
     private string _statusFilter = string.Empty;
 
-    private List<BranchLookupDto> _branches = new();
+    private List<RequestableBranchLookupDto> _branches = new();
     private List<ProductLookupDto> _products = new();
     private bool _createVisible;
     private Guid? _sourceDecisionId;
@@ -363,31 +387,46 @@
     private bool _detailVisible;
     private BranchProductionRequestDto? _detail;
     private string? _decisionReason;
+    private bool _savingRequest;
+    private readonly HashSet<Guid> _submittingRequestIds = [];
     private readonly List<ApproveLine> _approveItems = new();
 
     private List<StatusOption> _statusOptions = new();
     private List<StatusOption> _priorityOptions = new();
 
-    [Parameter, SupplyParameterFromQuery(Name = "new")]
+    [Parameter]
+    public bool ReviewMode { get; set; }
+
+    [Parameter]
+    public bool ShowPageHeader { get; set; } = true;
+
+    [Parameter]
+    public string? InitialStatus { get; set; }
+
+    [Parameter]
     public bool NewRequest { get; set; }
 
-    [Parameter, SupplyParameterFromQuery(Name = "decisionId")]
+    [Parameter]
     public Guid? NewRequestDecisionId { get; set; }
 
-    [Parameter, SupplyParameterFromQuery(Name = "branchId")]
+    [Parameter]
     public Guid? NewRequestBranchId { get; set; }
 
-    [Parameter, SupplyParameterFromQuery(Name = "productId")]
+    [Parameter]
     public Guid? NewRequestProductId { get; set; }
 
-    [Parameter, SupplyParameterFromQuery(Name = "notes")]
+    [Parameter]
     public string? NewRequestNotes { get; set; }
 
     protected override async Task OnInitializedAsync()
     {
         _canApprove = await Authz.IsGrantedAsync(ProductionPermissions.BranchRequests.Approve);
-        _branches = await BranchAppService.GetLookupAsync();
-        _products = await RequestAppService.GetRequestableProductsLookupAsync();
+        _canReject = await Authz.IsGrantedAsync(ProductionPermissions.BranchRequests.Reject);
+        if (!ReviewMode)
+        {
+            _branches = await RequestAppService.GetRequestableBranchesLookupAsync();
+            _products = await RequestAppService.GetRequestableProductsLookupAsync();
+        }
 
         _statusOptions =
         [
@@ -402,6 +441,7 @@
             new(BranchProductionRequestStatuses.Rejected, ProdL["Status:Rejected"]),
             new(BranchProductionRequestStatuses.Cancelled, ProdL["Status:Cancelled"])
         ];
+        _statusFilter = InitialStatus ?? string.Empty;
         _priorityOptions =
         [
             new(ProductionPriorities.Low, ProdL["Priority:Low"]),
@@ -409,7 +449,7 @@
             new(ProductionPriorities.Urgent, ProdL["Priority:Urgent"])
         ];
 
-        if (NewRequest)
+        if (!ReviewMode && NewRequest)
         {
             await OpenCreateDialogFromQueryAsync();
         }
@@ -421,14 +461,17 @@
         try
         {
             var sorting = state.SortDefinitions.FirstOrDefault();
-            var result = await RequestAppService.GetListAsync(new GetBranchProductionRequestsInput
+            var input = new GetBranchProductionRequestsInput
             {
                 Filter = _filter,
                 Status = string.IsNullOrWhiteSpace(_statusFilter) ? null : _statusFilter,
                 SkipCount = state.Page * state.PageSize,
                 MaxResultCount = state.PageSize,
                 Sorting = sorting == null ? string.Empty : $"{sorting.SortBy} {(sorting.Descending ? "desc" : "asc")}"
-            });
+            };
+            var result = ReviewMode
+                ? await RequestAppService.GetReviewListAsync(input)
+                : await RequestAppService.GetMyListAsync(input);
 
             return new GridData<BranchProductionRequestListItemDto>
             {
@@ -521,51 +564,100 @@
 
     private async Task SaveRequestAsync()
     {
+        if (!_editBranchId.HasValue)
+        {
+            Snackbar.Add(L["ThisFieldIsRequired", ProdL["Branch"]], Severity.Warning);
+            return;
+        }
+
+        var selectedLines = _editItems.Where(line => line.ProductId.HasValue).ToList();
+        if (selectedLines.Count == 0)
+        {
+            Snackbar.Add(ProdL["Production:104"], Severity.Warning);
+            return;
+        }
+
+        if (selectedLines.Any(line => line.Quantity <= 0))
+        {
+            Snackbar.Add(ProdL["Production:101"], Severity.Warning);
+            return;
+        }
+
+        if (selectedLines.GroupBy(line => line.ProductId!.Value).Any(group => group.Count() > 1))
+        {
+            Snackbar.Add(ProdL["Production:102"], Severity.Warning);
+            return;
+        }
+
         var input = new CreateBranchProductionRequestDto
         {
-            BranchId = _editBranchId ?? Guid.Empty,
+            BranchId = _editBranchId.Value,
             NeededByDate = (_editNeededBy ?? DateTime.Today.AddDays(1)).Date,
             Priority = _editPriority,
             Notes = _editNotes
         };
 
-        foreach (var line in _editItems)
+        foreach (var line in selectedLines)
         {
-            if (line.ProductId.HasValue)
+            input.Items.Add(new CreateBranchProductionRequestItemDto
             {
-                input.Items.Add(new CreateBranchProductionRequestItemDto
-                {
-                    ProductId = line.ProductId.Value,
-                    RequestedQuantity = line.Quantity
-                });
-            }
-        }
-
-        var created = await RequestAppService.CreateAsync(input);
-        if (_sourceDecisionId.HasValue)
-        {
-            await DecisionLogAppService.ExecuteAsync(_sourceDecisionId.Value, new ExecuteDecisionLogInput
-            {
-                ActionType = DecisionActionTypes.BranchProductionRequest,
-                ActionId = created.Id
+                ProductId = line.ProductId!.Value,
+                RequestedQuantity = line.Quantity
             });
-            Snackbar.Add(string.Format(ProdL["RequestSavedFromDecision"], created.RequestNumber), Severity.Success);
         }
-        else
+
+        _savingRequest = true;
+        try
         {
-            Snackbar.Add(ProdL["SavedSuccessfully"], Severity.Success);
+            var created = await RequestAppService.CreateAsync(input);
+            if (_sourceDecisionId.HasValue)
+            {
+                await DecisionLogAppService.ExecuteAsync(_sourceDecisionId.Value, new ExecuteDecisionLogInput
+                {
+                    ActionType = DecisionActionTypes.BranchProductionRequest,
+                    ActionId = created.Id
+                });
+                Snackbar.Add(string.Format(ProdL["RequestSavedFromDecision"], created.RequestNumber), Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add(ProdL["SavedSuccessfully"], Severity.Success);
+            }
+
+            CloseCreateDialog();
+            await ReloadAsync();
         }
-
-        CloseCreateDialog();
-
-        await ReloadAsync();
+        catch (Exception ex)
+        {
+            await HandleErrorAsync(ex);
+        }
+        finally
+        {
+            _savingRequest = false;
+        }
     }
 
     private async Task SubmitAsync(Guid id)
     {
-        await RequestAppService.SubmitAsync(id);
-        Snackbar.Add(ProdL["SavedSuccessfully"], Severity.Success);
-        await ReloadAsync();
+        if (!_submittingRequestIds.Add(id))
+        {
+            return;
+        }
+
+        try
+        {
+            await RequestAppService.SubmitAsync(id);
+            Snackbar.Add(ProdL["SavedSuccessfully"], Severity.Success);
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            await HandleErrorAsync(ex);
+        }
+        finally
+        {
+            _submittingRequestIds.Remove(id);
+        }
     }
 
     private async Task CancelAsync(Guid id)
@@ -577,7 +669,9 @@
 
     private async Task OpenDetailAsync(Guid id)
     {
-        _detail = await RequestAppService.GetAsync(id);
+        _detail = ReviewMode
+            ? await RequestAppService.GetForReviewAsync(id)
+            : await RequestAppService.GetMyAsync(id);
         _approveItems.Clear();
         foreach (var item in _detail.Items)
         {
@@ -624,6 +718,7 @@
 
         await RequestAppService.ApproveAsync(_detail.Id, input);
         Snackbar.Add(ProdL["SavedSuccessfully"], Severity.Success);
+        _nextStepVisible = true;
         CloseDetail();
         await ReloadAsync();
     }
@@ -689,16 +784,18 @@
 
         return _detail.Status switch
         {
-            BranchProductionRequestStatuses.Draft when !_canApprove
+            BranchProductionRequestStatuses.Draft when !ReviewMode
                 => ProdL["RequestHint:RequesterDraft"].Value,
-            BranchProductionRequestStatuses.Submitted when _canApprove
+            BranchProductionRequestStatuses.Submitted when ReviewMode
                 => ProdL["RequestHint:ApproverSubmitted"].Value,
             BranchProductionRequestStatuses.Submitted
                 => ProdL["RequestHint:RequesterSubmitted"].Value,
             BranchProductionRequestStatuses.Approved
-                or BranchProductionRequestStatuses.PartiallyPlanned
-                or BranchProductionRequestStatuses.Planned
                 => ProdL["RequestHint:Approved"].Value,
+            BranchProductionRequestStatuses.PartiallyPlanned
+                => ProdL["RequestHint:PartiallyPlanned"].Value,
+            BranchProductionRequestStatuses.Planned
+                => ProdL["RequestHint:Planned"].Value,
             _ => null
         };
     }
@@ -723,4 +820,6 @@
     }
 
     private sealed record StatusOption(string Value, string Label);
+
+    private bool _nextStepVisible;
 }

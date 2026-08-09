@@ -1,14 +1,18 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json;
 using System.Threading.Tasks;
 using Inventory;
 using Inventory.BranchInventory;
 using Inventory.Entities;
 using Inventory.Settings;
+using Inventory.StockBatches;
 using Microsoft.AspNetCore.Authorization;
 using Operations.PurchaseOrders;
 using Production.Entities;
+using Production.Control;
+using Production.Kitchens;
 using Production.Permissions;
 using Production.Plans;
 using Production.Waste;
@@ -37,6 +41,8 @@ public class ProductionOrderAppService : ProductionAppService, IProductionOrderA
     private readonly ProductionWasteManager _wasteManager;
     private readonly IProductionWasteRepository _wasteRepository;
     private readonly ISettingProvider _settingProvider;
+    private readonly KitchenAccessChecker _kitchenAccessChecker;
+    private readonly IStockBatchRepository _stockBatchRepository;
 
     public ProductionOrderAppService(
         IProductionOrderRepository orderRepository,
@@ -50,7 +56,9 @@ public class ProductionOrderAppService : ProductionAppService, IProductionOrderA
         IPurchaseOrderAppService purchaseOrderAppService,
         ProductionWasteManager wasteManager,
         IProductionWasteRepository wasteRepository,
-        ISettingProvider settingProvider)
+        ISettingProvider settingProvider,
+        KitchenAccessChecker kitchenAccessChecker,
+        IStockBatchRepository stockBatchRepository)
     {
         _orderRepository = orderRepository;
         _orderManager = orderManager;
@@ -64,63 +72,50 @@ public class ProductionOrderAppService : ProductionAppService, IProductionOrderA
         _wasteManager = wasteManager;
         _wasteRepository = wasteRepository;
         _settingProvider = settingProvider;
+        _kitchenAccessChecker = kitchenAccessChecker;
+        _stockBatchRepository = stockBatchRepository;
     }
 
     public async Task<ProductionOrderDto> GetAsync(Guid id)
     {
         var order = await _orderRepository.GetWithDetailsAsync(id);
+        await _kitchenAccessChecker.EnsureAccessAsync(order.KitchenBranchId);
         return await MapToDtoAsync(order);
     }
 
     public async Task<PagedResultDto<ProductionOrderListItemDto>> GetListAsync(GetProductionOrdersInput input)
     {
+        var kitchenIds = await GetKitchenScopeAsync(input.KitchenBranchId);
         var totalCount = await _orderRepository.CountFilteredAsync(
-            input.Filter, input.Status, input.KitchenBranchId);
+            input.Filter, input.Status, input.KitchenBranchId, kitchenIds);
 
         var items = await _orderRepository.GetFilteredListAsync(
             input.Filter,
             input.Status,
             input.KitchenBranchId,
+            kitchenIds,
             input.Sorting ?? string.Empty,
             input.SkipCount,
             input.MaxResultCount);
 
-        var dtos = new List<ProductionOrderListItemDto>();
-        foreach (var item in items)
-        {
-            dtos.Add(new ProductionOrderListItemDto
-            {
-                Id = item.Id,
-                OrderNumber = item.OrderNumber,
-                KitchenBranchId = item.KitchenBranchId,
-                KitchenBranchName = item.KitchenBranchName,
-                FinishedProductId = item.FinishedProductId,
-                FinishedProductName = item.FinishedProductName,
-                FinishedProductSku = item.FinishedProductSku,
-                Unit = item.Unit,
-                Status = item.Status,
-                Priority = item.Priority,
-                PlannedOutputQuantity = item.PlannedOutputQuantity,
-                AcceptedQuantity = item.AcceptedQuantity,
-                ReservedQuantity = item.ReservedQuantity,
-                DispatchedQuantity = item.DispatchedQuantity,
-                InTransitQuantity = item.InTransitQuantity,
-                ReceivedQuantity = item.ReceivedQuantity,
-                LostQuantity = item.LostQuantity,
-                RemainingToDispatch = item.RemainingToDispatch,
-                ActualStartTime = item.ActualStartTime,
-                CompletedAt = item.CompletedAt,
-                TotalProductionCost = item.TotalProductionCost
-            });
-        }
+        var dtos = items.ConvertAll(MapListItem);
 
         return new PagedResultDto<ProductionOrderListItemDto>(totalCount, dtos);
+    }
+
+    [Authorize(ProductionPermissions.Orders.Quality)]
+    public async Task<List<ProductionOrderListItemDto>> GetQualityQueueAsync(Guid? kitchenBranchId = null)
+    {
+        var kitchenIds = await GetKitchenScopeAsync(kitchenBranchId);
+        var items = await _orderRepository.GetQualityQueueAsync(kitchenBranchId, kitchenIds);
+        return items.ConvertAll(MapListItem);
     }
 
     [Authorize(ProductionPermissions.Orders.Create)]
     public async Task<List<ProductionOrderDto>> CreateFromPlanAsync(Guid planId)
     {
         var plan = await _planRepository.GetWithLinesAsync(planId);
+        await _kitchenAccessChecker.EnsureAccessAsync(plan.KitchenBranchId);
         var orders = await _orderManager.CreateFromPlanAsync(plan, CurrentUser.Id);
 
         var dtos = new List<ProductionOrderDto>();
@@ -136,9 +131,75 @@ public class ProductionOrderAppService : ProductionAppService, IProductionOrderA
     public async Task<ProductionOrderDto> RefreshAvailabilityAsync(Guid id)
     {
         var order = await _orderRepository.GetWithDetailsAsync(id);
+        await _kitchenAccessChecker.EnsureAccessAsync(order.KitchenBranchId);
         await _orderManager.RefreshAvailabilityAsync(order);
         await _orderRepository.UpdateAsync(order, autoSave: true);
         return await MapToDtoAsync(order);
+    }
+
+    [Authorize(ProductionPermissions.Orders.Schedule)]
+    public async Task<ProductionOrderDto> ScheduleAsync(
+        Guid id,
+        ScheduleProductionOrderDto input)
+    {
+        var order = await _orderRepository.GetWithDetailsAsync(id);
+        await _kitchenAccessChecker.EnsureAccessAsync(order.KitchenBranchId);
+
+        var profile = await GetControlProfileAsync();
+        var workCenter = profile.WorkCenters.FirstOrDefault(center =>
+            center.IsActive
+            && string.Equals(center.Code, input.WorkCenterCode, StringComparison.OrdinalIgnoreCase)
+            && (!center.KitchenBranchId.HasValue || center.KitchenBranchId == order.KitchenBranchId));
+        var shift = profile.Shifts.FirstOrDefault(item =>
+            item.IsActive
+            && string.Equals(item.Code, input.ShiftCode, StringComparison.OrdinalIgnoreCase));
+        if (workCenter == null || shift == null)
+        {
+            throw new BusinessException(ProductionErrorCodes.InvalidProductionSchedule);
+        }
+
+        _orderManager.EnsureScheduleDuration(
+            order,
+            workCenter.CapacityUnitsPerHour,
+            input.ScheduledStartTime,
+            input.ScheduledEndTime);
+        var overlappingSchedules = await _orderRepository.CountOverlappingSchedulesAsync(
+            order.KitchenBranchId,
+            workCenter.Code,
+            input.ScheduledStartTime,
+            input.ScheduledEndTime,
+            order.Id);
+        if (overlappingSchedules >= Math.Max(1, workCenter.ParallelSlots))
+        {
+            throw new BusinessException(ProductionErrorCodes.ProductionCapacityExceeded)
+                .WithData("WorkCenterCode", workCenter.Code)
+                .WithData("ParallelSlots", workCenter.ParallelSlots);
+        }
+
+        order.Schedule(
+            workCenter.Code,
+            shift.Code,
+            input.ScheduledStartTime,
+            input.ScheduledEndTime,
+            input.OperatorUserId,
+            input.OperatorName);
+        await _orderRepository.UpdateAsync(order, autoSave: true);
+        return await MapToDtoAsync(order);
+    }
+
+    [Authorize(ProductionPermissions.Orders.Create)]
+    public async Task<CreateSubProductionOrdersResultDto> CreateSubProductionOrdersAsync(Guid id)
+    {
+        var parent = await _orderRepository.GetWithDetailsAsync(id);
+        await _kitchenAccessChecker.EnsureAccessAsync(parent.KitchenBranchId);
+        var children = await _orderManager.CreateSubProductionOrdersAsync(parent, CurrentUser.Id);
+        var result = new CreateSubProductionOrdersResultDto();
+        foreach (var child in children)
+        {
+            await _orderRepository.InsertAsync(child);
+            result.Orders.Add(await MapToDtoAsync(child));
+        }
+        return result;
     }
 
     [Authorize(ProductionPermissions.Ingredients.CheckAvailability)]
@@ -146,6 +207,7 @@ public class ProductionOrderAppService : ProductionAppService, IProductionOrderA
     {
         using var contentCulture = CultureHelper.Use("ar-SY", "ar-SY");
         var order = await _orderRepository.GetWithDetailsAsync(id);
+        await _kitchenAccessChecker.EnsureAccessAsync(order.KitchenBranchId);
         var availability = await _orderManager.CheckAvailabilityAsync(order);
         var shortages = availability
             .Where(a => a.HasShortage && a.ShortageQuantity > 0)
@@ -217,6 +279,7 @@ public class ProductionOrderAppService : ProductionAppService, IProductionOrderA
     public async Task<ProductionOrderDto> StartAsync(Guid id)
     {
         var order = await _orderRepository.GetWithDetailsAsync(id);
+        await _kitchenAccessChecker.EnsureAccessAsync(order.KitchenBranchId);
         await _orderManager.RefreshAvailabilityAsync(order);
 
         if (order.Status == ProductionOrderStatuses.WaitingForIngredients)
@@ -226,6 +289,15 @@ public class ProductionOrderAppService : ProductionAppService, IProductionOrderA
                 .WithData("ProductionOrderId", order.Id);
         }
 
+        var controlProfile = await GetControlProfileAsync();
+        order.EnsureReadyForStart(
+            controlProfile.RequireScheduleBeforeStart,
+            controlProfile.RequireOperatorBeforeStart);
+
+        // Planned cost remains the historical plan snapshot. Refresh the ingredient
+        // prices immediately before consumption so ActualIngredientCost reflects the
+        // current source cost at the moment cooking starts.
+        await _orderManager.RefreshIngredientCostSnapshotsAsync(order);
         var consumptionLines = order.Start(CurrentUser.Id);
         foreach (var line in consumptionLines)
         {
@@ -242,13 +314,15 @@ public class ProductionOrderAppService : ProductionAppService, IProductionOrderA
                     .WithData("Available", inventory?.QuantityOnHand ?? 0);
             }
 
-            await _inventoryManager.AdjustStockAsync(
+            var adjustment = await _inventoryManager.AdjustStockDetailedAsync(
                 inventory,
                 inventory.QuantityOnHand - line.Quantity,
                 StockMovementTypes.ProductionConsumption,
                 notes: order.OrderNumber,
                 referenceId: order.Id,
                 referenceType: ReferenceType);
+
+            _orderManager.RecordActualIngredientCost(order, line, adjustment.ConsumedBatches);
 
             await _branchInventoryRepository.UpdateAsync(inventory);
         }
@@ -262,8 +336,15 @@ public class ProductionOrderAppService : ProductionAppService, IProductionOrderA
     public async Task<ProductionOrderDto> CompleteAsync(Guid id, CompleteProductionOrderDto input)
     {
         var order = await _orderRepository.GetWithDetailsAsync(id);
+        await _kitchenAccessChecker.EnsureAccessAsync(order.KitchenBranchId);
         var finishedProduct = await _productRepository.GetAsync(order.FinishedProductId);
-        var expiryDate = ResolveExpiryDate(input.ExpiryDate, finishedProduct, order);
+        var expiryDate = input.AcceptedQuantity > 0
+            ? ProductionExpiryPolicy.Resolve(
+                input.ExpiryDate,
+                finishedProduct.ShelfLifeDays,
+                order.ActualStartTime ?? Clock.Now,
+                finishedProduct.Id)
+            : (DateTime?)null;
         var completionNotes = NormalizeSystemNotesForPersistence(order, input.Notes);
 
         var completion = order.Complete(
@@ -274,30 +355,50 @@ public class ProductionOrderAppService : ProductionAppService, IProductionOrderA
             input.WasteReason,
             CurrentUser.Id,
             completionNotes);
+        var controlProfile = await GetControlProfileAsync();
+        if (!controlProfile.RequireQualityReleaseBeforeDispatch && input.AcceptedQuantity > 0)
+        {
+            order.SkipQualityRelease(CurrentUser.Id, Clock.Now);
+        }
         var output = completion.Output;
         await _orderManager.ApplyAllocationReleasesAsync(completion.ReleasedAllocations);
 
-        var inventory = await _branchInventoryRepository.FindByBranchAndProductAsync(
-            order.KitchenBranchId,
-            output.ProductId);
-
-        var finishedInventory = inventory?.Inventory;
-        if (finishedInventory == null)
+        if (output.AcceptedQuantity > 0)
         {
-            finishedInventory = await _inventoryManager.InitializeAsync(order.KitchenBranchId, output.ProductId);
-            await _branchInventoryRepository.InsertAsync(finishedInventory);
+            var inventory = await _branchInventoryRepository.FindByBranchAndProductAsync(
+                order.KitchenBranchId,
+                output.ProductId);
+
+            var finishedInventory = inventory?.Inventory;
+            if (finishedInventory == null)
+            {
+                finishedInventory = await _inventoryManager.InitializeAsync(order.KitchenBranchId, output.ProductId);
+                await _branchInventoryRepository.InsertAsync(finishedInventory);
+            }
+
+            await _inventoryManager.AdjustStockAsync(
+                finishedInventory,
+                finishedInventory.QuantityOnHand + output.AcceptedQuantity,
+                StockMovementTypes.ProductionOutput,
+                notes: order.OrderNumber,
+                referenceId: order.Id,
+                referenceType: ReferenceType,
+                batchExpiryDate: output.ExpiryDate,
+                batchUnitCost: output.UnitCost);
+
+            await _branchInventoryRepository.UpdateAsync(finishedInventory, autoSave: true);
+
+            var outputBatches = await _stockBatchRepository.GetBySourceAsync(
+                StockBatchSourceTypes.ProductionOutput,
+                order.Id);
+            var outputBatch = outputBatches.LastOrDefault(batch =>
+                batch.BranchId == order.KitchenBranchId
+                && batch.ProductId == output.ProductId);
+            if (outputBatch != null)
+            {
+                order.RecordOutputBatch(outputBatch.Id, outputBatch.BatchNumber);
+            }
         }
-
-        await _inventoryManager.AdjustStockAsync(
-            finishedInventory,
-            finishedInventory.QuantityOnHand + output.AcceptedQuantity,
-            StockMovementTypes.ProductionOutput,
-            notes: order.OrderNumber,
-            referenceId: order.Id,
-            referenceType: ReferenceType,
-            batchExpiryDate: output.ExpiryDate);
-
-        await _branchInventoryRepository.UpdateAsync(finishedInventory);
 
         if (input.RejectedQuantity > 0)
         {
@@ -335,35 +436,89 @@ public class ProductionOrderAppService : ProductionAppService, IProductionOrderA
         return await MapToDtoAsync(order);
     }
 
+    [Authorize(ProductionPermissions.Orders.Quality)]
+    public async Task<ProductionOrderDto> HoldQualityAsync(
+        Guid id,
+        ProductionQualityActionDto input)
+    {
+        var order = await _orderRepository.GetWithDetailsAsync(id);
+        await _kitchenAccessChecker.EnsureAccessAsync(order.KitchenBranchId);
+        order.HoldQuality(input.Reason ?? string.Empty, CurrentUser.Id, Clock.Now);
+        await _orderRepository.UpdateAsync(order, autoSave: true);
+        return await MapToDtoAsync(order);
+    }
+
+    [Authorize(ProductionPermissions.Orders.Quality)]
+    public async Task<ProductionOrderDto> ReleaseQualityAsync(
+        Guid id,
+        ProductionQualityActionDto input)
+    {
+        var order = await _orderRepository.GetWithDetailsAsync(id);
+        await _kitchenAccessChecker.EnsureAccessAsync(order.KitchenBranchId);
+        order.ReleaseQuality(input.Reason, CurrentUser.Id, Clock.Now);
+        await _orderRepository.UpdateAsync(order, autoSave: true);
+        return await MapToDtoAsync(order);
+    }
+
+    [Authorize(ProductionPermissions.Orders.Quality)]
+    public async Task<ProductionOrderDto> RejectQualityAsync(
+        Guid id,
+        ProductionQualityActionDto input)
+    {
+        var order = await _orderRepository.GetWithDetailsAsync(id);
+        await _kitchenAccessChecker.EnsureAccessAsync(order.KitchenBranchId);
+        order.RejectQuality(input.Reason ?? string.Empty, CurrentUser.Id, Clock.Now);
+
+        if (order.AcceptedQuantity > 0)
+        {
+            var inventoryRow = await _branchInventoryRepository.FindByBranchAndProductAsync(
+                order.KitchenBranchId,
+                order.FinishedProductId);
+            var inventory = inventoryRow?.Inventory;
+            if (inventory == null || inventory.QuantityOnHand < order.AcceptedQuantity)
+            {
+                throw new BusinessException(ProductionErrorCodes.WasteQuantityExceedsStock)
+                    .WithData("Requested", order.AcceptedQuantity)
+                    .WithData("Available", inventory?.QuantityOnHand ?? 0);
+            }
+
+            await _inventoryManager.AdjustStockAsync(
+                inventory,
+                inventory.QuantityOnHand - order.AcceptedQuantity,
+                StockMovementTypes.ProductionWaste,
+                notes: order.OrderNumber,
+                referenceId: order.Id,
+                referenceType: ReferenceType);
+            await _branchInventoryRepository.UpdateAsync(inventory);
+
+            var waste = await _wasteManager.CreateAsync(
+                order.Id,
+                order.KitchenBranchId,
+                order.FinishedProductId,
+                ProductionWasteTypes.RejectedOutput,
+                order.AcceptedQuantity,
+                order.UnitProductionCost,
+                ProductionWasteReasons.Other,
+                CurrentUser.Id,
+                Clock.Now,
+                input.Reason);
+            await _wasteRepository.InsertAsync(waste);
+        }
+
+        await _orderRepository.UpdateAsync(order, autoSave: true);
+        return await MapToDtoAsync(order);
+    }
+
     [Authorize(ProductionPermissions.Orders.Cancel)]
     public async Task<ProductionOrderDto> CancelAsync(Guid id)
     {
         var order = await _orderRepository.GetWithDetailsAsync(id);
+        await _kitchenAccessChecker.EnsureAccessAsync(order.KitchenBranchId);
         var releases = order.Cancel();
         await _orderManager.ApplyAllocationReleasesAsync(releases);
         await _orderRepository.UpdateAsync(order, autoSave: true);
         await RefreshPlanLifecycleAsync(order.ProductionPlanId);
         return await MapToDtoAsync(order);
-    }
-
-    private DateTime ResolveExpiryDate(DateTime? requestedExpiryDate, AppProduct product, AppProductionOrder order)
-    {
-        if (requestedExpiryDate.HasValue)
-        {
-            return requestedExpiryDate.Value.Date;
-        }
-
-        if (product.ShelfLifeDays.HasValue)
-        {
-            // Shelf life counts from when cooking actually started, not from when
-            // the completion was recorded — completing an order the next morning
-            // must not stretch the product's life by a day.
-            var cookedDate = order.ActualStartTime?.Date ?? Clock.Now.Date;
-            return cookedDate.AddDays(product.ShelfLifeDays.Value);
-        }
-
-        throw new BusinessException(ProductionErrorCodes.ProductionExpiryDateRequired)
-            .WithData("ProductId", product.Id);
     }
 
     private static string ResolveRejectedWasteReason(string? reason)
@@ -377,6 +532,16 @@ public class ProductionOrderAppService : ProductionAppService, IProductionOrderA
         return ProductionWasteReasons.IsValid(trimmed)
             ? trimmed
             : ProductionWasteReasons.Other;
+    }
+
+    private async Task<List<Guid>> GetKitchenScopeAsync(Guid? kitchenBranchId)
+    {
+        if (kitchenBranchId.HasValue)
+        {
+            await _kitchenAccessChecker.EnsureAccessAsync(kitchenBranchId.Value);
+        }
+
+        return await _kitchenAccessChecker.GetAccessibleKitchenIdsAsync();
     }
 
     private async Task<ProductionOrderDto> MapToDtoAsync(AppProductionOrder order)
@@ -414,7 +579,21 @@ public class ProductionOrderAppService : ProductionAppService, IProductionOrderA
             TotalProductionCost = order.TotalProductionCost,
             UnitProductionCost = order.UnitProductionCost,
             WasteReason = order.WasteReason,
-            Notes = FriendlySystemNotes(order.Notes, order.ProductionPlanId.HasValue)
+            Notes = FriendlySystemNotes(order.Notes, order.ProductionPlanId.HasValue),
+            ParentProductionOrderId = order.ParentProductionOrderId,
+            WorkCenterCode = order.WorkCenterCode,
+            ShiftCode = order.ShiftCode,
+            AssignedOperatorUserId = order.AssignedOperatorUserId,
+            AssignedOperatorName = order.AssignedOperatorName,
+            ScheduledStartTime = order.ScheduledStartTime,
+            ScheduledEndTime = order.ScheduledEndTime,
+            FormulaAllergens = order.FormulaAllergens,
+            QualityStatus = order.QualityStatus,
+            QualityReason = order.QualityReason,
+            QualityUpdatedAt = order.QualityUpdatedAt,
+            QualityUpdatedByUserId = order.QualityUpdatedByUserId,
+            OutputBatchId = order.OutputBatchId,
+            OutputBatchNumber = order.OutputBatchNumber
         };
 
         var branch = await _branchRepository.FindAsync(order.KitchenBranchId);
@@ -474,6 +653,21 @@ public class ProductionOrderAppService : ProductionAppService, IProductionOrderA
             });
         }
 
+        foreach (var lot in order.GetIngredientLots())
+        {
+            productById.TryGetValue(lot.IngredientProductId, out var ingredientProduct);
+            dto.IngredientLots.Add(new ProductionIngredientLotDto
+            {
+                IngredientProductId = lot.IngredientProductId,
+                IngredientName = ingredientProduct?.Name,
+                BatchId = lot.BatchId,
+                BatchNumber = lot.BatchNumber,
+                ExpiryDate = lot.ExpiryDate,
+                Quantity = lot.Quantity,
+                UnitCost = lot.UnitCost
+            });
+        }
+
         var availability = await _orderManager.CheckAvailabilityAsync(order);
         foreach (var line in availability)
         {
@@ -492,6 +686,40 @@ public class ProductionOrderAppService : ProductionAppService, IProductionOrderA
 
         return dto;
     }
+
+    private static ProductionOrderListItemDto MapListItem(ProductionOrderListItem item) => new()
+    {
+        Id = item.Id,
+        OrderNumber = item.OrderNumber,
+        KitchenBranchId = item.KitchenBranchId,
+        KitchenBranchName = item.KitchenBranchName,
+        FinishedProductId = item.FinishedProductId,
+        FinishedProductName = item.FinishedProductName,
+        FinishedProductSku = item.FinishedProductSku,
+        Unit = item.Unit,
+        Status = item.Status,
+        Priority = item.Priority,
+        PlannedOutputQuantity = item.PlannedOutputQuantity,
+        AcceptedQuantity = item.AcceptedQuantity,
+        ReservedQuantity = item.ReservedQuantity,
+        DispatchedQuantity = item.DispatchedQuantity,
+        InTransitQuantity = item.InTransitQuantity,
+        ReceivedQuantity = item.ReceivedQuantity,
+        LostQuantity = item.LostQuantity,
+        RemainingToDispatch = item.RemainingToDispatch,
+        ActualStartTime = item.ActualStartTime,
+        CompletedAt = item.CompletedAt,
+        TotalProductionCost = item.TotalProductionCost,
+        QualityStatus = item.QualityStatus,
+        QualityReason = item.QualityReason,
+        QualityUpdatedAt = item.QualityUpdatedAt,
+        OutputBatchNumber = item.OutputBatchNumber,
+        WorkCenterCode = item.WorkCenterCode,
+        ShiftCode = item.ShiftCode,
+        AssignedOperatorName = item.AssignedOperatorName,
+        ScheduledStartTime = item.ScheduledStartTime,
+        ScheduledEndTime = item.ScheduledEndTime
+    };
 
     private string? FriendlySystemNotes(string? notes, bool wasCreatedFromPlan)
     {
@@ -552,6 +780,27 @@ public class ProductionOrderAppService : ProductionAppService, IProductionOrderA
     private async Task<string> GetDefaultCurrencyAsync()
         => ShopCurrencySettings.Normalize(
             await _settingProvider.GetOrNullAsync(ShopCurrencySettings.Name));
+
+    private async Task<ProductionControlProfileDto> GetControlProfileAsync()
+    {
+        var json = await _settingProvider.GetOrNullAsync(ProductionControlSettings.Profile);
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return new ProductionControlProfileDto();
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<ProductionControlProfileDto>(
+                       json,
+                       new JsonSerializerOptions(JsonSerializerDefaults.Web))
+                   ?? new ProductionControlProfileDto();
+        }
+        catch (JsonException)
+        {
+            return new ProductionControlProfileDto();
+        }
+    }
 
     private async Task RefreshPlanLifecycleAsync(Guid? productionPlanId)
     {

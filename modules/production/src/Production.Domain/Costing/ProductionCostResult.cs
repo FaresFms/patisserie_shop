@@ -22,6 +22,7 @@ public sealed record ProductionCostLine(
 /// </summary>
 public sealed record ProductionCostResult(
     int PlannedOutputQuantity,
+    int ExpectedGrossOutputQuantity,
     int Batches,
     IReadOnlyList<ProductionCostLine> Lines,
     decimal PlannedIngredientCost,

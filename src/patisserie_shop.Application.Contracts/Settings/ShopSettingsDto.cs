@@ -13,9 +13,6 @@ public class ShopSettingsDto
     [StringLength(128)]
     public string ShopName { get; set; } = "Patisserie Shop";
 
-    [StringLength(256)]
-    public string? ShopAddress { get; set; }
-
     [StringLength(64)]
     public string? ShopPhone { get; set; }
 

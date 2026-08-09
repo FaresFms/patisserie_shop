@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using Production;
 using Production.Entities;
+using Production.Orders;
 using Shouldly;
 using Volo.Abp;
 using Xunit;
@@ -54,6 +55,22 @@ public class AppProductionOrderTests
     }
 
     [Fact]
+    public void Start_uses_the_latest_pre_consumption_ingredient_cost_snapshot()
+    {
+        var order = NewOrder();
+        var ingredientId = Guid.NewGuid();
+        order.AddIngredientSnapshot(Guid.NewGuid(), ingredientId, requiredQuantity: 10, unitCostSnapshot: 2m);
+        order.SetIngredientAvailability(hasShortage: false);
+
+        order.RefreshIngredientCostSnapshots(
+            new System.Collections.Generic.Dictionary<Guid, decimal> { [ingredientId] = 3m });
+        order.Start(Guid.NewGuid());
+
+        order.ActualIngredientCost.ShouldBe(30m);
+        order.Ingredients.Single().UnitCostSnapshot.ShouldBe(3m);
+    }
+
+    [Fact]
     public void Start_rejects_waiting_for_ingredients_order()
     {
         var order = NewOrder();
@@ -82,20 +99,51 @@ public class AppProductionOrderTests
     }
 
     [Fact]
-    public void Complete_requires_accepted_quantity()
+    public void Complete_allows_a_fully_rejected_batch_without_creating_output()
     {
         var order = ReadyStartedOrder();
 
-        Should.Throw<BusinessException>(() =>
-                order.Complete(
-                    actualOutputQuantity: 10,
-                    acceptedQuantity: 0,
-                    rejectedQuantity: 10,
-                    expiryDate: DateTime.Today.AddDays(2),
-                    wasteReason: "burnt",
-                    completedByUserId: Guid.NewGuid(),
-                    notes: null))
-            .Code.ShouldBe(ProductionErrorCodes.CannotCompleteWithoutAcceptedQuantity);
+        var completion = order.Complete(
+            actualOutputQuantity: 10,
+            acceptedQuantity: 0,
+            rejectedQuantity: 10,
+            expiryDate: null,
+            wasteReason: "burnt",
+            completedByUserId: Guid.NewGuid(),
+            notes: null);
+
+        order.Status.ShouldBe(ProductionOrderStatuses.Completed);
+        order.AcceptedQuantity.ShouldBe(0);
+        order.RejectedQuantity.ShouldBe(10);
+        order.ExpiryDate.ShouldBeNull();
+        order.UnitProductionCost.ShouldBe(0m);
+        completion.Output.AcceptedQuantity.ShouldBe(0);
+        completion.Output.ExpiryDate.ShouldBeNull();
+    }
+
+    [Fact]
+    public void Expiry_policy_defaults_to_shelf_life_and_allows_an_earlier_date()
+    {
+        var productId = Guid.NewGuid();
+        var productionDate = new DateTime(2026, 8, 4);
+
+        ProductionExpiryPolicy.Resolve(null, 3, productionDate, productId)
+            .ShouldBe(new DateTime(2026, 8, 7));
+        ProductionExpiryPolicy.Resolve(new DateTime(2026, 8, 6), 3, productionDate, productId)
+            .ShouldBe(new DateTime(2026, 8, 6));
+    }
+
+    [Fact]
+    public void Expiry_policy_rejects_a_date_beyond_product_shelf_life()
+    {
+        var exception = Should.Throw<BusinessException>(() =>
+            ProductionExpiryPolicy.Resolve(
+                new DateTime(2026, 8, 8),
+                shelfLifeDays: 3,
+                productionDate: new DateTime(2026, 8, 4),
+                productId: Guid.NewGuid()));
+
+        exception.Code.ShouldBe(ProductionErrorCodes.ProductionExpiryDateExceedsShelfLife);
     }
 
     [Fact]
@@ -176,6 +224,7 @@ public class AppProductionOrderTests
         order.SetIngredientAvailability(hasShortage: false);
         order.Start(Guid.NewGuid());
         order.Complete(12, 12, 0, DateTime.Today.AddDays(2), null, Guid.NewGuid(), null);
+        order.ReleaseQuality("passed", Guid.NewGuid(), DateTime.UtcNow);
 
         var firstTransferId = Guid.NewGuid();
         order.CreateDispatch(
@@ -239,6 +288,44 @@ public class AppProductionOrderTests
         var started = ReadyStartedOrder();
         Should.Throw<BusinessException>(() => started.Cancel())
             .Code.ShouldBe(ProductionErrorCodes.InvalidOrderStatusTransition);
+    }
+
+    [Fact]
+    public void Completed_output_requires_quality_release_before_dispatch()
+    {
+        var order = NewOrder();
+        var destinationBranchId = Guid.NewGuid();
+        order.AddAllocation(Guid.NewGuid(), destinationBranchId, Guid.NewGuid(), Guid.NewGuid(), 5);
+        order.AddIngredientSnapshot(Guid.NewGuid(), Guid.NewGuid(), 5, 2m);
+        order.SetIngredientAvailability(false);
+        order.Start(Guid.NewGuid());
+        order.Complete(5, 5, 0, DateTime.Today.AddDays(2), null, Guid.NewGuid(), null);
+
+        order.QualityStatus.ShouldBe(ProductionQualityStatuses.Pending);
+        Should.Throw<BusinessException>(() => order.CreateDispatch(
+                Guid.NewGuid(), Guid.NewGuid(), destinationBranchId, 5, DateTime.UtcNow, Guid.NewGuid))
+            .Code.ShouldBe(ProductionErrorCodes.QualityReleaseRequiredForDispatch);
+
+        order.HoldQuality("temperature check", Guid.NewGuid(), DateTime.UtcNow);
+        order.QualityStatus.ShouldBe(ProductionQualityStatuses.Held);
+        order.ReleaseQuality("passed", Guid.NewGuid(), DateTime.UtcNow);
+        Should.NotThrow(() => order.CreateDispatch(
+            Guid.NewGuid(), Guid.NewGuid(), destinationBranchId, 5, DateTime.UtcNow, Guid.NewGuid));
+    }
+
+    [Fact]
+    public void Schedule_and_operator_gates_are_enforced_before_start()
+    {
+        var order = NewOrder();
+        var start = DateTime.UtcNow.AddHours(1);
+
+        Should.Throw<BusinessException>(() => order.EnsureReadyForStart(true, true))
+            .Code.ShouldBe(ProductionErrorCodes.ProductionScheduleRequired);
+
+        order.Schedule("OVEN-1", "DAY", start, start.AddHours(2), Guid.NewGuid(), "Baker");
+        Should.NotThrow(() => order.EnsureReadyForStart(true, true));
+        order.WorkCenterCode.ShouldBe("OVEN-1");
+        order.AssignedOperatorName.ShouldBe("Baker");
     }
 
     private static AppProductionOrder ReadyStartedOrder()

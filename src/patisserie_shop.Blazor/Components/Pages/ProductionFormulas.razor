@@ -5,6 +5,7 @@
 @using Microsoft.AspNetCore.Authorization
 @using Volo.Abp.Application.Dtos
 @using Volo.Abp.AspNetCore.Components.Web.Theming.Layout
+@using Production
 @using Production.Formulas
 @using Production.Permissions
 @using Production.Localization
@@ -93,6 +94,12 @@
                     </CellTemplate>
                 </TemplateColumn>
                 <PropertyColumn T="ProductionFormulaListItemDto" TProperty="int" Property="x => x.Version" Title="@ProdL["Version"]" />
+                <TemplateColumn T="ProductionFormulaListItemDto" Title="@ProdL["RevisionStatus"]">
+                    <CellTemplate>
+                        @FormulaStatusChip(context.Item.ApprovalStatus)
+                    </CellTemplate>
+                </TemplateColumn>
+                <PropertyColumn T="ProductionFormulaListItemDto" TProperty="string?" Property="x => x.WorkCenterCode" Title="@ProdL["WorkCenter"]" />
                 <PropertyColumn T="ProductionFormulaListItemDto" TProperty="int" Property="x => x.ItemCount" Title="@ProdL["ItemCount"]" />
                 <TemplateColumn T="ProductionFormulaListItemDto" Title="@ProdL["IsActive"]" SortBy="x => x.IsActive">
                     <CellTemplate>
@@ -110,7 +117,7 @@
                     <CellTemplate>
                         @if (context.Item.IsDefault)
                         {
-                            <SoftChip T="string" Color="Color.Info" Size="Size.Small" Variant="Variant.Filled">@ProdL["IsDefault"]</SoftChip>
+                            <SoftChip T="string" Color="Color.Primary" Size="Size.Small" Variant="Variant.Filled">@ProdL["IsDefault"]</SoftChip>
                         }
                         else
                         {
@@ -122,16 +129,33 @@
                     <CellTemplate>
                         <span class="row-actions">
                             <SoftStack Row="true" Spacing="1">
-                                <SoftIconButton Icon="@Icons.Material.Filled.Edit"
-                                                Color="Color.Primary"
-                                                Size="Size.Small"
-                                                OnClick="() => OpenEditDialogAsync(context.Item.Id)"
-                                                Disabled="!_canManage" />
-                                <SoftIconButton Icon="@Icons.Material.Filled.Delete"
-                                                Color="Color.Error"
-                                                Size="Size.Small"
-                                                OnClick="() => DeleteAsync(context.Item)"
-                                                Disabled="!_canManage" />
+                                @if (context.Item.ApprovalStatus == ProductionFormulaStatuses.Draft)
+                                {
+                                    <SoftTooltip Text="@ProdL["EditDraft"]">
+                                        <SoftIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" Size="Size.Small"
+                                                        OnClick="() => OpenEditDialogAsync(context.Item.Id)" Disabled="!_canManage" />
+                                    </SoftTooltip>
+                                    <SoftTooltip Text="@ProdL["ApproveRevision"]">
+                                        <SoftIconButton Icon="@Icons.Material.Filled.Verified" Color="Color.Success" Size="Size.Small"
+                                                        OnClick="() => ApproveAsync(context.Item.Id)" Disabled="!_canManage" />
+                                    </SoftTooltip>
+                                    <SoftIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
+                                                    OnClick="() => DeleteAsync(context.Item)" Disabled="!_canManage" />
+                                }
+                                else
+                                {
+                                    <SoftTooltip Text="@ProdL["CreateRevision"]">
+                                        <SoftIconButton Icon="@Icons.Material.Filled.ContentCopy" Color="Color.Primary" Size="Size.Small"
+                                                        OnClick="() => CreateRevisionAsync(context.Item.Id)" Disabled="!_canManage" />
+                                    </SoftTooltip>
+                                    @if (context.Item.ApprovalStatus == ProductionFormulaStatuses.Approved)
+                                    {
+                                        <SoftTooltip Text="@ProdL["RetireRevision"]">
+                                            <SoftIconButton Icon="@Icons.Material.Filled.Archive" Color="Color.Warning" Size="Size.Small"
+                                                            OnClick="() => RetireAsync(context.Item.Id)" Disabled="!_canManage" />
+                                        </SoftTooltip>
+                                    }
+                                }
                             </SoftStack>
                         </span>
                     </CellTemplate>
@@ -167,8 +191,9 @@
                     </CardHeaderContent>
                     <CardHeaderActions>
                         <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                            <MudSwitch T="bool" @bind-Value="_editIsActive" Color="Color.Primary" Label="@ProdL["IsActive"]" />
-                            <MudSwitch T="bool" @bind-Value="_editIsDefault" Color="Color.Info" Label="@ProdL["IsDefault"]" />
+                            <SoftChip T="string" Color="Color.Default" Variant="Variant.Outlined" Size="Size.Small">
+                                @ProdL["Status:Draft"]
+                            </SoftChip>
                             <SoftIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="CloseDialog" />
                         </SoftStack>
                     </CardHeaderActions>
@@ -208,6 +233,19 @@
                         </div>
 
                         <div>
+                            <SoftText Typo="Typo.overline" Color="Color.Primary">@ProdL["ProductionInstructions"]</SoftText>
+                            <SoftDivider Class="mb-3" />
+                            <SoftStack Spacing="2">
+                                <SoftTextField T="string" Label="@ProdL["WorkCenter"]"
+                                               @bind-Value="_editWorkCenterCode" Variant="Variant.Outlined"
+                                               MaxLength="64" Placeholder="MAIN" />
+                                <SoftTextField T="string" Label="@ProdL["PreparationSteps"]"
+                                               @bind-Value="_editPreparationSteps" Variant="Variant.Outlined"
+                                               Lines="4" MaxLength="4000" />
+                            </SoftStack>
+                        </div>
+
+                        <div>
                             <SoftText Typo="Typo.overline" Color="Color.Primary">@ProdL["CostsSection"]</SoftText>
                             <SoftDivider Class="mb-3" />
                             <SoftStack Row="true" Spacing="2">
@@ -220,13 +258,17 @@
                                                   HideSpinButtons="true" />
                                 <SoftNumericField T="decimal"
                                                   Label="@ProdL["ExpectedWastePercent"]"
-                                                  @bind-Value="_editWastePercent"
+                                                  Value="_editWastePercent"
+                                                  ValueChanged="OnExpectedWastePercentChangedAsync"
                                                   Variant="Variant.Outlined"
-                                                  Min="0" Max="100"
+                                                  Min="0" Max="99.99m"
                                                   AdornmentText="%"
                                                   Adornment="Adornment.End"
                                                   HideSpinButtons="true" />
                             </SoftStack>
+                            <SoftText Typo="Typo.caption" Color="Color.Default" Class="mt-1">
+                                @ProdL["ExpectedWastePlanningHint"]
+                            </SoftText>
                             <SoftStack Row="true" Spacing="2" Class="mt-3">
                                 <SoftNumericField T="decimal"
                                                   Label="@ProdL["LaborCostPerBatch"]"
@@ -286,7 +328,7 @@
                                                                   Clearable="false" />
                                             </div>
                                             <SoftNumericField T="int"
-                                                              Label="@ProdL["Quantity"]"
+                                                              Label="@IngredientQuantityLabel(row)"
                                                               Value="row.Quantity"
                                                               ValueChanged="@(v => OnRowQuantityChangedAsync(row, v))"
                                                               Variant="Variant.Outlined"
@@ -303,6 +345,12 @@
                                                               Adornment="Adornment.End"
                                                               HideSpinButtons="true"
                                                               Style="max-width: 130px;" />
+                                            <SoftTextField T="string"
+                                                           Label="@ProdL["Allergens"]"
+                                                           @bind-Value="row.Allergens"
+                                                           Variant="Variant.Outlined"
+                                                           Placeholder="@ProdL["AllergensPlaceholder"]"
+                                                           Style="min-width: 180px;" />
                                             <SoftIconButton Icon="@Icons.Material.Filled.Delete"
                                                             Color="Color.Error"
                                                             Size="Size.Small"
@@ -357,6 +405,10 @@
                                     </tbody>
                                 </table>
                                 <SoftStack Spacing="1" Class="mt-2" Style="max-width: 360px; margin-left:auto;">
+                                    <SoftStack Row="true" Justify="Justify.SpaceBetween">
+                                        <SoftText Typo="Typo.body2" Color="Color.Default">@ProdL["ExpectedGrossOutput"]</SoftText>
+                                        <SoftText Typo="Typo.body2">@_cost.ExpectedGrossOutputQuantity</SoftText>
+                                    </SoftStack>
                                     <SoftStack Row="true" Justify="Justify.SpaceBetween">
                                         <SoftText Typo="Typo.body2" Color="Color.Default">@ProdL["Batches"]</SoftText>
                                         <SoftText Typo="Typo.body2">@_cost.Batches</SoftText>
@@ -468,6 +520,8 @@
     private bool _editIsActive = true;
     private bool _editIsDefault;
     private string? _editNotes;
+    private string? _editWorkCenterCode;
+    private string? _editPreparationSteps;
     private bool _editHadDemoMarker;
     private string? _outputUnit;
     private List<ItemRow> _editItems = new();
@@ -487,6 +541,7 @@
         public int Quantity { get; set; } = 1;
         public decimal LossPercent { get; set; }
         public int SortOrder { get; set; }
+        public string? Allergens { get; set; }
     }
 
     protected override async Task OnInitializedAsync()
@@ -591,9 +646,11 @@
         _editLaborCost = 0;
         _editOverheadCost = 0;
         _editMinutes = 0;
-        _editIsActive = true;
+        _editIsActive = false;
         _editIsDefault = false;
         _editNotes = null;
+        _editWorkCenterCode = null;
+        _editPreparationSteps = null;
         _editHadDemoMarker = false;
         _outputUnit = null;
         _editItems = new();
@@ -619,6 +676,8 @@
             _editIsDefault = f.IsDefault;
             _editHadDemoMarker = f.Notes?.Contains(DemoMarker, StringComparison.Ordinal) == true;
             _editNotes = WithoutDemoMarker(f.Notes);
+            _editWorkCenterCode = f.WorkCenterCode;
+            _editPreparationSteps = f.PreparationSteps;
             _outputUnit = f.FinishedProductUnit
                 ?? _finishedProducts.FirstOrDefault(p => p.Id == f.FinishedProductId)?.Unit;
             _editItems = f.Items
@@ -628,7 +687,8 @@
                     IngredientProductId = i.IngredientProductId,
                     Quantity = i.Quantity,
                     LossPercent = i.LossPercent,
-                    SortOrder = i.SortOrder
+                    SortOrder = i.SortOrder,
+                    Allergens = i.Allergens
                 })
                 .ToList();
             _dialogVisible = true;
@@ -658,6 +718,12 @@
     private async Task OnLaborCostChangedAsync(decimal value)
     {
         _editLaborCost = value;
+        await RecomputeCostAsync();
+    }
+
+    private async Task OnExpectedWastePercentChangedAsync(decimal value)
+    {
+        _editWastePercent = value;
         await RecomputeCostAsync();
     }
 
@@ -694,6 +760,14 @@
     {
         row.LossPercent = value;
         await RecomputeCostAsync();
+    }
+
+    private string IngredientQuantityLabel(ItemRow row)
+    {
+        var unit = _ingredients.FirstOrDefault(p => p.Id == row.IngredientProductId)?.Unit;
+        return string.IsNullOrWhiteSpace(unit)
+            ? ProdL["Quantity"]
+            : $"{ProdL["Quantity"]} ({unit})";
     }
 
     /// <summary>
@@ -740,12 +814,15 @@
             IsActive = _editIsActive,
             IsDefault = _editIsDefault,
             Notes = FormulaNotesForSave(),
+            WorkCenterCode = _editWorkCenterCode,
+            PreparationSteps = _editPreparationSteps,
             Items = _editItems.Select(i => new CreateProductionFormulaItemDto
             {
                 IngredientProductId = i.IngredientProductId,
                 Quantity = i.Quantity,
                 LossPercent = i.LossPercent,
-                SortOrder = order++
+                SortOrder = order++,
+                Allergens = i.Allergens
             }).ToList()
         };
     }
@@ -787,6 +864,8 @@
         IsActive = dto.IsActive,
         IsDefault = dto.IsDefault,
         Notes = dto.Notes,
+        WorkCenterCode = dto.WorkCenterCode,
+        PreparationSteps = dto.PreparationSteps,
         Items = dto.Items
     };
 
@@ -800,6 +879,11 @@
         if (string.IsNullOrWhiteSpace(_editName))
         {
             Snackbar.Add(L["ThisFieldIsRequired", ProdL["FormulaName"]], Severity.Warning);
+            return;
+        }
+        if (_editItems.Count == 0)
+        {
+            Snackbar.Add(ProdL["NoIngredients"], Severity.Warning);
             return;
         }
 
@@ -851,4 +935,64 @@
             await HandleErrorAsync(ex);
         }
     }
+
+    private async Task ApproveAsync(Guid id)
+    {
+        try
+        {
+            await FormulaAppService.ApproveAsync(id);
+            Snackbar.Add(ProdL["RevisionApproved"], Severity.Success);
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            await HandleErrorAsync(ex);
+        }
+    }
+
+    private async Task CreateRevisionAsync(Guid id)
+    {
+        try
+        {
+            var revision = await FormulaAppService.CreateRevisionAsync(id);
+            Snackbar.Add(ProdL["RevisionCreated"], Severity.Success);
+            await ReloadAsync();
+            await OpenEditDialogAsync(revision.Id);
+        }
+        catch (Exception ex)
+        {
+            await HandleErrorAsync(ex);
+        }
+    }
+
+    private async Task RetireAsync(Guid id)
+    {
+        try
+        {
+            await FormulaAppService.RetireAsync(id);
+            Snackbar.Add(ProdL["RevisionRetired"], Severity.Success);
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            await HandleErrorAsync(ex);
+        }
+    }
+
+    private RenderFragment FormulaStatusChip(string status) => builder =>
+    {
+        var color = status switch
+        {
+            ProductionFormulaStatuses.Approved => Color.Success,
+            ProductionFormulaStatuses.Retired => Color.Default,
+            _ => Color.Warning
+        };
+        builder.OpenComponent<SoftChip<string>>(0);
+        builder.AddAttribute(1, "Color", color);
+        builder.AddAttribute(2, "Size", Size.Small);
+        builder.AddAttribute(3, "Variant", status == ProductionFormulaStatuses.Approved ? Variant.Filled : Variant.Outlined);
+        builder.AddAttribute(4, "ChildContent", (RenderFragment)(content =>
+            content.AddContent(0, ProdL[$"FormulaStatus:{status}"])));
+        builder.CloseComponent();
+    };
 }

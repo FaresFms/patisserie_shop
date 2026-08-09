@@ -9,6 +9,9 @@ public class TransferCompletedEto
     public Guid TransferId { get; set; }
     public Guid FromBranchId { get; set; }
     public Guid ToBranchId { get; set; }
+    public string? SourceDocumentType { get; set; }
+    public Guid? SourceDocumentId { get; set; }
+    public Guid? SourceDocumentItemId { get; set; }
     public List<TransferCompletedLineEto> Lines { get; set; } = new();
 }
 

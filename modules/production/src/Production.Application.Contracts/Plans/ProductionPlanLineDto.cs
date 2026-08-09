@@ -19,4 +19,5 @@ public class ProductionPlanLineDto
     public decimal EstimatedLaborCost { get; set; }
     public decimal EstimatedOverheadCost { get; set; }
     public decimal EstimatedTotalCost { get; set; }
+    public bool HasActiveDefaultFormula { get; set; }
 }

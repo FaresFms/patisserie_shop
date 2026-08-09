@@ -7,6 +7,7 @@ using Intelligence.Entities;
 using Intelligence.Velocity;
 using Inventory;
 using Inventory.Entities;
+using Inventory.StockBatches;
 using Microsoft.EntityFrameworkCore;
 using Production.Costing;
 using Production.Entities;
@@ -27,6 +28,7 @@ public class ProductionPlanRepository
     private readonly IRepository<AppBranchInventory, Guid> _inventoryRepository;
     private readonly IRepository<AppProductVelocity, Guid> _velocityRepository;
     private readonly IProductionFormulaRepository _formulaRepository;
+    private readonly IStockBatchRepository _stockBatchRepository;
 
     public ProductionPlanRepository(
         IDbContextProvider<ProductionDbContext> dbContextProvider,
@@ -34,7 +36,8 @@ public class ProductionPlanRepository
         IRepository<AppProduct, Guid> productRepository,
         IRepository<AppBranchInventory, Guid> inventoryRepository,
         IRepository<AppProductVelocity, Guid> velocityRepository,
-        IProductionFormulaRepository formulaRepository)
+        IProductionFormulaRepository formulaRepository,
+        IStockBatchRepository stockBatchRepository)
         : base(dbContextProvider)
     {
         _branchRepository = branchRepository;
@@ -42,6 +45,7 @@ public class ProductionPlanRepository
         _inventoryRepository = inventoryRepository;
         _velocityRepository = velocityRepository;
         _formulaRepository = formulaRepository;
+        _stockBatchRepository = stockBatchRepository;
     }
 
     public async Task<AppProductionPlan> GetWithLinesAsync(Guid id, CancellationToken cancellationToken = default)
@@ -54,9 +58,10 @@ public class ProductionPlanRepository
         string? filter,
         string? status,
         Guid? kitchenBranchId,
+        IReadOnlyCollection<Guid> scopedKitchenBranchIds,
         CancellationToken cancellationToken = default)
     {
-        var query = await BuildFilteredQueryAsync(filter, status, kitchenBranchId);
+        var query = await BuildFilteredQueryAsync(filter, status, kitchenBranchId, scopedKitchenBranchIds);
         return await query.LongCountAsync(GetCancellationToken(cancellationToken));
     }
 
@@ -64,13 +69,14 @@ public class ProductionPlanRepository
         string? filter,
         string? status,
         Guid? kitchenBranchId,
+        IReadOnlyCollection<Guid> scopedKitchenBranchIds,
         string sorting,
         int skipCount,
         int maxResultCount,
         CancellationToken cancellationToken = default)
     {
         var ct = GetCancellationToken(cancellationToken);
-        var query = await BuildFilteredQueryAsync(filter, status, kitchenBranchId);
+        var query = await BuildFilteredQueryAsync(filter, status, kitchenBranchId, scopedKitchenBranchIds);
 
         var headers = await query
             .Select(p => new HeaderProjection
@@ -123,6 +129,7 @@ public class ProductionPlanRepository
     public async Task<List<ProductionPlanSuggestion>> BuildSuggestionsAsync(
         Guid kitchenBranchId,
         DateTime productionDate,
+        decimal forecastSafetyPercent,
         CancellationToken cancellationToken = default)
     {
         var ct = GetCancellationToken(cancellationToken);
@@ -179,15 +186,38 @@ public class ProductionPlanRepository
         var stockRows = await inventoryQuery
             .Where(i => i.BranchId == kitchenBranchId && productIds.Contains(i.ProductId))
             .ToListAsync(ct);
-        var stockByProduct = stockRows.ToDictionary(i => i.ProductId, i => i.QuantityOnHand);
+        var inventoryByProduct = stockRows.ToDictionary(i => i.ProductId);
+        var nonExpiredByProduct = await _stockBatchRepository.GetNonExpiredQuantitiesByProductAsync(
+            kitchenBranchId,
+            productionDate.Date,
+            ct);
+        var committedOrders = await dbContext.ProductionOrders
+            .Include(o => o.Allocations)
+            .Where(o => o.KitchenBranchId == kitchenBranchId
+                && o.Status == ProductionOrderStatuses.Completed
+                && productIds.Contains(o.FinishedProductId))
+            .ToListAsync(ct);
+        var committedByProduct = committedOrders
+            .GroupBy(o => o.FinishedProductId)
+            .ToDictionary(
+                g => g.Key,
+                g => g.Sum(o => o.Allocations.Sum(a =>
+                    Math.Max(0, a.AllocatedQuantity - a.DispatchedQuantity))));
 
         var suggestions = new List<ProductionPlanSuggestion>();
         foreach (var productId in productIds)
         {
             var product = productById[productId];
             requestedByProduct.TryGetValue(productId, out var requested);
-            forecastByProduct.TryGetValue(productId, out var forecast);
-            stockByProduct.TryGetValue(productId, out var stock);
+            forecastByProduct.TryGetValue(productId, out var baseForecast);
+            var forecast = (int)Math.Ceiling(
+                baseForecast * (1m + Math.Clamp(forecastSafetyPercent, 0m, 100m) / 100m));
+            inventoryByProduct.TryGetValue(productId, out var inventory);
+            var usableStock = inventory == null
+                ? 0
+                : StockBatchManager.GetUsableQuantity(product, inventory, nonExpiredByProduct);
+            committedByProduct.TryGetValue(productId, out var committedStock);
+            var stock = Math.Max(0, usableStock - committedStock);
 
             var suggested = Math.Max(0, requested + forecast - stock);
             var suggestion = new ProductionPlanSuggestion
@@ -218,6 +248,48 @@ public class ProductionPlanRepository
             .ToList();
     }
 
+    public async Task<List<ProductionForecastSnapshot>> GetForecastSnapshotsAsync(
+        DateTime fromInclusive,
+        DateTime toExclusive,
+        Guid? kitchenBranchId,
+        IReadOnlyCollection<Guid> scopedKitchenBranchIds,
+        CancellationToken cancellationToken = default)
+    {
+        var ct = GetCancellationToken(cancellationToken);
+        var query = (await GetQueryableAsync())
+            .Include(plan => plan.Lines)
+            .Where(plan => plan.ProductionDate >= fromInclusive.Date
+                           && plan.ProductionDate < toExclusive.Date
+                           && plan.Status != ProductionPlanStatuses.Draft
+                           && plan.Status != ProductionPlanStatuses.Cancelled);
+
+        query = kitchenBranchId.HasValue
+            ? query.Where(plan => plan.KitchenBranchId == kitchenBranchId.Value)
+            : query.Where(plan => scopedKitchenBranchIds.Contains(plan.KitchenBranchId));
+
+        var plans = await query.ToListAsync(ct);
+        var forecasts = plans
+            .SelectMany(plan => plan.Lines)
+            .GroupBy(line => line.ProductId)
+            .ToDictionary(group => group.Key, group => group.Sum(line => line.ForecastQuantity));
+        if (forecasts.Count == 0)
+        {
+            return new List<ProductionForecastSnapshot>();
+        }
+
+        var productIds = forecasts.Keys.ToList();
+        var products = await _productRepository.GetListAsync(
+            product => productIds.Contains(product.Id),
+            cancellationToken: ct);
+        return products.Select(product => new ProductionForecastSnapshot
+        {
+            ProductId = product.Id,
+            ProductName = product.Name,
+            ProductSku = product.SKU,
+            ForecastQuantity = forecasts.GetValueOrDefault(product.Id)
+        }).ToList();
+    }
+
     private async Task ApplyCostEstimateAsync(ProductionPlanSuggestion suggestion, int plannedQuantity)
     {
         var formula = await _formulaRepository.GetActiveDefaultForProductAsync(suggestion.ProductId);
@@ -242,7 +314,8 @@ public class ProductionPlanRepository
     private async Task<IQueryable<AppProductionPlan>> BuildFilteredQueryAsync(
         string? filter,
         string? status,
-        Guid? kitchenBranchId)
+        Guid? kitchenBranchId,
+        IReadOnlyCollection<Guid> scopedKitchenBranchIds)
     {
         var query = await GetQueryableAsync();
 
@@ -261,6 +334,8 @@ public class ProductionPlanRepository
         {
             query = query.Where(p => p.KitchenBranchId == kitchenBranchId.Value);
         }
+
+        query = query.Where(p => scopedKitchenBranchIds.Contains(p.KitchenBranchId));
 
         return query;
     }

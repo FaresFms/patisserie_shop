@@ -18,5 +18,7 @@ public class ProductionFormulaListItemDto
     public int EstimatedProductionMinutes { get; set; }
     public bool IsActive { get; set; }
     public bool IsDefault { get; set; }
+    public string ApprovalStatus { get; set; } = ProductionFormulaStatuses.Draft;
+    public string? WorkCenterCode { get; set; }
     public int ItemCount { get; set; }
 }

@@ -2,7 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Text.Json;
 using Volo.Abp;
+using Volo.Abp.Data;
 using Volo.Abp.Domain.Entities.Auditing;
 
 namespace Production.Entities;
@@ -16,6 +18,13 @@ namespace Production.Entities;
 /// </summary>
 public class AppProductionFormula : FullAuditedAggregateRoot<Guid>
 {
+    private const string ApprovalStatusProperty = "Production.Formula.ApprovalStatus";
+    private const string ApprovedAtProperty = "Production.Formula.ApprovedAt";
+    private const string ApprovedByProperty = "Production.Formula.ApprovedByUserId";
+    private const string IngredientAllergensProperty = "Production.Formula.IngredientAllergens";
+    private const string WorkCenterCodeProperty = "Production.Formula.WorkCenterCode";
+    private const string PreparationStepsProperty = "Production.Formula.PreparationSteps";
+
     public Guid FinishedProductId { get; private set; }
     public string FormulaName { get; private set; } = null!;
     public int Version { get; private set; } = 1;
@@ -33,6 +42,18 @@ public class AppProductionFormula : FullAuditedAggregateRoot<Guid>
     public bool IsActive { get; private set; } = true;
     public bool IsDefault { get; private set; }
     public string? Notes { get; private set; }
+
+    /// <summary>
+    /// Legacy default formulas are treated as approved so existing kitchens keep
+    /// working after the revision workflow is introduced.
+    /// </summary>
+    public string ApprovalStatus => this.GetProperty<string>(ApprovalStatusProperty)
+        ?? (IsDefault ? ProductionFormulaStatuses.Approved : ProductionFormulaStatuses.Draft);
+    public DateTime? ApprovedAt => this.GetProperty<DateTime?>(ApprovedAtProperty);
+    public Guid? ApprovedByUserId => this.GetProperty<Guid?>(ApprovedByProperty);
+    public string? WorkCenterCode => this.GetProperty<string>(WorkCenterCodeProperty);
+    public string? PreparationSteps => this.GetProperty<string>(PreparationStepsProperty);
+    public bool IsEditable => ApprovalStatus == ProductionFormulaStatuses.Draft;
 
     private readonly List<AppProductionFormulaItem> _items = new();
     public IReadOnlyCollection<AppProductionFormulaItem> Items => new ReadOnlyCollection<AppProductionFormulaItem>(_items);
@@ -77,6 +98,7 @@ public class AppProductionFormula : FullAuditedAggregateRoot<Guid>
         int estimatedProductionMinutes,
         string? notes)
     {
+        EnsureEditable();
         SetFormulaName(formulaName);
         SetOutputQuantity(outputQuantity);
         SetExpectedWastePercent(expectedWastePercent);
@@ -90,6 +112,7 @@ public class AppProductionFormula : FullAuditedAggregateRoot<Guid>
 
     public void SetFormulaName(string formulaName)
     {
+        EnsureEditable();
         if (string.IsNullOrWhiteSpace(formulaName))
         {
             throw new BusinessException(ProductionErrorCodes.FormulaNameRequired);
@@ -99,6 +122,7 @@ public class AppProductionFormula : FullAuditedAggregateRoot<Guid>
 
     public void SetOutputQuantity(int outputQuantity)
     {
+        EnsureEditable();
         if (outputQuantity <= 0)
         {
             throw new BusinessException(ProductionErrorCodes.InvalidOutputQuantity)
@@ -109,6 +133,7 @@ public class AppProductionFormula : FullAuditedAggregateRoot<Guid>
 
     public void SetVersion(int version)
     {
+        EnsureEditable();
         if (version <= 0)
         {
             throw new BusinessException(ProductionErrorCodes.InvalidVersion)
@@ -119,7 +144,8 @@ public class AppProductionFormula : FullAuditedAggregateRoot<Guid>
 
     public void SetExpectedWastePercent(decimal expectedWastePercent)
     {
-        if (expectedWastePercent < 0m || expectedWastePercent > 100m)
+        EnsureEditable();
+        if (expectedWastePercent < 0m || expectedWastePercent >= 100m)
         {
             throw new BusinessException(ProductionErrorCodes.InvalidWastePercent)
                 .WithData("ExpectedWastePercent", expectedWastePercent);
@@ -129,6 +155,7 @@ public class AppProductionFormula : FullAuditedAggregateRoot<Guid>
 
     public void SetLaborCostPerBatch(decimal laborCostPerBatch)
     {
+        EnsureEditable();
         if (laborCostPerBatch < 0m)
         {
             throw new BusinessException(ProductionErrorCodes.InvalidCost)
@@ -139,6 +166,7 @@ public class AppProductionFormula : FullAuditedAggregateRoot<Guid>
 
     public void SetOverheadCostPerBatch(decimal overheadCostPerBatch)
     {
+        EnsureEditable();
         if (overheadCostPerBatch < 0m)
         {
             throw new BusinessException(ProductionErrorCodes.InvalidCost)
@@ -149,6 +177,7 @@ public class AppProductionFormula : FullAuditedAggregateRoot<Guid>
 
     public void SetEstimatedProductionMinutes(int estimatedProductionMinutes)
     {
+        EnsureEditable();
         if (estimatedProductionMinutes < 0)
         {
             throw new BusinessException(ProductionErrorCodes.InvalidProductionMinutes)
@@ -157,7 +186,46 @@ public class AppProductionFormula : FullAuditedAggregateRoot<Guid>
         EstimatedProductionMinutes = estimatedProductionMinutes;
     }
 
-    public void SetNotes(string? notes) => Notes = notes;
+    public void SetNotes(string? notes)
+    {
+        EnsureEditable();
+        Notes = notes;
+    }
+
+    public void SetPhase3Details(
+        string? workCenterCode,
+        string? preparationSteps,
+        IReadOnlyDictionary<Guid, string>? ingredientAllergens)
+    {
+        EnsureEditable();
+        ExtraProperties[WorkCenterCodeProperty] = NormalizeOptional(workCenterCode);
+        ExtraProperties[PreparationStepsProperty] = NormalizeOptional(preparationSteps);
+
+        var normalized = ingredientAllergens?
+            .Where(x => _items.Any(item => item.IngredientProductId == x.Key))
+            .ToDictionary(x => x.Key, x => NormalizeAllergens(x.Value));
+        ExtraProperties[IngredientAllergensProperty] = JsonSerializer.Serialize(
+            normalized ?? new Dictionary<Guid, string>());
+    }
+
+    public IReadOnlyDictionary<Guid, string> GetIngredientAllergens()
+    {
+        var json = this.GetProperty<string>(IngredientAllergensProperty);
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return new Dictionary<Guid, string>();
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<Dictionary<Guid, string>>(json)
+                ?? new Dictionary<Guid, string>();
+        }
+        catch (JsonException)
+        {
+            return new Dictionary<Guid, string>();
+        }
+    }
 
     // ── Items (owned children) ──
 
@@ -168,6 +236,7 @@ public class AppProductionFormula : FullAuditedAggregateRoot<Guid>
         decimal lossPercent,
         int sortOrder)
     {
+        EnsureEditable();
         if (_items.Any(i => i.IngredientProductId == ingredientProductId))
         {
             throw new BusinessException(ProductionErrorCodes.DuplicateIngredient)
@@ -181,21 +250,89 @@ public class AppProductionFormula : FullAuditedAggregateRoot<Guid>
 
     public void RemoveItem(Guid itemId)
     {
+        EnsureEditable();
         var item = _items.FirstOrDefault(i => i.Id == itemId)
             ?? throw new BusinessException(ProductionErrorCodes.FormulaItemNotFound)
                 .WithData("ItemId", itemId);
         _items.Remove(item);
     }
 
-    public void ClearItems() => _items.Clear();
+    public void ClearItems()
+    {
+        EnsureEditable();
+        _items.Clear();
+    }
+
+    public void EnsureHasIngredients()
+    {
+        if (_items.Count == 0)
+        {
+            throw new BusinessException(ProductionErrorCodes.FormulaIngredientsRequired);
+        }
+    }
 
     // ── State flags ──
 
-    public void Activate() => IsActive = true;
+    public void Activate()
+    {
+        EnsureEditable();
+        IsActive = true;
+    }
 
-    public void Deactivate() => IsActive = false;
+    public void Deactivate()
+    {
+        EnsureEditable();
+        IsActive = false;
+    }
 
-    public void MarkDefault() => IsDefault = true;
+    public void MarkDefault()
+    {
+        if (ApprovalStatus != ProductionFormulaStatuses.Approved)
+        {
+            throw new BusinessException(ProductionErrorCodes.FormulaMustBeApproved);
+        }
+        IsDefault = true;
+        IsActive = true;
+    }
 
     public void UnmarkDefault() => IsDefault = false;
+
+    public void Approve(Guid? approvedByUserId, DateTime approvedAt)
+    {
+        EnsureEditable();
+        EnsureHasIngredients();
+        ExtraProperties[ApprovalStatusProperty] = ProductionFormulaStatuses.Approved;
+        ExtraProperties[ApprovedAtProperty] = approvedAt;
+        ExtraProperties[ApprovedByProperty] = approvedByUserId;
+        IsActive = true;
+    }
+
+    public void Retire()
+    {
+        if (ApprovalStatus != ProductionFormulaStatuses.Approved)
+        {
+            throw new BusinessException(ProductionErrorCodes.FormulaMustBeApproved);
+        }
+        ExtraProperties[ApprovalStatusProperty] = ProductionFormulaStatuses.Retired;
+        IsDefault = false;
+        IsActive = false;
+    }
+
+    private void EnsureEditable()
+    {
+        if (ApprovalStatus != ProductionFormulaStatuses.Draft)
+        {
+            throw new BusinessException(ProductionErrorCodes.ApprovedFormulaIsImmutable)
+                .WithData("FormulaId", Id)
+                .WithData("Status", ApprovalStatus);
+        }
+    }
+
+    private static string? NormalizeOptional(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private static string NormalizeAllergens(string? value) =>
+        string.Join(", ", (value ?? string.Empty)
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Distinct(StringComparer.OrdinalIgnoreCase));
 }

@@ -48,12 +48,18 @@
                         Color="Color.Primary"
                         StartIcon="@Icons.Material.Filled.Add"
                         OnClick="OpenCreateDialog"
-                        Disabled="@(!_canCreate || !CanOpenCreate)">
+                        Disabled="@(!_listReady || !_canCreate || !CanOpenCreate)">
                 @OpsL["NewTransfer"]
             </SoftButton>
         </div>
     </div>
     <SoftCardContent>
+        @if (!_listReady)
+        {
+            <SoftProgressLinear Indeterminate="true" Color="Color.Primary" />
+        }
+        else
+        {
 
         <div class="sts-tabs" role="tablist">
             <button type="button" class="@TabClass(ViewAction)" @onclick="@(() => SetViewAsync(ViewAction))">
@@ -220,6 +226,7 @@
                 <MudDataGridPager T="StockTransferDto" />
             </PagerContent>
         </SoftDataGrid>
+        }
     </SoftCardContent>
 </SoftCard>
 
@@ -236,7 +243,7 @@
                         </SoftStack>
                     </CardHeaderContent>
                     <CardHeaderActions>
-                        <SoftIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="CloseCreate" />
+                        <SoftIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="CloseCreate" Disabled="_saving" />
                     </CardHeaderActions>
                 </SoftCardHeader>
                 <SoftDivider />
@@ -372,12 +379,20 @@
                 </SoftCardContent>
                 <SoftDivider />
                 <div class="pa-3 d-flex justify-end" style="gap: 8px;">
-                    <SoftButton Variant="Variant.Text" OnClick="CloseCreate">@L["Cancel"]</SoftButton>
+                    <SoftButton Variant="Variant.Text" OnClick="CloseCreate" Disabled="_saving">@L["Cancel"]</SoftButton>
                     <SoftButton Variant="Variant.Filled" Color="Color.Primary"
-                                EndIcon="@Icons.Material.Filled.ArrowForward"
+                                EndIcon="@(_saving ? null : Icons.Material.Filled.ArrowForward)"
                                 OnClick="ConfirmCreateAsync"
                                 Disabled="@(_saving || !CanOpenCreate)">
-                        @OpsL["CreateRequest"]
+                        @if (_saving)
+                        {
+                            <SoftProgressCircular Indeterminate="true" Size="Size.Small" Color="Color.Inherit" />
+                            <span class="ms-2">@OpsL["ActionInProgress"]</span>
+                        }
+                        else
+                        {
+                            @OpsL["CreateRequest"]
+                        }
                     </SoftButton>
                 </div>
             </SoftCard>
@@ -638,6 +653,7 @@
     private bool _canComplete;
     private bool _canChooseBranches;
     private bool _canManageAllBranches;
+    private bool _listReady;
     private bool _subscribed;
     private bool _disposed;
     private string? _lastInitialView;
@@ -790,6 +806,12 @@
             // "receive this one" is one click, not list-then-hunt.
             _detailId = detailId;
         }
+
+        // MudDataGrid requests ServerData as soon as it is rendered. Keep it out of
+        // the render tree until permissions, branch scope, summary, and the initial
+        // perspective are all resolved; otherwise its first request can use the
+        // temporary null ("All") view and remain visible until a manual refresh.
+        _listReady = true;
     }
 
     /// <summary>
@@ -979,7 +1001,10 @@
         }
     }
 
-    private void CloseCreate() => _createVisible = false;
+    private void CloseCreate()
+    {
+        if (!_saving) _createVisible = false;
+    }
 
     private void OnRequestedDateChanged(DateTime? value)
     {
@@ -1079,6 +1104,12 @@
             Snackbar.Add(string.Format(OpsL["TransferCreatedToast"], created.Reference), Severity.Success);
             _createVisible = false;
             _detailId = created.Id;
+
+            // A newly created draft is now waiting for this manager's action. Move
+            // the underlying list to that server-scoped view immediately; otherwise
+            // a page that started on "All" stays broad until a full browser refresh
+            // recalculates the default view from the updated action summary.
+            _view = ViewAction;
             await ReloadAsync();
         }
         catch (Exception ex)

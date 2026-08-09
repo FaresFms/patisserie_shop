@@ -52,7 +52,7 @@
 
     private async Task<bool> TryResolveCashierBranchAsync()
     {
-        if (!await AuthorizationService.IsGrantedAsync(OperationsPermissions.Cashier.Default))
+        if (!await AuthorizationService.IsGrantedAsync(OperationsPermissions.Cashier.OperatePos))
         {
             return false;
         }

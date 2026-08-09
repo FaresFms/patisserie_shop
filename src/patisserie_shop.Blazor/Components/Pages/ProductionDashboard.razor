@@ -1,10 +1,10 @@
-@page "/production/dashboard"
+@page "/production/overview"
 @attribute [Authorize(ProductionPermissions.Dashboard.Default)]
 @using System.Globalization
 @using System.Threading.Tasks
-@using Inventory.Branches
 @using Microsoft.AspNetCore.Authorization
 @using Production.Dashboard
+@using Production.Kitchens
 @using Production.Localization
 @using Production.Permissions
 @using Volo.Abp.AspNetCore.Components.Web.Theming.Layout
@@ -15,44 +15,32 @@
 @using Margin = MudBlazor.Margin
 @inherits patisserie_shopComponentBase
 @inject IProductionDashboardAppService DashboardAppService
-@inject IBranchAppService BranchAppService
+@inject IProductionKitchenAppService KitchenAppService
 @inject NavigationManager Nav
 @inject PageLayout PageLayout
 @inject IStringLocalizer<ProductionResource> ProdL
 
 @if (!Embedded)
 {
-    PageLayout.Title = ProdL["ProductionDashboard"];
+    PageLayout.Title = ProdL["Workspace:overview:Title"];
+}
+
+@if (!Embedded)
+{
+    <ProductionWorkspaceHeader Workspace="overview" ActiveTab="today">
+        <Actions>
+            <SoftButton Variant="Variant.Text" Color="Color.Primary"
+                        StartIcon="@Icons.Material.Filled.Refresh"
+                        OnClick="LoadAsync"
+                        Disabled="_loading">
+                @ProdL["Refresh"]
+            </SoftButton>
+        </Actions>
+    </ProductionWorkspaceHeader>
 }
 
 <SoftCard Elevation="2" Class="@($"pa-2 page-flat prod-dash{(Embedded ? " prod-dash--embedded" : string.Empty)}")">
-    @if (!Embedded)
-    {
-        <div class="page-head">
-            <div>
-                <h1 class="page-title">@ProdL["ProductionDashboard"]</h1>
-                <div class="page-sub">
-                    @if (_lastRefresh.HasValue)
-                    {
-                        <span>@ProdL["ProductionDashboardSubtitle"] · <BrowserLocalTime Value="@_lastRefresh.Value" Display="BrowserTimeDisplay.Time" /></span>
-                    }
-                    else
-                    {
-                        <span>@ProdL["ProductionDashboardSubtitle"]</span>
-                    }
-                </div>
-            </div>
-            <div class="page-head-actions">
-                <SoftButton Variant="Variant.Text" Color="Color.Primary"
-                            StartIcon="@Icons.Material.Filled.Refresh"
-                            OnClick="LoadAsync"
-                            Disabled="_loading">
-                    @ProdL["Refresh"]
-                </SoftButton>
-            </div>
-        </div>
-    }
-    else
+    @if (Embedded)
     {
         <div class="pd-embedded-toolbar">
             <div>
@@ -81,7 +69,7 @@
     <SoftCardContent>
         <div class="toolbar">
             <div class="filter-chip">
-                <SoftLookupSelect TItem="BranchLookupDto" TValue="Guid?"
+                <SoftLookupSelect TItem="KitchenBranchLookupDto" TValue="Guid?"
                                   Items="_branches"
                                   ToValue="@(b => (Guid?)b.Id)"
                                   ToLabel="@(b => b.Name)"
@@ -95,7 +83,7 @@
             <div class="toolbar-right">
                 <SoftButton Variant="Variant.Text" Color="Color.Primary"
                             StartIcon="@Icons.Material.Filled.Analytics"
-                            OnClick="@(() => Nav.NavigateTo("/production/analytics"))">
+                            OnClick="@(() => Nav.NavigateTo("/production/overview/trends"))">
                     @ProdL["ProductionAnalytics"]
                 </SoftButton>
             </div>
@@ -148,7 +136,7 @@
                     </div>
                 </div>
 
-                <div class="pd-kpi pd-kpi--info" @onclick="@(() => Nav.NavigateTo("/production/cook"))">
+                <div class="pd-kpi pd-kpi--info" @onclick="@(() => Nav.NavigateTo("/production/workboard?stage=ready"))">
                     <div class="pd-kpi-icon"><SoftIcon Icon="@Icons.Material.Filled.Restaurant" /></div>
                     <div>
                         <div class="pd-kpi-value">@(_data.WaitingForIngredients + _data.ReadyToCook + _data.InProduction)</div>
@@ -157,7 +145,7 @@
                     </div>
                 </div>
 
-                <div class="pd-kpi pd-kpi--neutral" @onclick="@(() => Nav.NavigateTo("/production/branch-requests"))">
+                <div class="pd-kpi pd-kpi--neutral" @onclick="@(() => Nav.NavigateTo("/production/demand-planning?view=review"))">
                     <div class="pd-kpi-icon"><SoftIcon Icon="@Icons.Material.Filled.Inbox" /></div>
                     <div>
                         <div class="pd-kpi-value">@_data.PendingRequests</div>
@@ -468,7 +456,7 @@
     [Parameter] public bool Embedded { get; set; }
 
     private ProductionDashboardDto? _data;
-    private List<BranchLookupDto> _branches = new();
+    private List<KitchenBranchLookupDto> _branches = new();
     private Guid? _kitchenBranchId;
     private bool _loading;
     private DateTime? _lastRefresh;
@@ -498,7 +486,11 @@
     protected override async Task OnInitializedAsync()
     {
         await LoadShopCurrencyAsync();
-        _branches = await BranchAppService.GetLookupAsync();
+        _branches = await KitchenAppService.GetAccessibleLookupAsync();
+        if (_branches.Count == 1)
+        {
+            _kitchenBranchId = _branches[0].Id;
+        }
         await LoadAsync();
     }
 

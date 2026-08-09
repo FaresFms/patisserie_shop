@@ -119,7 +119,7 @@ public class patisserie_shopMenuContributor : IMenuContributor
             "/cashier",
             icon: "fas fa-cash-register",
             order: 0
-        ).RequirePermissions(OperationsPermissions.Cashier.Default));
+        ).RequirePermissions(OperationsPermissions.Cashier.OperatePos));
         operationsMenu.AddItem(new ApplicationMenuItem(
             patisserie_shopMenus.Sales,
             opsL["Menu:Sales"],
@@ -196,8 +196,8 @@ public class patisserie_shopMenuContributor : IMenuContributor
         );
         productionMenu.AddItem(new ApplicationMenuItem(
             patisserie_shopMenus.ProductionDashboard,
-            prodL["Menu:ProductionDashboard"],
-            "/production/dashboard",
+            prodL["Menu:ProductionOverview"],
+            "/production/overview",
             icon: "fas fa-gauge-high",
             order: 0
         ).RequirePermissions(ProductionPermissions.Dashboard.Default));
@@ -207,44 +207,30 @@ public class patisserie_shopMenuContributor : IMenuContributor
             "/production/my-requests",
             icon: "fas fa-clipboard-list",
             order: 1
-        ).RequirePermissions(ProductionPermissions.BranchRequests.Default));
+        ).RequirePermissions(ProductionPermissions.MyRequests.Default));
         productionMenu.AddItem(new ApplicationMenuItem(
             patisserie_shopMenus.ProductionBranchRequests,
-            prodL["Menu:BranchRequests"],
-            "/production/branch-requests",
-            icon: "fas fa-inbox",
-            order: 2
-        ).RequirePermissions(ProductionPermissions.BranchRequests.Approve));
-        productionMenu.AddItem(new ApplicationMenuItem(
-            patisserie_shopMenus.ProductionPlans,
-            prodL["Menu:ProductionPlans"],
-            "/production/plans",
+            prodL["Menu:DemandPlanning"],
+            "/production/demand-planning?view=review",
             icon: "fas fa-calendar-check",
-            order: 3
-        ).RequirePermissions(ProductionPermissions.Plans.Default));
+            order: 2
+        ).RequirePermissions(ProductionPermissions.BranchRequests.ViewAll));
         productionMenu.AddItem(new ApplicationMenuItem(
             patisserie_shopMenus.ProductionCook,
-            prodL["Menu:CookScreen"],
-            "/production/cook",
+            prodL["Menu:KitchenWorkboard"],
+            "/production/workboard?stage=ready",
             icon: "fas fa-fire",
-            order: 4
+            order: 3
         ).RequirePermissions(ProductionPermissions.Orders.Default));
         productionMenu.AddItem(new ApplicationMenuItem(
-            patisserie_shopMenus.ProductionDispatch,
-            prodL["Menu:Dispatch"],
-            "/production/dispatch",
-            icon: "fas fa-shipping-fast",
-            order: 5
-        ).RequirePermissions(ProductionPermissions.Dispatch.Default));
-        productionMenu.AddItem(new ApplicationMenuItem(
             patisserie_shopMenus.ProductionWaste,
-            prodL["Menu:Waste"],
-            "/production/waste",
-            icon: "fas fa-trash-can",
-            order: 6
+            prodL["Menu:QualityWaste"],
+            "/production/quality-waste",
+            icon: "fas fa-shield-heart",
+            order: 4
         ).RequirePermissions(ProductionPermissions.Waste.Default));
-        // Production Analytics intentionally lives behind the production
-        // dashboard (toolbar link), not in the sidebar.
+        // Planning, dispatch and analytics are tabs inside their operational
+        // workspaces, so the sidebar presents the kitchen's workflow once.
         context.Menu.AddItem(productionMenu);
 
         // ── Setup: configure once, revisit rarely ──────────────────────────
@@ -290,32 +276,39 @@ public class patisserie_shopMenuContributor : IMenuContributor
             order: 4
         ).RequirePermissions(ProductionPermissions.Formulas.Default));
         setupMenu.AddItem(new ApplicationMenuItem(
+            patisserie_shopMenus.ProductionControl,
+            prodL["Menu:ProductionControl"],
+            "/production/control",
+            icon: "fas fa-industry",
+            order: 5
+        ).RequirePermissions(ProductionPermissions.Control.Default));
+        setupMenu.AddItem(new ApplicationMenuItem(
             patisserie_shopMenus.InventoryRules,
             intelL["Menu:InventoryRules"],
             "/intelligence/inventory-rules",
             icon: "fas fa-gavel",
-            order: 5
+            order: 6
         ).RequirePermissions(IntelligencePermissions.Rules.Default));
         setupMenu.AddItem(new ApplicationMenuItem(
             patisserie_shopMenus.CashierAssignments,
             l["Menu:CashierAssignments"],
             "/operations/cashier-assignments",
             icon: "fas fa-user-tag",
-            order: 6
+            order: 7
         ).RequirePermissions(OperationsPermissions.Cashier.ViewAllShifts));
         setupMenu.AddItem(new ApplicationMenuItem(
             patisserie_shopMenus.AddCashier,
             l["Menu:AddCashier"],
             "/operations/add-cashier",
             icon: "fas fa-user-plus",
-            order: 7
+            order: 8
         ).RequirePermissions(OperationsPermissions.Cashier.ManageCashiers));
         setupMenu.AddItem(new ApplicationMenuItem(
             patisserie_shopMenus.ShopSettings,
             l["Menu:ShopSettings"],
             "/setup/shop-settings",
             icon: "fas fa-sliders-h",
-            order: 8
+            order: 9
         ).RequirePermissions(patisserie_shopPermissions.Settings.Manage));
         context.Menu.AddItem(setupMenu);
 

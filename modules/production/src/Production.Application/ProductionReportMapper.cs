@@ -1,4 +1,8 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
 using Microsoft.Extensions.Localization;
+using Operations.Sales;
 using Production.Analytics;
 using Production.Dashboard;
 using Production.Reports;
@@ -7,6 +11,10 @@ namespace Production;
 
 internal static class ProductionReportMapper
 {
+    public static IReadOnlyDictionary<Guid, int> MapActualDemand(
+        IReadOnlyCollection<ProductSalesAggregate> rows) =>
+        rows.ToDictionary(row => row.ProductId, row => row.TotalQuantitySold);
+
     public static ProductionDashboardDto MapDashboard(
         ProductionDashboardReadModel model,
         IStringLocalizer localizer)
@@ -75,7 +83,11 @@ internal static class ProductionReportMapper
             ActualCost = model.ActualCost,
             CostVariance = model.CostVariance,
             CostVariancePercent = model.CostVariancePercent,
-            AverageUnitCost = model.AverageUnitCost
+            AverageUnitCost = model.AverageUnitCost,
+            ForecastQuantity = model.ForecastQuantity,
+            ActualDemandQuantity = model.ActualDemandQuantity,
+            ForecastAccuracyPercent = model.ForecastAccuracyPercent,
+            ForecastBiasPercent = model.ForecastBiasPercent
         };
 
         foreach (var point in model.DailyOutput)
@@ -99,8 +111,22 @@ internal static class ProductionReportMapper
             dto.WasteReasons.Add(new ProductionWasteReasonAnalyticsRowDto
             {
                 Reason = reason.Reason,
-                Quantity = reason.Quantity,
+                IncidentCount = reason.IncidentCount,
                 Cost = reason.Cost
+            });
+        }
+
+        foreach (var row in model.ForecastAccuracy)
+        {
+            dto.ForecastAccuracy.Add(new ProductionForecastAccuracyRowDto
+            {
+                ProductId = row.ProductId,
+                ProductName = row.ProductName,
+                ProductSku = row.ProductSku,
+                ForecastQuantity = row.ForecastQuantity,
+                ActualQuantity = row.ActualQuantity,
+                AccuracyPercent = row.AccuracyPercent,
+                BiasPercent = row.BiasPercent
             });
         }
 

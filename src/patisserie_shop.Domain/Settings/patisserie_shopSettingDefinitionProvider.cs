@@ -24,13 +24,6 @@ public class patisserie_shopSettingDefinitionProvider : SettingDefinitionProvide
                 isVisibleToClients: true),
 
             new SettingDefinition(
-                patisserie_shopSettings.ShopAddress,
-                defaultValue: "",
-                displayName: L("Setting:ShopAddress"),
-                description: L("Setting:ShopAddress:Desc"),
-                isVisibleToClients: true),
-
-            new SettingDefinition(
                 patisserie_shopSettings.ShopPhone,
                 defaultValue: "",
                 displayName: L("Setting:ShopPhone"),
@@ -66,7 +59,14 @@ public class patisserie_shopSettingDefinitionProvider : SettingDefinitionProvide
                 defaultValue: "false",
                 displayName: L("Setting:AutopilotEnabled"),
                 description: L("Setting:AutopilotEnabled:Desc"),
-                isVisibleToClients: true)
+                isVisibleToClients: true),
+
+            new SettingDefinition(
+                patisserie_shopSettings.ProductionControlProfile,
+                defaultValue: "{\"RequireScheduleBeforeStart\":true,\"RequireOperatorBeforeStart\":true,\"RequireQualityReleaseBeforeDispatch\":true,\"ForecastSafetyPercent\":10,\"ForecastAccuracyWindowDays\":30,\"WorkCenters\":[{\"Code\":\"MAIN\",\"Name\":\"Main production line\",\"CapacityUnitsPerHour\":100,\"ParallelSlots\":1,\"IsActive\":true}],\"Shifts\":[{\"Code\":\"DAY\",\"Name\":\"Day shift\",\"StartTime\":\"06:00:00\",\"EndTime\":\"14:00:00\",\"IsActive\":true}]}",
+                displayName: L("Setting:ProductionControlProfile"),
+                description: L("Setting:ProductionControlProfile:Desc"),
+                isVisibleToClients: false)
         );
     }
 

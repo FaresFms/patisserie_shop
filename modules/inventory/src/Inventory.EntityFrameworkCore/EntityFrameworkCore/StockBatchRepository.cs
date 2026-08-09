@@ -34,6 +34,18 @@ public class StockBatchRepository
             .ToListAsync(GetCancellationToken(cancellationToken));
     }
 
+    public async Task<List<AppStockBatch>> GetBySourceAsync(
+        string sourceType,
+        Guid sourceId,
+        CancellationToken cancellationToken = default)
+    {
+        var dbContext = await GetDbContextAsync();
+        return await dbContext.Set<AppStockBatch>()
+            .Where(batch => batch.SourceType == sourceType && batch.SourceId == sourceId)
+            .OrderBy(batch => batch.CreationTime)
+            .ToListAsync(GetCancellationToken(cancellationToken));
+    }
+
     public async Task<List<StockBatchWithProduct>> GetExpiringWithProductAsync(
         DateTime maxExpiryDate,
         CancellationToken cancellationToken = default)

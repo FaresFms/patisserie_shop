@@ -222,6 +222,15 @@ public class StockTransferAppService : OperationsAppService, IStockTransferAppSe
             CurrentUser.Id,
             input.Notes);
 
+        if (!string.IsNullOrWhiteSpace(input.SourceDocumentType)
+            && input.SourceDocumentId.HasValue)
+        {
+            transfer.SetSourceDocument(
+                input.SourceDocumentType,
+                input.SourceDocumentId.Value,
+                input.SourceDocumentItemId);
+        }
+
         await _transferRepository.InsertAsync(transfer, autoSave: true);
         return await ProjectAsync(transfer);
     }
@@ -335,7 +344,7 @@ public class StockTransferAppService : OperationsAppService, IStockTransferAppSe
                 line.ItemId,
                 StockTransferBatchBreakdown.Format(
                     adjustment.ConsumedBatches.Select(
-                        b => new StockTransferBatchBreakdown.Line(b.ExpiryDate, b.Quantity))));
+                        b => new StockTransferBatchBreakdown.Line(b.ExpiryDate, b.Quantity, b.UnitCost))));
         }
 
         await _transferRepository.UpdateAsync(transfer, autoSave: true);
@@ -430,7 +439,7 @@ public class StockTransferAppService : OperationsAppService, IStockTransferAppSe
                 await _branchInventoryRepository.UpdateAsync(srcInv);
 
                 batches = sourceAdjustment.ConsumedBatches
-                    .Select(b => new StockTransferBatchBreakdown.Line(b.ExpiryDate, b.Quantity))
+                    .Select(b => new StockTransferBatchBreakdown.Line(b.ExpiryDate, b.Quantity, b.UnitCost))
                     .ToList();
             }
 
@@ -461,7 +470,8 @@ public class StockTransferAppService : OperationsAppService, IStockTransferAppSe
                     notes: reference,
                     referenceId: transfer.Id,
                     referenceType: TransferReferenceType,
-                    batchExpiryDate: batch.ExpiryDate);
+                    batchExpiryDate: batch.ExpiryDate,
+                    batchUnitCost: batch.UnitCost);
             }
 
             if (remaining > 0)

@@ -22,11 +22,11 @@ namespace Production.Formulas;
 /// </summary>
 public class ProductionFormulaManager : DomainService
 {
-    private readonly IRepository<AppProductionFormula, Guid> _formulaRepository;
+    private readonly IProductionFormulaRepository _formulaRepository;
     private readonly IRepository<AppProduct, Guid> _productRepository;
 
     public ProductionFormulaManager(
-        IRepository<AppProductionFormula, Guid> formulaRepository,
+        IProductionFormulaRepository formulaRepository,
         IRepository<AppProduct, Guid> productRepository)
     {
         _formulaRepository = formulaRepository;
@@ -48,12 +48,17 @@ public class ProductionFormulaManager : DomainService
     {
         await EnsureFinishedProductIsProducibleAsync(finishedProductId);
 
+        var resolvedVersion = version <= 0
+            ? await _formulaRepository.GetNextVersionAsync(finishedProductId)
+            : version;
+        await EnsureVersionAvailableAsync(finishedProductId, resolvedVersion);
+
         var formula = new AppProductionFormula(
             GuidGenerator.Create(),
             finishedProductId,
             formulaName,
             outputQuantity,
-            version <= 0 ? 1 : version,
+            resolvedVersion,
             expectedWastePercent,
             laborCostPerBatch,
             overheadCostPerBatch,
@@ -61,11 +66,6 @@ public class ProductionFormulaManager : DomainService
             isActive,
             isDefault: false,
             notes);
-
-        if (isDefault)
-        {
-            await MarkDefaultAsync(formula);
-        }
 
         return formula;
     }
@@ -176,6 +176,69 @@ public class ProductionFormulaManager : DomainService
         }
 
         formula.MarkDefault();
+    }
+
+    public async Task EnsureVersionAvailableAsync(
+        Guid finishedProductId,
+        int version,
+        Guid? excludingFormulaId = null)
+    {
+        if (await _formulaRepository.VersionExistsAsync(
+                finishedProductId,
+                version,
+                excludingFormulaId))
+        {
+            throw new BusinessException(ProductionErrorCodes.FormulaVersionAlreadyExists)
+                .WithData("FinishedProductId", finishedProductId)
+                .WithData("Version", version);
+        }
+    }
+
+    public async Task<AppProductionFormula> CreateDraftRevisionAsync(AppProductionFormula source)
+    {
+        Check.NotNull(source, nameof(source));
+        var sourceWithItems = await _formulaRepository.GetWithItemsAsync(source.Id);
+        var nextVersion = await _formulaRepository.GetNextVersionAsync(source.FinishedProductId);
+
+        var revision = new AppProductionFormula(
+            GuidGenerator.Create(),
+            source.FinishedProductId,
+            source.FormulaName,
+            source.OutputQuantity,
+            nextVersion,
+            source.ExpectedWastePercent,
+            source.LaborCostPerBatch,
+            source.OverheadCostPerBatch,
+            source.EstimatedProductionMinutes,
+            isActive: false,
+            isDefault: false,
+            source.Notes);
+
+        foreach (var item in sourceWithItems.Items.OrderBy(i => i.SortOrder))
+        {
+            revision.AddItem(
+                GuidGenerator.Create(),
+                item.IngredientProductId,
+                item.Quantity,
+                item.LossPercent,
+                item.SortOrder);
+        }
+
+        revision.SetPhase3Details(
+            source.WorkCenterCode,
+            source.PreparationSteps,
+            source.GetIngredientAllergens());
+        return revision;
+    }
+
+    public async Task ApproveAsync(
+        AppProductionFormula formula,
+        Guid? approvedByUserId,
+        DateTime approvedAt)
+    {
+        Check.NotNull(formula, nameof(formula));
+        formula.Approve(approvedByUserId, approvedAt);
+        await MarkDefaultAsync(formula);
     }
 
     private static bool IsValidIngredientType(string productType) =>

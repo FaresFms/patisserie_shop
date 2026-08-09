@@ -51,6 +51,20 @@ public class ProductionOrderRepository
             GetCancellationToken(cancellationToken));
     }
 
+    public async Task<List<AppProductionOrder>> GetChildrenAsync(
+        Guid parentProductionOrderId,
+        Guid kitchenBranchId,
+        CancellationToken cancellationToken = default)
+    {
+        var query = await GetQueryableAsync();
+        var candidates = await query
+            .Where(order => order.KitchenBranchId == kitchenBranchId)
+            .ToListAsync(GetCancellationToken(cancellationToken));
+        return candidates
+            .Where(order => order.ParentProductionOrderId == parentProductionOrderId)
+            .ToList();
+    }
+
     public async Task<AppProductionOrder?> FindByStockTransferIdAsync(
         Guid stockTransferId,
         CancellationToken cancellationToken = default)
@@ -90,9 +104,10 @@ public class ProductionOrderRepository
         string? filter,
         string? status,
         Guid? kitchenBranchId,
+        IReadOnlyCollection<Guid> scopedKitchenBranchIds,
         CancellationToken cancellationToken = default)
     {
-        var query = await BuildFilteredQueryAsync(filter, status, kitchenBranchId);
+        var query = await BuildFilteredQueryAsync(filter, status, kitchenBranchId, scopedKitchenBranchIds);
         return await query.LongCountAsync(GetCancellationToken(cancellationToken));
     }
 
@@ -100,33 +115,18 @@ public class ProductionOrderRepository
         string? filter,
         string? status,
         Guid? kitchenBranchId,
+        IReadOnlyCollection<Guid> scopedKitchenBranchIds,
         string sorting,
         int skipCount,
         int maxResultCount,
         CancellationToken cancellationToken = default)
     {
         var ct = GetCancellationToken(cancellationToken);
-        var query = await BuildFilteredQueryAsync(filter, status, kitchenBranchId);
+        var query = await BuildFilteredQueryAsync(filter, status, kitchenBranchId, scopedKitchenBranchIds);
 
         var headers = await query
-            .Select(o => new HeaderProjection
-            {
-                Id = o.Id,
-                OrderNumber = o.OrderNumber,
-                KitchenBranchId = o.KitchenBranchId,
-                FinishedProductId = o.FinishedProductId,
-                Status = o.Status,
-                Priority = o.Priority,
-                PlannedOutputQuantity = o.PlannedOutputQuantity,
-                AcceptedQuantity = o.AcceptedQuantity,
-                ReservedQuantity = o.Allocations.Sum(a => a.AllocatedQuantity),
-                DispatchedQuantity = o.Allocations.Sum(a => a.DispatchedQuantity),
-                ReceivedQuantity = o.Allocations.Sum(a => a.ReceivedQuantity),
-                LostQuantity = o.Allocations.Sum(a => a.LostQuantity),
-                ActualStartTime = o.ActualStartTime,
-                CompletedAt = o.CompletedAt,
-                TotalProductionCost = o.TotalProductionCost
-            })
+            .Include(o => o.Allocations)
+            .AsNoTracking()
             .ToListAsync(ct);
 
         if (headers.Count == 0)
@@ -167,10 +167,19 @@ public class ProductionOrderRepository
                 InTransitQuantity = Math.Max(0, h.DispatchedQuantity - h.ReceivedQuantity - h.LostQuantity),
                 ReceivedQuantity = h.ReceivedQuantity,
                 LostQuantity = h.LostQuantity,
-                RemainingToDispatch = Math.Max(0, h.ReservedQuantity - h.DispatchedQuantity),
+                RemainingToDispatch = h.RemainingToDispatch,
                 ActualStartTime = h.ActualStartTime,
                 CompletedAt = h.CompletedAt,
-                TotalProductionCost = h.TotalProductionCost
+                TotalProductionCost = h.TotalProductionCost,
+                QualityStatus = h.QualityStatus,
+                QualityReason = h.QualityReason,
+                QualityUpdatedAt = h.QualityUpdatedAt,
+                OutputBatchNumber = h.OutputBatchNumber,
+                WorkCenterCode = h.WorkCenterCode,
+                ShiftCode = h.ShiftCode,
+                AssignedOperatorName = h.AssignedOperatorName,
+                ScheduledStartTime = h.ScheduledStartTime,
+                ScheduledEndTime = h.ScheduledEndTime
             };
         });
 
@@ -180,8 +189,54 @@ public class ProductionOrderRepository
             .ToList();
     }
 
+    public async Task<List<ProductionOrderListItem>> GetQualityQueueAsync(
+        Guid? kitchenBranchId,
+        IReadOnlyCollection<Guid> scopedKitchenBranchIds,
+        CancellationToken cancellationToken = default)
+    {
+        var rows = await GetFilteredListAsync(
+            filter: null,
+            status: ProductionOrderStatuses.Completed,
+            kitchenBranchId,
+            scopedKitchenBranchIds,
+            sorting: "CompletedAt desc",
+            skipCount: 0,
+            maxResultCount: int.MaxValue,
+            cancellationToken);
+
+        return rows
+            .Where(row => row.QualityStatus is ProductionQualityStatuses.Pending or ProductionQualityStatuses.Held)
+            .ToList();
+    }
+
+    public async Task<int> CountOverlappingSchedulesAsync(
+        Guid kitchenBranchId,
+        string workCenterCode,
+        DateTime scheduledStart,
+        DateTime scheduledEnd,
+        Guid excludeOrderId,
+        CancellationToken cancellationToken = default)
+    {
+        var candidates = await (await GetQueryableAsync())
+            .Where(order =>
+                order.Id != excludeOrderId
+                && order.KitchenBranchId == kitchenBranchId
+                && order.Status != ProductionOrderStatuses.Completed
+                && order.Status != ProductionOrderStatuses.Cancelled)
+            .AsNoTracking()
+            .ToListAsync(GetCancellationToken(cancellationToken));
+
+        return candidates.Count(order =>
+            string.Equals(order.WorkCenterCode, workCenterCode, StringComparison.OrdinalIgnoreCase)
+            && order.ScheduledStartTime.HasValue
+            && order.ScheduledEndTime.HasValue
+            && order.ScheduledStartTime.Value < scheduledEnd
+            && order.ScheduledEndTime.Value > scheduledStart);
+    }
+
     public async Task<ProductionDashboardReadModel> GetDashboardAsync(
         Guid? kitchenBranchId,
+        IReadOnlyCollection<Guid> scopedKitchenBranchIds,
         CancellationToken cancellationToken = default)
     {
         var ct = GetCancellationToken(cancellationToken);
@@ -198,6 +253,8 @@ public class ProductionOrderRepository
             ordersQuery = ordersQuery.Where(o => o.KitchenBranchId == kitchenBranchId.Value);
             wasteQuery = wasteQuery.Where(w => w.KitchenBranchId == kitchenBranchId.Value);
         }
+        ordersQuery = ordersQuery.Where(o => scopedKitchenBranchIds.Contains(o.KitchenBranchId));
+        wasteQuery = wasteQuery.Where(w => scopedKitchenBranchIds.Contains(w.KitchenBranchId));
 
         var activeOrders = await ordersQuery
             .Where(o => o.Status == ProductionOrderStatuses.WaitingForIngredients
@@ -273,6 +330,7 @@ public class ProductionOrderRepository
     public async Task<ProductionAnalyticsReadModel> GetAnalyticsAsync(
         int days,
         Guid? kitchenBranchId,
+        IReadOnlyCollection<Guid> scopedKitchenBranchIds,
         CancellationToken cancellationToken = default)
     {
         var ct = GetCancellationToken(cancellationToken);
@@ -290,6 +348,8 @@ public class ProductionOrderRepository
             ordersQuery = ordersQuery.Where(o => o.KitchenBranchId == kitchenBranchId.Value);
             wasteQuery = wasteQuery.Where(w => w.KitchenBranchId == kitchenBranchId.Value);
         }
+        ordersQuery = ordersQuery.Where(o => scopedKitchenBranchIds.Contains(o.KitchenBranchId));
+        wasteQuery = wasteQuery.Where(w => scopedKitchenBranchIds.Contains(w.KitchenBranchId));
 
         var completedOrders = await ordersQuery
             .Where(o => o.CompletedAt != null && o.CompletedAt >= from && o.CompletedAt < tomorrow)
@@ -354,10 +414,10 @@ public class ProductionOrderRepository
             .Select(g => new ProductionWasteReasonAnalyticsRow
             {
                 Reason = g.Key,
-                Quantity = g.Sum(w => w.Quantity),
+                IncidentCount = g.Count(),
                 Cost = g.Sum(w => w.TotalCost)
             })
-            .OrderByDescending(r => r.Quantity)
+            .OrderByDescending(r => r.Cost)
             .ToList();
 
         return analytics;
@@ -366,7 +426,8 @@ public class ProductionOrderRepository
     private async Task<IQueryable<AppProductionOrder>> BuildFilteredQueryAsync(
         string? filter,
         string? status,
-        Guid? kitchenBranchId)
+        Guid? kitchenBranchId,
+        IReadOnlyCollection<Guid> scopedKitchenBranchIds)
     {
         var query = await GetQueryableAsync();
 
@@ -385,6 +446,8 @@ public class ProductionOrderRepository
         {
             query = query.Where(o => o.KitchenBranchId == kitchenBranchId.Value);
         }
+
+        query = query.Where(o => scopedKitchenBranchIds.Contains(o.KitchenBranchId));
 
         return query;
     }
@@ -477,7 +540,7 @@ public class ProductionOrderRepository
             {
                 Type = "UnfulfilledBranchRequest",
                 Severity = "Danger",
-                Url = "/production/dispatch",
+                Url = "/production/workboard/dispatch",
                 Count = dashboard.UnfulfilledDueToday
             });
         }
@@ -488,7 +551,7 @@ public class ProductionOrderRepository
             {
                 Type = "IngredientShortage",
                 Severity = "Warning",
-                Url = "/production/cook",
+                Url = "/production/workboard?stage=blocked",
                 Count = dashboard.WaitingForIngredients
             });
         }
@@ -499,7 +562,7 @@ public class ProductionOrderRepository
             {
                 Type = "ReadyToCook",
                 Severity = "Success",
-                Url = "/production/cook",
+                Url = "/production/workboard?stage=ready",
                 Count = dashboard.ReadyToCook
             });
         }
@@ -510,7 +573,7 @@ public class ProductionOrderRepository
             {
                 Type = "LateProductionRisk",
                 Severity = "Info",
-                Url = "/production/cook",
+                Url = "/production/workboard?stage=cooking",
                 Count = dashboard.InProduction
             });
         }
@@ -521,7 +584,7 @@ public class ProductionOrderRepository
             {
                 Type = "HighKitchenWaste",
                 Severity = dashboard.YieldPercentToday < 90m ? "Warning" : "Info",
-                Url = "/production/waste",
+                Url = "/production/quality-waste",
                 Count = dashboard.RejectedToday
             });
         }
@@ -532,7 +595,7 @@ public class ProductionOrderRepository
             {
                 Type = "PendingRequests",
                 Severity = "Info",
-                Url = "/production/branch-requests",
+                Url = "/production/demand-planning?view=review",
                 Count = dashboard.PendingRequests
             });
         }
@@ -545,7 +608,8 @@ public class ProductionOrderRepository
         BranchProductionRequestStatuses.Approved,
         BranchProductionRequestStatuses.PartiallyPlanned,
         BranchProductionRequestStatuses.Planned,
-        BranchProductionRequestStatuses.PartiallyFulfilled
+        BranchProductionRequestStatuses.PartiallyFulfilled,
+        BranchProductionRequestStatuses.Fulfilled
     ];
 
     private static decimal Percent(decimal numerator, decimal denominator)

@@ -4,12 +4,17 @@ using System.Collections.ObjectModel;
 using System.Linq;
 using Operations.Events;
 using Volo.Abp;
+using Volo.Abp.Data;
 using Volo.Abp.Domain.Entities.Auditing;
 
 namespace Operations.Entities;
 
 public class AppStockTransfer : FullAuditedAggregateRoot<Guid>
 {
+    private const string SourceDocumentTypeProperty = "Operations.SourceDocumentType";
+    private const string SourceDocumentIdProperty = "Operations.SourceDocumentId";
+    private const string SourceDocumentItemIdProperty = "Operations.SourceDocumentItemId";
+
     public Guid? FromBranchId { get; private set; }
     public Guid ToBranchId { get; private set; }
     public string Status { get; private set; } = null!;
@@ -32,6 +37,9 @@ public class AppStockTransfer : FullAuditedAggregateRoot<Guid>
 
     public bool IsDraft => Status == StockTransferStatuses.Draft;
     public bool IsTerminal => StockTransferStatuses.IsTerminal(Status);
+    public string? SourceDocumentType => this.GetProperty<string>(SourceDocumentTypeProperty);
+    public Guid? SourceDocumentId => this.GetProperty<Guid?>(SourceDocumentIdProperty);
+    public Guid? SourceDocumentItemId => this.GetProperty<Guid?>(SourceDocumentItemIdProperty);
 
     protected AppStockTransfer() { }
 
@@ -68,6 +76,27 @@ public class AppStockTransfer : FullAuditedAggregateRoot<Guid>
         var item = new AppStockTransferItem(itemId, Id, productId, requestedQty);
         _items.Add(item);
         return item;
+    }
+
+    public void SetSourceDocument(
+        string sourceDocumentType,
+        Guid sourceDocumentId,
+        Guid? sourceDocumentItemId = null)
+    {
+        EnsureDraft();
+        ExtraProperties[SourceDocumentTypeProperty] = Check.NotNullOrWhiteSpace(
+            sourceDocumentType,
+            nameof(sourceDocumentType),
+            maxLength: 128);
+        ExtraProperties[SourceDocumentIdProperty] = sourceDocumentId;
+        if (sourceDocumentItemId.HasValue)
+        {
+            ExtraProperties[SourceDocumentItemIdProperty] = sourceDocumentItemId.Value;
+        }
+        else
+        {
+            ExtraProperties.Remove(SourceDocumentItemIdProperty);
+        }
     }
 
     public void RemoveItem(Guid itemId)
@@ -281,6 +310,9 @@ public class AppStockTransfer : FullAuditedAggregateRoot<Guid>
             TransferId = Id,
             FromBranchId = FromBranchId.Value,
             ToBranchId = ToBranchId,
+            SourceDocumentType = SourceDocumentType,
+            SourceDocumentId = SourceDocumentId,
+            SourceDocumentItemId = SourceDocumentItemId,
             Lines = _items.Select(item => new TransferCompletedLineEto
             {
                 TransferItemId = item.Id,

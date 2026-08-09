@@ -1,16 +1,28 @@
 @using Volo.Abp.AspNetCore.Components.Web.Theming.Routing
 @using Microsoft.Extensions.Options
+@using Microsoft.AspNetCore.Components.Web
 @using MudBlazor
 @inject IOptions<AbpRouterOptions> RouterOptions
+@inject NavigationManager Navigation
 <MudDialogProvider />
 <MudSnackbarProvider />
 <Router AppAssembly="typeof(Program).Assembly" AdditionalAssemblies="RouterOptions.Value.AdditionalAssemblies">
     <Found Context="routeData">
-        <AuthorizeRouteView RouteData="routeData"
-                            DefaultLayout="typeof(patisserie_shop.Blazor.Shared.Themes.MainLayout)">
-            <NotAuthorized Context="authenticationState">
-                <RouteAccessDenied AuthenticationState="authenticationState" />
-            </NotAuthorized>
-        </AuthorizeRouteView>
+        <ErrorBoundary @key="Navigation.Uri">
+            <ChildContent>
+                <AuthorizeRouteView RouteData="routeData"
+                                    DefaultLayout="typeof(patisserie_shop.Blazor.Shared.Themes.MainLayout)">
+                    <NotAuthorized Context="authenticationState">
+                        <RouteAccessDenied AuthenticationState="authenticationState" />
+                    </NotAuthorized>
+                </AuthorizeRouteView>
+            </ChildContent>
+            <ErrorContent Context="routeException">
+                <RouteUnexpectedError />
+            </ErrorContent>
+        </ErrorBoundary>
     </Found>
+    <NotFound>
+        <RouteNotFound />
+    </NotFound>
 </Router>

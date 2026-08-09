@@ -534,7 +534,7 @@
     private void GoToBranchRequests()
     {
         _open = false;
-        Navigation.NavigateTo("/production/branch-requests", forceLoad: false);
+        Navigation.NavigateTo("/production/demand-planning?view=review", forceLoad: false);
     }
 
     private string TypeLabel(string decisionType) => decisionType switch

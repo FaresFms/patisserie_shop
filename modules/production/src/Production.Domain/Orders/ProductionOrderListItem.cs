@@ -25,4 +25,13 @@ public class ProductionOrderListItem
     public DateTime? ActualStartTime { get; set; }
     public DateTime? CompletedAt { get; set; }
     public decimal TotalProductionCost { get; set; }
+    public string QualityStatus { get; set; } = ProductionQualityStatuses.NotRequired;
+    public string? QualityReason { get; set; }
+    public DateTime? QualityUpdatedAt { get; set; }
+    public string? OutputBatchNumber { get; set; }
+    public string? WorkCenterCode { get; set; }
+    public string? ShiftCode { get; set; }
+    public string? AssignedOperatorName { get; set; }
+    public DateTime? ScheduledStartTime { get; set; }
+    public DateTime? ScheduledEndTime { get; set; }
 }

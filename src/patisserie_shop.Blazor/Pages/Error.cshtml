@@ -1,0 +1,33 @@
+@page "/error/{statusCode:int?}"
+@using Microsoft.AspNetCore.Mvc.Localization
+@using patisserie_shop.Localization
+@model patisserie_shop.Blazor.Pages.WarmErrorModel
+@inject IHtmlLocalizer<patisserie_shopResource> L
+@{
+    Layout = "/Pages/Account/_AccountLayout.cshtml";
+    ViewData["Title"] = L[Model.TitleKey].Value;
+}
+
+<main class="access-page-shell" role="main">
+    <section class="access-page-card" role="alert" aria-labelledby="error-page-title">
+        <div class="access-page-mark" aria-hidden="true">
+            <span class="material-icons-outlined">@Model.IconName</span>
+        </div>
+        <div class="access-page-code">@Model.HttpStatusCode</div>
+        <h1 id="error-page-title">@L[Model.TitleKey]</h1>
+        <p>@L[Model.DescriptionKey]</p>
+        <div class="access-page-actions">
+            @if (!string.IsNullOrWhiteSpace(Model.OriginalPath))
+            {
+                <a class="access-page-action access-page-action--secondary" href="@Model.OriginalPath">
+                    <span class="material-icons-outlined">refresh</span>
+                    @L["ErrorPage:TryAgain"]
+                </a>
+            }
+            <a class="access-page-action" href="/">
+                <span class="material-icons-outlined">home</span>
+                @L["Account:ReturnHome"]
+            </a>
+        </div>
+    </section>
+</main>

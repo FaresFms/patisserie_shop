@@ -62,6 +62,7 @@ public class StockBatchManager : DomainService
         DateTime expiryDate,
         string sourceType,
         Guid? sourceId = null,
+        decimal unitCost = 0m,
         bool autoSave = false)
     {
         var batchNumber = await GenerateBatchNumberAsync();
@@ -74,7 +75,8 @@ public class StockBatchManager : DomainService
             expiryDate,
             quantity,
             sourceType,
-            sourceId);
+            sourceId,
+            unitCost);
 
         await _batchRepository.InsertAsync(batch, autoSave);
         return batch;
@@ -89,10 +91,11 @@ public class StockBatchManager : DomainService
         int quantity,
         int shelfLifeDays,
         string sourceType,
-        Guid? sourceId = null)
+        Guid? sourceId = null,
+        decimal unitCost = 0m)
     {
         var expiryDate = Clock.Now.Date.AddDays(shelfLifeDays);
-        return CreateAsync(branchId, productId, quantity, expiryDate, sourceType, sourceId);
+        return CreateAsync(branchId, productId, quantity, expiryDate, sourceType, sourceId, unitCost);
     }
 
     /// <summary>
@@ -165,7 +168,12 @@ public class StockBatchManager : DomainService
             var expiryDate = batch.ExpiryDate;
             batch.Consume(take);
             await _batchRepository.UpdateAsync(batch);
-            consumed.Add(new ConsumedStockBatchLine(batch.Id, expiryDate, take));
+            consumed.Add(new ConsumedStockBatchLine(
+                batch.Id,
+                batch.BatchNumber,
+                expiryDate,
+                take,
+                batch.UnitCost));
             remaining -= take;
         }
 

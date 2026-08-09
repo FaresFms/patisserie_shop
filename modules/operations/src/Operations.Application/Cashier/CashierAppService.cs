@@ -24,7 +24,7 @@ namespace Operations.Cashier;
 /// Cash-only POS backend. Thin orchestrator: it composes the existing SaleManager /
 /// AppSale.Record / BranchInventoryManager.AdjustStockAsync pipeline (exactly like
 /// SaleAppService) plus the cash-drawer aggregate. A cashier is gated by
-/// <see cref="OperationsPermissions.Cashier.Default"/> — NOT by being a branch manager,
+/// <see cref="OperationsPermissions.Cashier.OperatePos"/> — NOT by being a branch manager,
 /// so there is no manager-branch EnsureBranchAccess check on the sell path.
 /// </summary>
 [Authorize(OperationsPermissions.Cashier.Default)]
@@ -72,6 +72,7 @@ public class CashierAppService : OperationsAppService, ICashierAppService
 
     // ─── Shifts ───
 
+    [Authorize(OperationsPermissions.Cashier.OperatePos)]
     public async Task<CashierShiftDto?> GetCurrentShiftAsync(Guid branchId)
     {
         EnsureBranchAllowed(branchId);
@@ -81,6 +82,7 @@ public class CashierAppService : OperationsAppService, ICashierAppService
         return shift == null ? null : await ProjectShiftAsync(shift);
     }
 
+    [Authorize(OperationsPermissions.Cashier.OperatePos)]
     public async Task<CashierShiftDto> OpenShiftAsync(OpenShiftDto input)
     {
         EnsureBranchAllowed(input.BranchId);
@@ -172,6 +174,7 @@ public class CashierAppService : OperationsAppService, ICashierAppService
 
     // ─── Assigned branch (claim-driven; the POS branch source) ───
 
+    [Authorize(OperationsPermissions.Cashier.OperatePos)]
     public async Task<CashierBranchDto?> GetMyBranchAsync()
     {
         var assigned = GetAssignedBranchId();
@@ -186,10 +189,15 @@ public class CashierAppService : OperationsAppService, ICashierAppService
             return null;
         }
 
-        return new CashierBranchDto { Id = branch.Id, Name = branch.Name };
+        return new CashierBranchDto
+        {
+            Id = branch.Id,
+            Name = branch.Name,
+            Address = branch.Address
+        };
     }
 
-    // ─── Branch list (cashier-permitted; Id + Name only) ───
+    // ─── Branch list (cashier-permitted lightweight branch data) ───
 
     public async Task<List<CashierBranchDto>> GetSellableBranchesAsync()
     {
@@ -199,12 +207,18 @@ public class CashierAppService : OperationsAppService, ICashierAppService
 
         return branches
             .OrderBy(b => b.Name)
-            .Select(b => new CashierBranchDto { Id = b.Id, Name = b.Name })
+            .Select(b => new CashierBranchDto
+            {
+                Id = b.Id,
+                Name = b.Name,
+                Address = b.Address
+            })
             .ToList();
     }
 
     // ─── Product tiles (sale-safe availability; never exposes cost) ───
 
+    [Authorize(OperationsPermissions.Cashier.OperatePos)]
     public async Task<List<CashierProductDto>> GetProductTilesAsync(Guid branchId, string? filter)
     {
         EnsureBranchAllowed(branchId);
@@ -241,6 +255,7 @@ public class CashierAppService : OperationsAppService, ICashierAppService
 
     // ─── Sale recording ───
 
+    [Authorize(OperationsPermissions.Cashier.OperatePos)]
     public async Task<CashierSaleResultDto> RecordSaleAsync(RecordCashierSaleDto input)
     {
         if (input.Lines == null || input.Lines.Count == 0)

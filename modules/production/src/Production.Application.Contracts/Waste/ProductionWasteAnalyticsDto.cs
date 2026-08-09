@@ -19,7 +19,7 @@ public class ProductionWasteAnalyticsDto
 
 public class ProductionWasteSummaryDto
 {
-    public int TotalQuantity { get; set; }
+    public int TotalIncidents { get; set; }
     public decimal TotalCost { get; set; }
     public string? TopReason { get; set; }
     public string? TopProductName { get; set; }
@@ -28,14 +28,14 @@ public class ProductionWasteSummaryDto
 public class ProductionWasteDailyPointDto
 {
     public DateTime Date { get; set; }
-    public int Quantity { get; set; }
+    public int IncidentCount { get; set; }
     public decimal Cost { get; set; }
 }
 
 public class ProductionWasteReasonSliceDto
 {
     public string Reason { get; set; } = null!;
-    public int Quantity { get; set; }
+    public int IncidentCount { get; set; }
     public decimal Cost { get; set; }
 }
 
@@ -44,6 +44,7 @@ public class ProductionWasteProductRowDto
     public Guid ProductId { get; set; }
     public string ProductName { get; set; } = null!;
     public string ProductSku { get; set; } = null!;
+    public string ProductUnit { get; set; } = null!;
     public int Quantity { get; set; }
     public decimal Cost { get; set; }
 }

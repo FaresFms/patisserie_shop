@@ -19,4 +19,9 @@ public class StockBatchWithDetails
 }
 
 /// <summary>One FEFO-consumed lot, preserving the source batch expiry date.</summary>
-public sealed record ConsumedStockBatchLine(Guid BatchId, DateTime ExpiryDate, int Quantity);
+public sealed record ConsumedStockBatchLine(
+    Guid BatchId,
+    string BatchNumber,
+    DateTime ExpiryDate,
+    int Quantity,
+    decimal UnitCost);

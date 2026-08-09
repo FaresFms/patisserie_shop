@@ -19,14 +19,19 @@ public class ProductionAnalyticsReadModel
     public decimal CostVariance { get; set; }
     public decimal CostVariancePercent { get; set; }
     public decimal AverageUnitCost { get; set; }
+    public int ForecastQuantity { get; set; }
+    public int ActualDemandQuantity { get; set; }
+    public decimal ForecastAccuracyPercent { get; set; }
+    public decimal ForecastBiasPercent { get; set; }
     public List<ProductionDailyOutputPoint> DailyOutput { get; set; } = new();
     public List<ProductionProductFocusRow> ProductPerformance { get; set; } = new();
     public List<ProductionWasteReasonAnalyticsRow> WasteReasons { get; set; } = new();
+    public List<ForecastAccuracyRow> ForecastAccuracy { get; set; } = new();
 }
 
 public class ProductionWasteReasonAnalyticsRow
 {
     public string Reason { get; set; } = null!;
-    public int Quantity { get; set; }
+    public int IncidentCount { get; set; }
     public decimal Cost { get; set; }
 }

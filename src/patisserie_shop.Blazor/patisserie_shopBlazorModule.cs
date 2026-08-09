@@ -36,7 +36,6 @@ using Volo.Abp.AspNetCore.Components.Web.Theming.Routing;
 using Volo.Abp.AspNetCore.Mvc;
 using Volo.Abp.AspNetCore.Mvc.Localization;
 using Volo.Abp.AspNetCore.Mvc.UI.Bundling;
-using Volo.Abp.AspNetCore.Mvc.UI.Theme.Shared;
 using Volo.Abp.AspNetCore.Serilog;
 using Volo.Abp.AspNetCore.Components.Server;
 using Volo.Abp.AspNetCore.Components.Server.LeptonXLiteTheme;
@@ -356,16 +355,17 @@ public class patisserie_shopBlazorModule : AbpModule
 
         app.UseForwardedHeaders();
 
-        if (env.IsDevelopment())
-        {
-            app.UseDeveloperExceptionPage();
-        }
-
         app.UseAbpRequestLocalization();
+
+        // Keep every browser-facing failure inside our warm error experience.
+        // ABP's UseErrorPage renders the legacy Lepton error surface, so both
+        // exceptions and empty 4xx/5xx responses are re-executed through our
+        // own Razor page instead.
+        app.UseExceptionHandler("/error/500");
+        app.UseStatusCodePagesWithReExecute("/error/{0}");
 
         if (!env.IsDevelopment())
         {
-            app.UseErrorPage();
             app.UseHsts();
         }
 

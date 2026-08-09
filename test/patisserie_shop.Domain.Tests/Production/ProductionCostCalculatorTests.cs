@@ -25,6 +25,7 @@ public class ProductionCostCalculatorTests
         int outputQuantity,
         decimal laborCostPerBatch = 0m,
         decimal overheadCostPerBatch = 0m,
+        decimal expectedWastePercent = 0m,
         params (Guid id, int qty, decimal loss)[] items)
     {
         var formula = new AppProductionFormula(
@@ -33,7 +34,7 @@ public class ProductionCostCalculatorTests
             formulaName: "Test Formula",
             outputQuantity: outputQuantity,
             version: 1,
-            expectedWastePercent: 0m,
+            expectedWastePercent: expectedWastePercent,
             laborCostPerBatch: laborCostPerBatch,
             overheadCostPerBatch: overheadCostPerBatch,
             estimatedProductionMinutes: 0);
@@ -131,6 +132,25 @@ public class ProductionCostCalculatorTests
         result.LaborCost.ShouldBe(10m);
         // requiredQty = ceil(10/100 × 50) = ceil(5) = 5
         result.Lines.Single().RequiredQuantity.ShouldBe(5);
+    }
+
+    [Fact]
+    public void Expected_Output_Waste_Inflates_Gross_Output_And_Ingredients()
+    {
+        var ing = Guid.NewGuid();
+        var formula = NewFormula(
+            outputQuantity: 100,
+            expectedWastePercent: 10m,
+            items: (ing, 50, 0m));
+
+        var result = ProductionCostCalculator.Calculate(
+            formula, 90, new Dictionary<Guid, decimal> { [ing] = 2m });
+
+        result.PlannedOutputQuantity.ShouldBe(90);
+        result.ExpectedGrossOutputQuantity.ShouldBe(100);
+        result.Batches.ShouldBe(1);
+        result.Lines.Single().RequiredQuantity.ShouldBe(50);
+        result.PlannedIngredientCost.ShouldBe(100m);
     }
 
     [Fact]

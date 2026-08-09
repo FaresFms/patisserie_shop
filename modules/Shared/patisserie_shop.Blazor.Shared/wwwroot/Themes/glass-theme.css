@@ -361,11 +361,14 @@ body.abp-application-layout .mud-input-helper-text,
 body.abp-application-layout .mud-input-adornment {
     color: var(--fg-2);
 }
-body.abp-application-layout .mud-input-label.mud-shrink,
-body.abp-application-layout .mud-input-outlined.mud-focused .mud-input-label {
+body.abp-application-layout .mud-shrink ~ label.mud-input-label.mud-input-label-inputcontrol {
     color: var(--fg-2) !important;
 }
-body.abp-application-layout .mud-input-outlined.mud-input-error .mud-input-label {
+body.abp-application-layout .mud-input:focus-within ~ label.mud-input-label.mud-input-label-inputcontrol {
+    color: var(--accent) !important;
+}
+body.abp-application-layout .mud-input:focus-within ~ label.mud-input-label.mud-input-label-inputcontrol.mud-input-error,
+body.abp-application-layout label.mud-input-label.mud-input-label-inputcontrol.mud-input-error {
     color: var(--danger) !important;
 }
 
@@ -1477,6 +1480,13 @@ body.soft-route-loading {
     line-height: 1.65;
 }
 
+.route-error__actions {
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: .75rem;
+}
+
 /* =========================================================
    Date / time picker — recolor MudBlazor's default blue
    (mud-theme-primary) to the warm terracotta accent.
@@ -2066,4 +2076,292 @@ body.abp-application-layout .shop-settings-job-fields .mud-input-number-control 
 
 html[dir="rtl"] body.abp-application-layout .shop-settings-job-fields .mud-input-number-control input {
     text-align: right;
+}
+
+/* ========================================================================== */
+/* Production workspaces                                                       */
+/* ========================================================================== */
+
+body.abp-application-layout .production-workspace-shell {
+    margin: 0 0 18px;
+    padding: 20px 22px 0;
+    border: 1px solid var(--bd-1);
+    border-radius: var(--r-lg);
+    background:
+        radial-gradient(circle at 8% 0%, var(--accent-soft), transparent 42%),
+        var(--surface);
+    box-shadow: var(--shadow-sm);
+    overflow: hidden;
+}
+
+body.abp-application-layout .production-workspace-heading {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 18px;
+    padding-bottom: 16px;
+}
+
+body.abp-application-layout .production-workspace-kicker {
+    margin-bottom: 7px;
+    color: var(--accent);
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: .11em;
+    text-transform: uppercase;
+}
+
+body.abp-application-layout .production-workspace-title-row {
+    display: flex;
+    align-items: center;
+    gap: 13px;
+}
+
+body.abp-application-layout .production-workspace-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 48px;
+    height: 48px;
+    flex: 0 0 48px;
+    border: 1px solid var(--accent-line);
+    border-radius: var(--r-md);
+    background: var(--accent-soft);
+    color: var(--accent);
+}
+
+body.abp-application-layout .production-workspace-title {
+    margin: 0;
+    color: var(--fg-1);
+    font-family: var(--font-serif);
+    font-size: clamp(24px, 3vw, 34px);
+    font-weight: 700;
+    line-height: 1.08;
+}
+
+body.abp-application-layout .production-workspace-subtitle {
+    max-width: 760px;
+    margin: 5px 0 0;
+    color: var(--fg-2);
+    font-size: 13.5px;
+    line-height: 1.5;
+}
+
+body.abp-application-layout .production-workspace-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 0 0 auto;
+}
+
+body.abp-application-layout .production-workspace-tabs {
+    display: flex;
+    align-items: stretch;
+    gap: 4px;
+    min-width: 0;
+    padding-top: 2px;
+    border-top: 1px solid var(--bd-1);
+    overflow-x: auto;
+    scrollbar-width: thin;
+}
+
+body.abp-application-layout .production-workspace-tab {
+    min-height: 46px;
+    flex: 0 0 auto;
+    border-radius: var(--r-sm) var(--r-sm) 0 0 !important;
+    white-space: nowrap;
+    text-transform: none !important;
+}
+
+body.abp-application-layout .production-workspace-tab.is-active {
+    box-shadow: inset 0 -3px 0 var(--accent);
+}
+
+body.abp-application-layout .production-next-step {
+    margin: 0 0 14px;
+}
+
+body.abp-application-layout .production-next-step-content {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    width: 100%;
+}
+
+body.abp-application-layout .production-stage-strip {
+    display: flex;
+    align-items: stretch;
+    gap: 8px;
+    margin: 0 0 12px;
+    padding: 10px;
+    border: 1px solid var(--bd-1);
+    border-radius: var(--r-md);
+    background: var(--bg-2);
+    overflow-x: auto;
+}
+
+body.abp-application-layout .production-stage-button {
+    min-height: 52px;
+    min-width: 148px;
+    flex: 1 0 auto;
+    border-radius: var(--r-sm) !important;
+    text-transform: none !important;
+}
+
+body.abp-application-layout .production-stage-button--handoff {
+    margin-inline-start: 8px;
+    border: 1px dashed var(--accent-line) !important;
+}
+
+body.abp-application-layout .production-flow-strip {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin: 0 0 14px;
+    padding: 12px 14px;
+    border: 1px solid var(--bd-1);
+    border-radius: var(--r-md);
+    background: var(--bg-2);
+    color: var(--fg-2);
+    font-size: 12.5px;
+}
+
+body.abp-application-layout .production-flow-strip > div {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+}
+
+body.abp-application-layout .production-flow-strip > div > span {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border: 1px solid var(--bd-2);
+    border-radius: 50%;
+    background: var(--surface);
+    color: var(--fg-2);
+    font: 700 11px var(--font-mono);
+}
+
+body.abp-application-layout .production-flow-strip > div.is-current {
+    color: var(--accent);
+    font-weight: 700;
+}
+
+body.abp-application-layout .production-flow-strip > div.is-current > span {
+    border-color: var(--accent-line);
+    background: var(--accent-soft);
+    color: var(--accent);
+}
+
+html[dir="rtl"] body.abp-application-layout .production-flow-strip > .mud-icon-root {
+    transform: rotate(180deg);
+}
+
+body.abp-application-layout .production-workboard-mobile {
+    display: none;
+}
+
+body.abp-application-layout .production-order-card {
+    border: 1px solid var(--bd-1);
+    border-radius: var(--r-md);
+    background: var(--surface);
+}
+
+body.abp-application-layout .production-order-card-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 14px;
+}
+
+body.abp-application-layout .production-order-card-product {
+    color: var(--fg-1);
+    font-size: 17px;
+    font-weight: 800;
+}
+
+body.abp-application-layout .production-order-card-number {
+    margin-top: 2px;
+    color: var(--fg-3);
+    font: 11.5px var(--font-mono);
+}
+
+body.abp-application-layout .production-order-card-meta {
+    display: grid;
+    gap: 8px;
+    margin-bottom: 16px;
+    color: var(--fg-2);
+    font-size: 12.5px;
+}
+
+body.abp-application-layout .production-order-card-meta > span {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+}
+
+body.abp-application-layout .production-anchor,
+body.abp-application-layout .production-anchor-target {
+    scroll-margin-top: 86px;
+}
+
+@media (max-width: 760px) {
+    body.abp-application-layout .production-workspace-shell {
+        margin-inline: -4px;
+        padding: 16px 14px 0;
+        border-radius: var(--r-md);
+    }
+
+    body.abp-application-layout .production-workspace-heading {
+        flex-direction: column;
+        gap: 12px;
+    }
+
+    body.abp-application-layout .production-workspace-actions,
+    body.abp-application-layout .production-workspace-actions .mud-button-root {
+        width: 100%;
+    }
+
+    body.abp-application-layout .production-workspace-title-row {
+        align-items: flex-start;
+    }
+
+    body.abp-application-layout .production-workspace-icon {
+        width: 42px;
+        height: 42px;
+        flex-basis: 42px;
+    }
+
+    body.abp-application-layout .production-workspace-tab {
+        min-height: 50px;
+    }
+
+    body.abp-application-layout .production-next-step-content {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    body.abp-application-layout .production-flow-strip {
+        justify-content: flex-start;
+        overflow-x: auto;
+    }
+
+    body.abp-application-layout .production-flow-strip > div {
+        min-width: max-content;
+    }
+
+    body.abp-application-layout .production-workboard-grid {
+        display: none !important;
+    }
+
+    body.abp-application-layout .production-workboard-mobile {
+        display: grid;
+        gap: 12px;
+    }
 }

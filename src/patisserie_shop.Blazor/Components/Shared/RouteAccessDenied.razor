@@ -4,22 +4,10 @@
 
 @if (AuthenticationState.User.Identity?.IsAuthenticated == true)
 {
-    <section class="route-access-denied" role="alert" aria-labelledby="route-access-denied-title">
-        <div class="route-access-denied__card">
-            <div class="route-access-denied__mark" aria-hidden="true">
-                <SoftIcon Icon="@Icons.Material.Outlined.LockPerson" />
-            </div>
-            <div class="route-access-denied__code">403</div>
-            <h1 id="route-access-denied-title">@L["Account:AccessDeniedTitle"]</h1>
-            <p>@L["Account:AccessDeniedDescription"]</p>
-            <SoftButton Href="/"
-                        Variant="MudBlazor.Variant.Filled"
-                        Color="MudBlazor.Color.Primary"
-                        StartIcon="@Icons.Material.Filled.Home">
-                @L["Account:ReturnHome"]
-            </SoftButton>
-        </div>
-    </section>
+    <RouteError StatusCode="403"
+                Title="@L["Account:AccessDeniedTitle"]"
+                Description="@L["Account:AccessDeniedDescription"]"
+                Icon="@Icons.Material.Outlined.LockPerson" />
 }
 else
 {

@@ -16,6 +16,12 @@ public interface IProductionFormulaAppService : IApplicationService
 
     Task<ProductionFormulaDto> UpdateAsync(Guid id, UpdateProductionFormulaDto input);
 
+    Task<ProductionFormulaDto> CreateRevisionAsync(Guid sourceFormulaId);
+
+    Task<ProductionFormulaDto> ApproveAsync(Guid id);
+
+    Task<ProductionFormulaDto> RetireAsync(Guid id);
+
     Task DeleteAsync(Guid id);
 
     /// <summary>Deterministic planned-cost preview for a saved formula at the given target output quantity.</summary>

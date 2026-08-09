@@ -25,7 +25,7 @@
     return;
 }
 
-<div class="soft-modal-backdrop" @onclick="CloseAsync">
+<div class="soft-modal-backdrop" @onclick="RequestCloseAsync">
     <div class="soft-modal-container soft-modal-container--xl" @onclick:stopPropagation="true">
         <SoftCard Elevation="24" Class="soft-modal-card">
 
@@ -41,22 +41,50 @@
                                     <span>@OpsL[$"Status:{_transfer.Status}"]</span>
                                 </div>
                             </SoftStack>
-                            <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                                <SoftText Typo="Typo.caption" Color="Color.Default">@_transfer.FromBranchName</SoftText>
-                                <MudIcon Icon="@Icons.Material.Filled.ArrowRightAlt" Size="Size.Small" />
-                                <SoftText Typo="Typo.caption" Color="Color.Default">@_transfer.ToBranchName</SoftText>
-                            </SoftStack>
+                            <SoftText Typo="Typo.caption" Color="Color.Default">@OpsL["TransferRoute"]</SoftText>
                         </div>
                     </SoftStack>
                 </CardHeaderContent>
                 <CardHeaderActions>
-                    <SoftIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="CloseAsync" />
+                    <SoftIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small"
+                                    OnClick="RequestCloseAsync" Disabled="_saving" />
                 </CardHeaderActions>
             </SoftCardHeader>
             <SoftDivider />
 
             <SoftCardContent Class="pa-4 sts-modal-body">
                 <SoftStack Spacing="4">
+
+                    <!-- Route is the primary fact: make sender and receiver unmistakable. -->
+                    <section class="sts-route" aria-label="@OpsL["TransferRoute"]">
+                        <div class="sts-route-branch sts-route-source">
+                            <div class="sts-route-icon">
+                                <MudIcon Icon="@Icons.Material.Filled.Outbox" Size="Size.Medium" />
+                            </div>
+                            <div class="sts-route-copy">
+                                <span class="sts-route-label">@OpsL["SendingBranch"]</span>
+                                <strong class="sts-route-name">@SourceBranchDisplayName</strong>
+                                <span class="sts-route-help">@OpsL["TransferLeavesHere"]</span>
+                            </div>
+                        </div>
+
+                        <div class="sts-route-direction" aria-hidden="true">
+                            <span class="sts-route-line"></span>
+                            <MudIcon Class="sts-route-arrow-icon" Icon="@Icons.Material.Filled.ArrowForward" Size="Size.Medium" />
+                            <span class="sts-route-line"></span>
+                        </div>
+
+                        <div class="sts-route-branch sts-route-destination">
+                            <div class="sts-route-icon">
+                                <MudIcon Icon="@Icons.Material.Filled.MoveToInbox" Size="Size.Medium" />
+                            </div>
+                            <div class="sts-route-copy">
+                                <span class="sts-route-label">@OpsL["ReceivingBranch"]</span>
+                                <strong class="sts-route-name">@_transfer.ToBranchName</strong>
+                                <span class="sts-route-help">@OpsL["TransferArrivesHere"]</span>
+                            </div>
+                        </div>
+                    </section>
 
                     @if (IsClosed)
                     {
@@ -82,29 +110,32 @@
                     else
                     {
                         <!-- Workflow stepper: Request → Approval → Ship → Receive -->
-                        <div class="sts-stepper">
-                            @for (var i = 0; i < StepKeys.Length; i++)
-                            {
-                                var stepIndex = i;
-                                var state = StepState(stepIndex);
-                                <div class="@($"sts-step sts-step-{state}")">
-                                    <div class="sts-step-dot">
-                                        @if (state == "done")
-                                        {
-                                            <MudIcon Icon="@Icons.Material.Filled.Check" Size="Size.Small" />
-                                        }
-                                        else
-                                        {
-                                            <MudIcon Icon="@StepIcon(stepIndex)" Size="Size.Small" />
-                                        }
-                                    </div>
-                                    <span class="sts-step-label">@OpsL[$"Step:{StepKeys[stepIndex]}"]</span>
-                                </div>
-                                @if (stepIndex < StepKeys.Length - 1)
+                        <div class="sts-workflow">
+                            <SoftText Typo="Typo.overline" Color="Color.Primary">@OpsL["WorkflowTimeline"]</SoftText>
+                            <div class="sts-stepper">
+                                @for (var i = 0; i < StepKeys.Length; i++)
                                 {
-                                    <div class="@($"sts-step-line {(stepIndex < CurrentStepIndex ? "sts-step-line-done" : "")}")"></div>
+                                    var stepIndex = i;
+                                    var state = StepState(stepIndex);
+                                    <div class="@($"sts-step sts-step-{state}")">
+                                        <div class="sts-step-dot">
+                                            @if (state == "done")
+                                            {
+                                                <MudIcon Icon="@Icons.Material.Filled.Check" Size="Size.Small" />
+                                            }
+                                            else
+                                            {
+                                                <MudIcon Icon="@StepIcon(stepIndex)" Size="Size.Small" />
+                                            }
+                                        </div>
+                                        <span class="sts-step-label">@OpsL[$"Step:{StepKeys[stepIndex]}"]</span>
+                                    </div>
+                                    @if (stepIndex < StepKeys.Length - 1)
+                                    {
+                                        <div class="@($"sts-step-line {(stepIndex < CurrentStepIndex ? "sts-step-line-done" : "")}")"></div>
+                                    }
                                 }
-                            }
+                            </div>
                         </div>
 
                         <!-- Who does what next -->
@@ -255,7 +286,7 @@
 
             <SoftDivider />
             <div class="pa-3 d-flex justify-end flex-wrap" style="gap: 8px;">
-                <SoftButton Variant="Variant.Text" OnClick="CloseAsync">@L["Close"]</SoftButton>
+                <SoftButton Variant="Variant.Text" OnClick="RequestCloseAsync" Disabled="_saving">@L["Close"]</SoftButton>
 
                 @if ((_transfer.Status == StockTransferStatuses.Draft
                       || _transfer.Status == StockTransferStatuses.Pending
@@ -274,20 +305,26 @@
                 @if (_transfer.Status == StockTransferStatuses.Draft && _transfer.Items.Count > 0 && CanEditCurrentRequest)
                 {
                     <SoftButton Variant="Variant.Filled" Color="Color.Primary"
-                                StartIcon="@Icons.Material.Filled.Send"
-                                OnClick="SubmitAsync" Disabled="_saving">@OpsL["SubmitRequest"]</SoftButton>
+                                StartIcon="@(IsBusy(BusySubmit) ? null : Icons.Material.Filled.Send)"
+                                OnClick="SubmitAsync" Disabled="_saving">
+                        @ActionButtonContent(BusySubmit, OpsL["SubmitRequest"])
+                    </SoftButton>
                 }
                 @if (_transfer.Status == StockTransferStatuses.Pending && _canApprove && !_transfer.FromBranchId.HasValue)
                 {
                     <SoftButton Variant="Variant.Filled" Color="Color.Success"
-                                StartIcon="@Icons.Material.Filled.Route"
-                                OnClick="AssignSourceAsync" Disabled="_saving">@OpsL["AssignSourceBranch"]</SoftButton>
+                                StartIcon="@(IsBusy(BusyAssignSource) ? null : Icons.Material.Filled.Route)"
+                                OnClick="AssignSourceAsync" Disabled="_saving">
+                        @ActionButtonContent(BusyAssignSource, OpsL["AssignSourceBranch"])
+                    </SoftButton>
                 }
                 @if (_transfer.Status == StockTransferStatuses.Pending && _canApprove && _transfer.FromBranchId.HasValue)
                 {
                     <SoftButton Variant="Variant.Filled" Color="Color.Success"
-                                StartIcon="@Icons.Material.Filled.CheckCircle"
-                                OnClick="ApproveAsync" Disabled="_saving">@OpsL["Approve"]</SoftButton>
+                                StartIcon="@(IsBusy(BusyApprove) ? null : Icons.Material.Filled.CheckCircle)"
+                                OnClick="ApproveAsync" Disabled="_saving">
+                        @ActionButtonContent(BusyApprove, OpsL["Approve"])
+                    </SoftButton>
                 }
                 @if (_transfer.Status == StockTransferStatuses.Approved && CanShipCurrentTransfer)
                 {
@@ -321,7 +358,7 @@
                         </SoftStack>
                     </CardHeaderContent>
                     <CardHeaderActions>
-                        <SoftIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="CloseAddItem" />
+                        <SoftIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="CloseAddItem" Disabled="_saving" />
                     </CardHeaderActions>
                 </SoftCardHeader>
                 <SoftDivider />
@@ -350,10 +387,12 @@
                 </SoftCardContent>
                 <SoftDivider />
                 <div class="pa-3 d-flex justify-end" style="gap: 8px;">
-                    <SoftButton Variant="Variant.Text" OnClick="CloseAddItem">@L["Cancel"]</SoftButton>
+                    <SoftButton Variant="Variant.Text" OnClick="CloseAddItem" Disabled="_saving">@L["Cancel"]</SoftButton>
                     <SoftButton Variant="Variant.Filled" Color="Color.Primary"
-                                StartIcon="@Icons.Material.Filled.Save"
-                                OnClick="ConfirmAddItem" Disabled="_saving">@L["Save"]</SoftButton>
+                                StartIcon="@(IsBusy(BusyAddItem) ? null : Icons.Material.Filled.Save)"
+                                OnClick="ConfirmAddItem" Disabled="_saving">
+                        @ActionButtonContent(BusyAddItem, L["Save"])
+                    </SoftButton>
                 </div>
             </SoftCard>
         </div>
@@ -379,7 +418,7 @@
                         </SoftStack>
                     </CardHeaderContent>
                     <CardHeaderActions>
-                        <SoftIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="CloseShip" />
+                        <SoftIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="CloseShip" Disabled="_saving" />
                     </CardHeaderActions>
                 </SoftCardHeader>
                 <SoftDivider />
@@ -426,11 +465,13 @@
                 </SoftCardContent>
                 <SoftDivider />
                 <div class="pa-3 d-flex justify-end" style="gap: 8px;">
-                    <SoftButton Variant="Variant.Text" OnClick="CloseShip">@L["Cancel"]</SoftButton>
+                    <SoftButton Variant="Variant.Text" OnClick="CloseShip" Disabled="_saving">@L["Cancel"]</SoftButton>
                     <SoftButton Variant="Variant.Filled" Color="Color.Info"
-                                StartIcon="@Icons.Material.Filled.LocalShipping"
+                                StartIcon="@(IsBusy(BusyShip) ? null : Icons.Material.Filled.LocalShipping)"
                                 OnClick="ConfirmShipAsync"
-                                Disabled="@(_saving || HasShipStockShortage || !HasAnythingToShip)">@OpsL["Ship"]</SoftButton>
+                                Disabled="@(_saving || HasShipStockShortage || !HasAnythingToShip)">
+                        @ActionButtonContent(BusyShip, OpsL["Ship"])
+                    </SoftButton>
                 </div>
             </SoftCard>
         </div>
@@ -456,7 +497,7 @@
                         </SoftStack>
                     </CardHeaderContent>
                     <CardHeaderActions>
-                        <SoftIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="CloseComplete" />
+                        <SoftIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="CloseComplete" Disabled="_saving" />
                     </CardHeaderActions>
                 </SoftCardHeader>
                 <SoftDivider />
@@ -501,13 +542,15 @@
                                 StartIcon="@Icons.Material.Filled.ReportProblem"
                                 OnClick="OpenReportLost" Disabled="_saving">@OpsL["TransferReportLost"]</SoftButton>
                     <div class="flex-grow-1"></div>
-                    <SoftButton Variant="Variant.Text" OnClick="CloseComplete">@L["Cancel"]</SoftButton>
-                    <SoftButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="ReceiveAll">
+                    <SoftButton Variant="Variant.Text" OnClick="CloseComplete" Disabled="_saving">@L["Cancel"]</SoftButton>
+                    <SoftButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="ReceiveAll" Disabled="_saving">
                         @OpsL["TransferAll"]
                     </SoftButton>
                     <SoftButton Variant="Variant.Filled" Color="Color.Tertiary"
-                                StartIcon="@Icons.Material.Filled.CheckCircle"
-                                OnClick="ConfirmComplete" Disabled="@(_saving || HasReceiveOverShipped)">@OpsL["ConfirmReceive"]</SoftButton>
+                                StartIcon="@(IsBusy(BusyComplete) ? null : Icons.Material.Filled.CheckCircle)"
+                                OnClick="ConfirmComplete" Disabled="@(_saving || HasReceiveOverShipped)">
+                        @ActionButtonContent(BusyComplete, OpsL["ConfirmReceive"])
+                    </SoftButton>
                 </div>
             </SoftCard>
         </div>
@@ -528,7 +571,7 @@
                         </SoftStack>
                     </CardHeaderContent>
                     <CardHeaderActions>
-                        <SoftIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="CloseReportLost" />
+                        <SoftIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="CloseReportLost" Disabled="_saving" />
                     </CardHeaderActions>
                 </SoftCardHeader>
                 <SoftDivider />
@@ -537,10 +580,12 @@
                 </SoftCardContent>
                 <SoftDivider />
                 <div class="pa-3 d-flex justify-end" style="gap: 8px;">
-                    <SoftButton Variant="Variant.Text" OnClick="CloseReportLost">@L["Cancel"]</SoftButton>
+                    <SoftButton Variant="Variant.Text" OnClick="CloseReportLost" Disabled="_saving">@L["Cancel"]</SoftButton>
                     <SoftButton Variant="Variant.Filled" Color="Color.Error"
-                                StartIcon="@Icons.Material.Filled.ReportProblem"
-                                OnClick="ConfirmReportLostAsync" Disabled="_saving">@OpsL["TransferReportLost"]</SoftButton>
+                                StartIcon="@(IsBusy(BusyReportLost) ? null : Icons.Material.Filled.ReportProblem)"
+                                OnClick="ConfirmReportLostAsync" Disabled="_saving">
+                        @ActionButtonContent(BusyReportLost, OpsL["TransferReportLost"])
+                    </SoftButton>
                 </div>
             </SoftCard>
         </div>
@@ -561,7 +606,7 @@
                         </SoftStack>
                     </CardHeaderContent>
                     <CardHeaderActions>
-                        <SoftIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="CloseReject" />
+                        <SoftIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="CloseReject" Disabled="_saving" />
                     </CardHeaderActions>
                 </SoftCardHeader>
                 <SoftDivider />
@@ -579,12 +624,12 @@
                 </SoftCardContent>
                 <SoftDivider />
                 <div class="pa-3 d-flex justify-end" style="gap: 8px;">
-                    <SoftButton Variant="Variant.Text" OnClick="CloseReject">@L["Cancel"]</SoftButton>
+                    <SoftButton Variant="Variant.Text" OnClick="CloseReject" Disabled="_saving">@L["Cancel"]</SoftButton>
                     <SoftButton Variant="Variant.Filled" Color="Color.Error"
-                                StartIcon="@Icons.Material.Filled.Block"
+                                StartIcon="@(IsBusy(BusyReject) ? null : Icons.Material.Filled.Block)"
                                 OnClick="ConfirmRejectAsync"
                                 Disabled="@(_saving || string.IsNullOrWhiteSpace(_rejectReason))">
-                        @OpsL["RejectRequest"]
+                        @ActionButtonContent(BusyReject, OpsL["RejectRequest"])
                     </SoftButton>
                 </div>
             </SoftCard>
@@ -606,7 +651,7 @@
                         </SoftStack>
                     </CardHeaderContent>
                     <CardHeaderActions>
-                        <SoftIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="CloseCancel" />
+                        <SoftIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="CloseCancel" Disabled="_saving" />
                     </CardHeaderActions>
                 </SoftCardHeader>
                 <SoftDivider />
@@ -623,11 +668,11 @@
                 </SoftCardContent>
                 <SoftDivider />
                 <div class="pa-3 d-flex justify-end" style="gap: 8px;">
-                    <SoftButton Variant="Variant.Text" OnClick="CloseCancel">@L["Close"]</SoftButton>
+                    <SoftButton Variant="Variant.Text" OnClick="CloseCancel" Disabled="_saving">@L["Close"]</SoftButton>
                     <SoftButton Variant="Variant.Filled" Color="Color.Error"
-                                StartIcon="@Icons.Material.Filled.Cancel"
+                                StartIcon="@(IsBusy(BusyCancel) ? null : Icons.Material.Filled.Cancel)"
                                 OnClick="ConfirmCancelAsync" Disabled="_saving">
-                        @OpsL["CancelTransfer"]
+                        @ActionButtonContent(BusyCancel, OpsL["CancelTransfer"])
                     </SoftButton>
                 </div>
             </SoftCard>
@@ -640,6 +685,92 @@
     .soft-modal-container--lg { max-width: 760px; }
 
     .sts-modal-body { max-height: 72vh; overflow-y: auto; }
+
+    .sts-route {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(92px, 0.32fr) minmax(0, 1fr);
+        align-items: stretch;
+        gap: 14px;
+        padding: 16px;
+        border: 1px solid var(--accent-line);
+        border-radius: var(--r-lg);
+        background: linear-gradient(135deg, var(--surface), var(--accent-soft));
+        box-shadow: var(--shadow-sm);
+    }
+
+    .sts-route-branch {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        min-width: 0;
+        padding: 14px;
+        border: 1px solid var(--bd-2);
+        border-radius: var(--r-md);
+        background: var(--surface);
+    }
+
+    .sts-route-source { border-inline-start: 4px solid var(--warn); }
+    .sts-route-destination { border-inline-start: 4px solid var(--success); }
+
+    .sts-route-icon {
+        display: grid;
+        place-items: center;
+        flex: 0 0 42px;
+        width: 42px;
+        height: 42px;
+        border-radius: 50%;
+        color: var(--accent-fg);
+        background: var(--accent);
+    }
+
+    .sts-route-copy {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+        gap: 2px;
+    }
+
+    .sts-route-label {
+        color: var(--fg-3);
+        font-size: 0.72rem;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+    }
+
+    .sts-route-name {
+        overflow-wrap: anywhere;
+        color: var(--fg-1);
+        font-family: var(--font-serif);
+        font-size: 1.08rem;
+        line-height: 1.25;
+    }
+
+    .sts-route-help {
+        color: var(--fg-3);
+        font-size: 0.78rem;
+    }
+
+    .sts-route-direction {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 5px;
+        color: var(--accent);
+    }
+
+    .sts-route-line {
+        width: 100%;
+        height: 1px;
+        background: var(--accent-line);
+    }
+
+    html[dir="rtl"] .sts-route-arrow-icon { transform: scaleX(-1); }
+
+    .sts-workflow {
+        display: grid;
+        gap: 8px;
+    }
 
     .sts-stepper {
         display: flex;
@@ -767,6 +898,28 @@
     .sts-status-completed { background: rgba(76,175,80,0.15);   color: #2e7d32; }
     .sts-status-cancelled { background: rgba(244,67,54,0.15);   color: #c62828; }
     .sts-status-rejected  { background: rgba(244,67,54,0.12);   color: #c62828; }
+
+    @@media (max-width: 700px) {
+        .sts-route {
+            grid-template-columns: 1fr;
+        }
+
+        .sts-route-direction {
+            min-height: 36px;
+            flex-direction: column;
+        }
+
+        .sts-route-line {
+            width: 1px;
+            height: 100%;
+            min-height: 8px;
+        }
+
+        .sts-route-arrow-icon,
+        html[dir="rtl"] .sts-route-arrow-icon {
+            transform: rotate(90deg);
+        }
+    }
 </style>
 
 @code {
@@ -776,8 +929,45 @@
 
     private static readonly string[] StepKeys = { "Request", "Approval", "Ship", "Receive" };
 
+    private const string BusyAddItem = "add-item";
+    private const string BusySubmit = "submit";
+    private const string BusyAssignSource = "assign-source";
+    private const string BusyApprove = "approve";
+    private const string BusyShip = "ship";
+    private const string BusyComplete = "complete";
+    private const string BusyReportLost = "report-lost";
+    private const string BusyReject = "reject";
+    private const string BusyCancel = "cancel";
+
     private StockTransferDto? _transfer;
     private bool _saving;
+    private string? _busyAction;
+
+    private string SourceBranchDisplayName =>
+        _transfer?.FromBranchId.HasValue == true
+            ? _transfer.FromBranchName
+            : OpsL["SourceNotAssigned"].Value;
+
+    private bool IsBusy(string action) => _busyAction == action;
+
+    private RenderFragment ActionButtonContent(string action, string label) => builder =>
+    {
+        if (!IsBusy(action))
+        {
+            builder.AddContent(0, label);
+            return;
+        }
+
+        builder.OpenComponent<SoftProgressCircular>(1);
+        builder.AddAttribute(2, "Indeterminate", true);
+        builder.AddAttribute(3, "Size", Size.Small);
+        builder.AddAttribute(4, "Color", Color.Inherit);
+        builder.CloseComponent();
+        builder.OpenElement(5, "span");
+        builder.AddAttribute(6, "class", "ms-2");
+        builder.AddContent(7, OpsL["ActionInProgress"]);
+        builder.CloseElement();
+    };
 
     private bool _canCreate;
     private bool _canApprove;
@@ -966,6 +1156,8 @@
         if (OnClose.HasDelegate) await OnClose.InvokeAsync();
     }
 
+    private Task RequestCloseAsync() => _saving ? Task.CompletedTask : CloseAsync();
+
     private async Task NotifyChanged()
     {
         if (Changed.HasDelegate) await Changed.InvokeAsync();
@@ -1002,16 +1194,20 @@
             : null;
     }
 
-    private void CloseAddItem() => _addItemVisible = false;
+    private void CloseAddItem()
+    {
+        if (!_saving) _addItemVisible = false;
+    }
 
     private async Task ConfirmAddItem()
     {
+        if (_saving) return;
         if (!_newItemProductId.HasValue || _newItemQty <= 0)
         {
             Snackbar.Add(L["ThisFieldIsRequired", OpsL["Product"]], Severity.Warning);
             return;
         }
-        _saving = true;
+        BeginBusy(BusyAddItem);
         try
         {
             await StockTransferAppService.AddItemAsync(TransferId, new AddStockTransferItemDto
@@ -1029,14 +1225,14 @@
         }
         finally
         {
-            _saving = false;
+            EndBusy();
         }
     }
 
     private async Task RemoveItemAsync(StockTransferItemDto item)
     {
         if (_saving) return;
-        _saving = true;
+        BeginBusy($"remove-item:{item.Id}");
         try
         {
             await StockTransferAppService.RemoveItemAsync(TransferId, item.Id);
@@ -1049,14 +1245,14 @@
         }
         finally
         {
-            _saving = false;
+            EndBusy();
         }
     }
 
     private async Task SaveApprovedAsync(StockTransferItemDto item)
     {
         if (_saving) return;
-        _saving = true;
+        BeginBusy($"save-approved:{item.Id}");
         try
         {
             var qty = GetApprovedEdit(item);
@@ -1075,16 +1271,18 @@
         }
         finally
         {
-            _saving = false;
+            EndBusy();
         }
     }
 
     // ─── Status actions ───
 
     private async Task SubmitAsync() => await RunAsync(
+        BusySubmit,
         () => StockTransferAppService.SubmitAsync(TransferId), OpsL["TransferSubmitted"], Severity.Success);
 
     private async Task ApproveAsync() => await RunAsync(
+        BusyApprove,
         () => StockTransferAppService.ApproveAsync(TransferId), OpsL["TransferApproved"], Severity.Success);
 
     private async Task AssignSourceAsync()
@@ -1096,6 +1294,7 @@
         }
 
         await RunAsync(
+            BusyAssignSource,
             () => StockTransferAppService.AssignSourceAsync(TransferId, new AssignStockTransferSourceDto
             {
                 FromBranchId = _sourceBranchId.Value
@@ -1135,7 +1334,10 @@
         }
     }
 
-    private void CloseShip() => _shipVisible = false;
+    private void CloseShip()
+    {
+        if (!_saving) _shipVisible = false;
+    }
 
     private async Task ConfirmShipAsync()
     {
@@ -1147,6 +1349,7 @@
         };
 
         if (await RunAsync(
+                BusyShip,
                 () => StockTransferAppService.ShipAsync(TransferId, input), OpsL["TransferShipped"], Severity.Success))
         {
             _shipVisible = false;
@@ -1161,7 +1364,10 @@
         _rejectVisible = true;
     }
 
-    private void CloseReject() => _rejectVisible = false;
+    private void CloseReject()
+    {
+        if (!_saving) _rejectVisible = false;
+    }
 
     private async Task ConfirmRejectAsync()
     {
@@ -1172,6 +1378,7 @@
         }
 
         if (await RunAsync(
+                BusyReject,
                 () => StockTransferAppService.RejectAsync(TransferId, new RejectStockTransferDto { Reason = _rejectReason }),
                 OpsL["TransferRejected"],
                 Severity.Warning))
@@ -1186,11 +1393,15 @@
         _cancelVisible = true;
     }
 
-    private void CloseCancel() => _cancelVisible = false;
+    private void CloseCancel()
+    {
+        if (!_saving) _cancelVisible = false;
+    }
 
     private async Task ConfirmCancelAsync()
     {
         if (await RunAsync(
+                BusyCancel,
                 () => StockTransferAppService.CancelAsync(TransferId, new CancelStockTransferDto { Reason = _cancelReason }),
                 OpsL["TransferCancelled"],
                 Severity.Warning))
@@ -1199,9 +1410,14 @@
         }
     }
 
-    private async Task<bool> RunAsync(Func<Task<StockTransferDto>> action, string message, Severity severity)
+    private async Task<bool> RunAsync(
+        string busyAction,
+        Func<Task<StockTransferDto>> action,
+        string message,
+        Severity severity)
     {
-        _saving = true;
+        if (_saving) return false;
+        BeginBusy(busyAction);
         try
         {
             await action();
@@ -1218,7 +1434,7 @@
             await LoadAsync(keepUnsavedEdits: true);
             return false;
         }
-        finally { _saving = false; }
+        finally { EndBusy(); }
     }
 
     // ─── Receive flow ───
@@ -1236,7 +1452,10 @@
 
     private void OpenReportLost() => _reportLostVisible = true;
 
-    private void CloseReportLost() => _reportLostVisible = false;
+    private void CloseReportLost()
+    {
+        if (!_saving) _reportLostVisible = false;
+    }
 
     private async Task ConfirmReportLostAsync()
     {
@@ -1247,11 +1466,13 @@
         {
             row.ReceiveNow = 0;
         }
-        _reportLostVisible = false;
-        await ConfirmComplete();
+        await ConfirmCompleteAsync(BusyReportLost);
     }
 
-    private void CloseComplete() => _completeVisible = false;
+    private void CloseComplete()
+    {
+        if (!_saving) _completeVisible = false;
+    }
 
     private void ReceiveAll()
     {
@@ -1261,8 +1482,11 @@
         }
     }
 
-    private async Task ConfirmComplete()
+    private Task ConfirmComplete() => ConfirmCompleteAsync(BusyComplete);
+
+    private async Task ConfirmCompleteAsync(string busyAction)
     {
+        if (_saving) return;
         if (HasReceiveOverShipped)
         {
             Snackbar.Add(BuildReceiveOverShippedWarning(), Severity.Error);
@@ -1273,7 +1497,7 @@
             .Select(r => new CompleteTransferLineDto { ItemId = r.Item.Id, TransferredQuantity = r.ReceiveNow })
             .ToList();
 
-        _saving = true;
+        BeginBusy(busyAction);
         try
         {
             var updated = await StockTransferAppService.CompleteAsync(TransferId, new CompleteStockTransferDto { Lines = lines });
@@ -1291,7 +1515,19 @@
                 _completeVisible = false;
             }
         }
-        finally { _saving = false; }
+        finally { EndBusy(); }
+    }
+
+    private void BeginBusy(string action)
+    {
+        _busyAction = action;
+        _saving = true;
+    }
+
+    private void EndBusy()
+    {
+        _saving = false;
+        _busyAction = null;
     }
 
     private string BuildReceiveOverShippedWarning()

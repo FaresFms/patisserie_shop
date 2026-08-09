@@ -1,0 +1,49 @@
+@inherits patisserie_shopComponentBase
+@inject NavigationManager Navigation
+
+<section class="route-access-denied route-error" role="alert" aria-labelledby="route-error-title">
+    <div class="route-access-denied__card">
+        <div class="route-access-denied__mark" aria-hidden="true">
+            <SoftIcon Icon="@Icon" />
+        </div>
+        <div class="route-access-denied__code">@StatusCode</div>
+        <h1 id="route-error-title">@Title</h1>
+        <p>@Description</p>
+        <div class="route-error__actions">
+            @if (ShowReload)
+            {
+                <SoftButton Variant="MudBlazor.Variant.Outlined"
+                            Color="MudBlazor.Color.Primary"
+                            StartIcon="@Icons.Material.Filled.Refresh"
+                            OnClick="Reload">
+                    @L["ErrorPage:TryAgain"]
+                </SoftButton>
+            }
+            <SoftButton Href="/"
+                        Variant="MudBlazor.Variant.Filled"
+                        Color="MudBlazor.Color.Primary"
+                        StartIcon="@Icons.Material.Filled.Home">
+                @L["Account:ReturnHome"]
+            </SoftButton>
+        </div>
+    </div>
+</section>
+
+@code {
+    [Parameter, EditorRequired]
+    public string StatusCode { get; set; } = null!;
+
+    [Parameter, EditorRequired]
+    public string Title { get; set; } = null!;
+
+    [Parameter, EditorRequired]
+    public string Description { get; set; } = null!;
+
+    [Parameter, EditorRequired]
+    public string Icon { get; set; } = null!;
+
+    [Parameter]
+    public bool ShowReload { get; set; }
+
+    private void Reload() => Navigation.NavigateTo(Navigation.Uri, forceLoad: true);
+}

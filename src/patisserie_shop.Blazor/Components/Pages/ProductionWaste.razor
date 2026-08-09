@@ -1,13 +1,14 @@
-@page "/production/waste"
+@page "/production/quality-waste"
 @attribute [Authorize(ProductionPermissions.Waste.Default)]
 @using System.Globalization
 @using System.Threading
 @using System.Threading.Tasks
-@using Inventory.Branches
 @using Inventory.BranchInventory
 @using Microsoft.AspNetCore.Authorization
 @using Production
+@using Production.Kitchens
 @using Production.Localization
+@using Production.Orders
 @using Production.Permissions
 @using Production.Waste
 @using Volo.Abp.Application.Dtos
@@ -19,36 +20,122 @@
 @using Margin = MudBlazor.Margin
 @inherits patisserie_shopComponentBase
 @inject IProductionWasteAppService WasteAppService
-@inject IBranchAppService BranchAppService
+@inject IProductionOrderAppService OrderAppService
+@inject IProductionKitchenAppService KitchenAppService
 @inject IBranchInventoryAppService BranchInventoryAppService
 @inject IAuthorizationService Authz
 @inject PageLayout PageLayout
 @inject ISnackbar Snackbar
 @inject IStringLocalizer<ProductionResource> ProdL
+@inject NavigationManager Navigation
 
 @{
-    PageLayout.Title = ProdL["ProductionWaste"];
+    PageLayout.Title = ProdL["Workspace:quality:Title"];
 }
 
-<SoftCard Elevation="2" Class="pa-2 page-flat prod-waste">
-    <div class="page-head">
-        <div>
-            <h1 class="page-title">@ProdL["ProductionWaste"]</h1>
-            <div class="page-sub">@ProdL["ProductionWasteSubtitle"]</div>
-        </div>
-        <div class="page-head-actions">
-            @if (_canWriteOff)
-            {
-                <SoftButton Variant="Variant.Filled" Color="Color.Primary"
-                            StartIcon="@Icons.Material.Filled.Add"
-                            OnClick="OpenWriteOffDialog">
-                    @ProdL["NewWasteWriteOff"]
-                </SoftButton>
-            }
-        </div>
-    </div>
+<span id="record" class="production-anchor"></span>
+<ProductionWorkspaceHeader Workspace="quality" ActiveTab="@(View ?? "quality")" RecordIncident="OpenWriteOffDialog">
+    <Actions>
+        @if (_canWriteOff)
+        {
+            <SoftButton Variant="Variant.Filled" Color="Color.Primary"
+                        StartIcon="@Icons.Material.Filled.AddAlert"
+                        OnClick="OpenWriteOffDialog">
+                @ProdL["Workspace:RecordIncident"]
+            </SoftButton>
+        }
+    </Actions>
+</ProductionWorkspaceHeader>
 
+<SoftCard Elevation="2" Class="pa-2 page-flat prod-waste">
     <SoftCardContent>
+        @if (_canManageQuality)
+        {
+            <section id="quality" class="pw-section production-anchor-target quality-queue">
+                <header class="pw-section-head">
+                    <div>
+                        <h2 class="pw-section-title">@ProdL["QualityQueue"]</h2>
+                        <div class="pw-section-sub">@ProdL["QualityQueueSubtitle"]</div>
+                    </div>
+                    <SoftChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Filled">
+                        @ProdL["QualityQueueCount", _qualityQueue.Count]
+                    </SoftChip>
+                </header>
+
+                @if (_qualityLoading)
+                {
+                    <SoftProgressLinear Indeterminate="true" Color="Color.Primary" />
+                }
+                else if (_qualityQueue.Count == 0)
+                {
+                    <div class="pw-empty quality-empty">
+                        <SoftIcon Icon="@Icons.Material.Filled.Verified" Color="Color.Success" Size="Size.Large" />
+                        <strong>@ProdL["QualityQueueEmpty"]</strong>
+                        <span>@ProdL["QualityQueueEmptyHint"]</span>
+                    </div>
+                }
+                else
+                {
+                    <div class="quality-list">
+                        @foreach (var order in _qualityQueue)
+                        {
+                            <article class="quality-row">
+                                <div class="quality-product">
+                                    <strong>@order.FinishedProductName</strong>
+                                    <span>@order.OrderNumber · @order.KitchenBranchName</span>
+                                </div>
+                                <div class="quality-facts">
+                                    <span><b>@order.AcceptedQuantity.ToString("N0")</b> @order.Unit</span>
+                                    <span>@ProdL["OutputLot"] <b>@(order.OutputBatchNumber ?? "-")</b></span>
+                                    @if (order.CompletedAt.HasValue)
+                                    {
+                                        <span><BrowserLocalTime Value="@order.CompletedAt.Value" Display="BrowserTimeDisplay.DateTime" /></span>
+                                    }
+                                </div>
+                                <SoftChip T="string" Size="Size.Small"
+                                          Color="@(order.QualityStatus == ProductionQualityStatuses.Held ? Color.Error : Color.Warning)"
+                                          Variant="Variant.Filled">
+                                    @ProdL[$"QualityStatus:{order.QualityStatus}"]
+                                </SoftChip>
+                                <div class="quality-actions">
+                                    <SoftButton Variant="Variant.Outlined" Color="Color.Warning"
+                                                StartIcon="@Icons.Material.Filled.PauseCircle"
+                                                Disabled="@(order.QualityStatus == ProductionQualityStatuses.Held)"
+                                                OnClick="@(() => OpenQualityAction(order, QualityActionHold))">
+                                        @ProdL["HoldQuality"]
+                                    </SoftButton>
+                                    <SoftButton Variant="Variant.Outlined" Color="Color.Error"
+                                                StartIcon="@Icons.Material.Filled.Cancel"
+                                                OnClick="@(() => OpenQualityAction(order, QualityActionReject))">
+                                        @ProdL["RejectQuality"]
+                                    </SoftButton>
+                                    <SoftButton Variant="Variant.Filled" Color="Color.Success"
+                                                StartIcon="@Icons.Material.Filled.Verified"
+                                                OnClick="@(() => OpenQualityAction(order, QualityActionRelease))">
+                                        @ProdL["ReleaseQuality"]
+                                    </SoftButton>
+                                </div>
+                            </article>
+                        }
+                    </div>
+                }
+            </section>
+        }
+
+        @if (_incidentRecorded)
+        {
+            <SoftAlert Severity="Severity.Success" Variant="Variant.Outlined" Class="production-next-step">
+                <div class="production-next-step-content">
+                    <span>@ProdL["NextStep:WasteRecorded"]</span>
+                    <SoftButton Variant="Variant.Text" Color="Color.Primary"
+                                StartIcon="@Icons.Material.Filled.QueryStats"
+                                OnClick="@(() => ScrollToSection("causes"))">
+                        @ProdL["Workspace:ReviewCauses"]
+                    </SoftButton>
+                </div>
+            </SoftAlert>
+        }
+
         <div class="toolbar">
             <SoftTextField T="string" @bind-Value="_filter"
                            Placeholder="@ProdL["Filter"]"
@@ -74,7 +161,7 @@
             </div>
 
             <div class="filter-chip">
-                <SoftLookupSelect TItem="BranchLookupDto" TValue="Guid?"
+                <SoftLookupSelect TItem="KitchenBranchLookupDto" TValue="Guid?"
                                   Items="_branches"
                                   ToValue="@(b => (Guid?)b.Id)"
                                   ToLabel="@(b => b.Name)"
@@ -99,8 +186,8 @@
         {
             <div class="stats pw-stats">
                 <div>
-                    <span class="stat-label">@ProdL["WasteQuantity"]</span>
-                    <span class="stat-value">@_analytics.Summary.TotalQuantity.ToString("N0")</span>
+                    <span class="stat-label">@ProdL["WasteIncidents"]</span>
+                    <span class="stat-value">@_analytics.Summary.TotalIncidents.ToString("N0")</span>
                 </div>
                 <div>
                     <span class="stat-label">@ProdL["WasteCost"]</span>
@@ -117,7 +204,7 @@
             </div>
         }
 
-        <div class="pw-two">
+        <div id="causes" class="pw-two">
             <section class="pw-section">
                 <header class="pw-section-head">
                     <div>
@@ -125,7 +212,7 @@
                         <div class="pw-section-sub">@ProdL["Days30"]</div>
                     </div>
                 </header>
-                @if (_analytics == null || _analytics.DailySeries.All(x => x.Quantity == 0))
+                @if (_analytics == null || _analytics.DailySeries.All(x => x.Cost == 0))
                 {
                     <div class="pw-empty">@ProdL["NoProductionData"]</div>
                 }
@@ -135,10 +222,10 @@
                         <ApexChart TItem="ProductionWasteDailyPointDto" @key="_analytics" Options="_wasteTrendOptions" Height="260">
                             <ApexPointSeries TItem="ProductionWasteDailyPointDto"
                                              Items="_analytics.DailySeries"
-                                             Name="@ProdL["WasteQuantity"]"
+                                             Name="@ProdL["WasteCost"]"
                                              SeriesType="SeriesType.Area"
                                              XValue="@(d => d.Date.ToString("MMM d", CultureInfo.CurrentCulture))"
-                                             YValue="@(d => d.Quantity)" />
+                                             YValue="@(d => d.Cost)" />
                         </ApexChart>
                     </div>
                 }
@@ -166,8 +253,8 @@
                                     <span>@row.ProductSku</span>
                                 </div>
                                 <div class="pw-mini-num">
-                                    <strong>@row.Quantity.ToString("N0")</strong>
-                                    <span>@FormatMoney(row.Cost)</span>
+                                    <strong>@FormatMoney(row.Cost)</strong>
+                                    <span>@row.Quantity.ToString("N0") @row.ProductUnit</span>
                                 </div>
                             </div>
                         }
@@ -176,6 +263,7 @@
             </section>
         </div>
 
+        <div id="ledger" class="production-anchor-target">
         <SoftDataGrid T="ProductionWasteDto"
                       @ref="_grid"
                       ServerData="LoadServerData"
@@ -220,8 +308,63 @@
                 <MudDataGridPager T="ProductionWasteDto" />
             </PagerContent>
         </SoftDataGrid>
+        </div>
     </SoftCardContent>
 </SoftCard>
+
+@if (_qualityDialogVisible && _qualityOrder is not null)
+{
+    <div class="glass-modal-backdrop" @onclick="CloseQualityDialog">
+        <div class="glass-modal-container glass-modal-container--sm" @onclick:stopPropagation="true">
+            <SoftCard Elevation="24" Class="glass-modal">
+                <SoftCardHeader Class="pa-4">
+                    <CardHeaderContent>
+                        <SoftStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <SoftIcon Icon="@QualityActionIcon" Color="@QualityActionColor" Size="Size.Medium" />
+                            <div>
+                                <SoftText Typo="Typo.h6">@ProdL[$"QualityAction:{_qualityAction}"]</SoftText>
+                                <SoftText Typo="Typo.caption" Color="Color.Secondary">@_qualityOrder.OrderNumber · @_qualityOrder.FinishedProductName</SoftText>
+                            </div>
+                        </SoftStack>
+                    </CardHeaderContent>
+                    <CardHeaderActions>
+                        <SoftIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="CloseQualityDialog" />
+                    </CardHeaderActions>
+                </SoftCardHeader>
+                <SoftDivider />
+                <SoftCardContent Class="pa-4 glass-modal-body">
+                    @if (_qualityAction == QualityActionReject)
+                    {
+                        <SoftAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mb-4">
+                            @ProdL["QualityRejectInventoryWarning", _qualityOrder.AcceptedQuantity, _qualityOrder.Unit]
+                        </SoftAlert>
+                    }
+                    <SoftTextField T="string" @bind-Value="_qualityReason"
+                                   Label="@ProdL["QualityReason"]"
+                                   HelperText="@QualityReasonHelp"
+                                   Required="@(_qualityAction != QualityActionRelease)"
+                                   Lines="3"
+                                   Variant="Variant.Outlined"
+                                   Margin="Margin.Dense" />
+                </SoftCardContent>
+                <SoftDivider />
+                <div class="pa-3 d-flex justify-end" style="gap: 8px;">
+                    <SoftButton Variant="Variant.Text" OnClick="CloseQualityDialog" Disabled="_savingQuality">@ProdL["Cancel"]</SoftButton>
+                    <SoftButton Variant="Variant.Filled" Color="@QualityActionColor"
+                                StartIcon="@QualityActionIcon"
+                                OnClick="SaveQualityActionAsync"
+                                Disabled="@(!CanSaveQualityAction || _savingQuality)">
+                        @if (_savingQuality)
+                        {
+                            <SoftProgressCircular Indeterminate="true" Size="Size.Small" Class="me-2" />
+                        }
+                        @ProdL[$"QualityAction:{_qualityAction}"]
+                    </SoftButton>
+                </div>
+            </SoftCard>
+        </div>
+    </div>
+}
 
 @if (_writeOffVisible)
 {
@@ -242,7 +385,7 @@
                 <SoftDivider />
                 <SoftCardContent Class="pa-4 glass-modal-body">
                     <SoftStack Spacing="3">
-                        <SoftLookupSelect TItem="BranchLookupDto" TValue="Guid?"
+                        <SoftLookupSelect TItem="KitchenBranchLookupDto" TValue="Guid?"
                                           Items="_branches"
                                           ToValue="@(b => (Guid?)b.Id)"
                                           ToLabel="@(b => b.Name)"
@@ -370,22 +513,59 @@
     .pw-grid { margin: 16px 32px 0; }
     .pw-product { font-weight: 700; }
     .pw-sku { font-family: var(--font-mono); font-size: 11.5px; color: var(--fg-3); }
+    .quality-queue { margin-bottom: 18px; border-color: var(--accent-line); }
+    .quality-list { display: grid; gap: 1px; background: var(--bd-1); border: 1px solid var(--bd-1); border-radius: var(--r-md); overflow: hidden; }
+    .quality-row { display: grid; grid-template-columns: minmax(180px, 1.15fr) minmax(260px, 1.4fr) auto minmax(310px, auto); gap: 16px; align-items: center; padding: 14px 16px; background: var(--surface); }
+    .quality-row:hover { background: var(--hover); }
+    .quality-product, .quality-facts { display: flex; flex-direction: column; gap: 3px; }
+    .quality-product span, .quality-facts span { color: var(--fg-3); font-size: 12px; }
+    .quality-facts { display: grid; grid-template-columns: repeat(3, minmax(80px, auto)); gap: 8px 16px; }
+    .quality-actions { display: flex; justify-content: flex-end; gap: 7px; flex-wrap: wrap; }
+    .quality-empty { min-height: 140px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; }
+    .quality-empty span { color: var(--fg-3); font-size: 13px; }
+    @@media (max-width: 1050px) {
+        .quality-row { grid-template-columns: 1fr auto; }
+        .quality-facts, .quality-actions { grid-column: 1 / -1; }
+        .quality-actions { justify-content: flex-start; }
+    }
+    @@media (max-width: 620px) {
+        .quality-row { grid-template-columns: 1fr; }
+        .quality-row > * { grid-column: 1; }
+        .quality-facts { grid-template-columns: 1fr; }
+        .quality-actions .mud-button-root { flex: 1 1 100%; }
+    }
     html[dir="rtl"] .prod-waste { direction: rtl; text-align: right; }
 </style>
 
 @code {
+    private const string QualityActionHold = "Hold";
+    private const string QualityActionReject = "Reject";
+    private const string QualityActionRelease = "Release";
+
+    [SupplyParameterFromQuery(Name = "view")]
+    public string? View { get; set; }
+
     private SoftDataGrid<ProductionWasteDto>? _grid;
     private bool _loading;
     private bool _canWriteOff;
     private string? _filter;
     private string _wasteTypeFilter = string.Empty;
     private Guid? _kitchenBranchFilter;
-    private List<BranchLookupDto> _branches = new();
+    private List<KitchenBranchLookupDto> _branches = new();
     private List<Option> _wasteTypeOptions = new();
     private List<Option> _reasonOptions = new();
     private ProductionWasteAnalyticsDto? _analytics;
+    private readonly List<ProductionOrderListItemDto> _qualityQueue = new();
+    private bool _canManageQuality;
+    private bool _qualityLoading;
+    private bool _qualityDialogVisible;
+    private bool _savingQuality;
+    private ProductionOrderListItemDto? _qualityOrder;
+    private string _qualityAction = QualityActionRelease;
+    private string? _qualityReason;
 
     private bool _writeOffVisible;
+    private bool _incidentRecorded;
     private bool _savingWriteOff;
     private Guid? _writeOffBranchId;
     private Guid? _writeOffProductId;
@@ -400,6 +580,28 @@
         && _writeOffProductId.HasValue
         && _writeOffQuantity > 0
         && (_writeOffReason != ProductionWasteReasons.Other || !string.IsNullOrWhiteSpace(_writeOffOtherReason));
+
+    private bool CanSaveQualityAction =>
+        _qualityOrder is not null &&
+        (_qualityAction == QualityActionRelease || !string.IsNullOrWhiteSpace(_qualityReason));
+
+    private Color QualityActionColor => _qualityAction switch
+    {
+        QualityActionReject => Color.Error,
+        QualityActionHold => Color.Warning,
+        _ => Color.Success
+    };
+
+    private string QualityActionIcon => _qualityAction switch
+    {
+        QualityActionReject => Icons.Material.Filled.Cancel,
+        QualityActionHold => Icons.Material.Filled.PauseCircle,
+        _ => Icons.Material.Filled.Verified
+    };
+
+    private string QualityReasonHelp => _qualityAction == QualityActionRelease
+        ? ProdL["QualityReleaseNoteHelp"]
+        : ProdL["QualityReasonRequiredHelp"];
 
     private readonly ApexChartOptions<ProductionWasteDailyPointDto> _wasteTrendOptions = new()
     {
@@ -426,7 +628,12 @@
     {
         await LoadShopCurrencyAsync();
         _canWriteOff = await Authz.IsGrantedAsync(ProductionPermissions.Waste.WriteOff);
-        _branches = await BranchAppService.GetLookupAsync();
+        _canManageQuality = await Authz.IsGrantedAsync(ProductionPermissions.Orders.Quality);
+        _branches = await KitchenAppService.GetAccessibleLookupAsync();
+        if (_branches.Count == 1)
+        {
+            _kitchenBranchFilter = _branches[0].Id;
+        }
         _wasteTypeOptions =
         [
             new(string.Empty, ProdL["AllWasteTypes"]),
@@ -449,7 +656,7 @@
             new(ProductionWasteReasons.TestBatch, ProdL["Reason:TestBatch"]),
             new(ProductionWasteReasons.Other, ProdL["Reason:Other"])
         ];
-        await LoadAnalyticsAsync();
+        await Task.WhenAll(LoadAnalyticsAsync(), LoadQualityQueueAsync());
     }
 
     private async Task<GridData<ProductionWasteDto>> LoadServerData(GridState<ProductionWasteDto> state, CancellationToken cancellationToken)
@@ -512,8 +719,92 @@
 
     private async Task ReloadAllAsync()
     {
-        await LoadAnalyticsAsync();
+        await Task.WhenAll(LoadAnalyticsAsync(), LoadQualityQueueAsync());
         await ReloadGridAsync();
+    }
+
+    private async Task LoadQualityQueueAsync()
+    {
+        if (!_canManageQuality)
+        {
+            return;
+        }
+
+        _qualityLoading = true;
+        try
+        {
+            var items = await OrderAppService.GetQualityQueueAsync(_kitchenBranchFilter);
+            _qualityQueue.Clear();
+            _qualityQueue.AddRange(items);
+        }
+        catch (Exception ex)
+        {
+            await HandleErrorAsync(ex);
+        }
+        finally
+        {
+            _qualityLoading = false;
+        }
+    }
+
+    private void OpenQualityAction(ProductionOrderListItemDto order, string action)
+    {
+        _qualityOrder = order;
+        _qualityAction = action;
+        _qualityReason = null;
+        _qualityDialogVisible = true;
+    }
+
+    private void CloseQualityDialog()
+    {
+        if (_savingQuality)
+        {
+            return;
+        }
+
+        _qualityDialogVisible = false;
+        _qualityOrder = null;
+        _qualityReason = null;
+    }
+
+    private async Task SaveQualityActionAsync()
+    {
+        if (!CanSaveQualityAction || _qualityOrder is null)
+        {
+            return;
+        }
+
+        _savingQuality = true;
+        try
+        {
+            var input = new ProductionQualityActionDto { Reason = _qualityReason };
+            if (_qualityAction == QualityActionHold)
+            {
+                await OrderAppService.HoldQualityAsync(_qualityOrder.Id, input);
+            }
+            else if (_qualityAction == QualityActionReject)
+            {
+                await OrderAppService.RejectQualityAsync(_qualityOrder.Id, input);
+            }
+            else
+            {
+                await OrderAppService.ReleaseQualityAsync(_qualityOrder.Id, input);
+            }
+
+            Snackbar.Add(ProdL["QualityActionSaved"], Severity.Success);
+            _qualityDialogVisible = false;
+            _qualityOrder = null;
+            _qualityReason = null;
+            await LoadQualityQueueAsync();
+        }
+        catch (Exception ex)
+        {
+            await HandleErrorAsync(ex);
+        }
+        finally
+        {
+            _savingQuality = false;
+        }
     }
 
     private Task ReloadGridAsync() => _grid?.ReloadServerData() ?? Task.CompletedTask;
@@ -586,6 +877,7 @@
             });
 
             Snackbar.Add(ProdL["SavedSuccessfully"], Severity.Success);
+            _incidentRecorded = true;
             _writeOffVisible = false;
             await ReloadAllAsync();
         }
@@ -598,6 +890,9 @@
             _savingWriteOff = false;
         }
     }
+
+    private void ScrollToSection(string section) =>
+        Navigation.NavigateTo($"/production/quality-waste?view={section}#{section}", replace: true);
 
     private void OnWriteOffReasonChanged(string reason)
     {

@@ -67,24 +67,11 @@ public class ProductionFormulaRepository
 
         var query = await BuildFilteredQueryAsync(filter, finishedProductId, isActive);
 
-        // Project the header + item count server-side, then overlay the product name in
-        // memory (cross-context). Sort/paging happen after the overlay so name sorting works.
+        // Phase 3 status/work-center metadata lives in ABP ExtraProperties so approved
+        // revisions remain migration-free. Materialize the aggregate before reading
+        // those computed properties; EF cannot translate them into SQL.
         var headers = await query
-            .Select(f => new HeaderProjection
-            {
-                Id = f.Id,
-                FinishedProductId = f.FinishedProductId,
-                FormulaName = f.FormulaName,
-                Version = f.Version,
-                OutputQuantity = f.OutputQuantity,
-                ExpectedWastePercent = f.ExpectedWastePercent,
-                LaborCostPerBatch = f.LaborCostPerBatch,
-                OverheadCostPerBatch = f.OverheadCostPerBatch,
-                EstimatedProductionMinutes = f.EstimatedProductionMinutes,
-                IsActive = f.IsActive,
-                IsDefault = f.IsDefault,
-                ItemCount = f.Items.Count
-            })
+            .Include(f => f.Items)
             .ToListAsync(ct);
 
         if (headers.Count == 0)
@@ -114,7 +101,9 @@ public class ProductionFormulaRepository
                 EstimatedProductionMinutes = h.EstimatedProductionMinutes,
                 IsActive = h.IsActive,
                 IsDefault = h.IsDefault,
-                ItemCount = h.ItemCount
+                ApprovalStatus = h.ApprovalStatus,
+                WorkCenterCode = h.WorkCenterCode,
+                ItemCount = h.Items.Count
             };
         });
 
@@ -132,6 +121,32 @@ public class ProductionFormulaRepository
         return await query
             .Where(f => f.FinishedProductId == finishedProductId && f.IsActive && f.IsDefault)
             .FirstOrDefaultAsync(GetCancellationToken(cancellationToken));
+    }
+
+    public async Task<int> GetNextVersionAsync(
+        Guid finishedProductId,
+        CancellationToken cancellationToken = default)
+    {
+        var query = await GetQueryableAsync();
+        var current = await query
+            .Where(f => f.FinishedProductId == finishedProductId)
+            .Select(f => (int?)f.Version)
+            .MaxAsync(GetCancellationToken(cancellationToken));
+        return (current ?? 0) + 1;
+    }
+
+    public async Task<bool> VersionExistsAsync(
+        Guid finishedProductId,
+        int version,
+        Guid? excludingFormulaId = null,
+        CancellationToken cancellationToken = default)
+    {
+        var query = await GetQueryableAsync();
+        return await query.AnyAsync(
+            f => f.FinishedProductId == finishedProductId
+                 && f.Version == version
+                 && (!excludingFormulaId.HasValue || f.Id != excludingFormulaId.Value),
+            GetCancellationToken(cancellationToken));
     }
 
     public async Task<Dictionary<Guid, decimal>> GetIngredientCostPricesAsync(
@@ -272,19 +287,4 @@ public class ProductionFormulaRepository
             : rows.OrderBy(keySelector);
     }
 
-    private sealed class HeaderProjection
-    {
-        public Guid Id { get; set; }
-        public Guid FinishedProductId { get; set; }
-        public string FormulaName { get; set; } = null!;
-        public int Version { get; set; }
-        public int OutputQuantity { get; set; }
-        public decimal ExpectedWastePercent { get; set; }
-        public decimal LaborCostPerBatch { get; set; }
-        public decimal OverheadCostPerBatch { get; set; }
-        public int EstimatedProductionMinutes { get; set; }
-        public bool IsActive { get; set; }
-        public bool IsDefault { get; set; }
-        public int ItemCount { get; set; }
-    }
 }

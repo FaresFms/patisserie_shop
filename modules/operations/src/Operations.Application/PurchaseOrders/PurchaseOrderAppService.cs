@@ -298,7 +298,8 @@ public class PurchaseOrderAppService : OperationsAppService, IPurchaseOrderAppSe
                 notes: $"PO {po.PONumber}",
                 referenceId: po.Id,
                 referenceType: nameof(AppPurchaseOrder),
-                batchExpiryDate: inputByItem[line.ItemId].ExpiryDate?.Date);
+                batchExpiryDate: inputByItem[line.ItemId].ExpiryDate?.Date,
+                batchUnitCost: line.UnitPrice);
 
             await _branchInventoryRepository.UpdateAsync(inv);
         }

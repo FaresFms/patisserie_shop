@@ -1,0 +1,32 @@
+@page "/production/dashboard"
+@page "/production/analytics"
+@page "/production/branch-requests"
+@page "/production/plans"
+@page "/production/cook"
+@page "/production/dispatch"
+@page "/production/waste"
+@attribute [Authorize]
+@using Microsoft.AspNetCore.Authorization
+@using Color = MudBlazor.Color
+@inject NavigationManager Navigation
+
+<SoftProgressLinear Indeterminate="true" Color="Color.Primary" />
+
+@code {
+    protected override void OnInitialized()
+    {
+        var path = Navigation.ToBaseRelativePath(Navigation.Uri).Split('?', '#')[0].TrimEnd('/').ToLowerInvariant();
+        var destination = path switch
+        {
+            "production/analytics" => "/production/overview/trends",
+            "production/branch-requests" => "/production/demand-planning?view=review",
+            "production/plans" => "/production/demand-planning/plans",
+            "production/cook" => "/production/workboard?stage=ready",
+            "production/dispatch" => "/production/workboard/dispatch",
+            "production/waste" => "/production/quality-waste",
+            _ => "/production/overview"
+        };
+
+        Navigation.NavigateTo(destination, replace: true);
+    }
+}
