@@ -24,7 +24,7 @@ namespace Operations.Cashier;
 /// Cash-only POS backend. Thin orchestrator: it composes the existing SaleManager /
 /// AppSale.Record / BranchInventoryManager.AdjustStockAsync pipeline (exactly like
 /// SaleAppService) plus the cash-drawer aggregate. A cashier is gated by
-/// <see cref="OperationsPermissions.Cashier.Default"/> — NOT by being a branch manager,
+/// <see cref="OperationsPermissions.Cashier.OperatePos"/> — NOT by being a branch manager,
 /// so there is no manager-branch EnsureBranchAccess check on the sell path.
 /// </summary>
 [Authorize(OperationsPermissions.Cashier.Default)]
@@ -72,6 +72,7 @@ public class CashierAppService : OperationsAppService, ICashierAppService
 
     // ─── Shifts ───
 
+    [Authorize(OperationsPermissions.Cashier.OperatePos)]
     public async Task<CashierShiftDto?> GetCurrentShiftAsync(Guid branchId)
     {
         EnsureBranchAllowed(branchId);
@@ -81,6 +82,7 @@ public class CashierAppService : OperationsAppService, ICashierAppService
         return shift == null ? null : await ProjectShiftAsync(shift);
     }
 
+    [Authorize(OperationsPermissions.Cashier.OperatePos)]
     public async Task<CashierShiftDto> OpenShiftAsync(OpenShiftDto input)
     {
         EnsureBranchAllowed(input.BranchId);
@@ -172,6 +174,7 @@ public class CashierAppService : OperationsAppService, ICashierAppService
 
     // ─── Assigned branch (claim-driven; the POS branch source) ───
 
+    [Authorize(OperationsPermissions.Cashier.OperatePos)]
     public async Task<CashierBranchDto?> GetMyBranchAsync()
     {
         var assigned = GetAssignedBranchId();
@@ -186,10 +189,15 @@ public class CashierAppService : OperationsAppService, ICashierAppService
             return null;
         }
 
-        return new CashierBranchDto { Id = branch.Id, Name = branch.Name };
+        return new CashierBranchDto
+        {
+            Id = branch.Id,
+            Name = branch.DisplayName,
+            Address = branch.DisplayAddress
+        };
     }
 
-    // ─── Branch list (cashier-permitted; Id + Name only) ───
+    // ─── Branch list (cashier-permitted lightweight branch data) ───
 
     public async Task<List<CashierBranchDto>> GetSellableBranchesAsync()
     {
@@ -198,13 +206,19 @@ public class CashierAppService : OperationsAppService, ICashierAppService
         var branches = await _branchRepository.GetListAsync(b => b.IsActive);
 
         return branches
-            .OrderBy(b => b.Name)
-            .Select(b => new CashierBranchDto { Id = b.Id, Name = b.Name })
+            .OrderBy(b => b.DisplayName)
+            .Select(b => new CashierBranchDto
+            {
+                Id = b.Id,
+                Name = b.DisplayName,
+                Address = b.DisplayAddress
+            })
             .ToList();
     }
 
     // ─── Product tiles (sale-safe availability; never exposes cost) ───
 
+    [Authorize(OperationsPermissions.Cashier.OperatePos)]
     public async Task<List<CashierProductDto>> GetProductTilesAsync(Guid branchId, string? filter)
     {
         EnsureBranchAllowed(branchId);
@@ -228,9 +242,9 @@ public class CashierAppService : OperationsAppService, ICashierAppService
         return rows.ConvertAll(r => new CashierProductDto
         {
             ProductId = r.Product.Id,
-            Name = r.Product.Name,
+            Name = r.Product.DisplayName,
             SKU = r.Product.SKU,
-            Description = r.Product.Description,
+            Description = r.Product.DisplayDescription,
             SalePrice = r.Product.SalePrice,
             ImageUrl = r.Product.ImageUrl,
             QuantityOnHand = StockBatchManager.GetUsableQuantity(r.Product, r.Inventory, nonExpired),
@@ -241,6 +255,7 @@ public class CashierAppService : OperationsAppService, ICashierAppService
 
     // ─── Sale recording ───
 
+    [Authorize(OperationsPermissions.Cashier.OperatePos)]
     public async Task<CashierSaleResultDto> RecordSaleAsync(RecordCashierSaleDto input)
     {
         if (input.Lines == null || input.Lines.Count == 0)
@@ -273,7 +288,7 @@ public class CashierAppService : OperationsAppService, ICashierAppService
         foreach (var line in input.Lines)
         {
             var product = await _productRepository.GetAsync(line.ProductId);
-            receiptNames[product.Id] = product.Name;
+            receiptNames[product.Id] = product.DisplayName;
             productById[product.Id] = product;
             sale.AddItem(GuidGenerator.Create(), product.Id, line.Quantity, product.SalePrice);
         }
@@ -479,7 +494,7 @@ public class CashierAppService : OperationsAppService, ICashierAppService
         {
             throw new BusinessException(OperationsErrorCodes.SaleBatchHistoryMissing)
                 .WithData("ProductId", missingBatchHistory.ProductId)
-                .WithData("ProductName", productById[missingBatchHistory.ProductId].Name);
+                .WithData("ProductName", productById[missingBatchHistory.ProductId].DisplayName);
         }
 
         foreach (var item in sale.Items)
@@ -601,7 +616,7 @@ public class CashierAppService : OperationsAppService, ICashierAppService
         var dto = MapShift(shift, totals);
 
         var branch = await _branchRepository.FindAsync(shift.BranchId);
-        dto.BranchName = branch?.Name;
+        dto.BranchName = branch?.DisplayName;
 
         var user = await _userRepository.FindAsync(shift.CashierUserId);
         dto.CashierUserName = user?.UserName;
@@ -629,7 +644,7 @@ public class CashierAppService : OperationsAppService, ICashierAppService
             Id = sale.Id,
             InvoiceNumber = sale.InvoiceNumber,
             BranchId = sale.BranchId,
-            BranchName = branch.Name,
+            BranchName = branch.DisplayName,
             SaleDate = sale.SaleDate,
             TotalAmount = sale.TotalAmount,
             Currency = await GetDefaultCurrencyAsync(),
@@ -646,9 +661,9 @@ public class CashierAppService : OperationsAppService, ICashierAppService
     {
         Id = item.Id,
         ProductId = item.ProductId,
-        ProductName = product?.Name ?? "(deleted product)",
+        ProductName = product?.DisplayName ?? "(deleted product)",
         ProductSKU = product?.SKU ?? "-",
-        ProductUnit = product?.Unit ?? "-",
+        ProductUnit = product?.DisplayUnit ?? "-",
         Quantity = item.Quantity,
         UnitPrice = item.UnitPrice,
         Subtotal = item.Subtotal
@@ -689,7 +704,7 @@ public class CashierAppService : OperationsAppService, ICashierAppService
     {
         if (ids.Count == 0) return new Dictionary<Guid, string>();
         var branches = await _branchRepository.GetListAsync(b => ids.Contains(b.Id));
-        return branches.ToDictionary(b => b.Id, b => b.Name);
+        return branches.ToDictionary(b => b.Id, b => b.DisplayName);
     }
 
     private async Task<Dictionary<Guid, string>> GetUserNamesAsync(List<Guid> ids)

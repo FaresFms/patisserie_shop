@@ -1,11 +1,11 @@
-@page "/production/analytics"
+@page "/production/overview/trends"
 @attribute [Authorize(ProductionPermissions.Analytics.Default)]
 @using System.Globalization
 @using System.Threading.Tasks
-@using Inventory.Branches
 @using Microsoft.AspNetCore.Authorization
 @using Production.Analytics
 @using Production.Dashboard
+@using Production.Kitchens
 @using Production.Localization
 @using Production.Permissions
 @using Volo.Abp.AspNetCore.Components.Web.Theming.Layout
@@ -16,30 +16,26 @@
 @using Margin = MudBlazor.Margin
 @inherits patisserie_shopComponentBase
 @inject IProductionAnalyticsAppService AnalyticsAppService
-@inject IBranchAppService BranchAppService
+@inject IProductionKitchenAppService KitchenAppService
 @inject PageLayout PageLayout
 @inject IStringLocalizer<ProductionResource> ProdL
 
 @{
-    PageLayout.Title = ProdL["ProductionAnalytics"];
+    PageLayout.Title = ProdL["Workspace:overview:Title"];
 }
 
-<SoftCard Elevation="2" Class="pa-2 page-flat prod-analytics">
-    <div class="page-head">
-        <div>
-            <h1 class="page-title">@ProdL["ProductionAnalytics"]</h1>
-            <div class="page-sub">@ProdL["ProductionAnalyticsSubtitle"]</div>
-        </div>
-        <div class="page-head-actions">
-            <SoftButton Variant="Variant.Text" Color="Color.Primary"
-                        StartIcon="@Icons.Material.Filled.Refresh"
-                        OnClick="LoadAsync"
-                        Disabled="_loading">
-                @ProdL["Refresh"]
-            </SoftButton>
-        </div>
-    </div>
+<ProductionWorkspaceHeader Workspace="overview" ActiveTab="trends">
+    <Actions>
+        <SoftButton Variant="Variant.Text" Color="Color.Primary"
+                    StartIcon="@Icons.Material.Filled.Refresh"
+                    OnClick="LoadAsync"
+                    Disabled="_loading">
+            @ProdL["Refresh"]
+        </SoftButton>
+    </Actions>
+</ProductionWorkspaceHeader>
 
+<SoftCard Elevation="2" Class="pa-2 page-flat prod-analytics">
     <SoftCardContent>
         <div class="toolbar">
             <div class="pa-range">
@@ -57,7 +53,7 @@
             </div>
 
             <div class="filter-chip">
-                <SoftLookupSelect TItem="BranchLookupDto" TValue="Guid?"
+                <SoftLookupSelect TItem="KitchenBranchLookupDto" TValue="Guid?"
                                   Items="_branches"
                                   ToValue="@(b => (Guid?)b.Id)"
                                   ToLabel="@(b => b.Name)"
@@ -101,13 +97,23 @@
                     <span class="stat-label">@ProdL["AverageUnitCost"]</span>
                     <span class="stat-value">@FormatMoneyExact(_data.AverageUnitCost)</span>
                 </div>
+                <div>
+                    <span class="stat-label">@ProdL["ForecastAccuracy"]</span>
+                    <span class="stat-value">@(_data.HasForecastAccuracyData ? FormatPercent(_data.ForecastAccuracyPercent) : "—")</span>
+                </div>
+                <div>
+                    <span class="stat-label">@ProdL["ForecastBias"]</span>
+                    <span class="stat-value @(_data.HasForecastAccuracyData ? BiasClass(_data.ForecastBiasPercent) : string.Empty)">
+                        @(_data.HasForecastAccuracyData ? FormatSignedPercent(_data.ForecastBiasPercent) : "—")
+                    </span>
+                </div>
             </div>
 
             <div class="pa-two">
                 <section class="pa-section">
                     <header class="pa-section-head">
                         <div>
-                            <h2 class="pa-section-title">@ProdL["OutputLast7Days"]</h2>
+                            <h2 class="pa-section-title">@ProdL["OutputSelectedPeriod"]</h2>
                             <div class="pa-section-sub">@_data.Days @ProdL["DaysSuffix"] · @ProdL["Accepted"] / @ProdL["Rejected"]</div>
                         </div>
                     </header>
@@ -133,7 +139,7 @@
                     <header class="pa-section-head">
                         <div>
                             <h2 class="pa-section-title">@ProdL["WasteReasonMix"]</h2>
-                            <div class="pa-section-sub">@ProdL["WasteQuantity"] / @ProdL["WasteCost"]</div>
+                            <div class="pa-section-sub">@ProdL["WasteCost"]</div>
                         </div>
                     </header>
                     @if (_data.WasteReasons.Count == 0)
@@ -146,15 +152,61 @@
                             <ApexChart TItem="ProductionWasteReasonAnalyticsRowDto" @key="_data" Options="_wasteOptions" Height="300">
                                 <ApexPointSeries TItem="ProductionWasteReasonAnalyticsRowDto"
                                                  Items="_data.WasteReasons"
-                                                 Name="@ProdL["WasteQuantity"]"
+                                                 Name="@ProdL["WasteCost"]"
                                                  SeriesType="SeriesType.Donut"
                                                  XValue="@(r => FormatReason(r.Reason))"
-                                                 YValue="@(r => r.Quantity)" />
+                                                 YValue="@(r => r.Cost)" />
                             </ApexChart>
                         </div>
                     }
                 </section>
             </div>
+
+            <section class="pa-section pa-section--wide">
+                <header class="pa-section-head">
+                    <div>
+                        <h2 class="pa-section-title">@ProdL["ForecastAccuracy"]</h2>
+                        <div class="pa-section-sub">@ProdL["ForecastAccuracySubtitle", _data.ForecastAccuracyDays]</div>
+                    </div>
+                    <div class="pa-forecast-totals">
+                        <span>@ProdL["Forecast"] <strong>@_data.ForecastQuantity.ToString("N0")</strong></span>
+                        <span>@ProdL["ActualDemand"] <strong>@_data.ActualDemandQuantity.ToString("N0")</strong></span>
+                    </div>
+                </header>
+                @if (_data.ForecastAccuracy.Count == 0)
+                {
+                    <div class="pa-empty">@ProdL["NoForecastAccuracyData"]</div>
+                }
+                else
+                {
+                    <table class="pa-table">
+                        <thead>
+                            <tr>
+                                <th>@ProdL["Product"]</th>
+                                <th class="pa-num">@ProdL["Forecast"]</th>
+                                <th class="pa-num">@ProdL["ActualDemand"]</th>
+                                <th class="pa-num">@ProdL["ForecastAccuracy"]</th>
+                                <th class="pa-num">@ProdL["ForecastBias"]</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var row in _data.ForecastAccuracy)
+                            {
+                                <tr>
+                                    <td>
+                                        <div class="pa-product">@row.ProductName</div>
+                                        <div class="pa-sku">@row.ProductSku</div>
+                                    </td>
+                                    <td class="pa-num">@row.ForecastQuantity.ToString("N0")</td>
+                                    <td class="pa-num">@row.ActualQuantity.ToString("N0")</td>
+                                    <td class="pa-num">@FormatPercent(row.AccuracyPercent)</td>
+                                    <td class="pa-num @BiasClass(row.BiasPercent)">@FormatSignedPercent(row.BiasPercent)</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                }
+            </section>
 
             <section class="pa-section pa-section--wide">
                 <header class="pa-section-head">
@@ -331,6 +383,8 @@
         color: var(--fg-1);
         font-variant-numeric: tabular-nums;
     }
+    .pa-forecast-totals { display: flex; gap: 16px; flex-wrap: wrap; color: var(--fg-3); font-size: 12px; }
+    .pa-forecast-totals strong { color: var(--fg-1); font-variant-numeric: tabular-nums; margin-inline-start: 4px; }
     html[dir="rtl"] .prod-analytics { direction: rtl; text-align: right; }
 </style>
 
@@ -342,7 +396,7 @@
     };
 
     private ProductionAnalyticsDto? _data;
-    private List<BranchLookupDto> _branches = new();
+    private List<KitchenBranchLookupDto> _branches = new();
     private Guid? _kitchenBranchId;
     private int _days = 30;
     private bool _loading;
@@ -386,7 +440,11 @@
     protected override async Task OnInitializedAsync()
     {
         await LoadShopCurrencyAsync();
-        _branches = await BranchAppService.GetLookupAsync();
+        _branches = await KitchenAppService.GetAccessibleLookupAsync();
+        if (_branches.Count == 1)
+        {
+            _kitchenBranchId = _branches[0].Id;
+        }
         await LoadAsync();
     }
 
@@ -428,6 +486,8 @@
 
     private string FormatReason(string reason) => ProdL[$"Reason:{reason}"].Value;
     private static string FormatPercent(decimal value) => $"{value:0.#}%";
+    private static string FormatSignedPercent(decimal value) => $"{(value > 0 ? "+" : string.Empty)}{value:0.#}%";
+    private static string BiasClass(decimal value) => Math.Abs(value) <= 10m ? "pa-success" : "pa-danger";
     private string FormatMoney(decimal value) => FormatShopMoney(value, 0);
     private string FormatMoneyExact(decimal value) => FormatShopMoney(value, 2);
 }

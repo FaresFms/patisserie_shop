@@ -1,4 +1,6 @@
 using patisserie_shop.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Volo.Abp.Autofac;
 using Volo.Abp.Data;
 using Volo.Abp.Modularity;
@@ -14,6 +16,11 @@ public class patisserie_shopDbMigratorModule : AbpModule
 {
     public override void ConfigureServices(ServiceConfigurationContext context)
     {
+        var configuration = context.Services.GetConfiguration();
+        var seedDemoData = configuration.GetValue<bool>("DataSeeding:SeedDemoData");
+        var seedProductionData = configuration.GetValue<bool?>("DataSeeding:SeedProductionData")
+            ?? seedDemoData;
+
         Configure<AbpDataSeedOptions>(options =>
         {
             // Keep the presentation pipeline deterministic on a completely empty database:
@@ -26,9 +33,16 @@ public class patisserie_shopDbMigratorModule : AbpModule
             options.Contributors.Remove<GraduationOperationsSeedContributor>();
             options.Contributors.Add<IdentityDataSeedContributor>();
             options.Contributors.Add<PatisserieDataSeedContributor>();
-            options.Contributors.Add<ProductionDemoSeedContributor>();
-            options.Contributors.Add<SalesHistorySeedContributor>();
-            options.Contributors.Add<GraduationOperationsSeedContributor>();
+            if (seedProductionData)
+            {
+                options.Contributors.Add<ProductionDemoSeedContributor>();
+            }
+
+            if (seedDemoData)
+            {
+                options.Contributors.Add<SalesHistorySeedContributor>();
+                options.Contributors.Add<GraduationOperationsSeedContributor>();
+            }
         });
     }
 }

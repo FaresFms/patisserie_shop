@@ -89,11 +89,13 @@ public partial class ProductionPlanLineToDtoMapper : MapperBase<AppProductionPla
     [MapperIgnoreTarget(nameof(ProductionPlanLineDto.ProductName))]
     [MapperIgnoreTarget(nameof(ProductionPlanLineDto.ProductSku))]
     [MapperIgnoreTarget(nameof(ProductionPlanLineDto.ProductUnit))]
+    [MapperIgnoreTarget(nameof(ProductionPlanLineDto.HasActiveDefaultFormula))]
     public override partial ProductionPlanLineDto Map(AppProductionPlanLine source);
 
     [MapperIgnoreTarget(nameof(ProductionPlanLineDto.ProductName))]
     [MapperIgnoreTarget(nameof(ProductionPlanLineDto.ProductSku))]
     [MapperIgnoreTarget(nameof(ProductionPlanLineDto.ProductUnit))]
+    [MapperIgnoreTarget(nameof(ProductionPlanLineDto.HasActiveDefaultFormula))]
     public override partial void Map(AppProductionPlanLine source, ProductionPlanLineDto destination);
 }
 

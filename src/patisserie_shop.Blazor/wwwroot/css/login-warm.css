@@ -470,6 +470,20 @@ body {
 }
 .access-page-action:hover { background: var(--accent-hover); transform: translateY(-1px); }
 .access-page-action .material-icons-outlined { font-size: 19px; }
+.access-page-actions {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.access-page-action--secondary {
+  border: 1px solid var(--accent-line);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.access-page-action--secondary:hover {
+  background: var(--hover);
+}
 @media (max-width: 560px) {
   .access-page-card { padding: 34px 24px; border-radius: 14px; }
   .acct-topbar { padding: 0 14px; }

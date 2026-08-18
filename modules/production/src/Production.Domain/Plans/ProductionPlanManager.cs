@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using Inventory;
 using Inventory.Entities;
 using Production.Entities;
+using Production.Formulas;
 using Production.Orders;
 using Volo.Abp;
 using Volo.Abp.Domain.Repositories;
@@ -16,22 +17,26 @@ public class ProductionPlanManager : DomainService
     private readonly IRepository<AppBranch, Guid> _branchRepository;
     private readonly IProductionPlanRepository _planRepository;
     private readonly IProductionOrderRepository _orderRepository;
+    private readonly IProductionFormulaRepository _formulaRepository;
 
     public ProductionPlanManager(
         IRepository<AppBranch, Guid> branchRepository,
         IProductionPlanRepository planRepository,
-        IProductionOrderRepository orderRepository)
+        IProductionOrderRepository orderRepository,
+        IProductionFormulaRepository formulaRepository)
     {
         _branchRepository = branchRepository;
         _planRepository = planRepository;
         _orderRepository = orderRepository;
+        _formulaRepository = formulaRepository;
     }
 
     public async Task<AppProductionPlan> CreateDraftAsync(
         Guid kitchenBranchId,
         DateTime productionDate,
         Guid? createdByUserId,
-        string? notes)
+        string? notes,
+        decimal forecastSafetyPercent = 0m)
     {
         await EnsureMainKitchenAsync(kitchenBranchId);
 
@@ -43,7 +48,10 @@ public class ProductionPlanManager : DomainService
             createdByUserId,
             notes);
 
-        var suggestions = await _planRepository.BuildSuggestionsAsync(kitchenBranchId, productionDate);
+        var suggestions = await _planRepository.BuildSuggestionsAsync(
+            kitchenBranchId,
+            productionDate,
+            Math.Clamp(forecastSafetyPercent, 0m, 100m));
         foreach (var suggestion in suggestions)
         {
             plan.AddLine(
@@ -79,6 +87,23 @@ public class ProductionPlanManager : DomainService
         Check.NotNull(plan, nameof(plan));
         var hasOrders = await _orderRepository.HasOrdersForPlanAsync(plan.Id);
         plan.Cancel(hasOrders);
+    }
+
+    public async Task ConfirmAsync(AppProductionPlan plan, Guid? confirmedByUserId)
+    {
+        Check.NotNull(plan, nameof(plan));
+
+        foreach (var line in plan.Lines.Where(line => line.PlannedQuantity > 0))
+        {
+            var formula = await _formulaRepository.GetActiveDefaultForProductAsync(line.ProductId);
+            if (formula == null)
+            {
+                throw new BusinessException(ProductionErrorCodes.FormulaRequiredForProductionOrder)
+                    .WithData("FinishedProductId", line.ProductId);
+            }
+        }
+
+        plan.Confirm(confirmedByUserId);
     }
 
     public async Task RefreshLifecycleAsync(AppProductionPlan plan)

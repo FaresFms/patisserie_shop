@@ -5,6 +5,7 @@ using Inventory;
 using Inventory.BranchInventory;
 using Microsoft.AspNetCore.Authorization;
 using Production.Entities;
+using Production.Kitchens;
 using Production.Permissions;
 using Volo.Abp;
 using Volo.Abp.Application.Dtos;
@@ -19,27 +20,32 @@ public class ProductionWasteAppService : ProductionAppService, IProductionWasteA
     private readonly ProductionWasteManager _wasteManager;
     private readonly IBranchInventoryRepository _branchInventoryRepository;
     private readonly BranchInventoryManager _inventoryManager;
+    private readonly KitchenAccessChecker _kitchenAccessChecker;
 
     public ProductionWasteAppService(
         IProductionWasteRepository wasteRepository,
         ProductionWasteManager wasteManager,
         IBranchInventoryRepository branchInventoryRepository,
-        BranchInventoryManager inventoryManager)
+        BranchInventoryManager inventoryManager,
+        KitchenAccessChecker kitchenAccessChecker)
     {
         _wasteRepository = wasteRepository;
         _wasteManager = wasteManager;
         _branchInventoryRepository = branchInventoryRepository;
         _inventoryManager = inventoryManager;
+        _kitchenAccessChecker = kitchenAccessChecker;
     }
 
     public async Task<PagedResultDto<ProductionWasteDto>> GetListAsync(GetProductionWastesInput input)
     {
+        var kitchenIds = await GetKitchenScopeAsync(input.KitchenBranchId);
         var totalCount = await _wasteRepository.CountFilteredAsync(
             input.Filter,
             input.WasteType,
             input.KitchenBranchId,
             input.FromDate,
-            input.ToDate);
+            input.ToDate,
+            kitchenIds);
 
         var rows = await _wasteRepository.GetFilteredListAsync(
             input.Filter,
@@ -47,6 +53,7 @@ public class ProductionWasteAppService : ProductionAppService, IProductionWasteA
             input.KitchenBranchId,
             input.FromDate,
             input.ToDate,
+            kitchenIds,
             input.Sorting ?? string.Empty,
             input.SkipCount,
             input.MaxResultCount);
@@ -62,12 +69,13 @@ public class ProductionWasteAppService : ProductionAppService, IProductionWasteA
 
     public async Task<ProductionWasteAnalyticsDto> GetAnalyticsAsync(GetProductionWasteAnalyticsInput input)
     {
-        var model = await _wasteRepository.GetAnalyticsAsync(input.Days, input.KitchenBranchId);
+        var kitchenIds = await GetKitchenScopeAsync(input.KitchenBranchId);
+        var model = await _wasteRepository.GetAnalyticsAsync(input.Days, input.KitchenBranchId, kitchenIds);
         var dto = new ProductionWasteAnalyticsDto
         {
             Summary = new ProductionWasteSummaryDto
             {
-                TotalQuantity = model.Summary.TotalQuantity,
+                TotalIncidents = model.Summary.TotalIncidents,
                 TotalCost = model.Summary.TotalCost,
                 TopReason = model.Summary.TopReason,
                 TopProductName = model.Summary.TopProductName
@@ -79,7 +87,7 @@ public class ProductionWasteAppService : ProductionAppService, IProductionWasteA
             dto.DailySeries.Add(new ProductionWasteDailyPointDto
             {
                 Date = point.Date,
-                Quantity = point.Quantity,
+                IncidentCount = point.IncidentCount,
                 Cost = point.Cost
             });
         }
@@ -89,7 +97,7 @@ public class ProductionWasteAppService : ProductionAppService, IProductionWasteA
             dto.Reasons.Add(new ProductionWasteReasonSliceDto
             {
                 Reason = reason.Reason,
-                Quantity = reason.Quantity,
+                IncidentCount = reason.IncidentCount,
                 Cost = reason.Cost
             });
         }
@@ -101,6 +109,7 @@ public class ProductionWasteAppService : ProductionAppService, IProductionWasteA
                 ProductId = product.ProductId,
                 ProductName = product.ProductName,
                 ProductSku = product.ProductSku,
+                ProductUnit = product.ProductUnit,
                 Quantity = product.Quantity,
                 Cost = product.Cost
             });
@@ -113,6 +122,7 @@ public class ProductionWasteAppService : ProductionAppService, IProductionWasteA
     public async Task<ProductionWasteDto> CreateWriteOffAsync(CreateProductionWasteWriteOffDto input)
     {
         using var contentCulture = CultureHelper.Use("ar-SY", "ar-SY");
+        await _kitchenAccessChecker.EnsureAccessAsync(input.KitchenBranchId);
         if (input.Quantity <= 0)
         {
             throw new BusinessException(ProductionErrorCodes.InvalidWasteQuantity)
@@ -172,9 +182,9 @@ public class ProductionWasteAppService : ProductionAppService, IProductionWasteA
             KitchenBranchId = waste.KitchenBranchId,
             KitchenBranchName = input.KitchenBranchId.ToString(),
             ProductId = waste.ProductId,
-            ProductName = inventoryRow.Product.Name,
+            ProductName = inventoryRow.Product.DisplayName,
             ProductSku = inventoryRow.Product.SKU,
-            ProductUnit = inventoryRow.Product.Unit,
+            ProductUnit = inventoryRow.Product.DisplayUnit,
             WasteType = waste.WasteType,
             Quantity = waste.Quantity,
             UnitCost = waste.UnitCost,
@@ -212,5 +222,15 @@ public class ProductionWasteAppService : ProductionAppService, IProductionWasteA
         ProductionWasteReasons.IngredientSpoilage => ProductionWasteTypes.IngredientSpoilage,
         _ => ProductionWasteTypes.ManualWriteOff
     };
+
+    private async Task<List<Guid>> GetKitchenScopeAsync(Guid? kitchenBranchId)
+    {
+        if (kitchenBranchId.HasValue)
+        {
+            await _kitchenAccessChecker.EnsureAccessAsync(kitchenBranchId.Value);
+        }
+
+        return await _kitchenAccessChecker.GetAccessibleKitchenIdsAsync();
+    }
 
 }

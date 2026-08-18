@@ -63,7 +63,7 @@ public class CashierAssignmentAppService : patisserie_shopAppService, ICashierAs
 
         var assignable = await GetAssignableBranchesAsync();
         var assignableIds = assignable.Select(b => b.Id).ToHashSet();
-        var branchNamesById = assignable.ToDictionary(b => b.Id, b => b.Name);
+        var branchNamesById = assignable.ToDictionary(b => b.Id, b => b.DisplayName);
 
         var cashiers = await _userManager.GetUsersInRoleAsync(CashierRoleName);
 
@@ -103,8 +103,8 @@ public class CashierAssignmentAppService : patisserie_shopAppService, ICashierAs
     {
         var branches = await GetAssignableBranchesAsync();
         return branches
-            .OrderBy(b => b.Name, StringComparer.OrdinalIgnoreCase)
-            .Select(b => new CashierBranchOptionDto { Id = b.Id, Name = b.Name })
+            .OrderBy(b => b.DisplayName, StringComparer.OrdinalIgnoreCase)
+            .Select(b => new CashierBranchOptionDto { Id = b.Id, Name = b.DisplayName })
             .ToList();
     }
 

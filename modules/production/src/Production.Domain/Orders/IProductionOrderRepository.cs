@@ -20,6 +20,11 @@ public interface IProductionOrderRepository : IRepository<AppProductionOrder, Gu
         Guid stockTransferId,
         CancellationToken cancellationToken = default);
 
+    Task<List<AppProductionOrder>> GetChildrenAsync(
+        Guid parentProductionOrderId,
+        Guid kitchenBranchId,
+        CancellationToken cancellationToken = default);
+
     Task<bool> HasOrdersForPlanAsync(
         Guid productionPlanId,
         CancellationToken cancellationToken = default);
@@ -32,23 +37,40 @@ public interface IProductionOrderRepository : IRepository<AppProductionOrder, Gu
         string? filter,
         string? status,
         Guid? kitchenBranchId,
+        IReadOnlyCollection<Guid> scopedKitchenBranchIds,
         CancellationToken cancellationToken = default);
 
     Task<List<ProductionOrderListItem>> GetFilteredListAsync(
         string? filter,
         string? status,
         Guid? kitchenBranchId,
+        IReadOnlyCollection<Guid> scopedKitchenBranchIds,
         string sorting,
         int skipCount,
         int maxResultCount,
         CancellationToken cancellationToken = default);
 
+    Task<List<ProductionOrderListItem>> GetQualityQueueAsync(
+        Guid? kitchenBranchId,
+        IReadOnlyCollection<Guid> scopedKitchenBranchIds,
+        CancellationToken cancellationToken = default);
+
+    Task<int> CountOverlappingSchedulesAsync(
+        Guid kitchenBranchId,
+        string workCenterCode,
+        DateTime scheduledStart,
+        DateTime scheduledEnd,
+        Guid excludeOrderId,
+        CancellationToken cancellationToken = default);
+
     Task<ProductionDashboardReadModel> GetDashboardAsync(
         Guid? kitchenBranchId,
+        IReadOnlyCollection<Guid> scopedKitchenBranchIds,
         CancellationToken cancellationToken = default);
 
     Task<ProductionAnalyticsReadModel> GetAnalyticsAsync(
         int days,
         Guid? kitchenBranchId,
+        IReadOnlyCollection<Guid> scopedKitchenBranchIds,
         CancellationToken cancellationToken = default);
 }

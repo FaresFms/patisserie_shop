@@ -15,8 +15,10 @@ public static class InventoryDbContextModelCreatingExtensions
         {
             b.ToTable(InventoryDbProperties.DbTablePrefix + "Categories", InventoryDbProperties.DbSchema);
             b.ConfigureByConvention();
-            b.Property(x => x.Name).IsRequired().HasMaxLength(128);
-            b.Property(x => x.Description).HasMaxLength(512);
+            b.Property(x => x.NameAr).IsRequired().HasMaxLength(128);
+            b.Property(x => x.NameEn).IsRequired().HasMaxLength(128);
+            b.Property(x => x.DescriptionAr).HasMaxLength(512);
+            b.Property(x => x.DescriptionEn).HasMaxLength(512);
         });
 
         builder.Entity<AppSupplier>(b =>
@@ -39,10 +41,13 @@ public static class InventoryDbContextModelCreatingExtensions
         {
             b.ToTable(InventoryDbProperties.DbTablePrefix + "Products", InventoryDbProperties.DbSchema);
             b.ConfigureByConvention();
-            b.Property(x => x.Name).IsRequired().HasMaxLength(128);
+            b.Property(x => x.NameAr).IsRequired().HasMaxLength(128);
+            b.Property(x => x.NameEn).IsRequired().HasMaxLength(128);
             b.Property(x => x.SKU).IsRequired().HasMaxLength(64);
-            b.Property(x => x.Description).HasMaxLength(1024);
-            b.Property(x => x.Unit).IsRequired().HasMaxLength(32);
+            b.Property(x => x.DescriptionAr).HasMaxLength(1024);
+            b.Property(x => x.DescriptionEn).HasMaxLength(1024);
+            b.Property(x => x.UnitAr).IsRequired().HasMaxLength(32);
+            b.Property(x => x.UnitEn).IsRequired().HasMaxLength(32);
             b.Property(x => x.Currency).HasMaxLength(3).HasDefaultValue("USD");
             b.Property(x => x.ImageUrl).HasMaxLength(512);
             // NO HasDefaultValue (project convention): code defaults + migration backfill
@@ -59,8 +64,10 @@ public static class InventoryDbContextModelCreatingExtensions
         {
             b.ToTable(InventoryDbProperties.DbTablePrefix + "Branches", InventoryDbProperties.DbSchema);
             b.ConfigureByConvention();
-            b.Property(x => x.Name).IsRequired().HasMaxLength(128);
-            b.Property(x => x.Address).HasMaxLength(512);
+            b.Property(x => x.NameAr).IsRequired().HasMaxLength(128);
+            b.Property(x => x.NameEn).IsRequired().HasMaxLength(128);
+            b.Property(x => x.AddressAr).HasMaxLength(512);
+            b.Property(x => x.AddressEn).HasMaxLength(512);
             b.Property(x => x.Phone).HasMaxLength(32);
             b.Property(x => x.Email).HasMaxLength(256);
             // NO HasDefaultValue (project convention): code defaults + migration backfill

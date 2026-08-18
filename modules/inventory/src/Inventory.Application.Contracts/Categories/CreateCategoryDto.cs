@@ -6,10 +6,17 @@ public class CreateCategoryDto
 {
     [Required]
     [StringLength(128)]
-    public string Name { get; set; } = null!;
+    public string NameAr { get; set; } = null!;
+
+    [Required]
+    [StringLength(128)]
+    public string NameEn { get; set; } = null!;
 
     [StringLength(512)]
-    public string? Description { get; set; }
+    public string? DescriptionAr { get; set; }
+
+    [StringLength(512)]
+    public string? DescriptionEn { get; set; }
 
     public bool IsActive { get; set; } = true;
 }

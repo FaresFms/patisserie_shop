@@ -23,6 +23,7 @@ public class PlannedCostDto
 {
     public Guid FormulaId { get; set; }
     public int PlannedOutputQuantity { get; set; }
+    public int ExpectedGrossOutputQuantity { get; set; }
     public int Batches { get; set; }
     public decimal PlannedIngredientCost { get; set; }
     public decimal LaborCost { get; set; }

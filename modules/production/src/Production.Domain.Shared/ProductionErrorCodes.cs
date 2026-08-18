@@ -10,7 +10,7 @@ public static class ProductionErrorCodes
     /// <summary>Formula name is required.</summary>
     public const string FormulaNameRequired = "Production:002";
 
-    /// <summary>Expected waste percent must be between 0 and 100.</summary>
+    /// <summary>Expected waste percent must be at least 0 and less than 100.</summary>
     public const string InvalidWastePercent = "Production:003";
 
     /// <summary>Labor / overhead cost per batch must be zero or positive.</summary>
@@ -42,6 +42,11 @@ public static class ProductionErrorCodes
 
     /// <summary>Planned output quantity passed to the cost calculator must be positive.</summary>
     public const string InvalidPlannedOutputQuantity = "Production:013";
+    public const string FormulaIngredientsRequired = "Production:014";
+    public const string ApprovedFormulaIsImmutable = "Production:015";
+    public const string FormulaVersionAlreadyExists = "Production:016";
+    public const string FormulaMustBeApproved = "Production:017";
+    public const string FormulaCannotBeDeletedAfterApproval = "Production:018";
 
     // ── Branch requests + production planning (Wave 3) ──
 
@@ -65,6 +70,7 @@ public static class ProductionErrorCodes
     public const string CannotCancelPlanWithOrders = "Production:118";
     public const string RequestPlannedQuantityExceeded = "Production:119";
     public const string RequestFulfilledQuantityExceeded = "Production:120";
+    public const string KitchenAccessDenied = "Production:121";
 
     // ── Production orders + cook workflow (Wave 4) ──
 
@@ -85,6 +91,20 @@ public static class ProductionErrorCodes
     public const string ProductionDispatchAlreadyExists = "Production:215";
     public const string ProductionDispatchNotFound = "Production:216";
     public const string ProductionDispatchAllocationNotFound = "Production:217";
+    public const string ProductionExpiryDateExceedsShelfLife = "Production:218";
+    public const string StockDispatchTargetNotAvailable = "Production:219";
+    public const string StockDispatchQuantityExceedsAvailable = "Production:220";
+    public const string StockDispatchReconciliationMismatch = "Production:221";
+    public const string IngredientCostRequired = "Production:222";
+    public const string ProductionScheduleRequired = "Production:223";
+    public const string ProductionOperatorRequired = "Production:224";
+    public const string InvalidProductionSchedule = "Production:225";
+    public const string QualityReleaseRequiredForDispatch = "Production:226";
+    public const string InvalidQualityTransition = "Production:227";
+    public const string QualityReasonRequired = "Production:228";
+    public const string NoSemiFinishedShortage = "Production:229";
+    public const string SubProductionAlreadyExists = "Production:230";
+    public const string ProductionCapacityExceeded = "Production:231";
 
     // ── Waste, dashboard, analytics, decisions (Wave 6) ──
 

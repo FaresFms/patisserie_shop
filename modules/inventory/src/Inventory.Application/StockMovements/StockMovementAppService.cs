@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Inventory.BranchInventory;
 using Inventory.Entities;
+using Inventory.Localization;
 using Inventory.Permissions;
 using Microsoft.AspNetCore.Authorization;
 using Volo.Abp;
@@ -87,10 +88,10 @@ public class StockMovementAppService : InventoryAppService, IStockMovementAppSer
     private StockMovementDto MapRow(StockMovementWithContext row)
     {
         var dto = ObjectMapper.Map<AppStockMovement, StockMovementDto>(row.Movement);
-        dto.BranchName = row.Branch.Name;
-        dto.ProductName = row.Product.Name;
+        dto.BranchName = LocalizedBusinessText.Select(row.Branch.NameAr, row.Branch.NameEn);
+        dto.ProductName = LocalizedBusinessText.Select(row.Product.NameAr, row.Product.NameEn);
         dto.ProductSKU = row.Product.SKU;
-        dto.ProductUnit = row.Product.Unit;
+        dto.ProductUnit = LocalizedBusinessText.Select(row.Product.UnitAr, row.Product.UnitEn);
         return dto;
     }
 }

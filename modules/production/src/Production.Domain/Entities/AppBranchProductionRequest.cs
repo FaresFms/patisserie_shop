@@ -202,6 +202,29 @@ public class AppBranchProductionRequest : FullAuditedAggregateRoot<Guid>
         RecalculateDemandStatus();
     }
 
+    public void CompleteReservedStockDispatch(
+        Guid itemId,
+        Guid productId,
+        int shippedQuantity,
+        int receivedQuantity)
+    {
+        if (!BranchProductionRequestStatuses.IsApprovedDemand(Status))
+        {
+            throw InvalidTransition(BranchProductionRequestStatuses.PartiallyFulfilled);
+        }
+
+        var item = FindItem(itemId);
+        if (item.ProductId != productId)
+        {
+            throw new BusinessException(ProductionErrorCodes.StockDispatchReconciliationMismatch)
+                .WithData("ExpectedProductId", item.ProductId)
+                .WithData("ReceivedProductId", productId);
+        }
+
+        item.CompleteReservedStockDispatch(shippedQuantity, receivedQuantity);
+        RecalculateDemandStatus();
+    }
+
     private void RecalculateDemandStatus()
     {
         // A line approved at 0 (a single rejected product) is trivially satisfied —

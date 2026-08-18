@@ -1,5 +1,6 @@
 using System;
 using Volo.Abp;
+using Volo.Abp.Data;
 using Volo.Abp.Domain.Entities.Auditing;
 
 namespace Inventory.Entities;
@@ -14,6 +15,7 @@ namespace Inventory.Entities;
 /// </summary>
 public class AppStockBatch : AuditedAggregateRoot<Guid>
 {
+    private const string UnitCostProperty = "Inventory.UnitCost";
     public Guid BranchId { get; private set; }
     public Guid ProductId { get; private set; }
     public string BatchNumber { get; private set; } = null!;
@@ -29,6 +31,7 @@ public class AppStockBatch : AuditedAggregateRoot<Guid>
 
     /// <summary>Id of the originating document (PO, transfer, …) when known.</summary>
     public Guid? SourceId { get; private set; }
+    public decimal UnitCost => this.GetProperty<decimal?>(UnitCostProperty) ?? 0m;
 
     public bool IsDepleted => QuantityRemaining <= 0;
 
@@ -45,7 +48,8 @@ public class AppStockBatch : AuditedAggregateRoot<Guid>
         DateTime expiryDate,
         int quantityReceived,
         string sourceType,
-        Guid? sourceId = null)
+        Guid? sourceId = null,
+        decimal unitCost = 0m)
         : base(id)
     {
         if (quantityReceived <= 0)
@@ -67,6 +71,7 @@ public class AppStockBatch : AuditedAggregateRoot<Guid>
         QuantityRemaining = quantityReceived;
         SourceType = sourceType;
         SourceId = sourceId;
+        SetUnitCost(unitCost);
     }
 
     /// <summary>
@@ -84,5 +89,10 @@ public class AppStockBatch : AuditedAggregateRoot<Guid>
         }
 
         QuantityRemaining -= quantity;
+    }
+
+    internal void SetUnitCost(decimal unitCost)
+    {
+        ExtraProperties[UnitCostProperty] = Math.Max(0m, unitCost);
     }
 }

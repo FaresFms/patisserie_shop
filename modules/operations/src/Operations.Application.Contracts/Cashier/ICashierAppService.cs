@@ -56,7 +56,7 @@ public interface ICashierAppService : IApplicationService
     Task<List<CashierShiftDto>> GetShiftsAsync(GetShiftsInput input);
 
     /// <summary>
-    /// The single branch (Id + Name) the current cashier is assigned to via their
+    /// The single branch (including receipt address) the current cashier is assigned to via their
     /// persistent <c>AssignedBranchId</c> claim, or null when no (active) branch is
     /// assigned. The POS uses this instead of a branch picker — the assigned branch is
     /// the authoritative branch context for the cashier.
@@ -64,7 +64,7 @@ public interface ICashierAppService : IApplicationService
     Task<CashierBranchDto?> GetMyBranchAsync();
 
     /// <summary>
-    /// Active branches (Id + Name). No longer the POS branch source (the POS uses the
+    /// Active lightweight branch records. No longer the POS branch source (the POS uses the
     /// assigned-branch claim via <see cref="GetMyBranchAsync"/>); retained so the
     /// host's cashier-report service can resolve a branch display name without
     /// Inventory's Branches.Default permission. Gated by the cashier permission only.

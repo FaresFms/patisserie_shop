@@ -104,7 +104,7 @@ public class ProductVelocityRepository
         }
 
         var branches = await _branchRepository.GetListAsync(cancellationToken: ct);
-        var branchNameById = branches.ToDictionary(b => b.Id, b => b.Name);
+        var branchNameById = branches.ToDictionary(b => b.Id, b => b.DisplayName);
 
         var f = string.IsNullOrWhiteSpace(filter) ? null : filter.Trim().ToLowerInvariant();
 
@@ -118,7 +118,7 @@ public class ProductVelocityRepository
                 continue;
             }
 
-            var productName = stockRow.Product.Name;
+            var productName = stockRow.Product.DisplayName;
             var productSku = stockRow.Product.SKU;
 
             if (f != null

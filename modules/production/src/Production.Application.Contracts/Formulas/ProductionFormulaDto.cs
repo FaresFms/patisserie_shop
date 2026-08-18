@@ -24,6 +24,12 @@ public class ProductionFormulaDto
     public bool IsActive { get; set; }
     public bool IsDefault { get; set; }
     public string? Notes { get; set; }
+    public string ApprovalStatus { get; set; } = ProductionFormulaStatuses.Draft;
+    public DateTime? ApprovedAt { get; set; }
+    public Guid? ApprovedByUserId { get; set; }
+    public bool IsEditable { get; set; }
+    public string? WorkCenterCode { get; set; }
+    public string? PreparationSteps { get; set; }
 
     public List<ProductionFormulaItemDto> Items { get; set; } = new();
 }

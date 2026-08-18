@@ -99,4 +99,23 @@ public class AppBranchProductionRequestItem : Entity<Guid>
 
         PlannedQuantity -= quantity;
     }
+
+    internal void CompleteReservedStockDispatch(int shippedQuantity, int receivedQuantity)
+    {
+        var openReservedQuantity = PlannedQuantity - FulfilledQuantity;
+        if (shippedQuantity <= 0
+            || receivedQuantity < 0
+            || receivedQuantity > shippedQuantity
+            || shippedQuantity > openReservedQuantity)
+        {
+            throw new BusinessException(ProductionErrorCodes.StockDispatchReconciliationMismatch)
+                .WithData("ShippedQuantity", shippedQuantity)
+                .WithData("ReceivedQuantity", receivedQuantity)
+                .WithData("OpenReservedQuantity", openReservedQuantity);
+        }
+
+        var lostQuantity = shippedQuantity - receivedQuantity;
+        FulfilledQuantity += receivedQuantity;
+        PlannedQuantity -= lostQuantity;
+    }
 }

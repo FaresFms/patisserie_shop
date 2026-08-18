@@ -40,6 +40,7 @@ public class patisserie_shopMenus
     public const string Production = Prefix + ".Production";
     public const string ProductionDashboard = Production + ".Dashboard";
     public const string ProductionFormulas = Production + ".Formulas";
+    public const string ProductionControl = Production + ".Control";
     public const string ProductionMyRequests = Production + ".MyRequests";
     public const string ProductionBranchRequests = Production + ".BranchRequests";
     public const string ProductionPlans = Production + ".Plans";

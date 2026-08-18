@@ -220,7 +220,7 @@
                             <div class="product-photo-frame">
                                 @if (!string.IsNullOrWhiteSpace(ProductImagePreview))
                                 {
-                                    <img src="@ProductImagePreview" alt="@_editName" />
+                                    <img src="@ProductImagePreview" alt="@(_editNameAr.Length > 0 ? _editNameAr : _editNameEn)" />
                                 }
                                 else
                                 {
@@ -256,13 +256,24 @@
                                 <SoftText Typo="Typo.overline" Color="Color.Primary">@InvL["BasicInfo"]</SoftText>
                                 <SoftDivider Class="mb-3" />
                                 <div class="product-form-grid product-form-grid--two">
-                                    <SoftTextField T="string"
-                                                   Label="@InvL["Name"]"
-                                                   @bind-Value="_editName"
-                                                   Variant="Variant.Outlined"
-                                                   MaxLength="128"
-                                                   Required="true"
-                                                   Immediate="true" />
+                                    <div dir="rtl">
+                                        <SoftTextField T="string"
+                                                       Label="@InvL["NameArabic"]"
+                                                       @bind-Value="_editNameAr"
+                                                       Variant="Variant.Outlined"
+                                                       MaxLength="128"
+                                                       Required="true"
+                                                       Immediate="true" />
+                                    </div>
+                                    <div dir="ltr">
+                                        <SoftTextField T="string"
+                                                       Label="@InvL["NameEnglish"]"
+                                                       @bind-Value="_editNameEn"
+                                                       Variant="Variant.Outlined"
+                                                       MaxLength="128"
+                                                       Required="true"
+                                                       Immediate="true" />
+                                    </div>
                                     <SoftTextField T="string"
                                                    Label="@InvL["SKU"]"
                                                    @bind-Value="_editSku"
@@ -292,10 +303,18 @@
                                                           Placeholder="@InvL["SelectSupplier"]"
                                                           Clearable="true" />
                                     </div>
-                                    <div class="product-form-grid-span">
+                                    <div dir="rtl">
                                         <SoftTextField T="string"
-                                                       Label="@InvL["Description"]"
-                                                       @bind-Value="_editDescription"
+                                                       Label="@InvL["DescriptionArabic"]"
+                                                       @bind-Value="_editDescriptionAr"
+                                                       Variant="Variant.Outlined"
+                                                       Lines="2"
+                                                       MaxLength="1024" />
+                                    </div>
+                                    <div dir="ltr">
+                                        <SoftTextField T="string"
+                                                       Label="@InvL["DescriptionEnglish"]"
+                                                       @bind-Value="_editDescriptionEn"
                                                        Variant="Variant.Outlined"
                                                        Lines="2"
                                                        MaxLength="1024" />
@@ -307,12 +326,22 @@
                                 <SoftText Typo="Typo.overline" Color="Color.Primary">@InvL["Pricing"]</SoftText>
                                 <SoftDivider Class="mb-3" />
                                 <div class="product-form-grid product-form-grid--pricing">
-                                    <SoftTextField T="string"
-                                                   Label="@InvL["Unit"]"
-                                                   @bind-Value="_editUnit"
-                                                   Variant="Variant.Outlined"
-                                                   MaxLength="32"
-                                                   Required="true" />
+                                    <div dir="rtl">
+                                        <SoftTextField T="string"
+                                                       Label="@InvL["UnitArabic"]"
+                                                       @bind-Value="_editUnitAr"
+                                                       Variant="Variant.Outlined"
+                                                       MaxLength="32"
+                                                       Required="true" />
+                                    </div>
+                                    <div dir="ltr">
+                                        <SoftTextField T="string"
+                                                       Label="@InvL["UnitEnglish"]"
+                                                       @bind-Value="_editUnitEn"
+                                                       Variant="Variant.Outlined"
+                                                       MaxLength="32"
+                                                       Required="true" />
+                                    </div>
                                     <SoftNumericField T="decimal"
                                                       Label="@InvL["CostPrice"]"
                                                       @bind-Value="_editCostPrice"
@@ -562,12 +591,15 @@
     private Dictionary<Guid, string> _categoryNames = new();
     private bool _dialogVisible;
     private Guid? _editingId;
-    private string _editName = string.Empty;
+    private string _editNameAr = string.Empty;
+    private string _editNameEn = string.Empty;
     private string _editSku = string.Empty;
-    private string? _editDescription;
+    private string? _editDescriptionAr;
+    private string? _editDescriptionEn;
     private Guid? _editCategoryId;
     private Guid? _editSupplierId;
-    private string _editUnit = "pcs";
+    private string _editUnitAr = "قطعة";
+    private string _editUnitEn = "pcs";
     private decimal _editCostPrice;
     private decimal _editSalePrice;
     private int _editReorderLevel = 5;
@@ -722,12 +754,15 @@
     private void OpenCreateDialog()
     {
         _editingId = null;
-        _editName = string.Empty;
+        _editNameAr = string.Empty;
+        _editNameEn = string.Empty;
         _editSku = string.Empty;
-        _editDescription = null;
+        _editDescriptionAr = null;
+        _editDescriptionEn = null;
         _editCategoryId = null;
         _editSupplierId = null;
-        _editUnit = "pcs";
+        _editUnitAr = "قطعة";
+        _editUnitEn = "pcs";
         _editCostPrice = 0m;
         _editSalePrice = 0m;
         _editReorderLevel = 5;
@@ -747,12 +782,15 @@
     private void OpenEditDialog(ProductDto p)
     {
         _editingId = p.Id;
-        _editName = p.Name;
+        _editNameAr = p.NameAr;
+        _editNameEn = p.NameEn;
         _editSku = p.SKU;
-        _editDescription = p.Description;
+        _editDescriptionAr = p.DescriptionAr;
+        _editDescriptionEn = p.DescriptionEn;
         _editCategoryId = p.CategoryId;
         _editSupplierId = p.DefaultSupplierId;
-        _editUnit = p.Unit;
+        _editUnitAr = p.UnitAr;
+        _editUnitEn = p.UnitEn;
         _editCostPrice = p.CostPrice;
         _editSalePrice = p.SalePrice;
         _editReorderLevel = p.ReorderLevel;
@@ -845,9 +883,14 @@
 
     private async Task SaveAsync()
     {
-        if (string.IsNullOrWhiteSpace(_editName))
+        if (string.IsNullOrWhiteSpace(_editNameAr))
         {
-            Snackbar.Add(L["ThisFieldIsRequired", InvL["Name"]], Severity.Warning);
+            Snackbar.Add(L["ThisFieldIsRequired", InvL["NameArabic"]], Severity.Warning);
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(_editNameEn))
+        {
+            Snackbar.Add(L["ThisFieldIsRequired", InvL["NameEnglish"]], Severity.Warning);
             return;
         }
         if (string.IsNullOrWhiteSpace(_editSku))
@@ -860,9 +903,14 @@
             Snackbar.Add(L["ThisFieldIsRequired", InvL["Category"]], Severity.Warning);
             return;
         }
-        if (string.IsNullOrWhiteSpace(_editUnit))
+        if (string.IsNullOrWhiteSpace(_editUnitAr))
         {
-            Snackbar.Add(L["ThisFieldIsRequired", InvL["Unit"]], Severity.Warning);
+            Snackbar.Add(L["ThisFieldIsRequired", InvL["UnitArabic"]], Severity.Warning);
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(_editUnitEn))
+        {
+            Snackbar.Add(L["ThisFieldIsRequired", InvL["UnitEnglish"]], Severity.Warning);
             return;
         }
         _saving = true;
@@ -875,10 +923,13 @@
                 {
                     CategoryId = _editCategoryId.Value,
                     DefaultSupplierId = _editSupplierId,
-                    Name = _editName,
+                    NameAr = _editNameAr,
+                    NameEn = _editNameEn,
                     SKU = _editSku,
-                    Description = _editDescription,
-                    Unit = _editUnit,
+                    DescriptionAr = _editDescriptionAr,
+                    DescriptionEn = _editDescriptionEn,
+                    UnitAr = _editUnitAr,
+                    UnitEn = _editUnitEn,
                     CostPrice = _editCostPrice,
                     SalePrice = _editSalePrice,
                     Currency = ShopCurrency,
@@ -898,10 +949,13 @@
                 {
                     CategoryId = _editCategoryId.Value,
                     DefaultSupplierId = _editSupplierId,
-                    Name = _editName,
+                    NameAr = _editNameAr,
+                    NameEn = _editNameEn,
                     SKU = _editSku,
-                    Description = _editDescription,
-                    Unit = _editUnit,
+                    DescriptionAr = _editDescriptionAr,
+                    DescriptionEn = _editDescriptionEn,
+                    UnitAr = _editUnitAr,
+                    UnitEn = _editUnitEn,
                     CostPrice = _editCostPrice,
                     SalePrice = _editSalePrice,
                     Currency = ShopCurrency,

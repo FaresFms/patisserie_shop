@@ -18,6 +18,11 @@ public interface IStockBatchRepository : IRepository<AppStockBatch, Guid>
         Guid productId,
         CancellationToken cancellationToken = default);
 
+    Task<List<AppStockBatch>> GetBySourceAsync(
+        string sourceType,
+        Guid sourceId,
+        CancellationToken cancellationToken = default);
+
     /// <summary>
     /// All live batches (QuantityRemaining &gt; 0) of ACTIVE products whose
     /// ExpiryDate is on or before <paramref name="maxExpiryDate"/>, joined with

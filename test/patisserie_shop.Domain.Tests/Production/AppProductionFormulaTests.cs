@@ -55,6 +55,18 @@ public class AppProductionFormulaTests
     }
 
     [Fact]
+    public void Formula_cannot_be_used_without_an_ingredient()
+    {
+        var formula = NewFormula();
+
+        Should.Throw<BusinessException>(() => formula.EnsureHasIngredients())
+            .Code.ShouldBe(ProductionErrorCodes.FormulaIngredientsRequired);
+
+        formula.AddItem(Guid.NewGuid(), Guid.NewGuid(), 1, 0m, 0);
+        Should.NotThrow(() => formula.EnsureHasIngredients());
+    }
+
+    [Fact]
     public void AddItem_Rejects_Non_Positive_Quantity()
     {
         var f = NewFormula();
@@ -111,6 +123,8 @@ public class AppProductionFormulaTests
         f.Activate();
         f.IsActive.ShouldBeTrue();
 
+        f.AddItem(Guid.NewGuid(), Guid.NewGuid(), 1, 0m, 0);
+        f.Approve(Guid.NewGuid(), DateTime.UtcNow);
         f.MarkDefault();
         f.IsDefault.ShouldBeTrue();
         f.UnmarkDefault();
@@ -127,6 +141,11 @@ public class AppProductionFormulaTests
                     laborCostPerBatch: 1m, overheadCostPerBatch: 1m, estimatedProductionMinutes: 5, notes: null))
             .Code.ShouldBe(ProductionErrorCodes.InvalidWastePercent);
 
+        Should.Throw<BusinessException>(() =>
+                f.UpdateInfo("Updated", outputQuantity: 50, expectedWastePercent: 100m,
+                    laborCostPerBatch: 1m, overheadCostPerBatch: 1m, estimatedProductionMinutes: 5, notes: null))
+            .Code.ShouldBe(ProductionErrorCodes.InvalidWastePercent);
+
         f.UpdateInfo("Updated", outputQuantity: 50, expectedWastePercent: 12.5m,
             laborCostPerBatch: 3m, overheadCostPerBatch: 2m, estimatedProductionMinutes: 5, notes: "n");
 
@@ -137,5 +156,25 @@ public class AppProductionFormulaTests
         f.OverheadCostPerBatch.ShouldBe(2m);
         f.EstimatedProductionMinutes.ShouldBe(5);
         f.Notes.ShouldBe("n");
+    }
+
+    [Fact]
+    public void Approved_revision_is_immutable_and_can_be_retired()
+    {
+        var formula = NewFormula();
+        formula.AddItem(Guid.NewGuid(), Guid.NewGuid(), 10, 0m, 0);
+        formula.SetPhase3Details("OVEN-1", "Bake until golden", null);
+        formula.Approve(Guid.NewGuid(), DateTime.UtcNow);
+
+        formula.ApprovalStatus.ShouldBe(ProductionFormulaStatuses.Approved);
+        Should.Throw<BusinessException>(() => formula.SetFormulaName("Changed"))
+            .Code.ShouldBe(ProductionErrorCodes.ApprovedFormulaIsImmutable);
+        Should.Throw<BusinessException>(() => formula.AddItem(Guid.NewGuid(), Guid.NewGuid(), 1, 0m, 1))
+            .Code.ShouldBe(ProductionErrorCodes.ApprovedFormulaIsImmutable);
+
+        formula.Retire();
+        formula.ApprovalStatus.ShouldBe(ProductionFormulaStatuses.Retired);
+        formula.IsActive.ShouldBeFalse();
+        formula.IsDefault.ShouldBeFalse();
     }
 }

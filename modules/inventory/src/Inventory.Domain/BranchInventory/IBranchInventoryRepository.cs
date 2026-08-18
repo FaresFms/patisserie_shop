@@ -63,6 +63,16 @@ public interface IBranchInventoryRepository : IRepository<AppBranchInventory, Gu
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// One row per active candidate branch and requested product. The destination
+    /// is excluded and missing inventory is represented by zero stock.
+    /// </summary>
+    Task<List<TransferSourceStockRow>> GetTransferSourceStockAsync(
+        Guid destinationBranchId,
+        IReadOnlyCollection<Guid> productIds,
+        IReadOnlyCollection<Guid>? sourceBranchIdScope = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Active products that currently have stock (QuantityOnHand &gt; 0) at the
     /// given branch, ordered by product name. Backs the "available products"
     /// lookup used when recording a sale or a transfer. When <paramref name="onlySellable"/>

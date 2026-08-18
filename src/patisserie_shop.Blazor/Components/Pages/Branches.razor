@@ -164,13 +164,24 @@
                             <SoftText Typo="Typo.overline" Color="Color.Primary">@InvL["BasicInfo"]</SoftText>
                             <SoftDivider Class="mb-3" />
                             <SoftStack Spacing="3">
-                                <SoftTextField T="string"
-                                               Label="@InvL["Name"]"
-                                               @bind-Value="_editName"
-                                               Variant="Variant.Outlined"
-                                               MaxLength="128"
-                                               Required="true"
-                                               Immediate="true" />
+                                <div dir="rtl">
+                                    <SoftTextField T="string"
+                                                   Label="@InvL["NameArabic"]"
+                                                   @bind-Value="_editNameAr"
+                                                   Variant="Variant.Outlined"
+                                                   MaxLength="128"
+                                                   Required="true"
+                                                   Immediate="true" />
+                                </div>
+                                <div dir="ltr">
+                                    <SoftTextField T="string"
+                                                   Label="@InvL["NameEnglish"]"
+                                                   @bind-Value="_editNameEn"
+                                                   Variant="Variant.Outlined"
+                                                   MaxLength="128"
+                                                   Required="true"
+                                                   Immediate="true" />
+                                </div>
                                 <SoftLookupSelect TItem="IdentityUserDto" TValue="Guid?"
                                                   Items="_users"
                                                   ToValue="@(u => (Guid?)u.Id)"
@@ -194,12 +205,24 @@
                         <div>
                             <SoftText Typo="Typo.overline" Color="Color.Primary">@InvL["Location"]</SoftText>
                             <SoftDivider Class="mb-3" />
-                            <SoftTextField T="string"
-                                           Label="@InvL["Address"]"
-                                           @bind-Value="_editAddress"
-                                           Variant="Variant.Outlined"
-                                           Lines="2"
-                                           MaxLength="512" />
+                            <SoftStack Spacing="3">
+                                <div dir="rtl">
+                                    <SoftTextField T="string"
+                                                   Label="@InvL["AddressArabic"]"
+                                                   @bind-Value="_editAddressAr"
+                                                   Variant="Variant.Outlined"
+                                                   Lines="2"
+                                                   MaxLength="512" />
+                                </div>
+                                <div dir="ltr">
+                                    <SoftTextField T="string"
+                                                   Label="@InvL["AddressEnglish"]"
+                                                   @bind-Value="_editAddressEn"
+                                                   Variant="Variant.Outlined"
+                                                   Lines="2"
+                                                   MaxLength="512" />
+                                </div>
+                            </SoftStack>
                         </div>
 
                         <div>
@@ -282,8 +305,10 @@
 
     private bool _dialogVisible;
     private Guid? _editingId;
-    private string _editName = string.Empty;
-    private string? _editAddress;
+    private string _editNameAr = string.Empty;
+    private string _editNameEn = string.Empty;
+    private string? _editAddressAr;
+    private string? _editAddressEn;
     private string? _editPhone;
     private string? _editEmail;
     private Guid? _editManagerUserId;
@@ -382,8 +407,10 @@
     private void OpenCreateDialog()
     {
         _editingId = null;
-        _editName = string.Empty;
-        _editAddress = null;
+        _editNameAr = string.Empty;
+        _editNameEn = string.Empty;
+        _editAddressAr = null;
+        _editAddressEn = null;
         _editPhone = null;
         _editEmail = null;
         _editManagerUserId = null;
@@ -395,8 +422,10 @@
     private void OpenEditDialog(BranchDto b)
     {
         _editingId = b.Id;
-        _editName = b.Name;
-        _editAddress = b.Address;
+        _editNameAr = b.NameAr;
+        _editNameEn = b.NameEn;
+        _editAddressAr = b.AddressAr;
+        _editAddressEn = b.AddressEn;
         _editPhone = b.Phone;
         _editEmail = b.Email;
         _editManagerUserId = b.ManagerUserId;
@@ -412,9 +441,14 @@
 
     private async Task SaveAsync()
     {
-        if (string.IsNullOrWhiteSpace(_editName))
+        if (string.IsNullOrWhiteSpace(_editNameAr))
         {
-            Snackbar.Add(L["ThisFieldIsRequired", InvL["Name"]], Severity.Warning);
+            Snackbar.Add(L["ThisFieldIsRequired", InvL["NameArabic"]], Severity.Warning);
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(_editNameEn))
+        {
+            Snackbar.Add(L["ThisFieldIsRequired", InvL["NameEnglish"]], Severity.Warning);
             return;
         }
 
@@ -425,8 +459,10 @@
             {
                 await BranchAppService.UpdateAsync(_editingId.Value, new UpdateBranchDto
                 {
-                    Name = _editName,
-                    Address = _editAddress,
+                    NameAr = _editNameAr,
+                    NameEn = _editNameEn,
+                    AddressAr = _editAddressAr,
+                    AddressEn = _editAddressEn,
                     Phone = _editPhone,
                     Email = _editEmail,
                     ManagerUserId = _editManagerUserId,
@@ -438,8 +474,10 @@
             {
                 await BranchAppService.CreateAsync(new CreateBranchDto
                 {
-                    Name = _editName,
-                    Address = _editAddress,
+                    NameAr = _editNameAr,
+                    NameEn = _editNameEn,
+                    AddressAr = _editAddressAr,
+                    AddressEn = _editAddressEn,
                     Phone = _editPhone,
                     Email = _editEmail,
                     ManagerUserId = _editManagerUserId,

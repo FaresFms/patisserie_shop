@@ -15,7 +15,11 @@ namespace Inventory;
 [Mapper]
 public partial class CategoryToDtoMapper : MapperBase<AppCategory, CategoryDto>
 {
+    [MapperIgnoreTarget(nameof(CategoryDto.Name))]
+    [MapperIgnoreTarget(nameof(CategoryDto.Description))]
     public override partial CategoryDto Map(AppCategory source);
+    [MapperIgnoreTarget(nameof(CategoryDto.Name))]
+    [MapperIgnoreTarget(nameof(CategoryDto.Description))]
     public override partial void Map(AppCategory source, CategoryDto destination);
 }
 
@@ -29,21 +33,35 @@ public partial class SupplierToDtoMapper : MapperBase<AppSupplier, SupplierDto>
 [Mapper]
 public partial class ProductToDtoMapper : MapperBase<AppProduct, ProductDto>
 {
+    [MapperIgnoreTarget(nameof(ProductDto.Name))]
+    [MapperIgnoreTarget(nameof(ProductDto.Description))]
+    [MapperIgnoreTarget(nameof(ProductDto.Unit))]
     public override partial ProductDto Map(AppProduct source);
+    [MapperIgnoreTarget(nameof(ProductDto.Name))]
+    [MapperIgnoreTarget(nameof(ProductDto.Description))]
+    [MapperIgnoreTarget(nameof(ProductDto.Unit))]
     public override partial void Map(AppProduct source, ProductDto destination);
 }
 
 [Mapper]
 public partial class ProductToLookupMapper : MapperBase<AppProduct, ProductLookupDto>
 {
+    [MapperIgnoreTarget(nameof(ProductLookupDto.Name))]
+    [MapperIgnoreTarget(nameof(ProductLookupDto.Unit))]
     public override partial ProductLookupDto Map(AppProduct source);
+    [MapperIgnoreTarget(nameof(ProductLookupDto.Name))]
+    [MapperIgnoreTarget(nameof(ProductLookupDto.Unit))]
     public override partial void Map(AppProduct source, ProductLookupDto destination);
 }
 
 [Mapper]
 public partial class BranchToDtoMapper : MapperBase<AppBranch, BranchDto>
 {
+    [MapperIgnoreTarget(nameof(BranchDto.Name))]
+    [MapperIgnoreTarget(nameof(BranchDto.Address))]
     public override partial BranchDto Map(AppBranch source);
+    [MapperIgnoreTarget(nameof(BranchDto.Name))]
+    [MapperIgnoreTarget(nameof(BranchDto.Address))]
     public override partial void Map(AppBranch source, BranchDto destination);
 }
 
@@ -82,7 +100,9 @@ public partial class StockMovementToDtoMapper : MapperBase<AppStockMovement, Sto
 [Mapper]
 public partial class BranchToLookupMapper : MapperBase<AppBranch, BranchLookupDto>
 {
+    [MapperIgnoreTarget(nameof(BranchLookupDto.Name))]
     public override partial BranchLookupDto Map(AppBranch source);
+    [MapperIgnoreTarget(nameof(BranchLookupDto.Name))]
     public override partial void Map(AppBranch source, BranchLookupDto destination);
 }
 

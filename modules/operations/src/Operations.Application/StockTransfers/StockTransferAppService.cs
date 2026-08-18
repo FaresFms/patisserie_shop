@@ -12,6 +12,7 @@ using Operations.Entities;
 using Operations.Permissions;
 using Volo.Abp;
 using Volo.Abp.Application.Dtos;
+using Volo.Abp.Authorization;
 using Volo.Abp.Domain.Repositories;
 using Volo.Abp.Identity;
 
@@ -30,6 +31,7 @@ public class StockTransferAppService : OperationsAppService, IStockTransferAppSe
     private readonly BranchInventoryManager _inventoryManager;
     private readonly IRepository<IdentityUser, Guid> _userRepository;
     private readonly IStockBatchRepository _stockBatchRepository;
+    private readonly TransferSourceAdvisor _transferSourceAdvisor;
 
     public StockTransferAppService(
         IStockTransferRepository transferRepository,
@@ -39,7 +41,8 @@ public class StockTransferAppService : OperationsAppService, IStockTransferAppSe
         StockTransferManager manager,
         BranchInventoryManager inventoryManager,
         IRepository<IdentityUser, Guid> userRepository,
-        IStockBatchRepository stockBatchRepository)
+        IStockBatchRepository stockBatchRepository,
+        TransferSourceAdvisor transferSourceAdvisor)
     {
         _transferRepository = transferRepository;
         _branchRepository = branchRepository;
@@ -49,6 +52,7 @@ public class StockTransferAppService : OperationsAppService, IStockTransferAppSe
         _inventoryManager = inventoryManager;
         _userRepository = userRepository;
         _stockBatchRepository = stockBatchRepository;
+        _transferSourceAdvisor = transferSourceAdvisor;
     }
 
     // ─── Queries ───
@@ -58,6 +62,71 @@ public class StockTransferAppService : OperationsAppService, IStockTransferAppSe
         var transfer = await _transferRepository.GetWithItemsAsync(id);
         await EnsureCanViewAsync(transfer);
         return await ProjectAsync(transfer);
+    }
+
+    public async Task<List<StockTransferSourceSuggestionDto>> GetSourceSuggestionsAsync(
+        GetStockTransferSourceSuggestionsInput input)
+    {
+        var canChooseBranches = await AuthorizationService.IsGrantedAsync(
+            OperationsPermissions.Transfers.ChooseBranches);
+        var canApprove = await AuthorizationService.IsGrantedAsync(
+            OperationsPermissions.Transfers.Approve);
+        if (!canChooseBranches && !canApprove)
+        {
+            throw new AbpAuthorizationException();
+        }
+
+        var requestLines = new List<TransferSourceRequestLine>();
+        foreach (var item in input.Items)
+        {
+            requestLines.Add(new TransferSourceRequestLine
+            {
+                ProductId = item.ProductId,
+                RequestedQuantity = item.RequestedQuantity
+            });
+        }
+
+        var sourceBranchScope = canApprove ? null : await GetManagedBranchIdsAsync();
+        var recommendations = await _transferSourceAdvisor.RecommendAsync(
+            input.ToBranchId,
+            requestLines,
+            sourceBranchScope);
+
+        var result = new List<StockTransferSourceSuggestionDto>();
+        foreach (var recommendation in recommendations)
+        {
+            var dto = new StockTransferSourceSuggestionDto
+            {
+                BranchId = recommendation.BranchId,
+                BranchName = recommendation.BranchName,
+                IsRecommended = recommendation.IsRecommended,
+                CanFulfillAll = recommendation.CanFulfillAll,
+                CoveredItemCount = recommendation.CoveredItemCount,
+                TotalItemCount = recommendation.TotalItemCount,
+                CoveragePercent = recommendation.CoveragePercent,
+                TotalSafeAvailable = recommendation.TotalSafeAvailable,
+                TotalMissingQuantity = recommendation.TotalMissingQuantity
+            };
+
+            foreach (var product in recommendation.Products)
+            {
+                dto.Products.Add(new StockTransferSourceProductSuggestionDto
+                {
+                    ProductId = product.ProductId,
+                    ProductName = product.ProductName,
+                    RequestedQuantity = product.RequestedQuantity,
+                    QuantityOnHand = product.QuantityOnHand,
+                    MinimumStock = product.MinimumStock,
+                    SafeAvailableQuantity = product.SafeAvailableQuantity,
+                    CoveredQuantity = product.CoveredQuantity,
+                    MissingQuantity = product.MissingQuantity
+                });
+            }
+
+            result.Add(dto);
+        }
+
+        return result;
     }
 
     public async Task<PagedResultDto<StockTransferDto>> GetListAsync(GetStockTransfersInput input)
@@ -163,9 +232,9 @@ public class StockTransferAppService : OperationsAppService, IStockTransferAppSe
             return requestableRows.ConvertAll(r => new StockTransferProductLookupDto
             {
                 ProductId = r.Product.Id,
-                Name = r.Product.Name,
+                Name = r.Product.DisplayName,
                 SKU = r.Product.SKU,
-                Unit = r.Product.Unit,
+                Unit = r.Product.DisplayUnit,
                 QuantityOnHand = StockBatchManager.GetUsableQuantity(
                     r.Product, r.Inventory, requestableNonExpired)
             });
@@ -178,9 +247,9 @@ public class StockTransferAppService : OperationsAppService, IStockTransferAppSe
         return rows.ConvertAll(r => new StockTransferProductLookupDto
         {
             ProductId = r.Product.Id,
-            Name = r.Product.Name,
+            Name = r.Product.DisplayName,
             SKU = r.Product.SKU,
-            Unit = r.Product.Unit,
+            Unit = r.Product.DisplayUnit,
             QuantityOnHand = StockBatchManager.GetUsableQuantity(r.Product, r.Inventory, nonExpired)
         });
     }
@@ -221,6 +290,15 @@ public class StockTransferAppService : OperationsAppService, IStockTransferAppSe
             input.RequestedDate,
             CurrentUser.Id,
             input.Notes);
+
+        if (!string.IsNullOrWhiteSpace(input.SourceDocumentType)
+            && input.SourceDocumentId.HasValue)
+        {
+            transfer.SetSourceDocument(
+                input.SourceDocumentType,
+                input.SourceDocumentId.Value,
+                input.SourceDocumentItemId);
+        }
 
         await _transferRepository.InsertAsync(transfer, autoSave: true);
         return await ProjectAsync(transfer);
@@ -335,7 +413,7 @@ public class StockTransferAppService : OperationsAppService, IStockTransferAppSe
                 line.ItemId,
                 StockTransferBatchBreakdown.Format(
                     adjustment.ConsumedBatches.Select(
-                        b => new StockTransferBatchBreakdown.Line(b.ExpiryDate, b.Quantity))));
+                        b => new StockTransferBatchBreakdown.Line(b.ExpiryDate, b.Quantity, b.UnitCost))));
         }
 
         await _transferRepository.UpdateAsync(transfer, autoSave: true);
@@ -430,7 +508,7 @@ public class StockTransferAppService : OperationsAppService, IStockTransferAppSe
                 await _branchInventoryRepository.UpdateAsync(srcInv);
 
                 batches = sourceAdjustment.ConsumedBatches
-                    .Select(b => new StockTransferBatchBreakdown.Line(b.ExpiryDate, b.Quantity))
+                    .Select(b => new StockTransferBatchBreakdown.Line(b.ExpiryDate, b.Quantity, b.UnitCost))
                     .ToList();
             }
 
@@ -461,7 +539,8 @@ public class StockTransferAppService : OperationsAppService, IStockTransferAppSe
                     notes: reference,
                     referenceId: transfer.Id,
                     referenceType: TransferReferenceType,
-                    batchExpiryDate: batch.ExpiryDate);
+                    batchExpiryDate: batch.ExpiryDate,
+                    batchUnitCost: batch.UnitCost);
             }
 
             if (remaining > 0)
@@ -511,9 +590,9 @@ public class StockTransferAppService : OperationsAppService, IStockTransferAppSe
             Reference = BuildReference(transfer.Id),
             Status = transfer.Status,
             FromBranchId = transfer.FromBranchId,
-            FromBranchName = fromBranch?.Name ?? "Waiting for admin",
+            FromBranchName = fromBranch?.DisplayName ?? "Waiting for admin",
             ToBranchId = transfer.ToBranchId,
-            ToBranchName = toBranch.Name,
+            ToBranchName = toBranch.DisplayName,
             RequestedDate = transfer.RequestedDate,
             ApprovedDate = transfer.ApprovedDate,
             ShippedDate = transfer.ShippedDate,
@@ -543,9 +622,9 @@ public class StockTransferAppService : OperationsAppService, IStockTransferAppSe
     {
         Id = item.Id,
         ProductId = item.ProductId,
-        ProductName = product?.Name ?? "(deleted product)",
+        ProductName = product?.DisplayName ?? "(deleted product)",
         ProductSKU = product?.SKU ?? "-",
-        ProductUnit = product?.Unit ?? "-",
+        ProductUnit = product?.DisplayUnit ?? "-",
         RequestedQuantity = item.RequestedQuantity,
         ApprovedQuantity = item.ApprovedQuantity,
         ShippedQuantity = item.ShippedQuantity,
@@ -556,7 +635,7 @@ public class StockTransferAppService : OperationsAppService, IStockTransferAppSe
     {
         if (ids.Count == 0) return new Dictionary<Guid, string>();
         var branches = await _branchRepository.GetListAsync(b => ids.Contains(b.Id));
-        return branches.ToDictionary(b => b.Id, b => b.Name);
+        return branches.ToDictionary(b => b.Id, b => b.DisplayName);
     }
 
     private async Task<Dictionary<Guid, string>> GetUserNamesAsync(List<Guid> ids)

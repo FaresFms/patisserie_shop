@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using Inventory;
 using Inventory.Entities;
 using Inventory.StockBatches;
 using Microsoft.Extensions.Localization;
@@ -43,6 +44,28 @@ public class ProductionOrderManager : DomainService
         _stockBatchRepository = stockBatchRepository;
         _requestRepository = requestRepository;
         _localizer = localizer;
+    }
+
+    public void EnsureScheduleDuration(
+        AppProductionOrder order,
+        int capacityUnitsPerHour,
+        DateTime scheduledStart,
+        DateTime scheduledEnd)
+    {
+        Check.NotNull(order, nameof(order));
+        if (capacityUnitsPerHour <= 0 || scheduledEnd <= scheduledStart)
+        {
+            throw new BusinessException(ProductionErrorCodes.InvalidProductionSchedule);
+        }
+
+        var availableUnits = (scheduledEnd - scheduledStart).TotalHours * capacityUnitsPerHour;
+        if (availableUnits + 0.0001d < order.PlannedOutputQuantity)
+        {
+            throw new BusinessException(ProductionErrorCodes.ProductionCapacityExceeded)
+                .WithData("PlannedQuantity", order.PlannedOutputQuantity)
+                .WithData("CapacityUnitsPerHour", capacityUnitsPerHour)
+                .WithData("RequiredMinutes", Math.Ceiling(order.PlannedOutputQuantity / (double)capacityUnitsPerHour * 60d));
+        }
     }
 
     public async Task<List<AppProductionOrder>> CreateFromPlanAsync(
@@ -95,7 +118,15 @@ public class ProductionOrderManager : DomainService
                 _localizer["ProductionOrderFromPlanNote", plan.PlanNumber],
                 sequence++);
 
-            var remainingForRequests = line.PlannedQuantity;
+            // Existing uncommitted kitchen stock covers approved branch demand first.
+            // Only the part of request demand not covered by that stock is allocated
+            // to this new cook order; any remaining production is forecast/buffer stock.
+            var requestProductionQuantity = Math.Max(
+                0,
+                line.RequestedQuantity - line.CurrentKitchenStock);
+            var remainingForRequests = Math.Min(
+                line.PlannedQuantity,
+                requestProductionQuantity);
             foreach (var target in planningTargets.Where(x =>
                          x.ProductId == line.ProductId && x.RemainingUnplannedQuantity > 0))
             {
@@ -137,6 +168,77 @@ public class ProductionOrderManager : DomainService
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Direct path from an approved branch-request line to a cook order, skipping the
+    /// demand-planning plan. The order is allocated entirely to the originating request
+    /// line, so dispatch after completion routes back to the branch that asked for it.
+    /// </summary>
+    public async Task<AppProductionOrder> CreateForRequestItemAsync(
+        Guid kitchenBranchId,
+        Guid requestId,
+        Guid requestItemId,
+        int quantity,
+        Guid? createdByUserId,
+        string? notes)
+    {
+        using var contentCulture = CultureHelper.Use("ar-SY", "ar-SY");
+
+        if (quantity <= 0)
+        {
+            throw new BusinessException(ProductionErrorCodes.InvalidOrderQuantity)
+                .WithData("PlannedOutputQuantity", quantity);
+        }
+
+        var request = await _requestRepository.GetWithItemsAsync(requestId);
+        if (!BranchProductionRequestStatuses.IsApprovedDemand(request.Status))
+        {
+            throw new BusinessException(ProductionErrorCodes.InvalidRequestStatusTransition)
+                .WithData("CurrentStatus", request.Status);
+        }
+
+        var item = request.Items.FirstOrDefault(x => x.Id == requestItemId)
+            ?? throw new BusinessException(ProductionErrorCodes.RequestItemNotFound)
+                .WithData("RequestItemId", requestItemId);
+
+        // Guards a stale page: if the line was planned or fulfilled meanwhile there is
+        // nothing left to cook for it, and an unallocated order would just confuse.
+        var remainingUnplanned = item.ApprovedQuantity - item.PlannedQuantity;
+        if (remainingUnplanned <= 0)
+        {
+            throw new BusinessException(ProductionErrorCodes.RequestPlannedQuantityExceeded)
+                .WithData("ApprovedQuantity", item.ApprovedQuantity)
+                .WithData("PlannedQuantity", item.PlannedQuantity);
+        }
+
+        var orderNotes = string.IsNullOrWhiteSpace(notes)
+            ? _localizer["ProductionOrderFromRequestNote", request.RequestNumber].Value
+            : $"{_localizer["ProductionOrderFromRequestNote", request.RequestNumber].Value} {notes.Trim()}";
+
+        var order = await CreateAsync(
+            kitchenBranchId,
+            productionPlanId: null,
+            productionPlanLineId: null,
+            item.ProductId,
+            quantity,
+            request.Priority,
+            createdByUserId,
+            orderNotes);
+
+        // Reserve only what this request line still needs; anything above that is
+        // buffer stock and stays unallocated so it can be dispatched freely later.
+        var reserved = Math.Min(quantity, remainingUnplanned);
+        request.ReservePlannedQuantity(requestItemId, reserved);
+        order.AddAllocation(
+            GuidGenerator.Create(),
+            request.BranchId,
+            request.Id,
+            requestItemId,
+            reserved);
+        await _requestRepository.UpdateAsync(request);
+
+        return order;
     }
 
     public async Task ApplyAllocationReleasesAsync(
@@ -220,10 +322,12 @@ public class ProductionOrderManager : DomainService
                 .WithData("FinishedProductId", finishedProductId);
 
         formula = await _formulaRepository.GetWithItemsAsync(formula.Id);
+        formula.EnsureHasIngredients();
 
         var ingredientIds = formula.Items.Select(i => i.IngredientProductId).Distinct().ToList();
         var unitCosts = await _formulaRepository.GetIngredientCostPricesAsync(ingredientIds);
         var cost = ProductionCostCalculator.Calculate(formula, plannedOutputQuantity, unitCosts);
+        EnsureIngredientCosts(cost);
 
         var order = new AppProductionOrder(
             GuidGenerator.Create(),
@@ -242,6 +346,13 @@ public class ProductionOrderManager : DomainService
             createdByUserId,
             notes);
 
+        var formulaAllergens = string.Join(", ", formula.GetIngredientAllergens().Values
+            .SelectMany(value => value.Split(
+                ',',
+                StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            .Distinct(StringComparer.OrdinalIgnoreCase));
+        order.SetRecipeControlSnapshot(formula.WorkCenterCode, formulaAllergens);
+
         foreach (var line in cost.Lines)
         {
             order.AddIngredientSnapshot(
@@ -255,6 +366,45 @@ public class ProductionOrderManager : DomainService
         order.SetIngredientAvailability(availability.Any(a => a.HasShortage));
 
         return order;
+    }
+
+    public async Task RefreshIngredientCostSnapshotsAsync(AppProductionOrder order)
+    {
+        Check.NotNull(order, nameof(order));
+        var ingredientIds = order.Ingredients.Select(i => i.IngredientProductId).Distinct().ToList();
+        var unitCosts = await _formulaRepository.GetIngredientCostPricesAsync(ingredientIds);
+        order.RefreshIngredientCostSnapshots(unitCosts);
+    }
+
+    public void RecordActualIngredientCost(
+        AppProductionOrder order,
+        AppProductionOrder.IngredientConsumptionLine consumption,
+        IReadOnlyList<ConsumedStockBatchLine> consumedBatches)
+    {
+        Check.NotNull(order, nameof(order));
+        var coveredQuantity = 0;
+        var actualCost = 0m;
+        foreach (var batch in consumedBatches)
+        {
+            coveredQuantity += batch.Quantity;
+            actualCost += batch.Quantity * (batch.UnitCost > 0m ? batch.UnitCost : consumption.UnitCost);
+        }
+
+        if (coveredQuantity < consumption.Quantity)
+        {
+            actualCost += (consumption.Quantity - coveredQuantity) * consumption.UnitCost;
+        }
+
+        order.RecordActualIngredientCost(consumption.IngredientId, actualCost);
+        order.RecordIngredientLotConsumption(
+            consumption.IngredientProductId,
+            consumedBatches.Select(batch => new AppProductionOrder.IngredientLotLine(
+                consumption.IngredientProductId,
+                batch.BatchId,
+                batch.BatchNumber,
+                batch.ExpiryDate,
+                batch.Quantity,
+                batch.UnitCost)).ToList());
     }
 
     public async Task<List<ProductionIngredientAvailability>> CheckAvailabilityAsync(AppProductionOrder order)
@@ -285,9 +435,9 @@ public class ProductionOrderManager : DomainService
             result.Add(new ProductionIngredientAvailability
             {
                 IngredientProductId = ingredient.IngredientProductId,
-                IngredientName = product?.Name ?? ingredient.IngredientProductId.ToString(),
+                IngredientName = product?.DisplayName ?? ingredient.IngredientProductId.ToString(),
                 IngredientSku = product?.SKU ?? string.Empty,
-                Unit = product?.Unit ?? string.Empty,
+                Unit = product?.DisplayUnit ?? string.Empty,
                 RequiredQuantity = ingredient.RequiredQuantity,
                 AvailableQuantity = inventory == null || product == null
                     ? 0
@@ -304,6 +454,69 @@ public class ProductionOrderManager : DomainService
         order.SetIngredientAvailability(availability.Any(a => a.HasShortage));
     }
 
+    public async Task<List<AppProductionOrder>> CreateSubProductionOrdersAsync(
+        AppProductionOrder parent,
+        Guid? createdByUserId)
+    {
+        Check.NotNull(parent, nameof(parent));
+        var existing = await _orderRepository.GetChildrenAsync(parent.Id, parent.KitchenBranchId);
+        if (existing.Count > 0)
+        {
+            throw new BusinessException(ProductionErrorCodes.SubProductionAlreadyExists)
+                .WithData("ProductionOrderId", parent.Id);
+        }
+
+        var shortages = (await CheckAvailabilityAsync(parent))
+            .Where(line => line.HasShortage)
+            .ToList();
+        if (shortages.Count == 0)
+        {
+            throw new BusinessException(ProductionErrorCodes.NoSemiFinishedShortage);
+        }
+
+        var shortageIds = shortages.Select(line => line.IngredientProductId).Distinct().ToList();
+        var semiFinishedProducts = await _productRepository.GetListAsync(product =>
+            shortageIds.Contains(product.Id)
+            && product.ProductType == ProductTypes.SemiFinished
+            && product.IsProducible
+            && product.IsActive);
+        var semiFinishedIds = semiFinishedProducts.Select(product => product.Id).ToHashSet();
+
+        var result = new List<AppProductionOrder>();
+        var sequence = 1;
+        foreach (var shortage in shortages.Where(line => semiFinishedIds.Contains(line.IngredientProductId)))
+        {
+            var child = await CreateAsync(
+                parent.KitchenBranchId,
+                productionPlanId: null,
+                productionPlanLineId: null,
+                shortage.IngredientProductId,
+                shortage.ShortageQuantity,
+                parent.Priority,
+                createdByUserId,
+                $"Sub-production for {parent.OrderNumber}",
+                sequence++);
+            child.LinkParentProductionOrder(parent.Id);
+            result.Add(child);
+        }
+
+        if (result.Count == 0)
+        {
+            throw new BusinessException(ProductionErrorCodes.NoSemiFinishedShortage);
+        }
+        return result;
+    }
+
     private static string CreateOrderNumber(int sequence) =>
         $"PROD-{DateTime.UtcNow:yyyyMMdd-HHmmssfff}-{sequence:D3}";
+
+    private static void EnsureIngredientCosts(ProductionCostResult cost)
+    {
+        var missingCost = cost.Lines.FirstOrDefault(line => line.HasZeroCost);
+        if (missingCost != null)
+        {
+            throw new BusinessException(ProductionErrorCodes.IngredientCostRequired)
+                .WithData("IngredientProductId", missingCost.IngredientProductId);
+        }
+    }
 }

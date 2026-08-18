@@ -138,19 +138,40 @@
                 <SoftDivider />
                 <SoftCardContent Class="pa-4">
                     <SoftStack Spacing="3">
-                        <SoftTextField T="string"
-                                       Label="@InvL["Name"]"
-                                       @bind-Value="_editName"
-                                       Variant="Variant.Outlined"
-                                       MaxLength="128"
-                                       Required="true"
-                                       Immediate="true" />
-                        <SoftTextField T="string"
-                                       Label="@InvL["Description"]"
-                                       @bind-Value="_editDescription"
-                                       Variant="Variant.Outlined"
-                                       Lines="3"
-                                       MaxLength="512" />
+                        <div dir="rtl">
+                            <SoftTextField T="string"
+                                           Label="@InvL["NameArabic"]"
+                                           @bind-Value="_editNameAr"
+                                           Variant="Variant.Outlined"
+                                           MaxLength="128"
+                                           Required="true"
+                                           Immediate="true" />
+                        </div>
+                        <div dir="ltr">
+                            <SoftTextField T="string"
+                                           Label="@InvL["NameEnglish"]"
+                                           @bind-Value="_editNameEn"
+                                           Variant="Variant.Outlined"
+                                           MaxLength="128"
+                                           Required="true"
+                                           Immediate="true" />
+                        </div>
+                        <div dir="rtl">
+                            <SoftTextField T="string"
+                                           Label="@InvL["DescriptionArabic"]"
+                                           @bind-Value="_editDescriptionAr"
+                                           Variant="Variant.Outlined"
+                                           Lines="3"
+                                           MaxLength="512" />
+                        </div>
+                        <div dir="ltr">
+                            <SoftTextField T="string"
+                                           Label="@InvL["DescriptionEnglish"]"
+                                           @bind-Value="_editDescriptionEn"
+                                           Variant="Variant.Outlined"
+                                           Lines="3"
+                                           MaxLength="512" />
+                        </div>
                         <SoftCheckBox T="bool" @bind-Value="_editIsActive" Label="@InvL["IsActive"]" Color="Color.Primary" />
                     </SoftStack>
                 </SoftCardContent>
@@ -209,8 +230,10 @@
 
     private bool _dialogVisible;
     private Guid? _editingId;
-    private string _editName = string.Empty;
-    private string? _editDescription;
+    private string _editNameAr = string.Empty;
+    private string _editNameEn = string.Empty;
+    private string? _editDescriptionAr;
+    private string? _editDescriptionEn;
     private bool _editIsActive = true;
 
     private bool _confirmVisible;
@@ -272,8 +295,10 @@
     private void OpenCreateDialog()
     {
         _editingId = null;
-        _editName = string.Empty;
-        _editDescription = null;
+        _editNameAr = string.Empty;
+        _editNameEn = string.Empty;
+        _editDescriptionAr = null;
+        _editDescriptionEn = null;
         _editIsActive = true;
         _dialogVisible = true;
     }
@@ -281,8 +306,10 @@
     private void OpenEditDialog(CategoryDto category)
     {
         _editingId = category.Id;
-        _editName = category.Name;
-        _editDescription = category.Description;
+        _editNameAr = category.NameAr;
+        _editNameEn = category.NameEn;
+        _editDescriptionAr = category.DescriptionAr;
+        _editDescriptionEn = category.DescriptionEn;
         _editIsActive = category.IsActive;
         _dialogVisible = true;
     }
@@ -294,9 +321,14 @@
 
     private async Task SaveAsync()
     {
-        if (string.IsNullOrWhiteSpace(_editName))
+        if (string.IsNullOrWhiteSpace(_editNameAr))
         {
-            Snackbar.Add(L["ThisFieldIsRequired", InvL["Name"]], Severity.Warning);
+            Snackbar.Add(L["ThisFieldIsRequired", InvL["NameArabic"]], Severity.Warning);
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(_editNameEn))
+        {
+            Snackbar.Add(L["ThisFieldIsRequired", InvL["NameEnglish"]], Severity.Warning);
             return;
         }
 
@@ -306,8 +338,10 @@
             {
                 await CategoryAppService.UpdateAsync(_editingId.Value, new UpdateCategoryDto
                 {
-                    Name = _editName,
-                    Description = _editDescription,
+                    NameAr = _editNameAr,
+                    NameEn = _editNameEn,
+                    DescriptionAr = _editDescriptionAr,
+                    DescriptionEn = _editDescriptionEn,
                     IsActive = _editIsActive
                 });
             }
@@ -315,8 +349,10 @@
             {
                 await CategoryAppService.CreateAsync(new CreateCategoryDto
                 {
-                    Name = _editName,
-                    Description = _editDescription,
+                    NameAr = _editNameAr,
+                    NameEn = _editNameEn,
+                    DescriptionAr = _editDescriptionAr,
+                    DescriptionEn = _editDescriptionEn,
                     IsActive = _editIsActive
                 });
             }

@@ -33,7 +33,8 @@ public abstract class IntegrationTestBase : patisserie_shopEntityFrameworkCoreTe
     protected async Task<CategoryDto> CreateCategoryAsync()
     {
         var categories = GetRequiredService<ICategoryAppService>();
-        return await categories.CreateAsync(new CreateCategoryDto { Name = NextName("Category") });
+        var name = NextName("Category");
+        return await categories.CreateAsync(new CreateCategoryDto { NameAr = name, NameEn = name });
     }
 
     protected async Task<SupplierDto> CreateSupplierAsync(int leadTimeDays = 3)
@@ -49,7 +50,8 @@ public abstract class IntegrationTestBase : patisserie_shopEntityFrameworkCoreTe
     protected async Task<BranchDto> CreateBranchAsync()
     {
         var branches = GetRequiredService<IBranchAppService>();
-        return await branches.CreateAsync(new CreateBranchDto { Name = NextName("Branch") });
+        var name = NextName("Branch");
+        return await branches.CreateAsync(new CreateBranchDto { NameAr = name, NameEn = name });
     }
 
     protected async Task<ProductDto> CreateProductAsync(
@@ -66,9 +68,11 @@ public abstract class IntegrationTestBase : patisserie_shopEntityFrameworkCoreTe
         {
             CategoryId = categoryId,
             DefaultSupplierId = defaultSupplierId,
-            Name = name,
+            NameAr = name,
+            NameEn = name,
             SKU = $"SKU-{name}",
-            Unit = "pcs",
+            UnitAr = "قطعة",
+            UnitEn = "pcs",
             CostPrice = costPrice,
             SalePrice = salePrice,
             ReorderLevel = reorderLevel,

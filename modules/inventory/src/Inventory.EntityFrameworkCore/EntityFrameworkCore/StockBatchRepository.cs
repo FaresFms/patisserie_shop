@@ -5,6 +5,7 @@ using System.Linq.Dynamic.Core;
 using System.Threading;
 using System.Threading.Tasks;
 using Inventory.Entities;
+using Inventory.Localization;
 using Inventory.StockBatches;
 using Microsoft.EntityFrameworkCore;
 using Volo.Abp.Domain.Repositories.EntityFrameworkCore;
@@ -31,6 +32,18 @@ public class StockBatchRepository
         return await dbContext.Set<AppStockBatch>()
             .Where(b => b.BranchId == branchId && b.ProductId == productId && b.QuantityRemaining > 0)
             .OrderBy(b => b.ExpiryDate)
+            .ToListAsync(GetCancellationToken(cancellationToken));
+    }
+
+    public async Task<List<AppStockBatch>> GetBySourceAsync(
+        string sourceType,
+        Guid sourceId,
+        CancellationToken cancellationToken = default)
+    {
+        var dbContext = await GetDbContextAsync();
+        return await dbContext.Set<AppStockBatch>()
+            .Where(batch => batch.SourceType == sourceType && batch.SourceId == sourceId)
+            .OrderBy(batch => batch.CreationTime)
             .ToListAsync(GetCancellationToken(cancellationToken));
     }
 
@@ -76,9 +89,12 @@ public class StockBatchRepository
             query = query.Where(x => branchIdScope.Contains(x.Batch.BranchId));
         }
 
-        return await query
-            .OrderBy(x => x.Batch.ExpiryDate)
-            .ThenBy(x => x.Branch.Name)
+        var orderedQuery = query.OrderBy(x => x.Batch.ExpiryDate);
+        orderedQuery = LocalizedBusinessText.IsArabic
+            ? orderedQuery.ThenBy(x => x.Branch.NameAr)
+            : orderedQuery.ThenBy(x => x.Branch.NameEn);
+
+        return await orderedQuery
             .Take(maxResultCount)
             .ToListAsync(GetCancellationToken(cancellationToken));
     }
@@ -195,12 +211,14 @@ public class StockBatchRepository
         }
 
         var s = sorting.Trim();
+        var productName = LocalizedBusinessText.IsArabic ? nameof(AppProduct.NameAr) : nameof(AppProduct.NameEn);
+        var branchName = LocalizedBusinessText.IsArabic ? nameof(AppBranch.NameAr) : nameof(AppBranch.NameEn);
         if (s.StartsWith("ProductName", StringComparison.OrdinalIgnoreCase))
-            return s.Replace("ProductName", $"{nameof(StockBatchWithDetails.Product)}.{nameof(AppProduct.Name)}", StringComparison.OrdinalIgnoreCase);
+            return s.Replace("ProductName", $"{nameof(StockBatchWithDetails.Product)}.{productName}", StringComparison.OrdinalIgnoreCase);
         if (s.StartsWith("ProductSKU", StringComparison.OrdinalIgnoreCase))
             return s.Replace("ProductSKU", $"{nameof(StockBatchWithDetails.Product)}.{nameof(AppProduct.SKU)}", StringComparison.OrdinalIgnoreCase);
         if (s.StartsWith("BranchName", StringComparison.OrdinalIgnoreCase))
-            return s.Replace("BranchName", $"{nameof(StockBatchWithDetails.Branch)}.{nameof(AppBranch.Name)}", StringComparison.OrdinalIgnoreCase);
+            return s.Replace("BranchName", $"{nameof(StockBatchWithDetails.Branch)}.{branchName}", StringComparison.OrdinalIgnoreCase);
         return $"{nameof(StockBatchWithDetails.Batch)}.{s}";
     }
 
@@ -222,7 +240,8 @@ public class StockBatchRepository
         {
             var f = filter.Trim().ToLower();
             query = query.Where(x =>
-                x.Product.Name.ToLower().Contains(f) ||
+                x.Product.NameAr.ToLower().Contains(f) ||
+                x.Product.NameEn.ToLower().Contains(f) ||
                 x.Product.SKU.ToLower().Contains(f) ||
                 x.Batch.BatchNumber.ToLower().Contains(f));
         }

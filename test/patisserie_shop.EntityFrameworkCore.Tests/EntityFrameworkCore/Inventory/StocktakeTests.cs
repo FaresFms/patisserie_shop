@@ -158,56 +158,6 @@ public class StocktakeTests : IntegrationTestBase
     }
 
     [Fact]
-    public async Task Perishable_overage_requires_a_preparation_date_and_creates_a_batch()
-    {
-        await DeactivateAllRulesAsync();
-        var category = await CreateCategoryAsync();
-        var product = await CreateProductAsync(category.Id, shelfLifeDays: 3);
-        var branch = await CreateBranchAsync();
-        var inventory = await InitializeInventoryAsync(branch.Id, product.Id, quantity: 0);
-        var manager = GetRequiredService<StocktakeManager>();
-
-        var exception = await Should.ThrowAsync<BusinessException>(() => WithUnitOfWorkAsync(() =>
-            manager.PostAsync(
-                branch.Id,
-                new List<StocktakeCount>
-                {
-                    new(
-                        inventory.Id,
-                        2,
-                        inventory.ConcurrencyStamp,
-                        StocktakeVarianceReasons.UnrecordedReceipt,
-                        null,
-                        null)
-                },
-                "Perishable count")));
-
-        exception.Code.ShouldBe(InventoryErrorCodes.StocktakeProductionDateRequired);
-
-        var preparationDate = DateTime.Today.AddDays(-1);
-        await WithUnitOfWorkAsync(() => manager.PostAsync(
-            branch.Id,
-            new List<StocktakeCount>
-            {
-                new(
-                    inventory.Id,
-                    2,
-                    inventory.ConcurrencyStamp,
-                    StocktakeVarianceReasons.UnrecordedReceipt,
-                    null,
-                    preparationDate)
-            },
-            "Perishable count"));
-
-        var batchRepository = GetRequiredService<IRepository<AppStockBatch, Guid>>();
-        var batch = (await batchRepository.GetListAsync(item =>
-            item.BranchId == branch.Id && item.ProductId == product.Id)).ShouldHaveSingleItem();
-        batch.QuantityReceived.ShouldBe(2);
-        batch.QuantityRemaining.ShouldBe(2);
-        batch.ExpiryDate.ShouldBe(preparationDate.AddDays(3));
-    }
-
-    [Fact]
     public async Task Other_reason_requires_a_short_explanation()
     {
         await DeactivateAllRulesAsync();

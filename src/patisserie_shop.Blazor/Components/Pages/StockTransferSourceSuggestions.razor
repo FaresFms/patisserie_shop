@@ -1,0 +1,198 @@
+@using Microsoft.AspNetCore.Components
+@using Operations.Localization
+@using Operations.StockTransfers
+@using Color = MudBlazor.Color
+@using Variant = MudBlazor.Variant
+@using Size = MudBlazor.Size
+@inject IStringLocalizer<OperationsResource> OpsL
+
+<div class="sts-suggestions" aria-live="polite">
+    @if (IsLoading)
+    {
+        <div class="sts-suggestion-state">
+            <SoftProgressLinear Indeterminate="true" Color="Color.Primary" />
+            <SoftText Typo="Typo.caption">@OpsL["SourceSuggestionsLoading"]</SoftText>
+        </div>
+    }
+    else if (!string.IsNullOrWhiteSpace(ErrorText))
+    {
+        <SoftAlert Severity="Severity.Error" Dense="true">@ErrorText</SoftAlert>
+    }
+    else if (Suggestions.Count == 0)
+    {
+        <div class="sts-suggestion-state sts-suggestion-state--empty">
+            <SoftIcon Icon="@Icons.Material.Outlined.Inventory2" Color="Color.Default" />
+            <SoftText Typo="Typo.body2">@OpsL["SourceSuggestionsEmpty"]</SoftText>
+        </div>
+    }
+    else
+    {
+        @if (!Suggestions[0].CanFulfillAll)
+        {
+            <SoftAlert Severity="Severity.Warning" Dense="true" Class="mb-2">
+                @OpsL["SourceSuggestionsPartialWarning"]
+            </SoftAlert>
+        }
+
+        <div class="sts-suggestion-grid">
+            @foreach (var suggestion in Suggestions.Take(3))
+            {
+                <SoftCard Elevation="0"
+                          Class="@SuggestionClass(suggestion)">
+                    <div class="sts-suggestion-head">
+                        <div>
+                            <SoftText Typo="Typo.subtitle2" Class="sts-suggestion-name">
+                                @suggestion.BranchName
+                            </SoftText>
+                            <SoftText Typo="Typo.caption" Class="sts-suggestion-explanation">
+                                @OpsL["SourceSuggestionBasis"]
+                            </SoftText>
+                        </div>
+                        @if (suggestion.IsRecommended)
+                        {
+                            <SoftChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Filled">
+                                @OpsL["SourceSuggestionRecommended"]
+                            </SoftChip>
+                        }
+                    </div>
+
+                    <div class="sts-suggestion-coverage">
+                        <span class="sts-suggestion-percent">@suggestion.CoveragePercent%</span>
+                        <span>
+                            @(suggestion.CanFulfillAll
+                                ? OpsL["SourceSuggestionFullCoverage"].Value
+                                : OpsL["SourceSuggestionPartialCoverage"].Value)
+                        </span>
+                    </div>
+                    <SoftProgressLinear Value="@suggestion.CoveragePercent"
+                                        Color="@(suggestion.CanFulfillAll ? Color.Success : Color.Warning)"
+                                        Rounded="true" Size="Size.Small" />
+
+                    <div class="sts-suggestion-metrics">
+                        <span>@string.Format(OpsL["SourceSuggestionItemsCovered"], suggestion.CoveredItemCount, suggestion.TotalItemCount)</span>
+                        <span>@string.Format(OpsL["SourceSuggestionSafeAvailable"], suggestion.TotalSafeAvailable)</span>
+                    </div>
+
+                    <details class="sts-suggestion-details">
+                        <summary>@OpsL["SourceSuggestionProductDetails"]</summary>
+                        @foreach (var product in suggestion.Products)
+                        {
+                            <div class="sts-suggestion-product @(product.MissingQuantity > 0 ? "sts-suggestion-product--missing" : "")">
+                                <SoftText Typo="Typo.body2" Class="sts-suggestion-product-name">@product.ProductName</SoftText>
+                                <div class="sts-suggestion-product-values">
+                                    <span>@string.Format(OpsL["SourceSuggestionRequested"], product.RequestedQuantity)</span>
+                                    <span>@string.Format(OpsL["SourceSuggestionOnHand"], product.QuantityOnHand)</span>
+                                    <span>@string.Format(OpsL["SourceSuggestionMinimum"], product.MinimumStock)</span>
+                                    <span>@string.Format(OpsL["SourceSuggestionSafe"], product.SafeAvailableQuantity)</span>
+                                    @if (product.MissingQuantity > 0)
+                                    {
+                                        <span class="sts-suggestion-missing">@string.Format(OpsL["SourceSuggestionMissing"], product.MissingQuantity)</span>
+                                    }
+                                </div>
+                            </div>
+                        }
+                    </details>
+
+                    <SoftButton Variant="@(SelectedSourceId == suggestion.BranchId ? Variant.Filled : Variant.Outlined)"
+                                Color="@(SelectedSourceId == suggestion.BranchId ? Color.Success : Color.Primary)"
+                                Size="Size.Small" FullWidth="true"
+                                StartIcon="@(SelectedSourceId == suggestion.BranchId ? Icons.Material.Filled.Check : Icons.Material.Filled.Route)"
+                                OnClick="@(() => SelectAsync(suggestion.BranchId))">
+                        @(SelectedSourceId == suggestion.BranchId
+                            ? OpsL["SourceSuggestionSelected"]
+                            : OpsL["SourceSuggestionChoose"])
+                    </SoftButton>
+                </SoftCard>
+            }
+        </div>
+    }
+</div>
+
+<style>
+    .sts-suggestions { width: 100%; }
+    .sts-suggestion-state {
+        display: grid;
+        gap: 8px;
+        padding: 14px;
+        border: 1px dashed var(--bd-2);
+        border-radius: var(--r-md);
+        color: var(--fg-2);
+    }
+    .sts-suggestion-state--empty {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .sts-suggestion-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 10px;
+    }
+    .sts-suggestion-card {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        padding: 12px;
+        border: 1px solid var(--bd-2);
+        border-radius: var(--r-md);
+        background: var(--surface);
+        box-shadow: none;
+    }
+    .sts-suggestion-card--recommended {
+        border-color: var(--accent-line);
+        background: linear-gradient(180deg, var(--accent-soft), var(--surface) 58%);
+    }
+    .sts-suggestion-card--selected {
+        border-color: var(--success);
+        box-shadow: 0 0 0 2px color-mix(in srgb, var(--success) 16%, transparent);
+    }
+    .sts-suggestion-head,
+    .sts-suggestion-coverage,
+    .sts-suggestion-metrics {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 8px;
+    }
+    .sts-suggestion-name { color: var(--fg-1); font-weight: 700; }
+    .sts-suggestion-explanation { color: var(--fg-3); }
+    .sts-suggestion-coverage { align-items: baseline; color: var(--fg-2); font-size: .78rem; }
+    .sts-suggestion-percent { color: var(--fg-1); font-size: 1.05rem; font-weight: 800; }
+    .sts-suggestion-metrics { color: var(--fg-3); font-size: .72rem; }
+    .sts-suggestion-details {
+        border-top: 1px solid var(--bd-1);
+        padding-top: 8px;
+        color: var(--fg-2);
+        font-size: .78rem;
+    }
+    .sts-suggestion-details summary { cursor: pointer; color: var(--accent); font-weight: 700; }
+    .sts-suggestion-product { padding: 8px 0; border-bottom: 1px solid var(--bd-1); }
+    .sts-suggestion-product:last-child { border-bottom: 0; }
+    .sts-suggestion-product--missing { color: var(--amber-text); }
+    .sts-suggestion-product-name { font-weight: 650; }
+    .sts-suggestion-product-values { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 3px; font-size: .7rem; }
+    .sts-suggestion-missing { color: var(--danger); font-weight: 700; }
+
+    @@media (max-width: 820px) {
+        .sts-suggestion-grid { grid-template-columns: 1fr; }
+    }
+</style>
+
+@code {
+    [Parameter] public IReadOnlyList<StockTransferSourceSuggestionDto> Suggestions { get; set; }
+        = Array.Empty<StockTransferSourceSuggestionDto>();
+    [Parameter] public bool IsLoading { get; set; }
+    [Parameter] public string? ErrorText { get; set; }
+    [Parameter] public Guid? SelectedSourceId { get; set; }
+    [Parameter] public EventCallback<Guid> SourceSelected { get; set; }
+
+    private string SuggestionClass(StockTransferSourceSuggestionDto suggestion)
+    {
+        var value = "sts-suggestion-card";
+        if (suggestion.IsRecommended) value += " sts-suggestion-card--recommended";
+        if (SelectedSourceId == suggestion.BranchId) value += " sts-suggestion-card--selected";
+        return value;
+    }
+
+    private Task SelectAsync(Guid branchId) => SourceSelected.InvokeAsync(branchId);
+}

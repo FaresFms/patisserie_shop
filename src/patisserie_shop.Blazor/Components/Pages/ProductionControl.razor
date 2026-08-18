@@ -1,0 +1,269 @@
+@page "/production/control"
+@attribute [Authorize(ProductionPermissions.Control.Default)]
+@using System.Globalization
+@using Microsoft.AspNetCore.Authorization
+@using Production.Control
+@using Production.Kitchens
+@using Production.Localization
+@using Production.Permissions
+@using Volo.Abp.AspNetCore.Components.Web.Theming.Layout
+@using Color = MudBlazor.Color
+@using Variant = MudBlazor.Variant
+@using Size = MudBlazor.Size
+@inherits patisserie_shopComponentBase
+@inject IProductionControlAppService ControlAppService
+@inject IProductionKitchenAppService KitchenAppService
+@inject IStringLocalizer<ProductionResource> ProdL
+@inject IAuthorizationService Authz
+@inject PageLayout PageLayout
+@inject ISnackbar Snackbar
+
+@{
+    PageLayout.Title = ProdL["Control:Title"];
+}
+
+<SoftCard Elevation="2" Class="pa-2 page-flat production-control">
+    <div class="page-head">
+        <div>
+            <h1 class="page-title">@ProdL["Control:Title"]</h1>
+            <div class="page-sub">@ProdL["Control:Subtitle"]</div>
+        </div>
+        <div class="page-head-actions">
+            @if (_canManage)
+            {
+                <SoftButton Variant="Variant.Filled" Color="Color.Primary"
+                            StartIcon="@Icons.Material.Filled.Save"
+                            Disabled="_saving || _loading"
+                            OnClick="SaveAsync">
+                    @ProdL["SaveControlProfile"]
+                </SoftButton>
+            }
+        </div>
+    </div>
+
+    <SoftCardContent>
+        @if (_loading)
+        {
+            <SoftDonutLoader Fill="true" />
+        }
+        else
+        {
+            <section class="control-section" id="control-rules">
+                <header>
+                    <h2>@ProdL["Control:Rules"]</h2>
+                    <p>@ProdL["Control:RulesSubtitle"]</p>
+                </header>
+                @* Each switch costs the kitchen a step on every batch, so say plainly
+                   what turning it off means rather than just naming it. *@
+                <SoftGrid Spacing="2">
+                    <SoftGridItem xs="12" md="4">
+                        <SoftCheckBox T="bool" @bind-Value="_profile.RequireScheduleBeforeStart"
+                                      Label="@ProdL["RequireScheduleBeforeStart"]" Color="Color.Primary" />
+                        <SoftText Typo="Typo.caption" Color="Color.Default">
+                            @ProdL["RequireScheduleBeforeStart:Hint"]
+                        </SoftText>
+                    </SoftGridItem>
+                    <SoftGridItem xs="12" md="4">
+                        <SoftCheckBox T="bool" @bind-Value="_profile.RequireOperatorBeforeStart"
+                                      Label="@ProdL["RequireOperatorBeforeStart"]" Color="Color.Primary" />
+                        <SoftText Typo="Typo.caption" Color="Color.Default">
+                            @ProdL["RequireOperatorBeforeStart:Hint"]
+                        </SoftText>
+                    </SoftGridItem>
+                    <SoftGridItem xs="12" md="4">
+                        <SoftCheckBox T="bool" @bind-Value="_profile.RequireQualityReleaseBeforeDispatch"
+                                      Label="@ProdL["RequireQualityReleaseBeforeDispatch"]" Color="Color.Primary" />
+                        <SoftText Typo="Typo.caption" Color="Color.Default">
+                            @ProdL["RequireQualityReleaseBeforeDispatch:Hint"]
+                        </SoftText>
+                    </SoftGridItem>
+                    <SoftGridItem xs="12" md="4">
+                        <SoftNumericField T="decimal" @bind-Value="_profile.ForecastSafetyPercent"
+                                          Label="@ProdL["ForecastSafetyPercent"]" Min="0" Max="100"
+                                          Variant="Variant.Outlined" AdornmentText="%" />
+                    </SoftGridItem>
+                    <SoftGridItem xs="12" md="4">
+                        <SoftNumericField T="int" @bind-Value="_profile.ForecastAccuracyWindowDays"
+                                          Label="@ProdL["ForecastAccuracyWindowDays"]" Min="1" Max="365"
+                                          Variant="Variant.Outlined" />
+                    </SoftGridItem>
+                </SoftGrid>
+            </section>
+
+            <section class="control-section">
+                <header class="control-section-head">
+                    <div>
+                        <h2>@ProdL["Control:WorkCenters"]</h2>
+                        <p>@ProdL["Control:WorkCentersSubtitle"]</p>
+                    </div>
+                    @if (_canManage)
+                    {
+                        <SoftButton Variant="Variant.Text" Color="Color.Primary"
+                                    StartIcon="@Icons.Material.Filled.Add" OnClick="AddWorkCenter">
+                            @ProdL["AddWorkCenter"]
+                        </SoftButton>
+                    }
+                </header>
+                <div class="control-rows">
+                    @foreach (var center in _profile.WorkCenters)
+                    {
+                        <div class="control-row">
+                            <SoftTextField T="string" @bind-Value="center.Code" Label="@ProdL["Code"]" Variant="Variant.Outlined" />
+                            <SoftTextField T="string" @bind-Value="center.Name" Label="@ProdL["Name"]" Variant="Variant.Outlined" />
+                            <div class="filter-chip">
+                                <SoftLookupSelect TItem="KitchenBranchLookupDto" TValue="Guid?"
+                                                  Items="_kitchens" ToValue="@(item => (Guid?)item.Id)"
+                                                  ToLabel="@(item => item.Name)" @bind-Value="center.KitchenBranchId"
+                                                  Label="@ProdL["KitchenBranch"]" Clearable="true" />
+                            </div>
+                            <SoftNumericField T="int" @bind-Value="center.CapacityUnitsPerHour"
+                                              Label="@ProdL["CapacityUnitsPerHour"]" Min="1" Variant="Variant.Outlined" />
+                            <SoftNumericField T="int" @bind-Value="center.ParallelSlots"
+                                              Label="@ProdL["ParallelSlots"]" Min="1" Max="20" Variant="Variant.Outlined" />
+                            <SoftCheckBox T="bool" @bind-Value="center.IsActive" Label="@ProdL["IsActive"]" Color="Color.Primary" />
+                            @if (_canManage)
+                            {
+                                <SoftIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error"
+                                                OnClick="@(() => RemoveWorkCenter(center))" />
+                            }
+                        </div>
+                    }
+                </div>
+            </section>
+
+            <section class="control-section">
+                <header class="control-section-head">
+                    <div>
+                        <h2>@ProdL["Control:Shifts"]</h2>
+                        <p>@ProdL["Control:ShiftsSubtitle"]</p>
+                    </div>
+                    @if (_canManage)
+                    {
+                        <SoftButton Variant="Variant.Text" Color="Color.Primary"
+                                    StartIcon="@Icons.Material.Filled.Add" OnClick="AddShift">
+                            @ProdL["AddShift"]
+                        </SoftButton>
+                    }
+                </header>
+                <div class="control-rows">
+                    @foreach (var shift in _shifts)
+                    {
+                        <div class="control-row control-row--shift">
+                            <SoftTextField T="string" @bind-Value="shift.Code" Label="@ProdL["Code"]" Variant="Variant.Outlined" />
+                            <SoftTextField T="string" @bind-Value="shift.Name" Label="@ProdL["Name"]" Variant="Variant.Outlined" />
+                            <SoftTextField T="string" @bind-Value="shift.Start" Label="@ProdL["ShiftStart"]"
+                                           Placeholder="06:00" Variant="Variant.Outlined" />
+                            <SoftTextField T="string" @bind-Value="shift.End" Label="@ProdL["ShiftEnd"]"
+                                           Placeholder="14:00" Variant="Variant.Outlined" />
+                            <SoftCheckBox T="bool" @bind-Value="shift.IsActive" Label="@ProdL["IsActive"]" Color="Color.Primary" />
+                            @if (_canManage)
+                            {
+                                <SoftIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error"
+                                                OnClick="@(() => RemoveShift(shift))" />
+                            }
+                        </div>
+                    }
+                </div>
+            </section>
+        }
+    </SoftCardContent>
+</SoftCard>
+
+<style>
+    .production-control { max-width: 1320px; margin: 0 auto; }
+    .control-section { padding: 22px 30px; border-bottom: 1px solid var(--bd-1); }
+    .control-section h2 { margin: 0; font: 700 20px var(--font-serif); color: var(--fg-1); }
+    .control-section p { margin: 4px 0 18px; color: var(--fg-3); font-size: 13px; }
+    .control-section-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+    .control-rows { display: grid; gap: 10px; }
+    .control-row { display: grid; grid-template-columns: .65fr 1.25fr 1fr .8fr .65fr auto auto; gap: 10px; align-items: center; padding: 12px; background: var(--surface); border: 1px solid var(--bd-1); border-radius: var(--r-md); }
+    .control-row--shift { grid-template-columns: .7fr 1.4fr .7fr .7fr auto auto; }
+    @@media (max-width: 1000px) { .control-row, .control-row--shift { grid-template-columns: 1fr 1fr; } }
+    @@media (max-width: 620px) { .control-section { padding: 18px 12px; } .control-row, .control-row--shift { grid-template-columns: 1fr; } }
+    html[dir="rtl"] .production-control { direction: rtl; text-align: right; }
+</style>
+
+@code {
+    private ProductionControlProfileDto _profile = new();
+    private List<KitchenBranchLookupDto> _kitchens = new();
+    private List<ShiftEdit> _shifts = new();
+    private bool _loading = true;
+    private bool _saving;
+    private bool _canManage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _canManage = await Authz.IsGrantedAsync(ProductionPermissions.Control.Manage);
+        _kitchens = await KitchenAppService.GetAccessibleLookupAsync();
+        _profile = await ControlAppService.GetAsync();
+        _shifts = _profile.Shifts.Select(ShiftEdit.FromDto).ToList();
+        _loading = false;
+    }
+
+    private void AddWorkCenter() => _profile.WorkCenters.Add(new ProductionWorkCenterDto
+    {
+        Code = $"LINE-{_profile.WorkCenters.Count + 1}",
+        Name = ProdL["NewWorkCenter"],
+        KitchenBranchId = _kitchens.Count == 1 ? _kitchens[0].Id : null
+    });
+
+    private void RemoveWorkCenter(ProductionWorkCenterDto center) => _profile.WorkCenters.Remove(center);
+
+    private void AddShift() => _shifts.Add(new ShiftEdit
+    {
+        Code = $"SHIFT-{_shifts.Count + 1}",
+        Name = ProdL["NewShift"],
+        Start = "06:00",
+        End = "14:00",
+        IsActive = true
+    });
+
+    private void RemoveShift(ShiftEdit shift) => _shifts.Remove(shift);
+
+    private async Task SaveAsync()
+    {
+        if (_saving) return;
+        _saving = true;
+        try
+        {
+            _profile.Shifts = _shifts.Select(item => item.ToDto()).ToList();
+            await ControlAppService.UpdateAsync(_profile);
+            Snackbar.Add(ProdL["ControlProfileSaved"], Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            await HandleErrorAsync(ex);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private sealed class ShiftEdit
+    {
+        public string Code { get; set; } = null!;
+        public string Name { get; set; } = null!;
+        public string Start { get; set; } = "06:00";
+        public string End { get; set; } = "14:00";
+        public bool IsActive { get; set; }
+
+        public static ShiftEdit FromDto(ProductionShiftDto dto) => new()
+        {
+            Code = dto.Code,
+            Name = dto.Name,
+            Start = dto.StartTime.ToString(@"hh\:mm", CultureInfo.InvariantCulture),
+            End = dto.EndTime.ToString(@"hh\:mm", CultureInfo.InvariantCulture),
+            IsActive = dto.IsActive
+        };
+
+        public ProductionShiftDto ToDto() => new()
+        {
+            Code = Code.Trim(),
+            Name = Name.Trim(),
+            StartTime = TimeSpan.TryParse(Start, CultureInfo.InvariantCulture, out var start) ? start : new TimeSpan(6, 0, 0),
+            EndTime = TimeSpan.TryParse(End, CultureInfo.InvariantCulture, out var end) ? end : new TimeSpan(14, 0, 0),
+            IsActive = IsActive
+        };
+    }
+}

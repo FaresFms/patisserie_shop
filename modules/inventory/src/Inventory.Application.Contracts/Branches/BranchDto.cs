@@ -6,7 +6,11 @@ namespace Inventory.Branches;
 public class BranchDto : EntityDto<Guid>
 {
     public string Name { get; set; } = null!;
+    public string NameAr { get; set; } = null!;
+    public string NameEn { get; set; } = null!;
     public string? Address { get; set; }
+    public string? AddressAr { get; set; }
+    public string? AddressEn { get; set; }
     public string? Phone { get; set; }
     public string? Email { get; set; }
     public Guid? ManagerUserId { get; set; }

@@ -45,8 +45,11 @@ public class OperationsPermissions
 
     public static class Cashier
     {
-        /// <summary>Cashier POS: sell, manage own shift, void own sales within the window.</summary>
+        /// <summary>Parent permission for cashier operations and supervision.</summary>
         public const string Default = GroupName + ".Cashier";
+
+        /// <summary>Operate the cashier POS page: sell and manage the user's own shift.</summary>
+        public const string OperatePos = Default + ".OperatePos";
 
         /// <summary>Manager drawer view: see all cashier shifts/drawers across branches.</summary>
         public const string ViewAllShifts = Default + ".ViewAllShifts";

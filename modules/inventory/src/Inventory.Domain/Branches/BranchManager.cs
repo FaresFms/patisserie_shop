@@ -9,28 +9,32 @@ namespace Inventory.Branches;
 
 public class BranchManager : DomainService
 {
-    private readonly IRepository<AppBranch, Guid> _branchRepository;
+    private readonly IBranchRepository _branchRepository;
 
-    public BranchManager(IRepository<AppBranch, Guid> branchRepository)
+    public BranchManager(IBranchRepository branchRepository)
     {
         _branchRepository = branchRepository;
     }
 
     public async Task<AppBranch> CreateAsync(
-        string name,
-        string? address = null,
+        string nameAr,
+        string nameEn,
+        string? addressAr = null,
+        string? addressEn = null,
         string? phone = null,
         string? email = null,
         Guid? managerUserId = null,
         bool isActive = true,
         string branchType = BranchTypes.SalesBranch)
     {
-        await EnsureNameIsUniqueAsync(name);
+        await EnsureNamesAreUniqueAsync(nameAr, nameEn);
 
         return new AppBranch(
             GuidGenerator.Create(),
-            name,
-            address,
+            nameAr,
+            nameEn,
+            addressAr,
+            addressEn,
             phone,
             email,
             managerUserId,
@@ -38,31 +42,37 @@ public class BranchManager : DomainService
             branchType);
     }
 
-    public async Task ChangeNameAsync(AppBranch branch, string newName)
+    public async Task ChangeNamesAsync(AppBranch branch, string nameAr, string nameEn)
     {
         Check.NotNull(branch, nameof(branch));
-        Check.NotNullOrWhiteSpace(newName, nameof(newName));
+        Check.NotNullOrWhiteSpace(nameAr, nameof(nameAr));
+        Check.NotNullOrWhiteSpace(nameEn, nameof(nameEn));
 
-        var normalized = newName.Trim();
-        if (string.Equals(branch.Name, normalized, StringComparison.OrdinalIgnoreCase))
+        var normalizedAr = nameAr.Trim();
+        var normalizedEn = nameEn.Trim();
+        if (string.Equals(branch.NameAr, normalizedAr, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(branch.NameEn, normalizedEn, StringComparison.OrdinalIgnoreCase))
         {
             return;
         }
 
-        await EnsureNameIsUniqueAsync(normalized, branch.Id);
-        branch.SetName(normalized);
+        await EnsureNamesAreUniqueAsync(normalizedAr, normalizedEn, branch.Id);
+        branch.SetNames(normalizedAr, normalizedEn);
     }
 
-    private async Task EnsureNameIsUniqueAsync(string name, Guid? ignoreId = null)
+    private async Task EnsureNamesAreUniqueAsync(string nameAr, string nameEn, Guid? ignoreId = null)
     {
-        var normalized = name.Trim();
+        var normalizedAr = nameAr.Trim();
+        var normalizedEn = nameEn.Trim();
         var exists = await _branchRepository.AnyAsync(b =>
-            b.Name == normalized && (ignoreId == null || b.Id != ignoreId.Value));
+            (b.NameAr == normalizedAr || b.NameEn == normalizedEn)
+            && (ignoreId == null || b.Id != ignoreId.Value));
 
         if (exists)
         {
             throw new BusinessException(InventoryErrorCodes.DuplicateBranchName)
-                .WithData("Name", normalized);
+                .WithData("NameAr", normalizedAr)
+                .WithData("NameEn", normalizedEn);
         }
     }
 }

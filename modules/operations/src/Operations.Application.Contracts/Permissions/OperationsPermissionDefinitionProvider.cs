@@ -34,6 +34,7 @@ public class OperationsPermissionDefinitionProvider : PermissionDefinitionProvid
         transfers.AddChild(OperationsPermissions.Transfers.Cancel, L("Permission:Transfers.Cancel"));
 
         var cashier = group.AddPermission(OperationsPermissions.Cashier.Default, L("Permission:Cashier"));
+        cashier.AddChild(OperationsPermissions.Cashier.OperatePos, L("Permission:Cashier.OperatePos"));
         cashier.AddChild(OperationsPermissions.Cashier.ViewAllShifts, L("Permission:Cashier.ViewAllShifts"));
         cashier.AddChild(OperationsPermissions.Cashier.ReportLowStock, L("Permission:Cashier.ReportLowStock"));
         cashier.AddChild(OperationsPermissions.Cashier.ManageCashiers, L("Permission:Cashier.ManageCashiers"));

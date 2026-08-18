@@ -37,4 +37,17 @@ public interface IBranchProductionRequestRepository : IRepository<AppBranchProdu
         IReadOnlyCollection<Guid> productIds,
         DateTime neededBefore,
         CancellationToken cancellationToken = default);
+
+    Task<List<BranchProductionRequestStockDispatchTarget>> GetStockDispatchTargetsAsync(
+        Guid kitchenBranchId,
+        DateTime usableOnDate,
+        string? filter = null,
+        CancellationToken cancellationToken = default);
+
+    Task<BranchProductionRequestStockDispatchTarget?> FindStockDispatchTargetAsync(
+        Guid kitchenBranchId,
+        Guid requestId,
+        Guid requestItemId,
+        DateTime usableOnDate,
+        CancellationToken cancellationToken = default);
 }

@@ -15,12 +15,14 @@ public interface IProductionPlanRepository : IRepository<AppProductionPlan, Guid
         string? filter,
         string? status,
         Guid? kitchenBranchId,
+        IReadOnlyCollection<Guid> scopedKitchenBranchIds,
         CancellationToken cancellationToken = default);
 
     Task<List<ProductionPlanListItem>> GetFilteredListAsync(
         string? filter,
         string? status,
         Guid? kitchenBranchId,
+        IReadOnlyCollection<Guid> scopedKitchenBranchIds,
         string sorting,
         int skipCount,
         int maxResultCount,
@@ -29,5 +31,13 @@ public interface IProductionPlanRepository : IRepository<AppProductionPlan, Guid
     Task<List<ProductionPlanSuggestion>> BuildSuggestionsAsync(
         Guid kitchenBranchId,
         DateTime productionDate,
+        decimal forecastSafetyPercent,
+        CancellationToken cancellationToken = default);
+
+    Task<List<ProductionForecastSnapshot>> GetForecastSnapshotsAsync(
+        DateTime fromInclusive,
+        DateTime toExclusive,
+        Guid? kitchenBranchId,
+        IReadOnlyCollection<Guid> scopedKitchenBranchIds,
         CancellationToken cancellationToken = default);
 }

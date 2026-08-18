@@ -116,7 +116,7 @@ public class GraduationOperationsSeedContributor : IDataSeedContributor, ITransi
     [UnitOfWork]
     public async Task SeedAsync(DataSeedContext context)
     {
-        var branches = (await _branchRepository.GetListAsync()).ToDictionary(x => x.Name);
+        var branches = (await _branchRepository.GetListAsync()).ToDictionary(x => x.NameAr);
         var products = (await _productRepository.GetListAsync()).ToDictionary(
             x => x.SKU,
             StringComparer.OrdinalIgnoreCase);

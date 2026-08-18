@@ -1,10 +1,11 @@
-@page "/production/cook"
+@page "/production/workboard"
 @attribute [Authorize(ProductionPermissions.Orders.Default)]
 @using System.Threading
 @using System.Threading.Tasks
-@using Inventory.Branches
 @using Microsoft.AspNetCore.Authorization
 @using Production
+@using Production.Control
+@using Production.Kitchens
 @using Production.Localization
 @using Production.Orders
 @using Production.Permissions
@@ -17,32 +18,62 @@
 @using Variant = MudBlazor.Variant
 @inherits patisserie_shopComponentBase
 @inject IProductionOrderAppService OrderAppService
-@inject IBranchAppService BranchAppService
+@inject IProductionKitchenAppService KitchenAppService
+@inject IProductionControlAppService ControlAppService
 @inject IAuthorizationService Authz
 @inject PageLayout PageLayout
 @inject ISnackbar Snackbar
 @inject IStringLocalizer<ProductionResource> ProdL
+@inject NavigationManager Navigation
 
 @{
-    PageLayout.Title = ProdL["CookScreen"];
+    PageLayout.Title = ProdL["Workspace:workboard:Title"];
 }
 
-<SoftCard Elevation="2" Class="pa-2 page-flat">
-    <div class="page-head">
-        <div>
-            <h1 class="page-title">@ProdL["CookScreen"]</h1>
-            <div class="page-sub">@ProdL["CookScreenSubtitle"]</div>
-        </div>
-        <div class="page-head-actions">
-            <SoftButton Variant="Variant.Text" Color="Color.Primary"
-                        StartIcon="@Icons.Material.Filled.Refresh"
-                        OnClick="ReloadAsync">
-                @ProdL["Refresh"]
-            </SoftButton>
-        </div>
-    </div>
+<ProductionWorkspaceHeader Workspace="workboard" ActiveTab="make">
+    <Actions>
+        <SoftButton Variant="Variant.Text" Color="Color.Primary"
+                    StartIcon="@Icons.Material.Filled.Refresh"
+                    OnClick="ReloadAsync">
+            @ProdL["Refresh"]
+        </SoftButton>
+    </Actions>
+</ProductionWorkspaceHeader>
 
+<SoftCard Elevation="2" Class="pa-2 page-flat">
     <SoftCardContent>
+        @if (_nextStepUrl is not null)
+        {
+            <SoftAlert Severity="Severity.Success" Variant="Variant.Outlined" Class="production-next-step">
+                <div class="production-next-step-content">
+                    <span>@ProdL[_nextStepMessageKey!]</span>
+                    <SoftButton Variant="Variant.Filled" Color="Color.Primary"
+                                StartIcon="@Icons.Material.Filled.ArrowForward"
+                                OnClick="@(() => Navigation.NavigateTo(_nextStepUrl))">
+                        @ProdL[_nextStepLabelKey!]
+                    </SoftButton>
+                </div>
+            </SoftAlert>
+        }
+
+        <div class="production-stage-strip" role="tablist" aria-label="@ProdL["Workspace:OrderStages"]">
+            @StageButton("blocked", ProductionOrderStatuses.WaitingForIngredients, ProdL["Workspace:MaterialsBlocked"], Icons.Material.Filled.Inventory)
+            @StageButton("ready", ProductionOrderStatuses.ReadyToCook, ProdL["Workspace:ReadyToStart"], Icons.Material.Filled.PlayCircle)
+            @StageButton("cooking", ProductionOrderStatuses.InProduction, ProdL["Workspace:CookingNow"], Icons.Material.Filled.LocalFireDepartment)
+            @StageButton("completed", ProductionOrderStatuses.Completed, ProdL["Workspace:Produced"], Icons.Material.Filled.TaskAlt)
+            @StageButton("all", string.Empty, ProdL["Workspace:AllOrders"], Icons.Material.Filled.History)
+            <AuthorizeView Policy="@ProductionPermissions.Dispatch.Default">
+                <Authorized>
+                    <SoftButton Variant="Variant.Text" Color="Color.Primary"
+                                StartIcon="@Icons.Material.Filled.LocalShipping"
+                                Class="production-stage-button production-stage-button--handoff"
+                                OnClick="@(() => Navigation.NavigateTo("/production/workboard/dispatch"))">
+                        @ProdL["Workspace:ReadyToSend"]
+                    </SoftButton>
+                </Authorized>
+            </AuthorizeView>
+        </div>
+
         <div class="toolbar">
             <SoftTextField T="string" @bind-Value="_filter"
                            Placeholder="@ProdL["Filter"]"
@@ -67,7 +98,7 @@
             </div>
 
             <div class="filter-chip">
-                <SoftLookupSelect TItem="BranchLookupDto" TValue="Guid?"
+                <SoftLookupSelect TItem="KitchenBranchLookupDto" TValue="Guid?"
                                   Items="_branches"
                                   ToValue="@(b => (Guid?)b.Id)"
                                   ToLabel="@(b => b.Name)"
@@ -82,6 +113,7 @@
 
         <SoftDataGrid T="ProductionOrderListItemDto"
                       @ref="_grid"
+                      Class="production-workboard-grid"
                       ServerData="LoadServerData"
                       Dense="true"
                       Hover="true"
@@ -95,7 +127,9 @@
                 <TemplateColumn T="ProductionOrderListItemDto" Title="@ProdL["Status"]" SortBy="x => x.Status">
                     <CellTemplate>@StatusChip(context.Item.Status)</CellTemplate>
                 </TemplateColumn>
-                <PropertyColumn T="ProductionOrderListItemDto" TProperty="string" Property="x => x.Priority" Title="@ProdL["Priority"]" />
+                <TemplateColumn T="ProductionOrderListItemDto" Title="@ProdL["Priority"]" SortBy="x => x.Priority">
+                    <CellTemplate>@PriorityLabel(context.Item.Priority)</CellTemplate>
+                </TemplateColumn>
                 <TemplateColumn T="ProductionOrderListItemDto" Title="@ProdL["PlannedOutput"]" SortBy="x => x.PlannedOutputQuantity">
                     <CellTemplate>@context.Item.PlannedOutputQuantity @context.Item.Unit</CellTemplate>
                 </TemplateColumn>
@@ -119,6 +153,33 @@
                 <MudDataGridPager T="ProductionOrderListItemDto" />
             </PagerContent>
         </SoftDataGrid>
+
+        <div class="production-workboard-mobile" aria-live="polite">
+            @foreach (var order in _visibleOrders)
+            {
+                <SoftCard Elevation="1" Class="production-order-card">
+                    <SoftCardContent>
+                        <div class="production-order-card-head">
+                            <div>
+                                <div class="production-order-card-product">@order.FinishedProductName</div>
+                                <div class="production-order-card-number">@order.OrderNumber</div>
+                            </div>
+                            @StatusChip(order.Status)
+                        </div>
+                        <div class="production-order-card-meta">
+                            <span><SoftIcon Icon="@Icons.Material.Filled.Store" Size="Size.Small" /> @order.KitchenBranchName</span>
+                            <span><SoftIcon Icon="@Icons.Material.Filled.BakeryDining" Size="Size.Small" /> @order.PlannedOutputQuantity @order.Unit</span>
+                            <span><SoftIcon Icon="@Icons.Material.Filled.PriorityHigh" Size="Size.Small" /> @PriorityLabel(order.Priority)</span>
+                        </div>
+                        <SoftButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true"
+                                    StartIcon="@Icons.Material.Filled.ArrowForward"
+                                    OnClick="@(() => OpenDetailAsync(order.Id))">
+                            @PrimaryActionLabel(order.Status)
+                        </SoftButton>
+                    </SoftCardContent>
+                </SoftCard>
+            }
+        </div>
     </SoftCardContent>
 </SoftCard>
 
@@ -133,6 +194,10 @@
                             <SoftIcon Icon="@Icons.Material.Filled.LocalFireDepartment" Color="Color.Primary" Size="Size.Medium" />
                             <SoftText Typo="Typo.h6">@_detail.OrderNumber</SoftText>
                             @StatusChip(_detail.Status)
+                            @if (_detail.Status == ProductionOrderStatuses.Completed)
+                            {
+                                @QualityChip(_detail.QualityStatus)
+                            }
                         </SoftStack>
                     </CardHeaderContent>
                     <CardHeaderActions>
@@ -161,6 +226,86 @@
                             </div>
                         </div>
 
+                        @if (!string.IsNullOrWhiteSpace(_detail.FormulaAllergens))
+                        {
+                            <SoftAlert Severity="Severity.Warning" Variant="Variant.Outlined">
+                                <strong>@ProdL["Allergens"]:</strong> @_detail.FormulaAllergens
+                            </SoftAlert>
+                        }
+
+                        @if (_detail.Status is ProductionOrderStatuses.Draft
+                            or ProductionOrderStatuses.ReadyToCook
+                            or ProductionOrderStatuses.WaitingForIngredients)
+                        {
+                            <div class="production-schedule-box">
+                                <SoftText Typo="Typo.subtitle2">@ProdL["ScheduleAndAssign"]</SoftText>
+                                <SoftGrid Spacing="2">
+                                    <SoftGridItem xs="12" md="4">
+                                        <SoftLookupSelect TItem="ProductionWorkCenterDto" TValue="string"
+                                                          Items="_availableWorkCenters" ToValue="@(item => item.Code)"
+                                                          ToLabel="@(item => $"{item.Name} · {item.CapacityUnitsPerHour}/h")"
+                                                          @bind-Value="_selectedWorkCenterCode" Label="@ProdL["WorkCenter"]"
+                                                          Clearable="false" />
+                                    </SoftGridItem>
+                                    <SoftGridItem xs="12" md="4">
+                                        <SoftLookupSelect TItem="ProductionShiftDto" TValue="string"
+                                                          Items="_availableShifts" ToValue="@(item => item.Code)"
+                                                          ToLabel="@(item => $"{item.Name} · {item.StartTime:hh\\:mm}-{item.EndTime:hh\\:mm}")"
+                                                          @bind-Value="_selectedShiftCode" Label="@ProdL["Shift"]"
+                                                          Clearable="false" />
+                                    </SoftGridItem>
+                                    <SoftGridItem xs="12" md="4">
+                                        <SoftLookupSelect TItem="ProductionOperatorLookupDto" TValue="Guid?"
+                                                          Items="_operators" ToValue="@(item => (Guid?)item.Id)"
+                                                          ToLabel="@(item => item.Name)" @bind-Value="_selectedOperatorId"
+                                                          Label="@ProdL["Operator"]" Clearable="false" />
+                                    </SoftGridItem>
+                                </SoftGrid>
+                                @* A one-line grey caption was too easy to miss, so pressing
+                                   "Schedule order" looked like it did nothing. Spell the
+                                   result out: when, where, who — and what to do next. *@
+                                @if (_detail.ScheduledStartTime.HasValue)
+                                {
+                                    <SoftAlert Severity="Severity.Success" Variant="Variant.Outlined"
+                                               Icon="@Icons.Material.Filled.EventAvailable" Class="mt-2">
+                                        <div class="stats">
+                                            <div>
+                                                <div class="stat-label">@ProdL["ScheduledFor"]</div>
+                                                <div class="stat-value">
+                                                    <BrowserLocalTime Value="@_detail.ScheduledStartTime"
+                                                                      Display="BrowserTimeDisplay.DateTime" Fallback="-" />
+                                                    @if (_detail.ScheduledEndTime.HasValue)
+                                                    {
+                                                        <text> → </text>
+                                                        <BrowserLocalTime Value="@_detail.ScheduledEndTime"
+                                                                          Display="BrowserTimeDisplay.Time" Fallback="-" />
+                                                    }
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <div class="stat-label">@ProdL["WorkCenter"]</div>
+                                                <div class="stat-value">@(_detail.WorkCenterCode ?? "-")</div>
+                                            </div>
+                                            <div>
+                                                <div class="stat-label">@ProdL["Shift"]</div>
+                                                <div class="stat-value">@(_detail.ShiftCode ?? "-")</div>
+                                            </div>
+                                            <div>
+                                                <div class="stat-label">@ProdL["Operator"]</div>
+                                                <div class="stat-value">@(_detail.AssignedOperatorName ?? "-")</div>
+                                            </div>
+                                        </div>
+                                        @if (_detail.Status == ProductionOrderStatuses.ReadyToCook)
+                                        {
+                                            <SoftText Typo="Typo.body2" Class="mt-2">
+                                                @ProdL["ScheduledNowPressStart"]
+                                            </SoftText>
+                                        }
+                                    </SoftAlert>
+                                }
+                            </div>
+                        }
+
                         @if (HasShortage)
                         {
                             <SoftAlert Severity="Severity.Warning">@ProdL["Production:205"]</SoftAlert>
@@ -183,6 +328,31 @@
                                 <MudTd>@AvailabilityChip(context.HasShortage)</MudTd>
                             </RowTemplate>
                         </SoftTable>
+
+                        @if (_detail.IngredientLots.Count > 0 || !string.IsNullOrWhiteSpace(_detail.OutputBatchNumber))
+                        {
+                            <SoftText Typo="Typo.subtitle2">@ProdL["LotGenealogy"]</SoftText>
+                            @if (!string.IsNullOrWhiteSpace(_detail.OutputBatchNumber))
+                            {
+                                <SoftAlert Severity="Severity.Info" Variant="Variant.Outlined">
+                                    @ProdL["OutputLot"]: <strong>@_detail.OutputBatchNumber</strong>
+                                </SoftAlert>
+                            }
+                            <SoftTable T="ProductionIngredientLotDto" Items="_detail.IngredientLots" Dense="true" Hover="true">
+                                <HeaderContent>
+                                    <MudTh>@ProdL["Ingredient"]</MudTh>
+                                    <MudTh>@ProdL["BatchNumber"]</MudTh>
+                                    <MudTh>@ProdL["ExpiryDate"]</MudTh>
+                                    <MudTh>@ProdL["Quantity"]</MudTh>
+                                </HeaderContent>
+                                <RowTemplate>
+                                    <MudTd>@context.IngredientName</MudTd>
+                                    <MudTd>@context.BatchNumber</MudTd>
+                                    <MudTd>@context.ExpiryDate.ToString("d")</MudTd>
+                                    <MudTd>@context.Quantity</MudTd>
+                                </RowTemplate>
+                            </SoftTable>
+                        }
 
                         <SoftText Typo="Typo.subtitle2">@ProdL["Ingredients"]</SoftText>
                         <SoftTable T="ProductionOrderIngredientDto" Items="_detail.Ingredients" Dense="true" Hover="true">
@@ -234,6 +404,7 @@
                                     <SoftDatePicker Label="@ProdL["ExpiryDate"]"
                                                     Date="_completeExpiryDate"
                                                     DateChanged="@(d => _completeExpiryDate = d)"
+                                                    Disabled="_completeAcceptedQuantity == 0"
                                                     MinDate="@(_detail.ActualStartTime?.Date ?? DateTime.Today)"
                                                     Variant="Variant.Outlined" />
                                 </SoftGridItem>
@@ -300,10 +471,27 @@
                     @if (_canCreateIngredientPo && HasShortage)
                     {
                         <SoftButton Variant="Variant.Outlined" Color="Color.Primary"
+                                    StartIcon="@Icons.Material.Filled.AccountTree"
+                                    Disabled="_creatingSubProduction"
+                                    OnClick="CreateSubProductionAsync">
+                            @ProdL["CreateSubProduction"]
+                        </SoftButton>
+                        <SoftButton Variant="Variant.Outlined" Color="Color.Primary"
                                     StartIcon="@Icons.Material.Filled.ShoppingCart"
                                     Disabled="_creatingIngredientPo"
                                     OnClick="CreateDraftIngredientPurchaseOrdersAsync">
                             @ProdL["CreateDraftIngredientPO"]
+                        </SoftButton>
+                    }
+                    @if (_canSchedule && _detail.Status is ProductionOrderStatuses.Draft
+                        or ProductionOrderStatuses.ReadyToCook
+                        or ProductionOrderStatuses.WaitingForIngredients)
+                    {
+                        <SoftButton Variant="Variant.Filled" Color="Color.Primary"
+                                    StartIcon="@Icons.Material.Filled.EventAvailable"
+                                    Disabled="!CanSchedule"
+                                    OnClick="ScheduleOrderAsync">
+                            @ProdL["ScheduleOrder"]
                         </SoftButton>
                     }
                     @if (_canCancel && ProductionOrderStatuses.CanCancel(_detail.Status))
@@ -351,17 +539,38 @@
     private bool _canStart;
     private bool _canComplete;
     private bool _canCancel;
+    private bool _canSchedule;
     private bool _canCreateIngredientPo;
     private bool _creatingIngredientPo;
+    private bool _creatingSubProduction;
     private string? _filter;
     private string _statusFilter = string.Empty;
     private Guid? _branchFilter;
-    private List<BranchLookupDto> _branches = new();
+    private List<KitchenBranchLookupDto> _branches = new();
     private List<StatusOption> _statusOptions = new();
     private List<WasteReasonOption> _reasonOptions = new();
+    private List<ProductionOrderListItemDto> _visibleOrders = new();
+    private string _activeStage = "ready";
+    private string? _nextStepUrl;
+    private string? _nextStepMessageKey;
+    private string? _nextStepLabelKey;
+
+    [Parameter, SupplyParameterFromQuery(Name = "stage")]
+    public string? Stage { get; set; }
+
+    /// <summary>Deep-link target: opens this order's detail modal on arrival.</summary>
+    [Parameter, SupplyParameterFromQuery(Name = "orderId")]
+    public Guid? OrderId { get; set; }
 
     private bool _detailVisible;
     private ProductionOrderDto? _detail;
+    private ProductionControlProfileDto _controlProfile = new();
+    private List<ProductionWorkCenterDto> _availableWorkCenters = new();
+    private List<ProductionShiftDto> _availableShifts = new();
+    private List<ProductionOperatorLookupDto> _operators = new();
+    private string _selectedWorkCenterCode = string.Empty;
+    private string _selectedShiftCode = string.Empty;
+    private Guid? _selectedOperatorId;
 
     private bool _completeVisible;
     private int _completeActualQuantity;
@@ -377,13 +586,16 @@
     private const string ShortageDemoMarker = "[DEMO-PRODUCTION-AR-SHORTAGE]";
 
     private bool HasShortage => _detail?.Availability.Any(x => x.HasShortage) == true;
+    private bool CanSchedule => !string.IsNullOrWhiteSpace(_selectedWorkCenterCode)
+        && !string.IsNullOrWhiteSpace(_selectedShiftCode)
+        && _selectedOperatorId.HasValue;
 
     private bool CompletionTotalsMismatch =>
         _completeActualQuantity != _completeAcceptedQuantity + _completeRejectedQuantity;
 
     private bool CanSubmitCompletion =>
         _completeActualQuantity > 0
-        && _completeAcceptedQuantity > 0
+        && _completeAcceptedQuantity >= 0
         && _completeRejectedQuantity >= 0
         && !CompletionTotalsMismatch
         && (_completeRejectedQuantity == 0
@@ -396,8 +608,19 @@
         _canStart = await Authz.IsGrantedAsync(ProductionPermissions.Orders.Start);
         _canComplete = await Authz.IsGrantedAsync(ProductionPermissions.Orders.Complete);
         _canCancel = await Authz.IsGrantedAsync(ProductionPermissions.Orders.Cancel);
+        _canSchedule = await Authz.IsGrantedAsync(ProductionPermissions.Orders.Schedule);
         _canCreateIngredientPo = await Authz.IsGrantedAsync(ProductionPermissions.Ingredients.CheckAvailability);
-        _branches = await BranchAppService.GetLookupAsync();
+        if (_canSchedule)
+        {
+            _controlProfile = await ControlAppService.GetAsync();
+            _availableShifts = _controlProfile.Shifts.Where(shift => shift.IsActive).ToList();
+            _operators = await ControlAppService.GetOperatorsAsync();
+        }
+        _branches = await KitchenAppService.GetAccessibleLookupAsync();
+        if (_branches.Count == 1)
+        {
+            _branchFilter = _branches[0].Id;
+        }
         _statusOptions =
         [
             new(string.Empty, ProdL["Status:All"]),
@@ -407,7 +630,20 @@
             new(ProductionOrderStatuses.Completed, ProdL["Status:Completed"]),
             new(ProductionOrderStatuses.Cancelled, ProdL["Status:Cancelled"])
         ];
+        ApplyInitialStage();
         _reasonOptions = BuildReasonOptions();
+
+        if (OrderId.HasValue)
+        {
+            try
+            {
+                await OpenDetailAsync(OrderId.Value);
+            }
+            catch (Exception ex)
+            {
+                await HandleErrorAsync(ex);
+            }
+        }
     }
 
     private async Task<GridData<ProductionOrderListItemDto>> LoadServerData(GridState<ProductionOrderListItemDto> state, CancellationToken cancellationToken)
@@ -425,6 +661,7 @@
                 MaxResultCount = state.PageSize,
                 Sorting = sorting == null ? string.Empty : $"{sorting.SortBy} {(sorting.Descending ? "desc" : "asc")}"
             });
+            _visibleOrders = result.Items.ToList();
 
             return new GridData<ProductionOrderListItemDto>
             {
@@ -443,6 +680,7 @@
     private async Task OnStatusChangedAsync(string value)
     {
         _statusFilter = value;
+        _activeStage = StageKeyForStatus(value);
         await ReloadAsync();
     }
 
@@ -457,6 +695,18 @@
     private async Task OpenDetailAsync(Guid id)
     {
         _detail = await OrderAppService.GetAsync(id);
+        _availableWorkCenters = _controlProfile.WorkCenters
+            .Where(center => center.IsActive
+                && (!center.KitchenBranchId.HasValue || center.KitchenBranchId == _detail.KitchenBranchId))
+            .ToList();
+        _selectedWorkCenterCode = _detail.WorkCenterCode
+            ?? _availableWorkCenters.FirstOrDefault()?.Code
+            ?? string.Empty;
+        _selectedShiftCode = _detail.ShiftCode
+            ?? _availableShifts.FirstOrDefault()?.Code
+            ?? string.Empty;
+        _selectedOperatorId = _detail.AssignedOperatorUserId
+            ?? _operators.FirstOrDefault()?.Id;
         _completeVisible = false;
         _detailVisible = true;
     }
@@ -476,6 +726,80 @@
         catch (Exception ex)
         {
             await HandleErrorAsync(ex);
+        }
+    }
+
+    private async Task ScheduleOrderAsync()
+    {
+        if (_detail == null || !CanSchedule) return;
+        var center = _availableWorkCenters.First(item => item.Code == _selectedWorkCenterCode);
+        var shift = _availableShifts.First(item => item.Code == _selectedShiftCode);
+        var operatorRow = _operators.First(item => item.Id == _selectedOperatorId);
+
+        var now = DateTime.Now;
+        var shiftStart = now.Date.Add(shift.StartTime);
+        var shiftEnd = now.Date.Add(shift.EndTime);
+        if (shiftEnd <= shiftStart)
+        {
+            shiftEnd = shiftEnd.AddDays(1);
+        }
+        if (now > shiftEnd)
+        {
+            shiftStart = shiftStart.AddDays(1);
+        }
+        else if (now > shiftStart)
+        {
+            shiftStart = now;
+        }
+
+        var hourlyCapacity = Math.Max(1, center.CapacityUnitsPerHour);
+        var durationMinutes = Math.Max(
+            15,
+            (int)Math.Ceiling(_detail.PlannedOutputQuantity / (decimal)hourlyCapacity * 60m));
+        try
+        {
+            _detail = await OrderAppService.ScheduleAsync(_detail.Id, new ScheduleProductionOrderDto
+            {
+                WorkCenterCode = center.Code,
+                ShiftCode = shift.Code,
+                ScheduledStartTime = shiftStart,
+                ScheduledEndTime = shiftStart.AddMinutes(durationMinutes),
+                OperatorUserId = operatorRow.Id,
+                OperatorName = operatorRow.Name
+            });
+            // Name what was booked — "Scheduled" alone left people unsure it worked.
+            Snackbar.Add(
+                ProdL["OrderScheduledDetail", center.Name, shiftStart.ToString("t"), operatorRow.Name],
+                Severity.Success);
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            await HandleErrorAsync(ex);
+        }
+    }
+
+    private async Task CreateSubProductionAsync()
+    {
+        if (_detail == null || _creatingSubProduction) return;
+        _creatingSubProduction = true;
+        try
+        {
+            var result = await OrderAppService.CreateSubProductionOrdersAsync(_detail.Id);
+            Snackbar.Add(ProdL["SubProductionCreated", result.CreatedCount], Severity.Success);
+            SetNextStep(
+                "/production/workboard?stage=blocked",
+                "NextStep:SubProductionCreated",
+                "Workspace:OpenWorkboard");
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            await HandleErrorAsync(ex);
+        }
+        finally
+        {
+            _creatingSubProduction = false;
         }
     }
 
@@ -517,6 +841,10 @@
                 Snackbar.Add(
                     ProdL["IngredientPurchaseOrdersCreated", result.PurchaseOrderCount, result.TotalShortageQuantity],
                     Severity.Success);
+                SetNextStep(
+                    "/operations/purchase-orders",
+                    "NextStep:PurchaseOrdersCreated",
+                    "Workspace:OpenPurchaseOrders");
             }
 
             _detail = await OrderAppService.RefreshAvailabilityAsync(_detail.Id);
@@ -573,6 +901,11 @@
             });
             _completeVisible = false;
             Snackbar.Add(ProdL["CompletedSuccessfully"], Severity.Success);
+            SetNextStep(
+                "/production/quality-waste#quality",
+                "NextStep:QualityReviewRequired",
+                "Workspace:OpenQuality");
+            CloseDetail();
             await ReloadAsync();
         }
         catch (Exception ex)
@@ -659,6 +992,24 @@
         builder.CloseComponent();
     };
 
+    private RenderFragment QualityChip(string status) => builder =>
+    {
+        var color = status switch
+        {
+            ProductionQualityStatuses.Released => Color.Success,
+            ProductionQualityStatuses.Held => Color.Warning,
+            ProductionQualityStatuses.Rejected => Color.Error,
+            _ => Color.Info
+        };
+        builder.OpenComponent<SoftChip<string>>(0);
+        builder.AddAttribute(1, "Color", color);
+        builder.AddAttribute(2, "Size", Size.Small);
+        builder.AddAttribute(3, "Variant", status == ProductionQualityStatuses.Pending ? Variant.Filled : Variant.Outlined);
+        builder.AddAttribute(4, "ChildContent", (RenderFragment)(content =>
+            content.AddContent(0, ProdL[$"QualityStatus:{status}"])));
+        builder.CloseComponent();
+    };
+
     private string StatusLabel(string status) => status switch
     {
         ProductionOrderStatuses.Draft => ProdL["Status:Draft"],
@@ -669,6 +1020,83 @@
         ProductionOrderStatuses.Cancelled => ProdL["Status:Cancelled"],
         _ => status
     };
+
+    private string PriorityLabel(string priority) => priority switch
+    {
+        ProductionPriorities.Low => ProdL["Priority:Low"],
+        ProductionPriorities.Urgent => ProdL["Priority:Urgent"],
+        _ => ProdL["Priority:Normal"]
+    };
+
+    private RenderFragment StageButton(string key, string status, string label, string icon) => builder =>
+    {
+        builder.OpenComponent<SoftButton>(0);
+        builder.AddAttribute(1, "Variant", _activeStage == key ? Variant.Filled : Variant.Text);
+        builder.AddAttribute(2, "Color", Color.Primary);
+        builder.AddAttribute(3, "StartIcon", icon);
+        builder.AddAttribute(4, "Class", _activeStage == key
+            ? "production-stage-button is-active"
+            : "production-stage-button");
+        builder.AddAttribute(5, "OnClick", EventCallback.Factory.Create<MouseEventArgs>(
+            this,
+            () => SelectStageAsync(key, status)));
+        builder.AddAttribute(6, "ChildContent", (RenderFragment)(content => content.AddContent(0, label)));
+        builder.CloseComponent();
+    };
+
+    private async Task SelectStageAsync(string key, string status)
+    {
+        _activeStage = key;
+        _statusFilter = status;
+        Navigation.NavigateTo($"/production/workboard?stage={key}", replace: true);
+        await ReloadAsync();
+    }
+
+    private void ApplyInitialStage()
+    {
+        _activeStage = Stage?.ToLowerInvariant() switch
+        {
+            "blocked" => "blocked",
+            "cooking" => "cooking",
+            "completed" => "completed",
+            "all" => "all",
+            _ => "ready"
+        };
+
+        _statusFilter = _activeStage switch
+        {
+            "blocked" => ProductionOrderStatuses.WaitingForIngredients,
+            "cooking" => ProductionOrderStatuses.InProduction,
+            "completed" => ProductionOrderStatuses.Completed,
+            "all" => string.Empty,
+            _ => ProductionOrderStatuses.ReadyToCook
+        };
+    }
+
+    private static string StageKeyForStatus(string status) => status switch
+    {
+        ProductionOrderStatuses.WaitingForIngredients => "blocked",
+        ProductionOrderStatuses.ReadyToCook => "ready",
+        ProductionOrderStatuses.InProduction => "cooking",
+        ProductionOrderStatuses.Completed => "completed",
+        _ => "all"
+    };
+
+    private string PrimaryActionLabel(string status) => status switch
+    {
+        ProductionOrderStatuses.WaitingForIngredients => ProdL["Workspace:ResolveMaterials"],
+        ProductionOrderStatuses.ReadyToCook => ProdL["StartCook"],
+        ProductionOrderStatuses.InProduction => ProdL["CompleteCook"],
+        ProductionOrderStatuses.Completed => ProdL["OpenOrder"],
+        _ => ProdL["OpenOrder"]
+    };
+
+    private void SetNextStep(string url, string messageKey, string labelKey)
+    {
+        _nextStepUrl = url;
+        _nextStepMessageKey = messageKey;
+        _nextStepLabelKey = labelKey;
+    }
 
     /// <summary>Plain-language "what happens next" line for the detail modal, per status.</summary>
     private string? CookHint() => _detail?.Status switch

@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Inventory.BranchInventory;
 using Inventory.Categories;
 using Inventory.Entities;
+using Inventory.Localization;
 using Inventory.Permissions;
 using Inventory.StockMovements;
 using Microsoft.AspNetCore.Authorization;
@@ -99,7 +100,7 @@ public class InventoryDashboardAppService : InventoryAppService, IInventoryDashb
                 return new BranchDashboardStatsDto
                 {
                     BranchId = b.Id,
-                    BranchName = b.Name,
+                    BranchName = LocalizedBusinessText.Select(b.NameAr, b.NameEn),
                     IsActive = b.IsActive,
                     TotalItems = rows.Count,
                     OutOfStockCount = bOut,
@@ -120,9 +121,9 @@ public class InventoryDashboardAppService : InventoryAppService, IInventoryDashb
             .Select(r =>
             {
                 var dto = ObjectMapper.Map<AppBranchInventory, BranchInventoryDto>(r.Inventory);
-                dto.ProductName = r.Product.Name;
+                dto.ProductName = LocalizedBusinessText.Select(r.Product.NameAr, r.Product.NameEn);
                 dto.ProductSKU = r.Product.SKU;
-                dto.ProductUnit = r.Product.Unit;
+                dto.ProductUnit = LocalizedBusinessText.Select(r.Product.UnitAr, r.Product.UnitEn);
                 dto.ProductIsActive = r.Product.IsActive;
                 return dto;
             })
@@ -149,10 +150,10 @@ public class InventoryDashboardAppService : InventoryAppService, IInventoryDashb
             .Select(r =>
             {
                 var dto = ObjectMapper.Map<AppStockMovement, StockMovementDto>(r.Movement);
-                dto.BranchName = r.Branch.Name;
-                dto.ProductName = r.Product.Name;
+                dto.BranchName = LocalizedBusinessText.Select(r.Branch.NameAr, r.Branch.NameEn);
+                dto.ProductName = LocalizedBusinessText.Select(r.Product.NameAr, r.Product.NameEn);
                 dto.ProductSKU = r.Product.SKU;
-                dto.ProductUnit = r.Product.Unit;
+                dto.ProductUnit = LocalizedBusinessText.Select(r.Product.UnitAr, r.Product.UnitEn);
                 return dto;
             })
             .ToList();

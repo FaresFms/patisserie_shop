@@ -2,13 +2,31 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Text.Json;
 using Volo.Abp;
+using Volo.Abp.Data;
 using Volo.Abp.Domain.Entities.Auditing;
 
 namespace Production.Entities;
 
 public class AppProductionOrder : FullAuditedAggregateRoot<Guid>
 {
+    private const string ParentOrderProperty = "Production.Order.ParentOrderId";
+    private const string WorkCenterProperty = "Production.Order.WorkCenterCode";
+    private const string ShiftProperty = "Production.Order.ShiftCode";
+    private const string OperatorIdProperty = "Production.Order.OperatorUserId";
+    private const string OperatorNameProperty = "Production.Order.OperatorName";
+    private const string ScheduledStartProperty = "Production.Order.ScheduledStart";
+    private const string ScheduledEndProperty = "Production.Order.ScheduledEnd";
+    private const string QualityStatusProperty = "Production.Order.QualityStatus";
+    private const string QualityReasonProperty = "Production.Order.QualityReason";
+    private const string QualityUpdatedAtProperty = "Production.Order.QualityUpdatedAt";
+    private const string QualityUpdatedByProperty = "Production.Order.QualityUpdatedBy";
+    private const string IngredientLotsProperty = "Production.Order.IngredientLots";
+    private const string OutputBatchIdProperty = "Production.Order.OutputBatchId";
+    private const string OutputBatchNumberProperty = "Production.Order.OutputBatchNumber";
+    private const string FormulaAllergensProperty = "Production.Order.FormulaAllergens";
+
     public string OrderNumber { get; private set; } = null!;
     public Guid KitchenBranchId { get; private set; }
     public Guid? ProductionPlanId { get; private set; }
@@ -37,6 +55,24 @@ public class AppProductionOrder : FullAuditedAggregateRoot<Guid>
     public Guid? CreatedByUserId { get; private set; }
     public Guid? StartedByUserId { get; private set; }
     public Guid? CompletedByUserId { get; private set; }
+
+    public Guid? ParentProductionOrderId => this.GetProperty<Guid?>(ParentOrderProperty);
+    public string? WorkCenterCode => this.GetProperty<string>(WorkCenterProperty);
+    public string? ShiftCode => this.GetProperty<string>(ShiftProperty);
+    public Guid? AssignedOperatorUserId => this.GetProperty<Guid?>(OperatorIdProperty);
+    public string? AssignedOperatorName => this.GetProperty<string>(OperatorNameProperty);
+    public DateTime? ScheduledStartTime => this.GetProperty<DateTime?>(ScheduledStartProperty);
+    public DateTime? ScheduledEndTime => this.GetProperty<DateTime?>(ScheduledEndProperty);
+    public string FormulaAllergens => this.GetProperty<string>(FormulaAllergensProperty) ?? string.Empty;
+    public string QualityStatus => this.GetProperty<string>(QualityStatusProperty)
+        ?? (Status == ProductionOrderStatuses.Completed
+            ? ProductionQualityStatuses.Released
+            : ProductionQualityStatuses.NotRequired);
+    public string? QualityReason => this.GetProperty<string>(QualityReasonProperty);
+    public DateTime? QualityUpdatedAt => this.GetProperty<DateTime?>(QualityUpdatedAtProperty);
+    public Guid? QualityUpdatedByUserId => this.GetProperty<Guid?>(QualityUpdatedByProperty);
+    public Guid? OutputBatchId => this.GetProperty<Guid?>(OutputBatchIdProperty);
+    public string? OutputBatchNumber => this.GetProperty<string>(OutputBatchNumberProperty);
 
     private readonly List<AppProductionOrderIngredient> _ingredients = new();
     public IReadOnlyCollection<AppProductionOrderIngredient> Ingredients => new ReadOnlyCollection<AppProductionOrderIngredient>(_ingredients);
@@ -165,6 +201,28 @@ public class AppProductionOrder : FullAuditedAggregateRoot<Guid>
             : ProductionOrderStatuses.ReadyToCook;
     }
 
+    public void RefreshIngredientCostSnapshots(IReadOnlyDictionary<Guid, decimal> unitCosts)
+    {
+        if (Status != ProductionOrderStatuses.Draft
+            && Status != ProductionOrderStatuses.ReadyToCook
+            && Status != ProductionOrderStatuses.WaitingForIngredients)
+        {
+            throw InvalidTransition(ProductionOrderStatuses.ReadyToCook);
+        }
+
+        foreach (var ingredient in _ingredients)
+        {
+            if (!unitCosts.TryGetValue(ingredient.IngredientProductId, out var unitCost)
+                || unitCost <= 0m)
+            {
+                throw new BusinessException(ProductionErrorCodes.IngredientCostRequired)
+                    .WithData("IngredientProductId", ingredient.IngredientProductId);
+            }
+
+            ingredient.RefreshCostSnapshot(unitCost);
+        }
+    }
+
     public IReadOnlyList<IngredientConsumptionLine> Start(Guid? startedByUserId)
     {
         if (Status != ProductionOrderStatuses.ReadyToCook)
@@ -198,11 +256,127 @@ public class AppProductionOrder : FullAuditedAggregateRoot<Guid>
         return lines;
     }
 
+    public void SetRecipeControlSnapshot(string? workCenterCode, string? formulaAllergens)
+    {
+        EnsurePreStartState();
+        ExtraProperties[WorkCenterProperty] = NormalizeOptional(workCenterCode);
+        ExtraProperties[FormulaAllergensProperty] = NormalizeOptional(formulaAllergens) ?? string.Empty;
+    }
+
+    public void LinkParentProductionOrder(Guid parentProductionOrderId)
+    {
+        EnsurePreStartState();
+        ExtraProperties[ParentOrderProperty] = parentProductionOrderId;
+    }
+
+    public void Schedule(
+        string workCenterCode,
+        string shiftCode,
+        DateTime scheduledStart,
+        DateTime scheduledEnd,
+        Guid operatorUserId,
+        string operatorName)
+    {
+        EnsurePreStartState();
+        if (string.IsNullOrWhiteSpace(workCenterCode)
+            || string.IsNullOrWhiteSpace(shiftCode)
+            || scheduledEnd <= scheduledStart)
+        {
+            throw new BusinessException(ProductionErrorCodes.InvalidProductionSchedule);
+        }
+        if (operatorUserId == Guid.Empty || string.IsNullOrWhiteSpace(operatorName))
+        {
+            throw new BusinessException(ProductionErrorCodes.ProductionOperatorRequired);
+        }
+
+        ExtraProperties[WorkCenterProperty] = workCenterCode.Trim();
+        ExtraProperties[ShiftProperty] = shiftCode.Trim();
+        ExtraProperties[ScheduledStartProperty] = scheduledStart;
+        ExtraProperties[ScheduledEndProperty] = scheduledEnd;
+        ExtraProperties[OperatorIdProperty] = operatorUserId;
+        ExtraProperties[OperatorNameProperty] = operatorName.Trim();
+        PlannedStartTime = scheduledStart;
+    }
+
+    public void EnsureReadyForStart(bool requireSchedule, bool requireOperator)
+    {
+        if (requireSchedule && (!ScheduledStartTime.HasValue || !ScheduledEndTime.HasValue))
+        {
+            throw new BusinessException(ProductionErrorCodes.ProductionScheduleRequired);
+        }
+        if (requireOperator && !AssignedOperatorUserId.HasValue)
+        {
+            throw new BusinessException(ProductionErrorCodes.ProductionOperatorRequired);
+        }
+    }
+
+    public void RecordIngredientLotConsumption(
+        Guid ingredientProductId,
+        IReadOnlyCollection<IngredientLotLine> lots)
+    {
+        if (Status != ProductionOrderStatuses.InProduction)
+        {
+            throw InvalidTransition(ProductionOrderStatuses.InProduction);
+        }
+
+        var all = GetIngredientLots().ToList();
+        all.RemoveAll(x => x.IngredientProductId == ingredientProductId);
+        all.AddRange(lots.Select(x => x with { IngredientProductId = ingredientProductId }));
+        ExtraProperties[IngredientLotsProperty] = JsonSerializer.Serialize(all);
+    }
+
+    public IReadOnlyList<IngredientLotLine> GetIngredientLots()
+    {
+        var json = this.GetProperty<string>(IngredientLotsProperty);
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return Array.Empty<IngredientLotLine>();
+        }
+        try
+        {
+            return JsonSerializer.Deserialize<List<IngredientLotLine>>(json)
+                ?? new List<IngredientLotLine>();
+        }
+        catch (JsonException)
+        {
+            return Array.Empty<IngredientLotLine>();
+        }
+    }
+
+    public void RecordOutputBatch(Guid batchId, string batchNumber)
+    {
+        if (Status != ProductionOrderStatuses.Completed)
+        {
+            throw InvalidTransition(ProductionOrderStatuses.Completed);
+        }
+        ExtraProperties[OutputBatchIdProperty] = batchId;
+        ExtraProperties[OutputBatchNumberProperty] = Check.NotNullOrWhiteSpace(
+            batchNumber,
+            nameof(batchNumber),
+            maxLength: 32);
+    }
+
+    public void RecordActualIngredientCost(Guid ingredientId, decimal actualTotalCost)
+    {
+        if (Status != ProductionOrderStatuses.InProduction)
+        {
+            throw InvalidTransition(ProductionOrderStatuses.InProduction);
+        }
+
+        var ingredient = _ingredients.FirstOrDefault(i => i.Id == ingredientId)
+            ?? throw new BusinessException(ProductionErrorCodes.ProductionOrderIngredientNotFound)
+                .WithData("IngredientId", ingredientId);
+        ingredient.RecordActualCost(actualTotalCost);
+        ActualIngredientCost = _ingredients.Sum(i => i.TotalCost);
+        TotalProductionCost = ActualIngredientCost + LaborCost + OverheadCost;
+        UnitProductionCost = TotalProductionCost / PlannedOutputQuantity;
+    }
+
     public CompletionResult Complete(
         int actualOutputQuantity,
         int acceptedQuantity,
         int rejectedQuantity,
-        DateTime expiryDate,
+        DateTime? expiryDate,
         string? wasteReason,
         Guid? completedByUserId,
         string? notes)
@@ -219,35 +393,39 @@ public class AppProductionOrder : FullAuditedAggregateRoot<Guid>
                 .WithData("AcceptedQuantity", acceptedQuantity)
                 .WithData("RejectedQuantity", rejectedQuantity);
         }
-        if (acceptedQuantity <= 0)
+        if (acceptedQuantity > 0 && !expiryDate.HasValue)
         {
-            throw new BusinessException(ProductionErrorCodes.CannotCompleteWithoutAcceptedQuantity);
+            throw new BusinessException(ProductionErrorCodes.ProductionExpiryDateRequired);
         }
         if (rejectedQuantity > 0 && string.IsNullOrWhiteSpace(wasteReason))
         {
             throw new BusinessException(ProductionErrorCodes.WasteReasonRequired);
         }
-        if (expiryDate.Date < (ActualStartTime?.Date ?? DateTime.UtcNow.Date))
+        if (acceptedQuantity > 0 && expiryDate!.Value.Date < (ActualStartTime?.Date ?? DateTime.UtcNow.Date))
         {
             throw new BusinessException(ProductionErrorCodes.ProductionExpiryDateInPast)
-                .WithData("ExpiryDate", expiryDate.Date)
+                .WithData("ExpiryDate", expiryDate.Value.Date)
                 .WithData("ProductionDate", ActualStartTime?.Date ?? DateTime.UtcNow.Date);
         }
 
         ActualOutputQuantity = actualOutputQuantity;
         AcceptedQuantity = acceptedQuantity;
         RejectedQuantity = rejectedQuantity;
-        ExpiryDate = expiryDate.Date;
+        ExpiryDate = acceptedQuantity > 0 ? expiryDate!.Value.Date : null;
         WasteReason = rejectedQuantity > 0 ? wasteReason?.Trim() : null;
         CompletedByUserId = completedByUserId;
         CompletedAt = DateTime.UtcNow;
         Notes = notes;
-        UnitProductionCost = TotalProductionCost / AcceptedQuantity;
+        UnitProductionCost = acceptedQuantity > 0 ? TotalProductionCost / acceptedQuantity : 0m;
         Status = ProductionOrderStatuses.Completed;
+        ExtraProperties[QualityStatusProperty] = acceptedQuantity > 0
+            ? ProductionQualityStatuses.Pending
+            : ProductionQualityStatuses.NotRequired;
+        ExtraProperties.Remove(QualityReasonProperty);
 
         var releases = ReleaseAllocationExcess(AcceptedQuantity);
         return new CompletionResult(
-            new OutputLine(FinishedProductId, AcceptedQuantity, UnitProductionCost, ExpiryDate.Value),
+            new OutputLine(FinishedProductId, AcceptedQuantity, UnitProductionCost, ExpiryDate),
             releases);
     }
 
@@ -274,6 +452,13 @@ public class AppProductionOrder : FullAuditedAggregateRoot<Guid>
         if (Status != ProductionOrderStatuses.Completed)
         {
             throw InvalidTransition(ProductionOrderStatuses.Completed);
+        }
+        if (QualityStatus != ProductionQualityStatuses.Released
+            && QualityStatus != ProductionQualityStatuses.NotRequired)
+        {
+            throw new BusinessException(ProductionErrorCodes.QualityReleaseRequiredForDispatch)
+                .WithData("ProductionOrderId", Id)
+                .WithData("QualityStatus", QualityStatus);
         }
         if (quantity <= 0 || quantity > RemainingToDispatch)
         {
@@ -363,6 +548,86 @@ public class AppProductionOrder : FullAuditedAggregateRoot<Guid>
         return results;
     }
 
+    public void HoldQuality(string reason, Guid? userId, DateTime at)
+    {
+        EnsureQualityTransition(
+            [ProductionQualityStatuses.Pending, ProductionQualityStatuses.Released],
+            ProductionQualityStatuses.Held,
+            reason,
+            userId,
+            at);
+    }
+
+    public void ReleaseQuality(string? notes, Guid? userId, DateTime at)
+    {
+        EnsureQualityTransition(
+            [ProductionQualityStatuses.Pending, ProductionQualityStatuses.Held],
+            ProductionQualityStatuses.Released,
+            notes,
+            userId,
+            at,
+            reasonRequired: false);
+    }
+
+    public void SkipQualityRelease(Guid? userId, DateTime at)
+    {
+        EnsureQualityTransition(
+            [ProductionQualityStatuses.Pending],
+            ProductionQualityStatuses.NotRequired,
+            reason: null,
+            userId,
+            at,
+            reasonRequired: false);
+    }
+
+    public void RejectQuality(string reason, Guid? userId, DateTime at)
+    {
+        EnsureQualityTransition(
+            [ProductionQualityStatuses.Pending, ProductionQualityStatuses.Held],
+            ProductionQualityStatuses.Rejected,
+            reason,
+            userId,
+            at);
+    }
+
+    private void EnsureQualityTransition(
+        IReadOnlyCollection<string> allowedStatuses,
+        string targetStatus,
+        string? reason,
+        Guid? userId,
+        DateTime at,
+        bool reasonRequired = true)
+    {
+        if (Status != ProductionOrderStatuses.Completed || !allowedStatuses.Contains(QualityStatus))
+        {
+            throw new BusinessException(ProductionErrorCodes.InvalidQualityTransition)
+                .WithData("CurrentStatus", QualityStatus)
+                .WithData("TargetStatus", targetStatus);
+        }
+        if (reasonRequired && string.IsNullOrWhiteSpace(reason))
+        {
+            throw new BusinessException(ProductionErrorCodes.QualityReasonRequired);
+        }
+
+        ExtraProperties[QualityStatusProperty] = targetStatus;
+        ExtraProperties[QualityReasonProperty] = NormalizeOptional(reason);
+        ExtraProperties[QualityUpdatedAtProperty] = at;
+        ExtraProperties[QualityUpdatedByProperty] = userId;
+    }
+
+    private void EnsurePreStartState()
+    {
+        if (Status != ProductionOrderStatuses.Draft
+            && Status != ProductionOrderStatuses.ReadyToCook
+            && Status != ProductionOrderStatuses.WaitingForIngredients)
+        {
+            throw InvalidTransition(ProductionOrderStatuses.ReadyToCook);
+        }
+    }
+
+    private static string? NormalizeOptional(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
     private void SetPlannedOutputQuantity(int plannedOutputQuantity)
     {
         if (plannedOutputQuantity <= 0)
@@ -425,7 +690,7 @@ public class AppProductionOrder : FullAuditedAggregateRoot<Guid>
         decimal UnitCost,
         decimal TotalCost);
 
-    public record OutputLine(Guid ProductId, int AcceptedQuantity, decimal UnitCost, DateTime ExpiryDate);
+    public record OutputLine(Guid ProductId, int AcceptedQuantity, decimal UnitCost, DateTime? ExpiryDate);
     public record CompletionResult(OutputLine Output, IReadOnlyList<AllocationReleaseLine> ReleasedAllocations);
     public record AllocationReleaseLine(
         Guid BranchProductionRequestId,
@@ -436,4 +701,12 @@ public class AppProductionOrder : FullAuditedAggregateRoot<Guid>
         Guid? BranchProductionRequestItemId,
         int ReceivedQuantity,
         int LostQuantity);
+
+    public record IngredientLotLine(
+        Guid IngredientProductId,
+        Guid BatchId,
+        string BatchNumber,
+        DateTime ExpiryDate,
+        int Quantity,
+        decimal UnitCost);
 }

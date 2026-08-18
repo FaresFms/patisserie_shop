@@ -5,6 +5,7 @@ using System.Linq.Dynamic.Core;
 using System.Threading;
 using System.Threading.Tasks;
 using Inventory.Entities;
+using Inventory.Localization;
 using Inventory.StockMovements;
 using Microsoft.EntityFrameworkCore;
 using Volo.Abp.Domain.Repositories.EntityFrameworkCore;
@@ -82,7 +83,7 @@ public class StockMovementRepository
             var matchingIds =
                 from m in movements
                 join p in dbContext.Set<AppProduct>() on m.ProductId equals p.Id
-                where p.Name.ToLower().Contains(f) || p.SKU.ToLower().Contains(f) ||
+                where p.NameAr.ToLower().Contains(f) || p.NameEn.ToLower().Contains(f) || p.SKU.ToLower().Contains(f) ||
                       (m.Notes != null && m.Notes.ToLower().Contains(f))
                 select m.Id;
             movements = movements.Where(m => matchingIds.Contains(m.Id));
@@ -231,7 +232,8 @@ public class StockMovementRepository
         {
             var f = filter.Filter.Trim().ToLower();
             joined = joined.Where(x =>
-                x.Product.Name.ToLower().Contains(f) ||
+                x.Product.NameAr.ToLower().Contains(f) ||
+                x.Product.NameEn.ToLower().Contains(f) ||
                 x.Product.SKU.ToLower().Contains(f) ||
                 (x.Movement.Notes != null && x.Movement.Notes.ToLower().Contains(f)));
         }
@@ -245,10 +247,12 @@ public class StockMovementRepository
             return $"{nameof(StockMovementWithContext.Movement)}.{nameof(AppStockMovement.CreationTime)} desc";
 
         var s = sorting.Trim();
+        var branchName = LocalizedBusinessText.IsArabic ? nameof(AppBranch.NameAr) : nameof(AppBranch.NameEn);
+        var productName = LocalizedBusinessText.IsArabic ? nameof(AppProduct.NameAr) : nameof(AppProduct.NameEn);
         if (s.StartsWith("BranchName", StringComparison.OrdinalIgnoreCase))
-            return s.Replace("BranchName", $"{nameof(StockMovementWithContext.Branch)}.{nameof(AppBranch.Name)}", StringComparison.OrdinalIgnoreCase);
+            return s.Replace("BranchName", $"{nameof(StockMovementWithContext.Branch)}.{branchName}", StringComparison.OrdinalIgnoreCase);
         if (s.StartsWith("ProductName", StringComparison.OrdinalIgnoreCase))
-            return s.Replace("ProductName", $"{nameof(StockMovementWithContext.Product)}.{nameof(AppProduct.Name)}", StringComparison.OrdinalIgnoreCase);
+            return s.Replace("ProductName", $"{nameof(StockMovementWithContext.Product)}.{productName}", StringComparison.OrdinalIgnoreCase);
         if (s.StartsWith("ProductSKU", StringComparison.OrdinalIgnoreCase))
             return s.Replace("ProductSKU", $"{nameof(StockMovementWithContext.Product)}.{nameof(AppProduct.SKU)}", StringComparison.OrdinalIgnoreCase);
         return $"{nameof(StockMovementWithContext.Movement)}.{s}";

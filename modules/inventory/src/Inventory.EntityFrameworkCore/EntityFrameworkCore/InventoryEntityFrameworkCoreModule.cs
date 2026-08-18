@@ -17,6 +17,7 @@ public class InventoryEntityFrameworkCoreModule : AbpModule
         {
             options.AddDefaultRepositories<IInventoryDbContext>();
             options.AddRepository<AppBranchInventory, BranchInventoryRepository>();
+            options.AddRepository<AppBranch, BranchRepository>();
             options.AddRepository<AppCategory, CategoryRepository>();
             options.AddRepository<AppStockMovement, StockMovementRepository>();
             options.AddRepository<AppProduct, ProductRepository>();

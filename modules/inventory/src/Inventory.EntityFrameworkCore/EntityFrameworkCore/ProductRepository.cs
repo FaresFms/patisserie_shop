@@ -5,6 +5,7 @@ using System.Linq.Dynamic.Core;
 using System.Threading;
 using System.Threading.Tasks;
 using Inventory.Entities;
+using Inventory.Localization;
 using Inventory.Products;
 using Microsoft.EntityFrameworkCore;
 using Volo.Abp.Domain.Repositories.EntityFrameworkCore;
@@ -63,10 +64,17 @@ public class ProductRepository
         if (!string.IsNullOrWhiteSpace(filter))
         {
             var f = filter.Trim().ToLower();
-            query = query.Where(p => p.Name.ToLower().Contains(f) || p.SKU.ToLower().Contains(f));
+            query = query.Where(p =>
+                p.NameAr.ToLower().Contains(f) ||
+                p.NameEn.ToLower().Contains(f) ||
+                p.SKU.ToLower().Contains(f));
         }
 
-        return await query.OrderBy(p => p.Name).Take(maxResults)
+        query = LocalizedBusinessText.IsArabic
+            ? query.OrderBy(p => p.NameAr)
+            : query.OrderBy(p => p.NameEn);
+
+        return await query.Take(maxResults)
             .ToListAsync(GetCancellationToken(cancellationToken));
     }
 
@@ -82,7 +90,8 @@ public class ProductRepository
         {
             var f = filter.Trim().ToLower();
             query = query.Where(p =>
-                p.Name.ToLower().Contains(f) ||
+                p.NameAr.ToLower().Contains(f) ||
+                p.NameEn.ToLower().Contains(f) ||
                 p.SKU.ToLower().Contains(f));
         }
 
@@ -105,5 +114,30 @@ public class ProductRepository
     }
 
     private static string ResolveSorting(string? sorting)
-        => string.IsNullOrWhiteSpace(sorting) ? nameof(AppProduct.Name) : sorting.Trim();
+    {
+        var localizedName = LocalizedBusinessText.IsArabic
+            ? nameof(AppProduct.NameAr)
+            : nameof(AppProduct.NameEn);
+        var localizedUnit = LocalizedBusinessText.IsArabic
+            ? nameof(AppProduct.UnitAr)
+            : nameof(AppProduct.UnitEn);
+
+        if (string.IsNullOrWhiteSpace(sorting))
+        {
+            return localizedName;
+        }
+
+        var value = sorting.Trim();
+        if (value.StartsWith("Name", StringComparison.OrdinalIgnoreCase))
+        {
+            return value.Replace("Name", localizedName, StringComparison.OrdinalIgnoreCase);
+        }
+
+        if (value.StartsWith("Unit", StringComparison.OrdinalIgnoreCase))
+        {
+            return value.Replace("Unit", localizedUnit, StringComparison.OrdinalIgnoreCase);
+        }
+
+        return value;
+    }
 }

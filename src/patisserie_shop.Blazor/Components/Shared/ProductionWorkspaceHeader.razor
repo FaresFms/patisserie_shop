@@ -1,0 +1,120 @@
+@using Microsoft.AspNetCore.Components.Authorization
+@using Production.Localization
+@using Production.Permissions
+@using Color = MudBlazor.Color
+@using Size = MudBlazor.Size
+@using Variant = MudBlazor.Variant
+@inject NavigationManager Navigation
+@inject IStringLocalizer<ProductionResource> ProdL
+
+<section class="production-workspace-shell" aria-label="@Title">
+    <div class="production-workspace-heading">
+        <div>
+            <div class="production-workspace-kicker">@ProdL["ProductionWorkspace"]</div>
+            <div class="production-workspace-title-row">
+                <span class="production-workspace-icon" aria-hidden="true">
+                    <SoftIcon Icon="@Icon" Size="Size.Medium" />
+                </span>
+                <div>
+                    <h1 class="production-workspace-title">@Title</h1>
+                    <p class="production-workspace-subtitle">@Subtitle</p>
+                </div>
+            </div>
+        </div>
+        @if (Actions is not null)
+        {
+            <div class="production-workspace-actions">@Actions</div>
+        }
+    </div>
+
+    <nav class="production-workspace-tabs" aria-label="@ProdL["WorkspaceSections"]">
+        @if (Workspace == "overview")
+        {
+            @Tab("today", ProdL["Workspace:Today"], Icons.Material.Filled.Today, "/production/overview")
+            <AuthorizeView Policy="@ProductionPermissions.Analytics.Default">
+                <Authorized>
+                    @Tab("trends", ProdL["Workspace:Trends"], Icons.Material.Filled.ShowChart, "/production/overview/trends")
+                </Authorized>
+            </AuthorizeView>
+        }
+        else if (Workspace == "demand")
+        {
+            @Tab("review", ProdL["Workspace:AwaitingReview"], Icons.Material.Filled.Inbox, "/production/demand-planning?view=review")
+            @Tab("approved", ProdL["Workspace:ApprovedDemand"], Icons.Material.Filled.TaskAlt, "/production/demand-planning?view=approved")
+            <AuthorizeView Policy="@ProductionPermissions.Plans.Default">
+                <Authorized>
+                    @Tab("plan", ProdL["Workspace:ProductionPlan"], Icons.Material.Filled.CalendarMonth, "/production/demand-planning/plans")
+                </Authorized>
+            </AuthorizeView>
+            @Tab("history", ProdL["Workspace:DemandHistory"], Icons.Material.Filled.History, "/production/demand-planning?view=history")
+        }
+        else if (Workspace == "workboard")
+        {
+            @Tab("make", ProdL["Workspace:Make"], Icons.Material.Filled.LocalFireDepartment, "/production/workboard?stage=ready")
+            <AuthorizeView Policy="@ProductionPermissions.Dispatch.Default">
+                <Authorized>
+                    @Tab("send", ProdL["Workspace:SendReceive"], Icons.Material.Filled.LocalShipping, "/production/workboard/dispatch")
+                </Authorized>
+            </AuthorizeView>
+        }
+        else if (Workspace == "quality")
+        {
+            <AuthorizeView Policy="@ProductionPermissions.Orders.Quality">
+                <Authorized>
+                    @Tab("quality", ProdL["Workspace:QualityQueue"], Icons.Material.Filled.FactCheck, "/production/quality-waste?view=quality#quality")
+                </Authorized>
+            </AuthorizeView>
+            @if (RecordIncident.HasDelegate)
+            {
+                <SoftButton Variant="Variant.Text" Color="Color.Primary"
+                            StartIcon="@Icons.Material.Filled.AddAlert"
+                            Class="production-workspace-tab"
+                            OnClick="RecordIncident">
+                    @ProdL["Workspace:RecordIncident"]
+                </SoftButton>
+            }
+            @Tab("ledger", ProdL["Workspace:WasteLedger"], Icons.Material.Filled.ReceiptLong, "/production/quality-waste?view=ledger#ledger")
+            @Tab("causes", ProdL["Workspace:CausesTrends"], Icons.Material.Filled.QueryStats, "/production/quality-waste?view=causes#causes")
+        }
+    </nav>
+</section>
+
+@code {
+    [Parameter, EditorRequired]
+    public string Workspace { get; set; } = null!;
+
+    [Parameter, EditorRequired]
+    public string ActiveTab { get; set; } = null!;
+
+    [Parameter]
+    public RenderFragment? Actions { get; set; }
+
+    [Parameter]
+    public EventCallback<Microsoft.AspNetCore.Components.Web.MouseEventArgs> RecordIncident { get; set; }
+
+    private string Title => ProdL[$"Workspace:{Workspace}:Title"];
+    private string Subtitle => ProdL[$"Workspace:{Workspace}:Subtitle"];
+
+    private string Icon => Workspace switch
+    {
+        "overview" => Icons.Material.Filled.SpaceDashboard,
+        "demand" => Icons.Material.Filled.Assignment,
+        "workboard" => Icons.Material.Filled.ViewKanban,
+        "quality" => Icons.Material.Filled.HealthAndSafety,
+        _ => Icons.Material.Filled.Factory
+    };
+
+    private RenderFragment Tab(string key, string label, string icon, string url) => builder =>
+    {
+        builder.OpenComponent<SoftButton>(0);
+        builder.AddAttribute(1, "Variant", key == ActiveTab ? Variant.Filled : Variant.Text);
+        builder.AddAttribute(2, "Color", Color.Primary);
+        builder.AddAttribute(3, "StartIcon", icon);
+        builder.AddAttribute(4, "Class", key == ActiveTab ? "production-workspace-tab is-active" : "production-workspace-tab");
+        builder.AddAttribute(5, "OnClick", EventCallback.Factory.Create<Microsoft.AspNetCore.Components.Web.MouseEventArgs>(
+            this,
+            () => Navigation.NavigateTo(url)));
+        builder.AddAttribute(6, "ChildContent", (RenderFragment)(content => content.AddContent(0, label)));
+        builder.CloseComponent();
+    };
+}

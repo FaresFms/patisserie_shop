@@ -140,9 +140,9 @@ internal static class StocktakeReconciliationReportBuilder
         row = new StocktakeReconciliationProductDto
         {
             ProductId = productId,
-            ProductName = product?.Name ?? productId.ToString("N")[..8].ToUpperInvariant(),
+            ProductName = product?.DisplayName ?? productId.ToString("N")[..8].ToUpperInvariant(),
             Sku = product?.SKU ?? string.Empty,
-            Unit = product?.Unit ?? string.Empty,
+            Unit = product?.DisplayUnit ?? string.Empty,
             CostPrice = product?.CostPrice ?? 0m
         };
         rows[productId] = row;

@@ -36,9 +36,10 @@ public class ProductionWasteRepository
         Guid? kitchenBranchId,
         DateTime? fromDate,
         DateTime? toDate,
+        IReadOnlyCollection<Guid> scopedKitchenBranchIds,
         CancellationToken cancellationToken = default)
     {
-        var query = await BuildFilteredQueryAsync(filter, wasteType, kitchenBranchId, fromDate, toDate);
+        var query = await BuildFilteredQueryAsync(filter, wasteType, kitchenBranchId, fromDate, toDate, scopedKitchenBranchIds);
         return await query.LongCountAsync(GetCancellationToken(cancellationToken));
     }
 
@@ -48,13 +49,14 @@ public class ProductionWasteRepository
         Guid? kitchenBranchId,
         DateTime? fromDate,
         DateTime? toDate,
+        IReadOnlyCollection<Guid> scopedKitchenBranchIds,
         string sorting,
         int skipCount,
         int maxResultCount,
         CancellationToken cancellationToken = default)
     {
         var ct = GetCancellationToken(cancellationToken);
-        var query = await BuildFilteredQueryAsync(filter, wasteType, kitchenBranchId, fromDate, toDate);
+        var query = await BuildFilteredQueryAsync(filter, wasteType, kitchenBranchId, fromDate, toDate, scopedKitchenBranchIds);
 
         var rows = await ApplySorting(query, sorting)
             .Skip(skipCount)
@@ -81,6 +83,7 @@ public class ProductionWasteRepository
     public async Task<ProductionWasteAnalyticsReadModel> GetAnalyticsAsync(
         int days,
         Guid? kitchenBranchId,
+        IReadOnlyCollection<Guid> scopedKitchenBranchIds,
         CancellationToken cancellationToken = default)
     {
         var ct = GetCancellationToken(cancellationToken);
@@ -92,6 +95,7 @@ public class ProductionWasteRepository
         {
             query = query.Where(w => w.KitchenBranchId == kitchenBranchId.Value);
         }
+        query = query.Where(w => scopedKitchenBranchIds.Contains(w.KitchenBranchId));
 
         var rows = await query
             .Select(w => new WasteProjection
@@ -113,15 +117,15 @@ public class ProductionWasteRepository
         {
             Summary = new ProductionWasteSummary
             {
-                TotalQuantity = rows.Sum(r => r.Quantity),
+                TotalIncidents = rows.Count,
                 TotalCost = rows.Sum(r => r.TotalCost),
                 TopReason = rows.GroupBy(r => r.Reason)
-                    .OrderByDescending(g => g.Sum(x => x.Quantity))
+                    .OrderByDescending(g => g.Sum(x => x.TotalCost))
                     .Select(g => g.Key)
                     .FirstOrDefault(),
                 TopProductName = rows.GroupBy(r => r.ProductId)
-                    .OrderByDescending(g => g.Sum(x => x.Quantity))
-                    .Select(g => productById.TryGetValue(g.Key, out var product) ? product.Name : null)
+                    .OrderByDescending(g => g.Sum(x => x.TotalCost))
+                    .Select(g => productById.TryGetValue(g.Key, out var product) ? product.DisplayName : null)
                     .FirstOrDefault()
             }
         };
@@ -132,7 +136,7 @@ public class ProductionWasteRepository
             analytics.DailySeries.Add(new ProductionWasteDailyPoint
             {
                 Date = date,
-                Quantity = dayRows.Sum(r => r.Quantity),
+                IncidentCount = dayRows.Count,
                 Cost = dayRows.Sum(r => r.TotalCost)
             });
         }
@@ -142,10 +146,10 @@ public class ProductionWasteRepository
             .Select(g => new ProductionWasteReasonSlice
             {
                 Reason = g.Key,
-                Quantity = g.Sum(x => x.Quantity),
+                IncidentCount = g.Count(),
                 Cost = g.Sum(x => x.TotalCost)
             })
-            .OrderByDescending(x => x.Quantity)
+            .OrderByDescending(x => x.Cost)
             .ToList();
 
         analytics.TopProducts = rows
@@ -156,13 +160,14 @@ public class ProductionWasteRepository
                 return new ProductionWasteProductRow
                 {
                     ProductId = g.Key,
-                    ProductName = product?.Name ?? g.Key.ToString(),
+                    ProductName = product?.DisplayName ?? g.Key.ToString(),
                     ProductSku = product?.SKU ?? string.Empty,
+                    ProductUnit = product?.DisplayUnit ?? string.Empty,
                     Quantity = g.Sum(x => x.Quantity),
                     Cost = g.Sum(x => x.TotalCost)
                 };
             })
-            .OrderByDescending(x => x.Quantity)
+            .OrderByDescending(x => x.Cost)
             .Take(8)
             .ToList();
 
@@ -174,7 +179,8 @@ public class ProductionWasteRepository
         string? wasteType,
         Guid? kitchenBranchId,
         DateTime? fromDate,
-        DateTime? toDate)
+        DateTime? toDate,
+        IReadOnlyCollection<Guid> scopedKitchenBranchIds)
     {
         var query = await GetQueryableAsync();
 
@@ -186,6 +192,7 @@ public class ProductionWasteRepository
         {
             query = query.Where(w => w.KitchenBranchId == kitchenBranchId.Value);
         }
+        query = query.Where(w => scopedKitchenBranchIds.Contains(w.KitchenBranchId));
         if (fromDate.HasValue)
         {
             var from = fromDate.Value.Date;
@@ -269,11 +276,11 @@ public class ProductionWasteRepository
                 ProductionOrderId = r.ProductionOrderId,
                 ProductionOrderNumber = orderNumber,
                 KitchenBranchId = r.KitchenBranchId,
-                KitchenBranchName = branch?.Name ?? r.KitchenBranchId.ToString(),
+                KitchenBranchName = branch?.DisplayName ?? r.KitchenBranchId.ToString(),
                 ProductId = r.ProductId,
-                ProductName = product?.Name ?? r.ProductId.ToString(),
+                ProductName = product?.DisplayName ?? r.ProductId.ToString(),
                 ProductSku = product?.SKU ?? string.Empty,
-                ProductUnit = product?.Unit ?? string.Empty,
+                ProductUnit = product?.DisplayUnit ?? string.Empty,
                 WasteType = r.WasteType,
                 Quantity = r.Quantity,
                 UnitCost = r.UnitCost,

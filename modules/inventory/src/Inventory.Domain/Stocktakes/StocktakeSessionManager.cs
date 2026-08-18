@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Inventory.BranchInventory;
 using Inventory.Entities;
+using Inventory.Localization;
 using Volo.Abp;
 using Volo.Abp.Domain.Repositories;
 using Volo.Abp.Domain.Services;
@@ -54,9 +55,9 @@ public class StocktakeSessionManager : DomainService
         var seeds = rows.ConvertAll(row => new StocktakeSessionLineSeed(
             row.Inventory.Id,
             row.Product.Id,
-            row.Product.Name,
+            LocalizedBusinessText.Select(row.Product.NameAr, row.Product.NameEn),
             row.Product.SKU,
-            row.Product.Unit,
+            LocalizedBusinessText.Select(row.Product.UnitAr, row.Product.UnitEn),
             row.Inventory.QuantityOnHand,
             row.Product.ShelfLifeDays.HasValue,
             row.Inventory.ConcurrencyStamp));

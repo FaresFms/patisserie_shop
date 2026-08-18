@@ -41,7 +41,6 @@ public class ShopSettingsAppService : patisserie_shopAppService, IShopSettingsAp
         return new ShopSettingsDto
         {
             ShopName = await _settingProvider.GetOrNullAsync(patisserie_shopSettings.ShopName) ?? "Patisserie Shop",
-            ShopAddress = await _settingProvider.GetOrNullAsync(patisserie_shopSettings.ShopAddress),
             ShopPhone = await _settingProvider.GetOrNullAsync(patisserie_shopSettings.ShopPhone),
             ReceiptFooterMessage = await _settingProvider.GetOrNullAsync(patisserie_shopSettings.ReceiptFooterMessage),
             DefaultCurrency = ShopCurrencySettings.Normalize(
@@ -95,7 +94,6 @@ public class ShopSettingsAppService : patisserie_shopAppService, IShopSettingsAp
             IntelligenceJobSettings.ExpiryDefaultIntervalMinutes);
 
         await _settingManager.SetGlobalAsync(patisserie_shopSettings.ShopName, name);
-        await _settingManager.SetGlobalAsync(patisserie_shopSettings.ShopAddress, (input.ShopAddress ?? string.Empty).Trim());
         await _settingManager.SetGlobalAsync(patisserie_shopSettings.ShopPhone, (input.ShopPhone ?? string.Empty).Trim());
         await _settingManager.SetGlobalAsync(patisserie_shopSettings.ReceiptFooterMessage, (input.ReceiptFooterMessage ?? string.Empty).Trim());
         await _settingManager.SetGlobalAsync(patisserie_shopSettings.DefaultCurrency, currency);

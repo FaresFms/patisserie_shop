@@ -20,8 +20,19 @@ public class ProductionPermissions
     public static class BranchRequests
     {
         public const string Default = GroupName + ".BranchRequests";
+        public const string ViewAll = Default + ".ViewAll";
         public const string Approve = Default + ".Approve";
         public const string Reject = Default + ".Reject";
+    }
+
+    public static class MyRequests
+    {
+        public const string Default = GroupName + ".MyRequests";
+    }
+
+    public static class Kitchens
+    {
+        public const string ManageAll = GroupName + ".Kitchens.ManageAll";
     }
 
     public static class Plans
@@ -37,6 +48,9 @@ public class ProductionPermissions
         public const string Start = Default + ".Start";
         public const string Complete = Default + ".Complete";
         public const string Cancel = Default + ".Cancel";
+        public const string Schedule = Default + ".Schedule";
+        public const string Quality = Default + ".Quality";
+        public const string Traceability = Default + ".Traceability";
     }
 
     public static class Ingredients
@@ -61,6 +75,12 @@ public class ProductionPermissions
     public static class Analytics
     {
         public const string Default = GroupName + ".Analytics";
+    }
+
+    public static class Control
+    {
+        public const string Default = GroupName + ".Control";
+        public const string Manage = Default + ".Manage";
     }
 
     public static string[] GetAll()

@@ -1,8 +1,16 @@
 using System;
+using System.Threading;
+using System.Threading.Tasks;
+using Inventory.Entities;
+using NSubstitute;
 using Production;
 using Production.Entities;
+using Production.Formulas;
+using Production.Orders;
+using Production.Plans;
 using Shouldly;
 using Volo.Abp;
+using Volo.Abp.Domain.Repositories;
 using Xunit;
 
 namespace patisserie_shop.Production;
@@ -100,5 +108,32 @@ public class AppProductionPlanTests
 
         Should.Throw<BusinessException>(() => plan.Cancel(hasProductionOrders: true))
             .Code.ShouldBe(ProductionErrorCodes.CannotCancelPlanWithOrders);
+    }
+
+    [Fact]
+    public async Task Manager_rejects_missing_formula_before_changing_plan_status()
+    {
+        var plan = NewPlan();
+        var productId = Guid.NewGuid();
+        plan.AddLine(
+            Guid.NewGuid(), productId, 5, 0, 0, 5, 5,
+            0m, 0m, 0m, 0m);
+
+        var formulaRepository = Substitute.For<IProductionFormulaRepository>();
+        formulaRepository
+            .GetActiveDefaultForProductAsync(productId, Arg.Any<CancellationToken>())
+            .Returns((AppProductionFormula?)null);
+
+        var manager = new ProductionPlanManager(
+            Substitute.For<IRepository<AppBranch, Guid>>(),
+            Substitute.For<IProductionPlanRepository>(),
+            Substitute.For<IProductionOrderRepository>(),
+            formulaRepository);
+
+        var exception = await Should.ThrowAsync<BusinessException>(
+            () => manager.ConfirmAsync(plan, Guid.NewGuid()));
+
+        exception.Code.ShouldBe(ProductionErrorCodes.FormulaRequiredForProductionOrder);
+        plan.Status.ShouldBe(ProductionPlanStatuses.Draft);
     }
 }

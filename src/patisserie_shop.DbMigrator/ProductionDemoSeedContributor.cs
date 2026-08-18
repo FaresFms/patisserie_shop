@@ -32,6 +32,7 @@ public class ProductionDemoSeedContributor : IDataSeedContributor, ITransientDep
     private const int ShortageQuantity = 340;
     private const string RawCategoryName = "مواد الإنتاج الخام";
     private const string PackagingCategoryName = "مواد التغليف";
+    private const string CreamSweetsCategoryName = "حلويات عربية بالقشطة";
     private const string IngredientSupplierName = "شركة زاد الشام للمواد الغذائية";
 
     private readonly CategoryManager _categoryManager;
@@ -141,20 +142,35 @@ public class ProductionDemoSeedContributor : IDataSeedContributor, ITransientDep
 
         var rawCategory = await EnsureCategoryAsync(
             RawCategoryName,
-            "مواد تدخل في وصفات المطبخ الرئيسي مثل الدقيق والزبدة والسكر والبيض.");
+            "Raw Materials",
+            "مواد تدخل في وصفات المطبخ الرئيسي مثل الدقيق والزبدة والسكر والبيض.",
+            "Ingredients used by the central kitchen, such as flour, butter, sugar, and eggs.");
         var packagingCategory = await EnsureCategoryAsync(
             PackagingCategoryName,
-            "علب وأكياس تستخدم لتجهيز الإنتاج قبل إرساله للفروع.");
+            "Packaging",
+            "علب وأكياس تستخدم لتجهيز الإنتاج قبل إرساله للفروع.",
+            "Boxes and bags used to prepare production for branch dispatch.");
+        var creamSweetsCategory = await EnsureCategoryAsync(
+            CreamSweetsCategoryName,
+            "Arabic Cream Sweets",
+            "حلويات سورية وعربية طازجة محشوة بالقشطة ومحضّرة يومياً في المطبخ المركزي.",
+            "Fresh Syrian and Arabic sweets filled with ashta and prepared daily in the central kitchen.");
         var supplier = await EnsureSupplierAsync();
 
         var ingredients = await EnsureIngredientProductsAsync(rawCategory.Id, packagingCategory.Id, supplier.Id);
         await EnsureKitchenIngredientStockAsync(mainKitchen.Id, ingredients);
 
         var finishedProducts = await EnsureFinishedProductsAreProducibleAsync();
-        await EnsureArabicFormulasAsync(finishedProducts, ingredients);
+        var creamSweets = await EnsureCreamSweetProductsAsync(creamSweetsCategory.Id);
+        foreach (var (sku, product) in creamSweets)
+        {
+            finishedProducts[sku] = product;
+        }
+        await EnsureArabicFormulasAsync(finishedProducts, ingredients, kitchenUser.Id);
 
         var requests = await EnsureBranchRequestsAsync(finishedProducts);
         await EnsureStarterPlanAndOrdersAsync(mainKitchen.Id, requests);
+        await EnsureCreamSweetsRequestsAndPlanAsync(mainKitchen.Id, finishedProducts);
         await EnsureButterShortageScenarioAsync(mainKitchen.Id, finishedProducts);
         await EnsureCompletedProductionAndWasteAsync(
             mainKitchen.Id,
@@ -163,15 +179,19 @@ public class ProductionDemoSeedContributor : IDataSeedContributor, ITransientDep
             ingredients);
     }
 
-    private async Task<AppCategory> EnsureCategoryAsync(string name, string description)
+    private async Task<AppCategory> EnsureCategoryAsync(
+        string nameAr,
+        string nameEn,
+        string descriptionAr,
+        string descriptionEn)
     {
-        var category = await _categoryRepo.FindAsync(c => c.Name == name);
+        var category = await _categoryRepo.FindAsync(c => c.NameAr == nameAr);
         if (category != null)
         {
             return category;
         }
 
-        category = await _categoryManager.CreateAsync(name, description);
+        category = await _categoryManager.CreateAsync(nameAr, nameEn, descriptionAr, descriptionEn);
         await _categoryRepo.InsertAsync(category, autoSave: true);
         return category;
     }
@@ -211,7 +231,70 @@ public class ProductionDemoSeedContributor : IDataSeedContributor, ITransientDep
             new IngredientSpec("RM-STRAW-001", "فراولة طازجة", "غرام", rawCategoryId, 0.01m, 4, ProductTypes.RawMaterial, "فراولة للتارت والطلبات الطازجة."),
             new IngredientSpec("RM-YEAST-001", "خميرة فورية", "غرام", rawCategoryId, 0.006m, 180, ProductTypes.RawMaterial, "خميرة للخبز والعجين اليومي."),
             new IngredientSpec("RM-SALT-001", "ملح غذائي", "غرام", rawCategoryId, 0.001m, 730, ProductTypes.RawMaterial, "ملح لضبط نكهة العجين."),
+            new IngredientSpec("RM-ASHTA-001", "قشطة عربية طازجة", "غرام", rawCategoryId, 0.009m, 3, ProductTypes.RawMaterial, "قشطة طازجة لحشوات الحلويات العربية اليومية."),
+            new IngredientSpec("RM-MILK-001", "حليب كامل الدسم", "مل", rawCategoryId, 0.0018m, 5, ProductTypes.RawMaterial, "حليب طازج لتحضير القشطة والحشوات."),
+            new IngredientSpec("RM-SEMOLINA-001", "سميد ناعم", "غرام", rawCategoryId, 0.002m, 365, ProductTypes.RawMaterial, "سميد ناعم لحلاوة الجبن والمدلوقة."),
+            new IngredientSpec("RM-AKKAWI-001", "جبنة عكاوي محلاة", "غرام", rawCategoryId, 0.01m, 14, ProductTypes.RawMaterial, "جبنة عكاوي منقوعة ومخففة الملوحة لحلاوة الجبن والكنافة."),
+            new IngredientSpec("RM-PHYLLO-001", "رقائق عجينة جلاش", "غرام", rawCategoryId, 0.004m, 90, ProductTypes.RawMaterial, "رقائق جلاش لزنود الست والوربات والشعيبيات."),
+            new IngredientSpec("RM-KATAIFI-001", "عجينة كنافة خشنة", "غرام", rawCategoryId, 0.0045m, 30, ProductTypes.RawMaterial, "عجينة كنافة طازجة للحلويات المخبوزة."),
+            new IngredientSpec("RM-PISTACHIO-001", "فستق حلبي مجروش", "غرام", rawCategoryId, 0.035m, 180, ProductTypes.RawMaterial, "فستق حلبي مجروش للتزيين والحشوات."),
+            new IngredientSpec("RM-WALNUT-001", "جوز مجروش", "غرام", rawCategoryId, 0.018m, 180, ProductTypes.RawMaterial, "جوز مجروش لحشوات القطايف والحلويات الموسمية."),
+            new IngredientSpec("RM-STARCH-001", "نشاء ذرة", "غرام", rawCategoryId, 0.002m, 365, ProductTypes.RawMaterial, "نشاء لتثبيت القشطة والحشوات."),
+            new IngredientSpec("RM-BLOSSOM-001", "ماء زهر", "مل", rawCategoryId, 0.006m, 365, ProductTypes.RawMaterial, "ماء زهر لتعطير القطر والقشطة."),
+            new IngredientSpec("RM-GHEE-001", "سمنة عربية", "غرام", rawCategoryId, 0.011m, 365, ProductTypes.RawMaterial, "سمنة عربية لخبز الحلويات الشرقية وتحميرها."),
+            new IngredientSpec("RM-TOAST-001", "خبز توست للحلويات", "غرام", rawCategoryId, 0.003m, 7, ProductTypes.RawMaterial, "خبز أبيض مخصص لتحضير عيش السرايا."),
             new IngredientSpec("PK-BOX-001", "علبة كرتون للحلويات", "علبة", packagingCategoryId, 0.25m, null, ProductTypes.Packaging, "علبة تغليف للطلبات الجاهزة والتحويلات.")
+        };
+
+        var englishNames = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["RM-FLOUR-001"] = "Premium Croissant Flour",
+            ["RM-BUTTER-001"] = "French Unsalted Butter",
+            ["RM-SUGAR-001"] = "Fine Sugar",
+            ["RM-EGG-001"] = "Fresh Eggs",
+            ["RM-CHOC-001"] = "70% Dark Chocolate",
+            ["RM-ALMOND-001"] = "Ground Almonds",
+            ["RM-STRAW-001"] = "Fresh Strawberries",
+            ["RM-YEAST-001"] = "Instant Yeast",
+            ["RM-SALT-001"] = "Food-grade Salt",
+            ["RM-ASHTA-001"] = "Fresh Arabic Ashta",
+            ["RM-MILK-001"] = "Whole Milk",
+            ["RM-SEMOLINA-001"] = "Fine Semolina",
+            ["RM-AKKAWI-001"] = "Desalted Akkawi Cheese",
+            ["RM-PHYLLO-001"] = "Phyllo Pastry Sheets",
+            ["RM-KATAIFI-001"] = "Kataifi Dough",
+            ["RM-PISTACHIO-001"] = "Crushed Aleppo Pistachios",
+            ["RM-WALNUT-001"] = "Crushed Walnuts",
+            ["RM-STARCH-001"] = "Cornstarch",
+            ["RM-BLOSSOM-001"] = "Orange Blossom Water",
+            ["RM-GHEE-001"] = "Arabic Ghee",
+            ["RM-TOAST-001"] = "Dessert Toast Bread",
+            ["PK-BOX-001"] = "Pastry Cardboard Box"
+        };
+        var englishDescriptions = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["RM-FLOUR-001"] = "High-protein white flour suitable for laminated dough and bread.",
+            ["RM-BUTTER-001"] = "Cold butter for lamination and croissants.",
+            ["RM-SUGAR-001"] = "Sugar for fillings, creams, and dough.",
+            ["RM-EGG-001"] = "Fresh daily eggs for cakes, glazing, and creams.",
+            ["RM-CHOC-001"] = "Chocolate for fillings and opera cake.",
+            ["RM-ALMOND-001"] = "Almond powder for French pastries.",
+            ["RM-STRAW-001"] = "Strawberries for tarts and fresh orders.",
+            ["RM-YEAST-001"] = "Yeast for bread and daily dough.",
+            ["RM-SALT-001"] = "Salt used to balance dough flavor.",
+            ["RM-ASHTA-001"] = "Fresh ashta for daily Arabic sweet fillings.",
+            ["RM-MILK-001"] = "Fresh whole milk for ashta and cream fillings.",
+            ["RM-SEMOLINA-001"] = "Fine semolina for halawet el jibn and madlouka.",
+            ["RM-AKKAWI-001"] = "Soaked, desalted Akkawi cheese for cheese sweets and knafeh.",
+            ["RM-PHYLLO-001"] = "Phyllo sheets for znoud el sit, warbat, and shaibiyat.",
+            ["RM-KATAIFI-001"] = "Fresh kataifi dough for baked Arabic sweets.",
+            ["RM-PISTACHIO-001"] = "Crushed Aleppo pistachios for fillings and garnish.",
+            ["RM-WALNUT-001"] = "Crushed walnuts for qatayef and seasonal fillings.",
+            ["RM-STARCH-001"] = "Cornstarch used to stabilize ashta and cream fillings.",
+            ["RM-BLOSSOM-001"] = "Orange blossom water for syrup and ashta.",
+            ["RM-GHEE-001"] = "Arabic ghee for baking and browning traditional sweets.",
+            ["RM-TOAST-001"] = "White bread prepared specifically for eish el saraya.",
+            ["PK-BOX-001"] = "Packaging box for prepared orders and transfers."
         };
 
         var products = new Dictionary<string, AppProduct>(StringComparer.OrdinalIgnoreCase);
@@ -223,10 +306,13 @@ public class ProductionDemoSeedContributor : IDataSeedContributor, ITransientDep
                 product = await _productManager.CreateAsync(
                     spec.CategoryId,
                     spec.Name,
+                    englishNames[spec.Sku],
                     spec.Sku,
                     spec.Unit,
+                    spec.Unit == "علبة" ? "box" : spec.Unit == "حبة" ? "piece" : spec.Unit == "مل" ? "ml" : "gram",
                     supplierId,
                     spec.Description,
+                    englishDescriptions[spec.Sku],
                     spec.CostPrice,
                     salePrice: 0m,
                     reorderLevel: spec.ProductType == ProductTypes.Packaging ? 50 : 1_000,
@@ -260,6 +346,18 @@ public class ProductionDemoSeedContributor : IDataSeedContributor, ITransientDep
             ["RM-STRAW-001"] = 6_000,
             ["RM-YEAST-001"] = 2_000,
             ["RM-SALT-001"] = 3_000,
+            ["RM-ASHTA-001"] = 35_000,
+            ["RM-MILK-001"] = 30_000,
+            ["RM-SEMOLINA-001"] = 18_000,
+            ["RM-AKKAWI-001"] = 22_000,
+            ["RM-PHYLLO-001"] = 20_000,
+            ["RM-KATAIFI-001"] = 20_000,
+            ["RM-PISTACHIO-001"] = 10_000,
+            ["RM-WALNUT-001"] = 10_000,
+            ["RM-STARCH-001"] = 8_000,
+            ["RM-BLOSSOM-001"] = 5_000,
+            ["RM-GHEE-001"] = 15_000,
+            ["RM-TOAST-001"] = 12_000,
             ["PK-BOX-001"] = 300
         };
 
@@ -297,7 +395,7 @@ public class ProductionDemoSeedContributor : IDataSeedContributor, ITransientDep
 
     private async Task<Dictionary<string, AppProduct>> EnsureFinishedProductsAreProducibleAsync()
     {
-        var targetSkus = new[] { "VN-001", "VN-002", "CT-001", "CT-002", "BR-001" };
+        var targetSkus = new[] { "VN-001", "VN-002", "CT-001", "CT-002", "BR-001", "SS-002" };
         var products = await _productRepo.GetListAsync(p => targetSkus.Contains(p.SKU));
         var bySku = products.ToDictionary(p => p.SKU, StringComparer.OrdinalIgnoreCase);
 
@@ -319,25 +417,80 @@ public class ProductionDemoSeedContributor : IDataSeedContributor, ITransientDep
         return bySku;
     }
 
+    private async Task<Dictionary<string, AppProduct>> EnsureCreamSweetProductsAsync(Guid categoryId)
+    {
+        var specs = new[]
+        {
+            new CreamSweetSpec("AS-001", "حلاوة الجبن بالقشطة", "Halawet El Jibn with Ashta", 1.65m, 4.75m, 2, "لفائف حلاوة الجبن الطازجة محشوة بالقشطة ومزيّنة بالفستق الحلبي.", "Fresh sweet-cheese rolls filled with ashta and garnished with Aleppo pistachios."),
+            new CreamSweetSpec("AS-002", "زنود الست بالقشطة", "Znoud El Sit with Ashta", 1.45m, 4.25m, 2, "رقائق مقرمشة محشوة بالقشطة ومغطاة بالقطر والفستق.", "Crisp phyllo rolls filled with ashta and finished with syrup and pistachios."),
+            new CreamSweetSpec("AS-003", "وربات بالقشطة", "Warbat with Ashta", 1.35m, 4.00m, 2, "وربات جلاش مخبوزة بالسمنة ومحشوة بالقشطة الطازجة.", "Ghee-baked phyllo parcels filled with fresh ashta."),
+            new CreamSweetSpec("AS-004", "مدلوقة بالقشطة والفستق", "Madlouka with Ashta and Pistachios", 1.75m, 5.00m, 3, "طبقة سميد طرية مع القشطة والفستق الحلبي.", "Soft semolina sweet layered with ashta and Aleppo pistachios."),
+            new CreamSweetSpec("AS-005", "كنافة بالقشطة", "Knafeh with Ashta", 1.60m, 4.75m, 2, "كنافة خشنة مخبوزة بالسمنة ومحشوة بالقشطة.", "Ghee-baked kataifi pastry filled with fresh ashta."),
+            new CreamSweetSpec("AS-006", "قطايف بالقشطة", "Qatayef with Ashta", 1.10m, 3.50m, 2, "قطايف طرية محشوة بالقشطة ومزيّنة بالفستق.", "Soft qatayef filled with ashta and garnished with pistachios."),
+            new CreamSweetSpec("AS-007", "عيش السرايا بالقشطة", "Eish El Saraya with Ashta", 1.50m, 4.50m, 3, "خبز محمّص بالقطر تعلوه طبقة قشطة وفستق.", "Syrup-soaked toasted bread topped with ashta and pistachios."),
+            new CreamSweetSpec("AS-008", "شعيبيات بالقشطة", "Shaibiyat with Ashta", 1.40m, 4.25m, 2, "شعيبيات جلاش ذهبية محشوة بالقشطة ومطيّبة بماء الزهر.", "Golden phyllo shaibiyat filled with ashta and scented with orange blossom water.")
+        };
+
+        var products = new Dictionary<string, AppProduct>(StringComparer.OrdinalIgnoreCase);
+        foreach (var spec in specs)
+        {
+            var product = await _productRepo.FindAsync(p => p.SKU == spec.Sku);
+            if (product == null)
+            {
+                product = await _productManager.CreateAsync(
+                    categoryId,
+                    spec.NameAr,
+                    spec.NameEn,
+                    spec.Sku,
+                    "قطعة",
+                    "piece",
+                    defaultSupplierId: null,
+                    spec.DescriptionAr,
+                    spec.DescriptionEn,
+                    spec.CostPrice,
+                    spec.SalePrice,
+                    currency: "USD",
+                    reorderLevel: 12,
+                    shelfLifeDays: spec.ShelfLifeDays,
+                    productType: ProductTypes.FinishedGood,
+                    isSellable: true,
+                    isPurchasable: false,
+                    isProducible: true);
+                await _productRepo.InsertAsync(product, autoSave: true);
+            }
+            else if (!product.IsProducible || product.ProductType != ProductTypes.FinishedGood)
+            {
+                product.SetClassification(ProductTypes.FinishedGood, isSellable: true, isPurchasable: false, isProducible: true);
+                await _productRepo.UpdateAsync(product, autoSave: true);
+            }
+
+            products[spec.Sku] = product;
+        }
+
+        return products;
+    }
+
     private async Task EnsureArabicFormulasAsync(
         Dictionary<string, AppProduct> finishedProducts,
-        Dictionary<string, AppProduct> ingredients)
+        Dictionary<string, AppProduct> ingredients,
+        Guid kitchenUserId)
     {
         var formulaSpecs = new[]
         {
             new FormulaSpec(
                 "VN-001",
-                "وصفة كرواسون الزبدة - دفعة 50 قطعة",
+                "وصفة كرواسون الجبنة - دفعة 50 قطعة",
                 50,
                 4m,
                 18m,
                 7m,
                 180,
-                "وصفة تشغيل واضحة: عجين مورق، راحة باردة، ثم خبز وتبريد قبل التحويل للفروع.",
+                "عجين مورق محشو بجبنة عكاوي محلاة، مع راحة باردة ثم خبز وتبريد قبل التحويل للفروع.",
                 new[]
                 {
                     Item("RM-FLOUR-001", 5_000, 2m),
                     Item("RM-BUTTER-001", 2_500, 3m),
+                    Item("RM-AKKAWI-001", 1_500, 2m),
                     Item("RM-SUGAR-001", 350, 1m),
                     Item("RM-EGG-001", 20, 0m),
                     Item("RM-YEAST-001", 120, 0m),
@@ -345,13 +498,13 @@ public class ProductionDemoSeedContributor : IDataSeedContributor, ITransientDep
                 }),
             new FormulaSpec(
                 "VN-002",
-                "وصفة بان أو شوكولا - دفعة 40 قطعة",
+                "وصفة كرواسون الشوكولا - دفعة 40 قطعة",
                 40,
                 4.5m,
                 20m,
                 8m,
                 190,
-                "دفعة كرواسون بالشوكولا مع مراقبة كمية الحشوة حتى لا يزيد الهدر.",
+                "دفعة كرواسون بالشوكولا مع ضبط وزن الحشوة حتى لا يزيد الهدر.",
                 new[]
                 {
                     Item("RM-FLOUR-001", 4_200, 2m),
@@ -364,55 +517,184 @@ public class ProductionDemoSeedContributor : IDataSeedContributor, ITransientDep
                 }),
             new FormulaSpec(
                 "CT-001",
-                "وصفة تارت الفراولة - دفعة 12 قطعة",
-                12,
-                6m,
-                14m,
+                "وصفة كاتو الشوكولا - دفعة 16 شريحة",
+                16,
                 5m,
-                120,
-                "تارت سريع التلف، لذلك تظهر الفراولة الطازجة كعنصر واضح في الوصفة.",
+                18m,
+                7m,
+                150,
+                "قالب كاتو شوكولا يبرد جيداً قبل تقسيمه إلى شرائح متساوية.",
                 new[]
                 {
-                    Item("RM-FLOUR-001", 1_800, 1m),
-                    Item("RM-BUTTER-001", 900, 2m),
-                    Item("RM-SUGAR-001", 700, 1m),
-                    Item("RM-EGG-001", 24, 0m),
-                    Item("RM-STRAW-001", 1_800, 4m),
-                    Item("PK-BOX-001", 12, 0m)
+                    Item("RM-FLOUR-001", 1_600, 1m),
+                    Item("RM-BUTTER-001", 800, 2m),
+                    Item("RM-SUGAR-001", 900, 1m),
+                    Item("RM-EGG-001", 28, 0m),
+                    Item("RM-CHOC-001", 1_800, 2m),
+                    Item("RM-MILK-001", 1_200, 1m)
                 }),
             new FormulaSpec(
                 "CT-002",
-                "وصفة كيك أوبرا - دفعة 16 شريحة",
+                "وصفة كاتو الفانيلا والفواكه - دفعة 16 شريحة",
                 16,
                 5m,
                 22m,
                 9m,
                 160,
-                "دفعة حلويات دقيقة تحتاج شوكولا ولوز، مناسبة لمراجعة تكلفة الوصفة.",
+                "كاتو فانيلا بطبقات قشطة وفراولة طازجة، يجهز ويبرد قبل التقطيع.",
                 new[]
                 {
                     Item("RM-FLOUR-001", 1_500, 1m),
                     Item("RM-BUTTER-001", 900, 2m),
                     Item("RM-SUGAR-001", 800, 1m),
                     Item("RM-EGG-001", 30, 0m),
-                    Item("RM-CHOC-001", 2_000, 2m),
-                    Item("RM-ALMOND-001", 700, 1m)
+                    Item("RM-MILK-001", 1_200, 1m),
+                    Item("RM-ASHTA-001", 1_400, 3m),
+                    Item("RM-STRAW-001", 1_200, 4m)
                 }),
             new FormulaSpec(
                 "BR-001",
-                "وصفة باغيت تقليدي - دفعة 80 رغيف",
+                "وصفة خبز الصمون - دفعة 80 رغيف",
                 80,
                 3m,
                 12m,
                 4m,
                 150,
-                "دفعة خبز يومية تعتمد على دقيق وخميرة وملح، سهلة القراءة للمطبخ.",
+                "دفعة صمون يومية تعتمد على الدقيق والخميرة مع كمية حليب خفيفة لقوام طري.",
                 new[]
                 {
                     Item("RM-FLOUR-001", 9_000, 1m),
                     Item("RM-YEAST-001", 220, 0m),
                     Item("RM-SALT-001", 160, 0m),
-                    Item("RM-SUGAR-001", 200, 0m)
+                    Item("RM-SUGAR-001", 200, 0m),
+                    Item("RM-MILK-001", 1_500, 1m)
+                }),
+            new FormulaSpec(
+                "SS-002",
+                "وصفة معروك رمضان بالقشطة - دفعة 30 قطعة",
+                30, 6m, 17m, 7m, 125,
+                "عجن المعروك وتركه يتخمر، الخبز حتى اللون الذهبي، ثم الحشو بالقشطة بعد أن يبرد.",
+                new[]
+                {
+                    Item("RM-FLOUR-001", 2_500, 2m),
+                    Item("RM-YEAST-001", 60, 0m),
+                    Item("RM-SUGAR-001", 500, 1m),
+                    Item("RM-BUTTER-001", 400, 2m),
+                    Item("RM-MILK-001", 1_200, 1m),
+                    Item("RM-ASHTA-001", 1_500, 4m),
+                    Item("RM-BLOSSOM-001", 80, 1m)
+                }),
+            new FormulaSpec(
+                "AS-001",
+                "وصفة حلاوة الجبن بالقشطة - دفعة 30 قطعة",
+                30, 6m, 20m, 8m, 150,
+                "تحضير عجينة الجبن والسميد، فردها ولفها بالقشطة، ثم التقطيع والتزيين بالفستق.",
+                new[]
+                {
+                    Item("RM-AKKAWI-001", 1_800, 3m),
+                    Item("RM-SEMOLINA-001", 800, 2m),
+                    Item("RM-SUGAR-001", 700, 1m),
+                    Item("RM-ASHTA-001", 1_500, 4m),
+                    Item("RM-PISTACHIO-001", 250, 2m),
+                    Item("RM-BLOSSOM-001", 120, 1m)
+                }),
+            new FormulaSpec(
+                "AS-002",
+                "وصفة زنود الست بالقشطة - دفعة 30 قطعة",
+                30, 7m, 18m, 7m, 120,
+                "لف رقائق الجلاش حول القشطة، القلي أو الخبز حتى اللون الذهبي، ثم إضافة القطر والفستق.",
+                new[]
+                {
+                    Item("RM-PHYLLO-001", 1_500, 5m),
+                    Item("RM-ASHTA-001", 1_800, 4m),
+                    Item("RM-GHEE-001", 500, 2m),
+                    Item("RM-SUGAR-001", 900, 1m),
+                    Item("RM-PISTACHIO-001", 200, 2m),
+                    Item("RM-BLOSSOM-001", 100, 1m)
+                }),
+            new FormulaSpec(
+                "AS-003",
+                "وصفة وربات بالقشطة - دفعة 24 قطعة",
+                24, 6m, 17m, 7m, 110,
+                "تشكيل طبقات الجلاش بالسمنة، خبزها، ثم حشوها بالقشطة بعد أن تبرد جزئياً.",
+                new[]
+                {
+                    Item("RM-PHYLLO-001", 1_200, 5m),
+                    Item("RM-ASHTA-001", 1_600, 4m),
+                    Item("RM-GHEE-001", 450, 2m),
+                    Item("RM-SUGAR-001", 750, 1m),
+                    Item("RM-PISTACHIO-001", 180, 2m),
+                    Item("RM-BLOSSOM-001", 80, 1m)
+                }),
+            new FormulaSpec(
+                "AS-004",
+                "وصفة مدلوقة بالقشطة والفستق - دفعة 20 قطعة",
+                20, 5m, 16m, 6m, 100,
+                "طهي السميد بالسمنة والقطر، فرده في الصواني، ثم إضافة القشطة والفستق بعد التبريد.",
+                new[]
+                {
+                    Item("RM-SEMOLINA-001", 1_000, 2m),
+                    Item("RM-ASHTA-001", 1_600, 4m),
+                    Item("RM-SUGAR-001", 800, 1m),
+                    Item("RM-GHEE-001", 250, 2m),
+                    Item("RM-PISTACHIO-001", 400, 2m),
+                    Item("RM-BLOSSOM-001", 100, 1m)
+                }),
+            new FormulaSpec(
+                "AS-005",
+                "وصفة كنافة بالقشطة - دفعة 20 قطعة",
+                20, 7m, 20m, 8m, 130,
+                "توزيع عجينة الكنافة بالسمنة، إضافة القشطة، الخبز حتى اللون الذهبي ثم التشريب بالقطر.",
+                new[]
+                {
+                    Item("RM-KATAIFI-001", 2_000, 5m),
+                    Item("RM-ASHTA-001", 1_800, 4m),
+                    Item("RM-GHEE-001", 650, 2m),
+                    Item("RM-SUGAR-001", 900, 1m),
+                    Item("RM-PISTACHIO-001", 250, 2m),
+                    Item("RM-BLOSSOM-001", 100, 1m)
+                }),
+            new FormulaSpec(
+                "AS-006",
+                "وصفة قطايف بالقشطة - دفعة 30 قطعة",
+                30, 6m, 16m, 6m, 100,
+                "تحضير عجينة القطايف وتركها تتخمر، خبز الأقراص من جهة واحدة، ثم الحشو بالقشطة والتزيين.",
+                new[]
+                {
+                    Item("RM-FLOUR-001", 1_800, 2m),
+                    Item("RM-YEAST-001", 30, 0m),
+                    Item("RM-SUGAR-001", 650, 1m),
+                    Item("RM-MILK-001", 1_200, 1m),
+                    Item("RM-ASHTA-001", 1_500, 4m),
+                    Item("RM-PISTACHIO-001", 150, 2m),
+                    Item("RM-BLOSSOM-001", 80, 1m)
+                }),
+            new FormulaSpec(
+                "AS-007",
+                "وصفة عيش السرايا بالقشطة - دفعة 20 قطعة",
+                20, 5m, 15m, 6m, 90,
+                "تحميص الخبز وتشريبه بالقطر، تبريده ثم تغطيته بالقشطة والفستق.",
+                new[]
+                {
+                    Item("RM-TOAST-001", 1_600, 3m),
+                    Item("RM-SUGAR-001", 1_200, 1m),
+                    Item("RM-ASHTA-001", 1_800, 4m),
+                    Item("RM-PISTACHIO-001", 250, 2m),
+                    Item("RM-BLOSSOM-001", 120, 1m)
+                }),
+            new FormulaSpec(
+                "AS-008",
+                "وصفة شعيبيات بالقشطة - دفعة 30 قطعة",
+                30, 6m, 18m, 7m, 120,
+                "طي رقائق الجلاش بشكل مثلثات، حشوها بالقشطة، خبزها بالسمنة ثم إضافة القطر.",
+                new[]
+                {
+                    Item("RM-PHYLLO-001", 1_500, 5m),
+                    Item("RM-ASHTA-001", 1_700, 4m),
+                    Item("RM-GHEE-001", 500, 2m),
+                    Item("RM-SUGAR-001", 850, 1m),
+                    Item("RM-PISTACHIO-001", 200, 2m),
+                    Item("RM-BLOSSOM-001", 90, 1m)
                 })
         };
 
@@ -423,14 +705,35 @@ public class ProductionDemoSeedContributor : IDataSeedContributor, ITransientDep
                 continue;
             }
 
-            var hasDefaultFormula = await _formulaRepo.AnyAsync(f =>
-                f.FinishedProductId == finishedProduct.Id
-                && f.IsActive
-                && f.IsDefault);
-            if (hasDefaultFormula)
+            var activeFormulas = await _formulaRepo.GetListAsync(f =>
+                f.FinishedProductId == finishedProduct.Id && f.IsActive);
+            var desiredFormula = activeFormulas.FirstOrDefault(f => f.FormulaName == spec.Name);
+            if (desiredFormula != null)
             {
+                desiredFormula = await _formulaRepo.GetWithItemsAsync(desiredFormula.Id);
+                foreach (var otherDefault in activeFormulas.Where(f => f.Id != desiredFormula.Id && f.IsDefault))
+                {
+                    otherDefault.UnmarkDefault();
+                    await _formulaRepo.UpdateAsync(otherDefault);
+                }
+
+                if (desiredFormula.ApprovalStatus == ProductionFormulaStatuses.Draft)
+                {
+                    desiredFormula.Approve(kitchenUserId, DateTime.UtcNow);
+                }
+
+                if (!desiredFormula.IsDefault)
+                {
+                    desiredFormula.MarkDefault();
+                }
+
+                await _formulaRepo.UpdateAsync(desiredFormula, autoSave: true);
                 continue;
             }
+
+            var nextVersion = activeFormulas.Count == 0
+                ? 1
+                : activeFormulas.Max(f => f.Version) + 1;
 
             await _formulaManager.EnsureIngredientsAreValidAsync(
                 spec.Items.Select(i => ingredients[i.IngredientSku].Id));
@@ -439,7 +742,7 @@ public class ProductionDemoSeedContributor : IDataSeedContributor, ITransientDep
                 finishedProduct.Id,
                 spec.Name,
                 spec.OutputQuantity,
-                version: 1,
+                version: nextVersion,
                 spec.ExpectedWastePercent,
                 spec.LaborCostPerBatch,
                 spec.OverheadCostPerBatch,
@@ -448,18 +751,29 @@ public class ProductionDemoSeedContributor : IDataSeedContributor, ITransientDep
                 isDefault: true,
                 notes: spec.Notes);
 
-            var sortOrder = 1;
-            foreach (var item in spec.Items)
-            {
-                formula.AddItem(
-                    Guid.NewGuid(),
-                    ingredients[item.IngredientSku].Id,
-                    item.Quantity,
-                    item.LossPercent,
-                    sortOrder++);
-            }
+            AddFormulaItems(formula, spec, ingredients);
+
+            formula.Approve(kitchenUserId, DateTime.UtcNow);
+            formula.MarkDefault();
 
             await _formulaRepo.InsertAsync(formula, autoSave: true);
+        }
+    }
+
+    private static void AddFormulaItems(
+        AppProductionFormula formula,
+        FormulaSpec spec,
+        Dictionary<string, AppProduct> ingredients)
+    {
+        var sortOrder = 1;
+        foreach (var item in spec.Items)
+        {
+            formula.AddItem(
+                Guid.NewGuid(),
+                ingredients[item.IngredientSku].Id,
+                item.Quantity,
+                item.LossPercent,
+                sortOrder++);
         }
     }
 
@@ -498,7 +812,7 @@ public class ProductionDemoSeedContributor : IDataSeedContributor, ITransientDep
             new BranchRequestSpec(
                 "فرع أبو رمانة",
                 ProductionPriorities.Normal,
-                "طلب نهاية الأسبوع مع تركيز على التارت وشرائح الكيك.",
+                "طلب نهاية الأسبوع مع تركيز على شرائح الكاتو بالشوكولا والفواكه.",
                 new Dictionary<string, int>
                 {
                     ["CT-001"] = 18,
@@ -508,7 +822,7 @@ public class ProductionDemoSeedContributor : IDataSeedContributor, ITransientDep
             new BranchRequestSpec(
                 "فرع الشعلان",
                 ProductionPriorities.Urgent,
-                "الكمية المتوفرة لا تكفي حركة يوم الجمعة؛ الأولوية للكرواسون والباغيت.",
+                "الكمية المتوفرة لا تكفي حركة يوم الجمعة؛ الأولوية للكرواسون والصمون.",
                 new Dictionary<string, int>
                 {
                     ["VN-001"] = 42,
@@ -529,7 +843,7 @@ public class ProductionDemoSeedContributor : IDataSeedContributor, ITransientDep
 
         foreach (var spec in specs)
         {
-            var branch = await _branchRepo.FindAsync(b => b.Name == spec.BranchName);
+            var branch = await _branchRepo.FindAsync(b => b.NameAr == spec.BranchName);
             if (branch == null)
             {
                 _logger.LogWarning("Production request branch {BranchName} was not found.", spec.BranchName);
@@ -641,6 +955,137 @@ public class ProductionDemoSeedContributor : IDataSeedContributor, ITransientDep
         await _planRepo.UpdateAsync(plan, autoSave: true);
     }
 
+    private async Task EnsureCreamSweetsRequestsAndPlanAsync(
+        Guid mainKitchenId,
+        Dictionary<string, AppProduct> finishedProducts)
+    {
+        var neededByDate = DateTime.UtcNow.Date.AddDays(3);
+        var specs = new[]
+        {
+            new BranchRequestSpec(
+                "فرع المزة",
+                ProductionPriorities.Urgent,
+                "برنامج الحلويات العربية بالقشطة - تشكيلة المزة للعرض المسائي.",
+                new Dictionary<string, int> { ["AS-001"] = 30, ["AS-002"] = 30, ["SS-002"] = 30 }),
+            new BranchRequestSpec(
+                "فرع المالكي",
+                ProductionPriorities.Normal,
+                "برنامج الحلويات العربية بالقشطة - تشكيلة المالكي للضيافة والطلبات.",
+                new Dictionary<string, int> { ["AS-003"] = 24, ["AS-004"] = 20 }),
+            new BranchRequestSpec(
+                "فرع أبو رمانة",
+                ProductionPriorities.Urgent,
+                "برنامج الحلويات العربية بالقشطة - تشكيلة أبو رمانة الطازجة.",
+                new Dictionary<string, int> { ["AS-005"] = 20, ["AS-006"] = 30 }),
+            new BranchRequestSpec(
+                "فرع باب توما",
+                ProductionPriorities.Normal,
+                "برنامج الحلويات العربية بالقشطة - تشكيلة باب توما للعرض اليومي.",
+                new Dictionary<string, int> { ["AS-007"] = 20, ["AS-008"] = 30 })
+        };
+
+        foreach (var spec in specs)
+        {
+            if (await _requestRepo.AnyAsync(r => r.Notes == spec.Notes))
+            {
+                continue;
+            }
+
+            var branch = await _branchRepo.FindAsync(b => b.NameAr == spec.BranchName);
+            if (branch == null)
+            {
+                _logger.LogWarning("Cream-sweets production request branch {BranchName} was not found.", spec.BranchName);
+                continue;
+            }
+
+            var branchSpec = GraduationSeedData.RetailBranches.First(x => x.Name == spec.BranchName);
+            var managerUser = await _userManager.FindByNameAsync(branchSpec.ManagerUserName);
+            using var requestActor = managerUser == null
+                ? null
+                : _currentPrincipalAccessor.Change(
+                    GraduationSeedData.PrincipalFor(
+                        managerUser,
+                        IdentityDataSeedContributor.BranchManagerRoleName));
+
+            var selectedProducts = spec.Quantities
+                .Where(x => finishedProducts.ContainsKey(x.Key))
+                .Select(x => finishedProducts[x.Key])
+                .ToList();
+            await _requestManager.EnsureRequestProductsAreProducibleAsync(selectedProducts.Select(p => p.Id));
+
+            var request = await _requestManager.CreateAsync(
+                branch.Id,
+                neededByDate,
+                spec.Priority,
+                managerUser?.Id,
+                spec.Notes);
+
+            foreach (var (sku, quantity) in spec.Quantities)
+            {
+                if (finishedProducts.TryGetValue(sku, out var product))
+                {
+                    request.AddItem(
+                        Guid.NewGuid(),
+                        product.Id,
+                        quantity,
+                        "كمية دفعة كاملة حتى تصل الحلويات طازجة وبنفس مستوى الجودة إلى الفرع.");
+                }
+            }
+
+            request.Submit();
+            request.Approve(
+                managerUser?.Id,
+                request.Items.ToDictionary(i => i.Id, i => i.RequestedQuantity),
+                "تم اعتماد دفعات الحلويات بالقشطة حسب الطاقة اليومية ومدة الصلاحية القصيرة.");
+            await _requestRepo.InsertAsync(request, autoSave: true);
+        }
+
+        if (await _planRepo.AnyAsync(p =>
+                p.KitchenBranchId == mainKitchenId
+                && p.ProductionDate == neededByDate))
+        {
+            return;
+        }
+
+        var kitchenUser = await _userManager.FindByNameAsync(IdentityDataSeedContributor.KitchenManagerUserName);
+        var plan = await _planManager.CreateDraftAsync(
+            mainKitchenId,
+            neededByDate,
+            kitchenUser?.Id,
+            "خطة الحلويات العربية بالقشطة: تبدأ بتحضير القشطة والقطر، ثم الأصناف المخبوزة، وتُنهي بالأصناف الباردة قبل التوزيع.");
+
+        if (plan.Lines.Count == 0)
+        {
+            _logger.LogWarning("The cream-sweets production plan has no approved request lines.");
+            return;
+        }
+
+        foreach (var line in plan.Lines.ToList())
+        {
+            var hasDefaultFormula = await _formulaRepo.AnyAsync(f =>
+                f.FinishedProductId == line.ProductId
+                && f.IsActive
+                && f.IsDefault);
+            if (!hasDefaultFormula)
+            {
+                plan.UpdateLinePlannedQuantity(
+                    line.Id,
+                    0,
+                    "انشال هالصنف من خطة الحلويات لأنه ما عنده وصفة إنتاج افتراضية معتمدة.");
+            }
+        }
+
+        plan.Confirm(kitchenUser?.Id);
+        var orders = await _orderManager.CreateFromPlanAsync(plan, kitchenUser?.Id);
+        await _planRepo.InsertAsync(plan);
+        foreach (var order in orders)
+        {
+            await _orderRepo.InsertAsync(order);
+        }
+
+        await _planRepo.UpdateAsync(plan, autoSave: true);
+    }
+
     private async Task EnsureButterShortageScenarioAsync(
         Guid mainKitchenId,
         Dictionary<string, AppProduct> finishedProducts)
@@ -661,7 +1106,7 @@ public class ProductionDemoSeedContributor : IDataSeedContributor, ITransientDep
             return;
         }
 
-        var branch = await _branchRepo.FindAsync(b => b.Name == "فرع جرمانا");
+        var branch = await _branchRepo.FindAsync(b => b.NameAr == "فرع جرمانا");
         if (branch == null)
         {
             _logger.LogWarning("The shortage scenario could not find the Jaramana branch.");
@@ -841,11 +1286,11 @@ public class ProductionDemoSeedContributor : IDataSeedContributor, ITransientDep
             DateTime.UtcNow.AddDays(-8),
             "وصلت عدة علب مضغوطة من الزاوية وما عادت مناسبة لتغليف طلبات الزبائن.");
 
-        if (finishedProducts.TryGetValue("BR-001", out var baguette))
+        if (finishedProducts.TryGetValue("BR-001", out var samoon))
         {
             await RecordStockWasteAsync(
                 mainKitchenId,
-                baguette,
+                samoon,
                 quantity: 6,
                 ProductionWasteTypes.ExpiredFinishedGood,
                 ProductionWasteReasons.ExpiredBeforeDispatch,
@@ -854,19 +1299,19 @@ public class ProductionDemoSeedContributor : IDataSeedContributor, ITransientDep
                 "ستة أرغفة بقيت بعد إلغاء رحلة التوزيع المسائية وانتهت صلاحيتها قبل الإرسال.");
         }
 
-        if (finishedProducts.TryGetValue("CT-002", out var operaCake))
+        if (finishedProducts.TryGetValue("CT-002", out var vanillaFruitGateau))
         {
             var qualityWaste = await _wasteManager.CreateAsync(
                 productionOrderId: null,
                 mainKitchenId,
-                operaCake.Id,
+                vanillaFruitGateau.Id,
                 ProductionWasteTypes.RejectedOutput,
                 quantity: 4,
-                operaCake.CostPrice,
+                vanillaFruitGateau.CostPrice,
                 ProductionWasteReasons.UnderBaked,
                 kitchenUserId,
                 DateTime.UtcNow.AddDays(-2),
-                "أربع شرائح ما تماسكت طبقاتها بعد التبريد، فتم عزلها في فحص الجودة.");
+                "أربع شرائح كاتو ما تماسكت طبقات القشطة والفواكه فيها بعد التبريد، فتم عزلها في فحص الجودة.");
             await _wasteRepo.InsertAsync(qualityWaste, autoSave: true);
         }
     }
@@ -923,6 +1368,16 @@ public class ProductionDemoSeedContributor : IDataSeedContributor, ITransientDep
         string Description);
 
     private sealed record FormulaItemSpec(string IngredientSku, int Quantity, decimal LossPercent);
+
+    private sealed record CreamSweetSpec(
+        string Sku,
+        string NameAr,
+        string NameEn,
+        decimal CostPrice,
+        decimal SalePrice,
+        int ShelfLifeDays,
+        string DescriptionAr,
+        string DescriptionEn);
 
     private sealed record FormulaSpec(
         string FinishedSku,

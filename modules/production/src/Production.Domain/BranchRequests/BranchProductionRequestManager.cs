@@ -69,6 +69,31 @@ public class BranchProductionRequestManager : DomainService
         }
     }
 
+    public async Task<List<AppBranch>> GetRequestableBranchesAsync(Guid? userId, bool bypass)
+    {
+        List<AppBranch> branches;
+        if (bypass)
+        {
+            branches = await _branchRepository.GetListAsync(
+                b => b.IsActive && b.BranchType == BranchTypes.SalesBranch);
+        }
+        else if (userId.HasValue)
+        {
+            branches = await _branchRepository.GetListAsync(
+                b => b.IsActive &&
+                     b.BranchType == BranchTypes.SalesBranch &&
+                     b.ManagerUserId == userId.Value);
+        }
+        else
+        {
+            branches = [];
+        }
+
+        branches.Sort((left, right) =>
+            string.Compare(left.DisplayName, right.DisplayName, StringComparison.CurrentCultureIgnoreCase));
+        return branches;
+    }
+
     public async Task EnsureRequestProductsAreProducibleAsync(IEnumerable<Guid> productIds)
     {
         var ids = productIds.Distinct().ToList();

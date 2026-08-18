@@ -20,9 +20,6 @@ public static class patisserie_shopSettings
     /// <summary>Display name of the shop — top bar and receipt header. Default "Patisserie Shop".</summary>
     public const string ShopName = ShopPrefix + ".Name";
 
-    /// <summary>Street address printed on the receipt footer. Default empty.</summary>
-    public const string ShopAddress = ShopPrefix + ".Address";
-
     /// <summary>Phone number printed on the receipt footer. Default empty.</summary>
     public const string ShopPhone = ShopPrefix + ".Phone";
 
@@ -52,4 +49,7 @@ public static class patisserie_shopSettings
     /// ActionMode is honored. Default true.
     /// </summary>
     public const string AutopilotEnabled = OperationsPrefix + ".AutopilotEnabled";
+
+    /// <summary>JSON profile for work centers, shifts, quality gates, and forecast rules.</summary>
+    public const string ProductionControlProfile = Production.ProductionControlSettings.Profile;
 }

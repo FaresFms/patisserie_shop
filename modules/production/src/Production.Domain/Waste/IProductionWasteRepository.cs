@@ -15,6 +15,7 @@ public interface IProductionWasteRepository : IRepository<AppProductionWaste, Gu
         Guid? kitchenBranchId,
         DateTime? fromDate,
         DateTime? toDate,
+        IReadOnlyCollection<Guid> scopedKitchenBranchIds,
         CancellationToken cancellationToken = default);
 
     Task<List<ProductionWasteListItem>> GetFilteredListAsync(
@@ -23,6 +24,7 @@ public interface IProductionWasteRepository : IRepository<AppProductionWaste, Gu
         Guid? kitchenBranchId,
         DateTime? fromDate,
         DateTime? toDate,
+        IReadOnlyCollection<Guid> scopedKitchenBranchIds,
         string sorting,
         int skipCount,
         int maxResultCount,
@@ -31,5 +33,6 @@ public interface IProductionWasteRepository : IRepository<AppProductionWaste, Gu
     Task<ProductionWasteAnalyticsReadModel> GetAnalyticsAsync(
         int days,
         Guid? kitchenBranchId,
+        IReadOnlyCollection<Guid> scopedKitchenBranchIds,
         CancellationToken cancellationToken = default);
 }

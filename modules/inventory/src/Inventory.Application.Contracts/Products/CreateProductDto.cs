@@ -12,18 +12,29 @@ public class CreateProductDto
 
     [Required]
     [StringLength(128)]
-    public string Name { get; set; } = null!;
+    public string NameAr { get; set; } = null!;
+
+    [Required]
+    [StringLength(128)]
+    public string NameEn { get; set; } = null!;
 
     [Required]
     [StringLength(64)]
     public string SKU { get; set; } = null!;
 
     [StringLength(1024)]
-    public string? Description { get; set; }
+    public string? DescriptionAr { get; set; }
+
+    [StringLength(1024)]
+    public string? DescriptionEn { get; set; }
 
     [Required]
     [StringLength(32)]
-    public string Unit { get; set; } = null!;
+    public string UnitAr { get; set; } = null!;
+
+    [Required]
+    [StringLength(32)]
+    public string UnitEn { get; set; } = null!;
 
     [Range(0, double.MaxValue)]
     public decimal CostPrice { get; set; }

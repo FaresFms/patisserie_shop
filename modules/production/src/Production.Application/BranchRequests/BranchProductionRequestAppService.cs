@@ -14,7 +14,7 @@ using Volo.Abp.Settings;
 
 namespace Production.BranchRequests;
 
-[Authorize(ProductionPermissions.BranchRequests.Default)]
+[Authorize]
 public class BranchProductionRequestAppService : ProductionAppService, IBranchProductionRequestAppService
 {
     private readonly IBranchProductionRequestRepository _requestRepository;
@@ -22,7 +22,6 @@ public class BranchProductionRequestAppService : ProductionAppService, IBranchPr
     private readonly IProductionFormulaRepository _formulaRepository;
     private readonly IRepository<AppBranch, Guid> _branchRepository;
     private readonly IRepository<AppProduct, Guid> _productRepository;
-    private readonly IAuthorizationService _authorizationService;
     private readonly ISettingProvider _settingProvider;
 
     public BranchProductionRequestAppService(
@@ -31,7 +30,6 @@ public class BranchProductionRequestAppService : ProductionAppService, IBranchPr
         IProductionFormulaRepository formulaRepository,
         IRepository<AppBranch, Guid> branchRepository,
         IRepository<AppProduct, Guid> productRepository,
-        IAuthorizationService authorizationService,
         ISettingProvider settingProvider)
     {
         _requestRepository = requestRepository;
@@ -39,20 +37,49 @@ public class BranchProductionRequestAppService : ProductionAppService, IBranchPr
         _formulaRepository = formulaRepository;
         _branchRepository = branchRepository;
         _productRepository = productRepository;
-        _authorizationService = authorizationService;
         _settingProvider = settingProvider;
     }
 
-    public async Task<BranchProductionRequestDto> GetAsync(Guid id)
+    [Authorize(ProductionPermissions.BranchRequests.ViewAll)]
+    public Task<BranchProductionRequestDto> GetAsync(Guid id)
+        => GetForReviewAsync(id);
+
+    [Authorize(ProductionPermissions.BranchRequests.ViewAll)]
+    public Task<PagedResultDto<BranchProductionRequestListItemDto>> GetListAsync(GetBranchProductionRequestsInput input)
+        => GetReviewListAsync(input);
+
+    [Authorize(ProductionPermissions.MyRequests.Default)]
+    public async Task<BranchProductionRequestDto> GetMyAsync(Guid id)
     {
         var request = await _requestRepository.GetWithItemsAsync(id);
-        await EnsureCanSeeRequestAsync(request);
+        await _requestManager.EnsureBranchAccessAsync(request.BranchId, CurrentUser.Id, bypass: false);
         return await MapToDtoAsync(request);
     }
 
-    public async Task<PagedResultDto<BranchProductionRequestListItemDto>> GetListAsync(GetBranchProductionRequestsInput input)
+    [Authorize(ProductionPermissions.MyRequests.Default)]
+    public async Task<PagedResultDto<BranchProductionRequestListItemDto>> GetMyListAsync(GetBranchProductionRequestsInput input)
     {
-        var scopedBranchIds = await GetBranchScopeAsync();
+        var scopedBranchIds = await GetManagedBranchIdsAsync();
+
+        return await GetListInternalAsync(input, scopedBranchIds);
+    }
+
+    [Authorize(ProductionPermissions.BranchRequests.ViewAll)]
+    public async Task<BranchProductionRequestDto> GetForReviewAsync(Guid id)
+    {
+        var request = await _requestRepository.GetWithItemsAsync(id);
+        return await MapToDtoAsync(request);
+    }
+
+    [Authorize(ProductionPermissions.BranchRequests.ViewAll)]
+    public Task<PagedResultDto<BranchProductionRequestListItemDto>> GetReviewListAsync(
+        GetBranchProductionRequestsInput input)
+        => GetListInternalAsync(input, scopedBranchIds: null);
+
+    private async Task<PagedResultDto<BranchProductionRequestListItemDto>> GetListInternalAsync(
+        GetBranchProductionRequestsInput input,
+        IReadOnlyCollection<Guid>? scopedBranchIds)
+    {
 
         var totalCount = await _requestRepository.CountFilteredAsync(
             input.Filter, input.Status, input.BranchId, scopedBranchIds);
@@ -75,9 +102,10 @@ public class BranchProductionRequestAppService : ProductionAppService, IBranchPr
         return new PagedResultDto<BranchProductionRequestListItemDto>(totalCount, dtos);
     }
 
+    [Authorize(ProductionPermissions.MyRequests.Default)]
     public async Task<BranchProductionRequestDto> CreateAsync(CreateBranchProductionRequestDto input)
     {
-        await _requestManager.EnsureBranchAccessAsync(input.BranchId, CurrentUser.Id, await CanReviewAllRequestsAsync());
+        await _requestManager.EnsureBranchAccessAsync(input.BranchId, CurrentUser.Id, bypass: false);
         await _requestManager.EnsureRequestProductsAreProducibleAsync(GetProductIds(input.Items));
 
         var request = await _requestManager.CreateAsync(
@@ -93,10 +121,11 @@ public class BranchProductionRequestAppService : ProductionAppService, IBranchPr
         return await MapToDtoAsync(request);
     }
 
+    [Authorize(ProductionPermissions.MyRequests.Default)]
     public async Task<BranchProductionRequestDto> UpdateAsync(Guid id, UpdateBranchProductionRequestDto input)
     {
         var request = await _requestRepository.GetWithItemsAsync(id);
-        await _requestManager.EnsureBranchAccessAsync(request.BranchId, CurrentUser.Id, await CanReviewAllRequestsAsync());
+        await _requestManager.EnsureBranchAccessAsync(request.BranchId, CurrentUser.Id, bypass: false);
         await _requestManager.EnsureRequestProductsAreProducibleAsync(GetProductIds(input.Items));
 
         request.UpdateHeader(input.NeededByDate, input.Priority, input.Notes);
@@ -107,20 +136,22 @@ public class BranchProductionRequestAppService : ProductionAppService, IBranchPr
         return await MapToDtoAsync(request);
     }
 
+    [Authorize(ProductionPermissions.MyRequests.Default)]
     public async Task<BranchProductionRequestDto> SubmitAsync(Guid id)
     {
         var request = await _requestRepository.GetWithItemsAsync(id);
-        await _requestManager.EnsureBranchAccessAsync(request.BranchId, CurrentUser.Id, await CanReviewAllRequestsAsync());
+        await _requestManager.EnsureBranchAccessAsync(request.BranchId, CurrentUser.Id, bypass: false);
 
         request.Submit();
         await _requestRepository.UpdateAsync(request, autoSave: true);
         return await MapToDtoAsync(request);
     }
 
+    [Authorize(ProductionPermissions.MyRequests.Default)]
     public async Task<BranchProductionRequestDto> CancelAsync(Guid id)
     {
         var request = await _requestRepository.GetWithItemsAsync(id);
-        await _requestManager.EnsureBranchAccessAsync(request.BranchId, CurrentUser.Id, await CanReviewAllRequestsAsync());
+        await _requestManager.EnsureBranchAccessAsync(request.BranchId, CurrentUser.Id, bypass: false);
 
         request.Cancel();
         await _requestRepository.UpdateAsync(request, autoSave: true);
@@ -151,6 +182,27 @@ public class BranchProductionRequestAppService : ProductionAppService, IBranchPr
         return await MapToDtoAsync(request);
     }
 
+    [Authorize(ProductionPermissions.MyRequests.Default)]
+    public async Task<List<RequestableBranchLookupDto>> GetRequestableBranchesLookupAsync()
+    {
+        var branches = await _requestManager.GetRequestableBranchesAsync(
+            CurrentUser.Id,
+            bypass: false);
+
+        var dtos = new List<RequestableBranchLookupDto>(branches.Count);
+        foreach (var branch in branches)
+        {
+            dtos.Add(new RequestableBranchLookupDto
+            {
+                Id = branch.Id,
+                Name = branch.DisplayName
+            });
+        }
+
+        return dtos;
+    }
+
+    [Authorize(ProductionPermissions.MyRequests.Default)]
     public async Task<List<ProductLookupDto>> GetRequestableProductsLookupAsync(string? filter = null)
     {
         var products = await _formulaRepository.GetProducibleFinishedProductsLookupAsync(filter, maxResults: 200);
@@ -166,13 +218,8 @@ public class BranchProductionRequestAppService : ProductionAppService, IBranchPr
         return dtos;
     }
 
-    private async Task<IReadOnlyCollection<Guid>?> GetBranchScopeAsync()
+    private async Task<IReadOnlyCollection<Guid>> GetManagedBranchIdsAsync()
     {
-        if (await CanReviewAllRequestsAsync())
-        {
-            return null;
-        }
-
         var branches = await _branchRepository.GetListAsync(b => b.ManagerUserId == CurrentUser.Id);
         var ids = new List<Guid>();
         foreach (var branch in branches)
@@ -181,19 +228,6 @@ public class BranchProductionRequestAppService : ProductionAppService, IBranchPr
         }
         return ids;
     }
-
-    private async Task EnsureCanSeeRequestAsync(AppBranchProductionRequest request)
-    {
-        if (await CanReviewAllRequestsAsync())
-        {
-            return;
-        }
-
-        await _requestManager.EnsureBranchAccessAsync(request.BranchId, CurrentUser.Id, bypass: false);
-    }
-
-    private Task<bool> CanReviewAllRequestsAsync() =>
-        _authorizationService.IsGrantedAsync(ProductionPermissions.BranchRequests.Approve);
 
     private void ApplyItems(AppBranchProductionRequest request, List<CreateBranchProductionRequestItemDto> items)
     {
@@ -218,7 +252,7 @@ public class BranchProductionRequestAppService : ProductionAppService, IBranchPr
         var dto = ObjectMapper.Map<AppBranchProductionRequest, BranchProductionRequestDto>(request);
 
         var branch = await _branchRepository.FindAsync(request.BranchId);
-        dto.BranchName = branch?.Name;
+        dto.BranchName = branch?.DisplayName;
 
         var productIds = new List<Guid>();
         foreach (var item in request.Items)
@@ -237,9 +271,9 @@ public class BranchProductionRequestAppService : ProductionAppService, IBranchPr
         {
             if (productById.TryGetValue(item.ProductId, out var product))
             {
-                item.ProductName = product.Name;
+                item.ProductName = product.DisplayName;
                 item.ProductSku = product.SKU;
-                item.ProductUnit = product.Unit;
+                item.ProductUnit = product.DisplayUnit;
             }
         }
 

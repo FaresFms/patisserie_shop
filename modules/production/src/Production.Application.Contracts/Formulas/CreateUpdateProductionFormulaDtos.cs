@@ -16,6 +16,9 @@ public class CreateProductionFormulaItemDto
     public decimal LossPercent { get; set; }
 
     public int SortOrder { get; set; }
+
+    [StringLength(512)]
+    public string? Allergens { get; set; }
 }
 
 public class CreateProductionFormulaDto
@@ -50,6 +53,12 @@ public class CreateProductionFormulaDto
 
     [StringLength(1024)]
     public string? Notes { get; set; }
+
+    [StringLength(64)]
+    public string? WorkCenterCode { get; set; }
+
+    [StringLength(4000)]
+    public string? PreparationSteps { get; set; }
 
     public List<CreateProductionFormulaItemDto> Items { get; set; } = new();
 }

@@ -72,7 +72,8 @@ public class BranchInventoryManager : DomainService
         Guid? referenceId = null,
         string? referenceType = null,
         DateTime? batchExpiryDate = null,
-        DateTime? batchProductionDate = null)
+        DateTime? batchProductionDate = null,
+        decimal? batchUnitCost = null)
     {
         var result = await AdjustStockDetailedAsync(
             inventory,
@@ -82,7 +83,8 @@ public class BranchInventoryManager : DomainService
             referenceId,
             referenceType,
             batchExpiryDate,
-            batchProductionDate);
+            batchProductionDate,
+            batchUnitCost);
 
         return result.Movement;
     }
@@ -95,7 +97,8 @@ public class BranchInventoryManager : DomainService
         Guid? referenceId = null,
         string? referenceType = null,
         DateTime? batchExpiryDate = null,
-        DateTime? batchProductionDate = null)
+        DateTime? batchProductionDate = null,
+        decimal? batchUnitCost = null)
     {
         Check.NotNull(inventory, nameof(inventory));
 
@@ -149,7 +152,8 @@ public class BranchInventoryManager : DomainService
             movementType,
             referenceId,
             batchExpiryDate,
-            batchProductionDate);
+            batchProductionDate,
+            batchUnitCost);
 
         return new StockAdjustmentResult(movement, consumedBatches);
     }
@@ -171,7 +175,8 @@ public class BranchInventoryManager : DomainService
         string movementType,
         Guid? referenceId,
         DateTime? batchExpiryDate,
-        DateTime? batchProductionDate)
+        DateTime? batchProductionDate,
+        decimal? batchUnitCost)
     {
         var product = await _productRepository.FindAsync(inventory.ProductId);
 
@@ -203,6 +208,7 @@ public class BranchInventoryManager : DomainService
 
         if (delta > 0 && product?.ShelfLifeDays is int shelfLifeDays)
         {
+            var resolvedUnitCost = batchUnitCost ?? product.CostPrice;
             batchExpiryDate ??= batchProductionDate?.Date.AddDays(shelfLifeDays);
             if (batchExpiryDate.HasValue)
             {
@@ -212,7 +218,8 @@ public class BranchInventoryManager : DomainService
                     delta,
                     batchExpiryDate.Value,
                     MapBatchSourceType(movementType),
-                    referenceId);
+                    referenceId,
+                    resolvedUnitCost);
             }
             else if (movementType == StockMovementTypes.Purchase
                 || movementType == StockMovementTypes.TransferIn
@@ -224,7 +231,8 @@ public class BranchInventoryManager : DomainService
                     delta,
                     shelfLifeDays,
                     MapBatchSourceType(movementType),
-                    referenceId);
+                    referenceId,
+                    resolvedUnitCost);
             }
         }
 

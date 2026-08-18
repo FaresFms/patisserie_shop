@@ -244,6 +244,9 @@ public class AppStockTransferTests
     public void Complete_Uses_Supplied_Quantity_Or_Falls_Back_To_Approved_And_Publishes_Eto()
     {
         var transfer = NewTransfer();
+        var sourceDocumentId = Guid.NewGuid();
+        var sourceDocumentItemId = Guid.NewGuid();
+        transfer.SetSourceDocument("Production.BranchRequest", sourceDocumentId, sourceDocumentItemId);
         var adjusted = transfer.AddItem(Guid.NewGuid(), Guid.NewGuid(), requestedQty: 10);
         var untouched = transfer.AddItem(Guid.NewGuid(), Guid.NewGuid(), requestedQty: 4);
         transfer.Submit();
@@ -269,6 +272,27 @@ public class AppStockTransferTests
         eto.TransferId.ShouldBe(transfer.Id);
         eto.FromBranchId.ShouldBe(transfer.FromBranchId!.Value);
         eto.ToBranchId.ShouldBe(transfer.ToBranchId);
+        eto.SourceDocumentType.ShouldBe("Production.BranchRequest");
+        eto.SourceDocumentId.ShouldBe(sourceDocumentId);
+        eto.SourceDocumentItemId.ShouldBe(sourceDocumentItemId);
+    }
+
+    [Fact]
+    public void Batch_breakdown_preserves_unit_cost_and_reads_legacy_segments()
+    {
+        var formatted = StockTransferBatchBreakdown.Format(new[]
+        {
+            new StockTransferBatchBreakdown.Line(new DateTime(2026, 8, 10), 3, 1.25m),
+            new StockTransferBatchBreakdown.Line(new DateTime(2026, 8, 10), 2, 1.25m)
+        });
+
+        var costed = StockTransferBatchBreakdown.Parse(formatted).ShouldHaveSingleItem();
+        costed.Quantity.ShouldBe(5);
+        costed.UnitCost.ShouldBe(1.25m);
+
+        var legacy = StockTransferBatchBreakdown.Parse("2026-08-11:4").ShouldHaveSingleItem();
+        legacy.Quantity.ShouldBe(4);
+        legacy.UnitCost.ShouldBeNull();
     }
 
     [Fact]

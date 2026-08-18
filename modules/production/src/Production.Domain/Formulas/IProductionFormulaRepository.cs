@@ -40,6 +40,16 @@ public interface IProductionFormulaRepository : IRepository<AppProductionFormula
         Guid finishedProductId,
         CancellationToken cancellationToken = default);
 
+    Task<int> GetNextVersionAsync(
+        Guid finishedProductId,
+        CancellationToken cancellationToken = default);
+
+    Task<bool> VersionExistsAsync(
+        Guid finishedProductId,
+        int version,
+        Guid? excludingFormulaId = null,
+        CancellationToken cancellationToken = default);
+
     /// <summary>
     /// Per-ingredient unit cost (the product's CostPrice) for the supplied ids. Missing
     /// ids simply don't appear; the caller treats them as zero cost.

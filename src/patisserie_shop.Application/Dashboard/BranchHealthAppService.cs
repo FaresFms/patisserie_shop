@@ -167,7 +167,7 @@ public class BranchHealthAppService : patisserie_shopAppService, IBranchHealthAp
             results.Add(new BranchHealthDto
             {
                 BranchId = branch.Id,
-                BranchName = branch.Name,
+                BranchName = branch.DisplayName,
                 Score = score,
                 Grade = ToGrade(score),
                 Components = components

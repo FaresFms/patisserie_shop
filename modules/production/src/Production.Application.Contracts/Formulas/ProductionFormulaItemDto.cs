@@ -9,4 +9,5 @@ public class ProductionFormulaItemDto
     public int Quantity { get; set; }
     public decimal LossPercent { get; set; }
     public int SortOrder { get; set; }
+    public string? Allergens { get; set; }
 }

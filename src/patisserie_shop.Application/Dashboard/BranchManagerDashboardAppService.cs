@@ -70,7 +70,7 @@ public class BranchManagerDashboardAppService : patisserie_shopAppService, IBran
             return new BranchDashboardDto { HasBranchAssigned = false };
         }
 
-        var branch = myBranches.OrderBy(b => b.Name).First();
+        var branch = myBranches.OrderBy(b => b.DisplayName).First();
         var branchId = branch.Id;
         var hasMultiple = myBranches.Count > 1;
 
@@ -157,7 +157,7 @@ public class BranchManagerDashboardAppService : patisserie_shopAppService, IBran
         var sourceBranches = sourceBranchIds.Count == 0
             ? new List<AppBranch>()
             : await _branchRepository.GetListAsync(b => sourceBranchIds.Contains(b.Id));
-        var sourceBranchNames = sourceBranches.ToDictionary(b => b.Id, b => b.Name);
+        var sourceBranchNames = sourceBranches.ToDictionary(b => b.Id, b => b.DisplayName);
 
         var incomingTransfers = incomingRows.Select(r => new IncomingTransferDto
         {
@@ -200,8 +200,8 @@ public class BranchManagerDashboardAppService : patisserie_shopAppService, IBran
                 Id = d.Id,
                 DecisionType = d.DecisionType,
                 Reasoning = d.Reasoning,
-                ProductName = product?.Name,
-                BranchName = branch.Name,
+                ProductName = product?.DisplayName,
+                BranchName = branch.DisplayName,
                 Status = d.Status,
                 CreationTime = d.CreationTime,
                 SuggestedAction = d.SuggestedAction
@@ -213,7 +213,7 @@ public class BranchManagerDashboardAppService : patisserie_shopAppService, IBran
             HasBranchAssigned = true,
             HasMultipleBranches = hasMultiple,
             BranchId = branchId,
-            BranchName = branch.Name,
+            BranchName = branch.DisplayName,
             TotalProducts = totalProducts,
             LowStockCount = lowStockCount,
             HealthyCount = healthyCount,
@@ -270,9 +270,9 @@ public class BranchManagerDashboardAppService : patisserie_shopAppService, IBran
             return new StockItemDto
             {
                 ProductId = product.Id,
-                ProductName = product.Name,
+                ProductName = product.DisplayName,
                 SKU = product.SKU,
-                Unit = product.Unit,
+                Unit = product.DisplayUnit,
                 QuantityOnHand = inv.QuantityOnHand,
                 MinimumStock = inv.MinimumStock,
                 MaximumStock = inv.MaximumStock,

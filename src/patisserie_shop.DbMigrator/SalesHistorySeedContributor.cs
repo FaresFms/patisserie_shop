@@ -74,7 +74,7 @@ public class SalesHistorySeedContributor : IDataSeedContributor, ITransientDepen
 
         var branches = await _branchRepository.GetListAsync(
             b => b.IsActive && b.BranchType == BranchTypes.SalesBranch);
-        var branchesByName = branches.ToDictionary(b => b.Name);
+        var branchesByName = branches.ToDictionary(b => b.NameAr);
         var endDay = DateTime.UtcNow.Date.AddDays(-1);
         var startDay = endDay.AddDays(-(HistoryDays - 1));
         var totalSales = 0;

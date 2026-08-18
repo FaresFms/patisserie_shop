@@ -52,23 +52,29 @@ public class IdentityDataSeedContributor : IDataSeedContributor, ITransientDepen
     private readonly IdentityRoleManager _roleManager;
     private readonly IdentityUserManager _userManager;
     private readonly IPermissionDataSeeder _permissionDataSeeder;
+    private readonly IPermissionGrantRepository _permissionGrantRepository;
     private readonly IGuidGenerator _guidGenerator;
     private readonly ICurrentTenant _currentTenant;
+    private readonly IUnitOfWorkManager _unitOfWorkManager;
 
     public IdentityDataSeedContributor(
         IIdentityRoleRepository roleRepository,
         IdentityRoleManager roleManager,
         IdentityUserManager userManager,
         IPermissionDataSeeder permissionDataSeeder,
+        IPermissionGrantRepository permissionGrantRepository,
         IGuidGenerator guidGenerator,
-        ICurrentTenant currentTenant)
+        ICurrentTenant currentTenant,
+        IUnitOfWorkManager unitOfWorkManager)
     {
         _roleRepository = roleRepository;
         _roleManager = roleManager;
         _userManager = userManager;
         _permissionDataSeeder = permissionDataSeeder;
+        _permissionGrantRepository = permissionGrantRepository;
         _guidGenerator = guidGenerator;
         _currentTenant = currentTenant;
+        _unitOfWorkManager = unitOfWorkManager;
     }
 
     [UnitOfWork]
@@ -79,6 +85,11 @@ public class IdentityDataSeedContributor : IDataSeedContributor, ITransientDepen
         await EnsureRoleExistsAsync(CashierRoleName, isStatic: false);
         await EnsureRoleExistsAsync(KitchenManagerRoleName, isStatic: false);
 
+        // The built-in ABP admin contributor runs in the same outer seeding unit of
+        // work. Flush it first so our permission seeder can see those rows instead
+        // of creating duplicate grants for the same role and permission.
+        await _unitOfWorkManager.Current!.SaveChangesAsync();
+
         await _permissionDataSeeder.SeedAsync(
             RoleProviderName, AdminRoleName, AdminPermissions(), context.TenantId);
         await _permissionDataSeeder.SeedAsync(
@@ -87,6 +98,18 @@ public class IdentityDataSeedContributor : IDataSeedContributor, ITransientDepen
             RoleProviderName, CashierRoleName, CashierPermissions(), context.TenantId);
         await _permissionDataSeeder.SeedAsync(
             RoleProviderName, KitchenManagerRoleName, KitchenManagerPermissions(), context.TenantId);
+        await _unitOfWorkManager.Current!.SaveChangesAsync();
+
+        // Permission seeding adds missing grants but intentionally does not remove old ones.
+        // Reconcile the few role-specific screens that Phase 0 deliberately split.
+        await RemoveRolePermissionAsync(AdminRoleName, OperationsPermissions.Cashier.OperatePos);
+        await RemoveRolePermissionAsync(AdminRoleName, ProductionPermissions.MyRequests.Default);
+        await RemoveRolePermissionAsync(KitchenManagerRoleName, ProductionPermissions.MyRequests.Default);
+        await RemoveRolePermissionAsync(KitchenManagerRoleName, ProductionPermissions.Kitchens.ManageAll);
+        await RemoveDuplicateRoleGrantsAsync(AdminRoleName);
+        await RemoveDuplicateRoleGrantsAsync(BranchManagerRoleName);
+        await RemoveDuplicateRoleGrantsAsync(CashierRoleName);
+        await RemoveDuplicateRoleGrantsAsync(KitchenManagerRoleName);
 
         foreach (var user in GraduationSeedData.Users())
         {
@@ -109,6 +132,31 @@ public class IdentityDataSeedContributor : IDataSeedContributor, ITransientDepen
         };
 
         EnsureSucceeded(await _roleManager.CreateAsync(role), $"create role '{roleName}'");
+    }
+
+    private async Task RemoveRolePermissionAsync(string roleName, string permissionName)
+    {
+        var grants = await _permissionGrantRepository.GetListAsync(
+            RoleProviderName,
+            roleName);
+        foreach (var grant in grants.Where(grant => grant.Name == permissionName))
+        {
+            await _permissionGrantRepository.DeleteAsync(grant);
+        }
+    }
+
+    private async Task RemoveDuplicateRoleGrantsAsync(string roleName)
+    {
+        var grants = await _permissionGrantRepository.GetListAsync(RoleProviderName, roleName);
+        var duplicates = grants
+            .GroupBy(grant => grant.Name, StringComparer.Ordinal)
+            .SelectMany(group => group.OrderBy(grant => grant.Id).Skip(1))
+            .ToList();
+
+        foreach (var duplicate in duplicates)
+        {
+            await _permissionGrantRepository.DeleteAsync(duplicate);
+        }
     }
 
     private async Task EnsureUserExistsAsync(UserPresentationSpec spec)
@@ -170,8 +218,10 @@ public class IdentityDataSeedContributor : IDataSeedContributor, ITransientDepen
         return permissions
             .Where(p => p != InventoryPermissions.GroupName
                      && p != OperationsPermissions.GroupName
+                     && p != OperationsPermissions.Cashier.OperatePos
                      && p != IntelligencePermissions.GroupName
-                     && p != ProductionPermissions.GroupName)
+                     && p != ProductionPermissions.GroupName
+                     && p != ProductionPermissions.MyRequests.Default)
             .Distinct();
     }
 
@@ -201,19 +251,22 @@ public class IdentityDataSeedContributor : IDataSeedContributor, ITransientDepen
 
         IntelligencePermissions.DecisionLogs.Default,
         IntelligencePermissions.DecisionLogs.Acknowledge,
-        ProductionPermissions.BranchRequests.Default
+        ProductionPermissions.MyRequests.Default
     ];
 
     private static IEnumerable<string> CashierPermissions() =>
     [
         OperationsPermissions.Cashier.Default,
+        OperationsPermissions.Cashier.OperatePos,
         OperationsPermissions.Cashier.ReportLowStock
     ];
 
     private static IEnumerable<string> KitchenManagerPermissions()
     {
         var permissions = ProductionPermissions.GetAll()
-            .Where(p => p != ProductionPermissions.GroupName)
+            .Where(p => p != ProductionPermissions.GroupName
+                     && p != ProductionPermissions.MyRequests.Default
+                     && p != ProductionPermissions.Kitchens.ManageAll)
             .ToList();
 
         permissions.AddRange(

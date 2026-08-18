@@ -1,10 +1,10 @@
-@page "/production/plans"
+@page "/production/demand-planning/plans"
 @attribute [Authorize(ProductionPermissions.Plans.Default)]
 @using System.Threading
 @using System.Threading.Tasks
-@using Inventory.Branches
 @using Microsoft.AspNetCore.Authorization
 @using Production
+@using Production.Kitchens
 @using Production.Localization
 @using Production.Permissions
 @using Production.Plans
@@ -16,33 +16,44 @@
 @using Margin = MudBlazor.Margin
 @inherits patisserie_shopComponentBase
 @inject IProductionPlanAppService PlanAppService
-@inject IBranchAppService BranchAppService
+@inject IProductionKitchenAppService KitchenAppService
 @inject IAuthorizationService Authz
 @inject PageLayout PageLayout
 @inject ISnackbar Snackbar
 @inject IStringLocalizer<ProductionResource> ProdL
+@inject NavigationManager Navigation
 
 @{
-    PageLayout.Title = ProdL["ProductionPlans"];
+    PageLayout.Title = ProdL["Workspace:demand:Title"];
 }
 
-<SoftCard Elevation="2" Class="pa-2 page-flat">
-    <div class="page-head">
-        <div>
-            <h1 class="page-title">@ProdL["ProductionPlans"]</h1>
-            <div class="page-sub">@ProdL["ProductionPlansSubtitle"]</div>
-        </div>
-        <div class="page-head-actions">
-            <SoftButton Variant="Variant.Filled" Color="Color.Primary"
-                        StartIcon="@Icons.Material.Filled.Add"
-                        OnClick="OpenCreateDialog"
-                        Disabled="!_canManage">
-                @ProdL["NewPlan"]
-            </SoftButton>
-        </div>
-    </div>
+<ProductionWorkspaceHeader Workspace="demand" ActiveTab="plan">
+    <Actions>
+        <SoftButton Variant="Variant.Filled" Color="Color.Primary"
+                    StartIcon="@Icons.Material.Filled.Add"
+                    OnClick="OpenCreateDialog"
+                    Disabled="!_canManage">
+            @ProdL["NewPlan"]
+        </SoftButton>
+    </Actions>
+</ProductionWorkspaceHeader>
 
+<SoftCard Elevation="2" Class="pa-2 page-flat">
     <SoftCardContent>
+        @if (_nextStepVisible)
+        {
+            <SoftAlert Severity="Severity.Success" Variant="Variant.Outlined" Class="production-next-step">
+                <div class="production-next-step-content">
+                    <span>@ProdL["NextStep:PlanConfirmed"]</span>
+                    <SoftButton Variant="Variant.Filled" Color="Color.Primary"
+                                StartIcon="@Icons.Material.Filled.ViewKanban"
+                                OnClick="@(() => Navigation.NavigateTo("/production/workboard?stage=ready"))">
+                        @ProdL["Workspace:OpenWorkboard"]
+                    </SoftButton>
+                </div>
+            </SoftAlert>
+        }
+
         <div class="toolbar">
             <SoftTextField T="string" @bind-Value="_filter"
                            Placeholder="@ProdL["Filter"]"
@@ -135,7 +146,7 @@
                 <SoftCardContent Class="pa-4 glass-modal-body">
                     <SoftStack Spacing="3">
                         <SoftAlert Severity="Severity.Info">@ProdL["CreatePlanHint"]</SoftAlert>
-                        <SoftLookupSelect TItem="BranchLookupDto" TValue="Guid?"
+                        <SoftLookupSelect TItem="KitchenBranchLookupDto" TValue="Guid?"
                                           Items="_branches"
                                           ToValue="@(b => (Guid?)b.Id)"
                                           ToLabel="@(b => b.Name)"
@@ -189,6 +200,13 @@
                     <SoftStack Spacing="3">
                         <SoftText Typo="Typo.body2">@_detail.KitchenBranchName · @_detail.ProductionDate.ToString("yyyy-MM-dd")</SoftText>
 
+                        @if (HasMissingFormulaLines)
+                        {
+                            <SoftAlert Severity="Severity.Error" Variant="Variant.Outlined">
+                                @ProdL["PlanFormulaReadinessWarning", MissingFormulaProductNames]
+                            </SoftAlert>
+                        }
+
                         <SoftTable T="ProductionPlanLineDto" Items="_detail.Lines" Dense="true" Hover="true">
                             <HeaderContent>
                                 <MudTh>@ProdL["Product"]</MudTh>
@@ -204,7 +222,15 @@
                                 @{
                                     var edit = _lineEdits[context.Id];
                                 }
-                                <MudTd>@context.ProductSku - @context.ProductName</MudTd>
+                                <MudTd>
+                                    <div>@context.ProductSku - @context.ProductName</div>
+                                    @if (context.PlannedQuantity > 0 && !context.HasActiveDefaultFormula)
+                                    {
+                                        <SoftChip T="string" Color="Color.Error" Variant="Variant.Outlined" Size="Size.Small">
+                                            @ProdL["FormulaRequired"]
+                                        </SoftChip>
+                                    }
+                                </MudTd>
                                 <MudTd>@context.RequestedQuantity @context.ProductUnit</MudTd>
                                 <MudTd>@context.ForecastQuantity @context.ProductUnit</MudTd>
                                 <MudTd>@context.CurrentKitchenStock @context.ProductUnit</MudTd>
@@ -257,6 +283,7 @@
                         </SoftButton>
                         <SoftButton Variant="Variant.Filled" Color="Color.Primary"
                                     StartIcon="@Icons.Material.Filled.Check"
+                                    Disabled="@(_confirming || HasMissingFormulaLines)"
                                     OnClick="ConfirmPlanAsync">
                             @ProdL["ConfirmPlan"]
                         </SoftButton>
@@ -273,7 +300,7 @@
     private bool _canManage;
     private string? _filter;
     private string _statusFilter = string.Empty;
-    private List<BranchLookupDto> _branches = new();
+    private List<KitchenBranchLookupDto> _branches = new();
     private List<StatusOption> _statusOptions = new();
 
     private bool _createVisible;
@@ -284,12 +311,13 @@
     private bool _detailVisible;
     private ProductionPlanDto? _detail;
     private readonly Dictionary<Guid, LineEdit> _lineEdits = new();
+    private bool _confirming;
 
     protected override async Task OnInitializedAsync()
     {
         await LoadShopCurrencyAsync();
         _canManage = await Authz.IsGrantedAsync(ProductionPermissions.Plans.Manage);
-        _branches = await BranchAppService.GetLookupAsync();
+        _branches = await KitchenAppService.GetAccessibleLookupAsync();
         _statusOptions =
         [
             new(string.Empty, ProdL["Status:All"]),
@@ -394,12 +422,35 @@
 
     private async Task ConfirmPlanAsync()
     {
-        if (_detail == null) return;
-        await PlanAppService.ConfirmAsync(_detail.Id);
-        Snackbar.Add(ProdL["SavedSuccessfully"], Severity.Success);
-        CloseDetail();
-        await ReloadAsync();
+        if (_detail == null || HasMissingFormulaLines || _confirming) return;
+
+        _confirming = true;
+        try
+        {
+            await PlanAppService.ConfirmAsync(_detail.Id);
+            Snackbar.Add(ProdL["SavedSuccessfully"], Severity.Success);
+            _nextStepVisible = true;
+            CloseDetail();
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(GetFriendlyErrorMessage(ex), Severity.Error);
+            await OpenDetailAsync(_detail.Id);
+        }
+        finally
+        {
+            _confirming = false;
+        }
     }
+
+    private bool HasMissingFormulaLines => _detail?.Lines.Any(line =>
+        line.PlannedQuantity > 0 && !line.HasActiveDefaultFormula) == true;
+
+    private string MissingFormulaProductNames => string.Join(", ", _detail?.Lines
+        .Where(line => line.PlannedQuantity > 0 && !line.HasActiveDefaultFormula)
+        .Select(line => line.ProductName ?? line.ProductSku ?? line.ProductId.ToString())
+        .Distinct() ?? []);
 
     private async Task CancelPlanAsync()
     {
@@ -445,4 +496,6 @@
     }
 
     private sealed record StatusOption(string Value, string Label);
+
+    private bool _nextStepVisible;
 }

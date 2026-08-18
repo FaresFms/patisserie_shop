@@ -80,7 +80,7 @@ else
         {
             _role = DashboardRole.BranchManager;
         }
-        else if (await AuthorizationService.IsGrantedAsync(OperationsPermissions.Cashier.Default))
+        else if (await AuthorizationService.IsGrantedAsync(OperationsPermissions.Cashier.OperatePos))
         {
             // Cashiers (no dashboard permission) land straight on the POS.
 
@@ -90,7 +90,7 @@ else
         {
             // Kitchen managers land on their production dashboard — today's KPIs
             // plus the action queue of what needs them right now.
-            Nav.NavigateTo("/production/dashboard", forceLoad: false, replace: true);
+            Nav.NavigateTo("/production/overview", forceLoad: false, replace: true);
         }
         else if (await AuthorizationService.IsGrantedAsync(ProductionPermissions.Formulas.Default))
         {

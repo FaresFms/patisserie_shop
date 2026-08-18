@@ -136,8 +136,8 @@ public class DeadStockScannerService : ITransientDependency
 
             var reasoning = _localizer[
                 "DecisionReasoning:DeadStock",
-                product.Name,
-                branch.Name,
+                product.DisplayName,
+                branch.DisplayName,
                 daysSinceLastSale,
                 thresholdDays,
                 rule.RuleName];

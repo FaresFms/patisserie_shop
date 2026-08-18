@@ -16,42 +16,55 @@ public class CategoryManager : DomainService
         _categoryRepository = categoryRepository;
     }
 
-    public async Task<AppCategory> CreateAsync(string name, string? description = null, bool isActive = true)
+    public async Task<AppCategory> CreateAsync(
+        string nameAr,
+        string nameEn,
+        string? descriptionAr = null,
+        string? descriptionEn = null,
+        bool isActive = true)
     {
-        await EnsureNameIsUniqueAsync(name);
+        await EnsureNamesAreUniqueAsync(nameAr, nameEn);
 
         return new AppCategory(
             GuidGenerator.Create(),
-            name,
-            description,
+            nameAr,
+            nameEn,
+            descriptionAr,
+            descriptionEn,
             isActive);
     }
 
-    public async Task ChangeNameAsync(AppCategory category, string newName)
+    public async Task ChangeNamesAsync(AppCategory category, string nameAr, string nameEn)
     {
         Check.NotNull(category, nameof(category));
-        Check.NotNullOrWhiteSpace(newName, nameof(newName));
+        Check.NotNullOrWhiteSpace(nameAr, nameof(nameAr));
+        Check.NotNullOrWhiteSpace(nameEn, nameof(nameEn));
 
-        var normalized = newName.Trim();
-        if (string.Equals(category.Name, normalized, StringComparison.OrdinalIgnoreCase))
+        var normalizedAr = nameAr.Trim();
+        var normalizedEn = nameEn.Trim();
+        if (string.Equals(category.NameAr, normalizedAr, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(category.NameEn, normalizedEn, StringComparison.OrdinalIgnoreCase))
         {
             return;
         }
 
-        await EnsureNameIsUniqueAsync(normalized, category.Id);
-        category.SetName(normalized);
+        await EnsureNamesAreUniqueAsync(normalizedAr, normalizedEn, category.Id);
+        category.SetNames(normalizedAr, normalizedEn);
     }
 
-    private async Task EnsureNameIsUniqueAsync(string name, Guid? ignoreId = null)
+    private async Task EnsureNamesAreUniqueAsync(string nameAr, string nameEn, Guid? ignoreId = null)
     {
-        var normalized = name.Trim();
+        var normalizedAr = nameAr.Trim();
+        var normalizedEn = nameEn.Trim();
         var exists = await _categoryRepository.AnyAsync(c =>
-            c.Name == normalized && (ignoreId == null || c.Id != ignoreId.Value));
+            (c.NameAr == normalizedAr || c.NameEn == normalizedEn)
+            && (ignoreId == null || c.Id != ignoreId.Value));
 
         if (exists)
         {
             throw new BusinessException(InventoryErrorCodes.DuplicateCategoryName)
-                .WithData("Name", normalized);
+                .WithData("NameAr", normalizedAr)
+                .WithData("NameEn", normalizedEn);
         }
     }
 }

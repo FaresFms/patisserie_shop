@@ -1,0 +1,28 @@
+@page "/production/my-requests"
+@attribute [Authorize(ProductionPermissions.MyRequests.Default)]
+@using Microsoft.AspNetCore.Authorization
+@using Production.Permissions
+
+<BranchProductionRequests ReviewMode="false"
+                          NewRequest="NewRequest"
+                          NewRequestDecisionId="NewRequestDecisionId"
+                          NewRequestBranchId="NewRequestBranchId"
+                          NewRequestProductId="NewRequestProductId"
+                          NewRequestNotes="NewRequestNotes" />
+
+@code {
+    [Parameter, SupplyParameterFromQuery(Name = "new")]
+    public bool NewRequest { get; set; }
+
+    [Parameter, SupplyParameterFromQuery(Name = "decisionId")]
+    public Guid? NewRequestDecisionId { get; set; }
+
+    [Parameter, SupplyParameterFromQuery(Name = "branchId")]
+    public Guid? NewRequestBranchId { get; set; }
+
+    [Parameter, SupplyParameterFromQuery(Name = "productId")]
+    public Guid? NewRequestProductId { get; set; }
+
+    [Parameter, SupplyParameterFromQuery(Name = "notes")]
+    public string? NewRequestNotes { get; set; }
+}

@@ -35,6 +35,27 @@ public class AppProductionOrderIngredient : Entity<Guid>
         TotalCost = RequiredQuantity * UnitCostSnapshot;
     }
 
+    internal void RefreshCostSnapshot(decimal unitCostSnapshot)
+    {
+        if (ConsumedQuantity > 0)
+        {
+            throw new BusinessException(ProductionErrorCodes.InvalidOrderStatusTransition);
+        }
+
+        SetCostSnapshot(unitCostSnapshot);
+    }
+
+    internal void RecordActualCost(decimal actualTotalCost)
+    {
+        if (ConsumedQuantity <= 0 || actualTotalCost < 0m)
+        {
+            throw new BusinessException(ProductionErrorCodes.InvalidCost);
+        }
+
+        UnitCostSnapshot = actualTotalCost / ConsumedQuantity;
+        TotalCost = actualTotalCost;
+    }
+
     private void SetRequiredQuantity(int requiredQuantity)
     {
         if (requiredQuantity <= 0)

@@ -180,137 +180,52 @@
                 {
                     var typeKey = item.DecisionType.ToLowerInvariant();
                     <div class="@($"dl-card dl-type-{typeKey} dl-status-{item.Status.ToLowerInvariant()}")">
-                        <div class="dl-card-left">
-                            <MudIcon Icon="@TypeIcon(item.DecisionType)" Size="Size.Medium" Class="dl-type-icon" />
-                            <SoftChip T="string" Size="Size.Small" Variant="Variant.Filled"
-                                      Color="@TypeChipColor(item.DecisionType)"
-                                      Class="dl-type-chip">
-                                @IntL[$"DecisionType:{item.DecisionType}"]
-                            </SoftChip>
+                        <div class="dl-card-icon" aria-hidden="true">
+                            <SoftIcon Icon="@TypeIcon(item.DecisionType)" Size="Size.Medium" Class="dl-type-icon" />
                         </div>
 
-                        <div class="dl-card-center">
-                            <div class="dl-reasoning">@item.Reasoning</div>
-                            <div class="dl-meta">
-                                @if (!string.IsNullOrWhiteSpace(item.ProductName))
-                                {
-                                    <span class="dl-meta-pill">
-                                        <MudIcon Icon="@Icons.Material.Outlined.Inventory2" Size="Size.Small" />
-                                        @item.ProductName
-                                    </span>
-                                }
-                                @if (!string.IsNullOrWhiteSpace(item.BranchName))
-                                {
-                                    <span class="dl-meta-pill">
-                                        <MudIcon Icon="@Icons.Material.Outlined.Storefront" Size="Size.Small" />
-                                        @item.BranchName
-                                    </span>
-                                }
-                                @if (item.StockAtEvaluation.HasValue)
-                                {
-                                    <span class="dl-meta-pill" title="@IntL["DecisionLog:StockAtEvaluation"]">
-                                        <MudIcon Icon="@Icons.Material.Outlined.Numbers" Size="Size.Small" />
-                                        @IntL["DecisionLog:StockAtEvaluation"]: @item.StockAtEvaluation
-                                    </span>
-                                }
-                                @if (item.DaysWithoutSale.HasValue)
-                                {
-                                    <span class="dl-meta-pill">
-                                        <MudIcon Icon="@Icons.Material.Outlined.HistoryToggleOff" Size="Size.Small" />
-                                        @IntL["DecisionLog:DaysWithoutSale"]: @item.DaysWithoutSale
-                                    </span>
-                                }
-                                @if (!string.IsNullOrWhiteSpace(item.RuleName))
-                                {
-                                    <span class="dl-meta-pill" title="@IntL["DecisionLog:Rule"]">
-                                        <MudIcon Icon="@Icons.Material.Outlined.Gavel" Size="Size.Small" />
-                                        @item.RuleName
-                                    </span>
-                                }
-                            </div>
-
-                            @if (!string.IsNullOrWhiteSpace(item.SuggestedAction))
-                            {
-                                <div class="dl-suggested">
-                                    <MudIcon Icon="@Icons.Material.Outlined.Lightbulb" Size="Size.Small" />
-                                    <span>@item.SuggestedAction</span>
-                                </div>
-                            }
-                        </div>
-
-                        <div class="dl-card-right">
-                            @if (item.Status != DecisionLogStatuses.Pending)
-                            {
+                        <div class="dl-card-copy">
+                            <div class="dl-card-tags">
+                                <SoftChip T="string" Size="Size.Small" Variant="Variant.Filled"
+                                          Color="@TypeChipColor(item.DecisionType)"
+                                          Class="dl-type-chip">
+                                    @IntL[$"DecisionType:{item.DecisionType}"]
+                                </SoftChip>
                                 <SoftChip T="string" Size="Size.Small"
                                           Color="@StatusChipColor(item.Status)"
-                                          Variant="Variant.Outlined">
+                                          Variant="@(item.Status == DecisionLogStatuses.Pending ? Variant.Filled : Variant.Outlined)">
                                     @IntL[$"DecisionStatus:{item.Status}"]
                                 </SoftChip>
-                            }
+                            </div>
+                            <div class="dl-card-title">@DecisionTitle(item)</div>
+                            <div class="dl-card-context">
+                                <span>
+                                    <SoftIcon Icon="@Icons.Material.Outlined.Storefront" Size="Size.Small" />
+                                    @DecisionLocation(item)
+                                </span>
+                                <span>
+                                    <SoftIcon Icon="@Icons.Material.Outlined.Schedule" Size="Size.Small" />
+                                    @TimeAgo(item.CreationTime)
+                                </span>
+                            </div>
+                        </div>
+
+                        <div class="dl-card-side">
                             @if (!string.IsNullOrWhiteSpace(item.Outcome))
                             {
-                                @* 48h outcome recorded by the outcome scanner: StockedOut is loud (filled red),
-                                   Resolved/Unresolved are quiet (outlined). *@
                                 <SoftChip T="string" Size="Size.Small"
                                           Color="@OutcomeChipColor(item.Outcome)"
                                           Variant="@(item.Outcome == DecisionOutcomes.StockedOut ? Variant.Filled : Variant.Outlined)">
                                     @IntL[$"Outcome:{item.Outcome}"]
                                 </SoftChip>
                             }
-                            <div class="dl-time">
-                                @TimeAgo(item.CreationTime) ·
-                                <BrowserLocalTime Value="@item.CreationTime" Display="BrowserTimeDisplay.MonthDayTime" />
-                            </div>
-                            @if (item.Status == DecisionLogStatuses.Executed
-                                 && item.ExecutedActionType == DecisionActionTypes.StockAdjustment)
-                            {
-                                @* Write-offs create no document to view — the immutable
-                                   stock-movement ledger is the audit trail. Muted chip only. *@
-                                <SoftChip T="string" Size="Size.Small"
-                                          Color="Color.Default" Variant="Variant.Outlined">
-                                    @IntL["DecisionLog:WrittenOff"]
-                                </SoftChip>
-                            }
-                            else if (item.Status == DecisionLogStatuses.Executed
-                                     && item.ExecutedActionId.HasValue
-                                     && !string.IsNullOrWhiteSpace(item.ExecutedActionType))
-                            {
-                                <a class="dl-action-link" href="@ActionLinkHref(item.ExecutedActionType)">
-                                    <MudIcon Icon="@ActionLinkIcon(item.ExecutedActionType)" Size="Size.Small" />
-                                    @ActionLinkLabel(item.ExecutedActionType)
-                                </a>
-                            }
-                            @if (item.Status != "Pending" && item.AcknowledgedAt.HasValue)
-                            {
-                                <div class="dl-ack">
-                                    <BrowserLocalTime Value="@item.AcknowledgedAt.Value"
-                                                      Display="BrowserTimeDisplay.MonthDayTime"
-                                                      Template="@AcknowledgedTemplate(item.AcknowledgedByUserId)" />
-                                </div>
-                            }
-                            @if (_canAcknowledge && item.Status == "Pending")
-                            {
-                                <div class="dl-actions">
-                                    <SoftButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary"
-                                                StartIcon="@Icons.Material.Filled.PlayArrow"
-                                                OnClick="@(() => OpenExecuteDialogAsync(item))"
-                                                Disabled="_busyId == item.Id">
-                                        @IntL["DecisionLog:Action:Executed"]
-                                    </SoftButton>
-                                    <SoftButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Success"
-                                                StartIcon="@Icons.Material.Filled.Check"
-                                                OnClick="@(() => AcknowledgeAsync(item))"
-                                                Disabled="_busyId == item.Id">
-                                        @IntL["DecisionLog:Action:Acknowledge"]
-                                    </SoftButton>
-                                    <SoftButton Size="Size.Small" Variant="Variant.Text" Color="Color.Default"
-                                                StartIcon="@Icons.Material.Filled.Close"
-                                                OnClick="@(() => DismissAsync(item))"
-                                                Disabled="_busyId == item.Id">
-                                        @IntL["DecisionLog:Action:Dismiss"]
-                                    </SoftButton>
-                                </div>
-                            }
+                            <SoftButton Size="Size.Small"
+                                        Variant="Variant.Outlined"
+                                        Color="Color.Primary"
+                                        StartIcon="@Icons.Material.Outlined.Visibility"
+                                        OnClick="@(() => OpenDetails(item))">
+                                @L["Details"]
+                            </SoftButton>
                         </div>
                     </div>
                 }
@@ -330,6 +245,235 @@
         </div>
     </SoftCardContent>
 </SoftCard>
+
+@if (_detailItem is { } detailItem)
+{
+    var detailTypeKey = detailItem.DecisionType.ToLowerInvariant();
+    <div class="glass-modal-backdrop" @onclick="CloseDetails">
+        <div class="glass-modal-container glass-modal-container--lg" @onclick:stopPropagation="true">
+            <SoftCard Elevation="24" Class="@($"glass-modal dl-detail-modal dl-type-{detailTypeKey}")">
+                <SoftCardHeader Class="pa-4 dl-detail-header">
+                    <CardHeaderContent>
+                        <div class="dl-detail-heading">
+                            <span class="dl-detail-icon" aria-hidden="true">
+                                <SoftIcon Icon="@TypeIcon(detailItem.DecisionType)" Size="Size.Medium" Class="dl-type-icon" />
+                            </span>
+                            <div class="dl-detail-heading-copy">
+                                <SoftText Typo="Typo.h6">@IntL["DecisionLog:Details:Title"]</SoftText>
+                                <div class="dl-detail-subtitle">
+                                    @IntL[$"DecisionType:{detailItem.DecisionType}"] · @DecisionTitle(detailItem)
+                                </div>
+                            </div>
+                        </div>
+                    </CardHeaderContent>
+                    <CardHeaderActions>
+                        <div class="dl-detail-header-actions">
+                            <SoftChip T="string" Size="Size.Small"
+                                      Color="@StatusChipColor(detailItem.Status)"
+                                      Variant="@(detailItem.Status == DecisionLogStatuses.Pending ? Variant.Filled : Variant.Outlined)">
+                                @IntL[$"DecisionStatus:{detailItem.Status}"]
+                            </SoftChip>
+                            <SoftIconButton Icon="@Icons.Material.Filled.Close"
+                                            Size="Size.Small"
+                                            OnClick="CloseDetails"
+                                            Disabled="@(_busyId == detailItem.Id)" />
+                        </div>
+                    </CardHeaderActions>
+                </SoftCardHeader>
+                <SoftDivider />
+
+                <SoftCardContent Class="pa-4 glass-modal-body dl-detail-body">
+                    <section class="dl-detail-section dl-detail-overview-section">
+                        <div class="dl-detail-section-title">
+                            <SoftIcon Icon="@Icons.Material.Outlined.Dashboard" Size="Size.Small" />
+                            <span>@IntL["DecisionLog:Details:Overview"]</span>
+                        </div>
+                        <div class="dl-detail-overview">
+                            <div class="dl-detail-field">
+                                <span>@IntL["DecisionLog:Details:Product"]</span>
+                                <strong>@(!string.IsNullOrWhiteSpace(detailItem.ProductName) ? detailItem.ProductName : "—")</strong>
+                            </div>
+                            <div class="dl-detail-field">
+                                <span>@IntL["DecisionLog:Details:Branch"]</span>
+                                <strong>@DecisionLocation(detailItem)</strong>
+                            </div>
+                            <div class="dl-detail-field">
+                                <span>@IntL["DecisionLog:Details:Type"]</span>
+                                <strong>@IntL[$"DecisionType:{detailItem.DecisionType}"]</strong>
+                            </div>
+                            <div class="dl-detail-field">
+                                <span>@IntL["DecisionLog:Details:Status"]</span>
+                                <strong>@IntL[$"DecisionStatus:{detailItem.Status}"]</strong>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="dl-detail-section">
+                        <div class="dl-detail-section-title">
+                            <SoftIcon Icon="@Icons.Material.Outlined.PsychologyAlt" Size="Size.Small" />
+                            <span>@IntL["DecisionLog:Details:Why"]</span>
+                        </div>
+                        <p class="dl-detail-reasoning">@detailItem.Reasoning</p>
+                    </section>
+
+                    @if (!string.IsNullOrWhiteSpace(detailItem.SuggestedAction))
+                    {
+                        <section class="dl-detail-section dl-detail-recommendation">
+                            <div class="dl-detail-section-title">
+                                <SoftIcon Icon="@Icons.Material.Outlined.Lightbulb" Size="Size.Small" />
+                                <span>@IntL["DecisionLog:Details:Recommendation"]</span>
+                            </div>
+                            <p>@detailItem.SuggestedAction</p>
+                        </section>
+                    }
+
+                    <section class="dl-detail-section">
+                        <div class="dl-detail-section-title">
+                            <SoftIcon Icon="@Icons.Material.Outlined.Analytics" Size="Size.Small" />
+                            <span>@IntL["DecisionLog:Details:Evaluation"]</span>
+                        </div>
+                        <div class="dl-detail-info-grid">
+                            <div class="dl-detail-field">
+                                <span>@IntL["DecisionLog:Details:CreatedAt"]</span>
+                                <strong><BrowserLocalTime Value="@detailItem.CreationTime" Display="BrowserTimeDisplay.DateTime" /></strong>
+                            </div>
+                            <div class="dl-detail-field">
+                                <span>@IntL["DecisionLog:Rule"]</span>
+                                <strong>@(!string.IsNullOrWhiteSpace(detailItem.RuleName) ? detailItem.RuleName : IntL["DecisionLog:NoRule"].Value)</strong>
+                            </div>
+                            @if (detailItem.StockAtEvaluation.HasValue)
+                            {
+                                <div class="dl-detail-field">
+                                    <span>@IntL["DecisionLog:StockAtEvaluation"]</span>
+                                    <strong>@detailItem.StockAtEvaluation</strong>
+                                </div>
+                            }
+                            @if (detailItem.DaysWithoutSale.HasValue)
+                            {
+                                <div class="dl-detail-field">
+                                    <span>@IntL["DecisionLog:DaysWithoutSale"]</span>
+                                    <strong>@detailItem.DaysWithoutSale</strong>
+                                </div>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(detailItem.SourceBranchName))
+                            {
+                                <div class="dl-detail-field">
+                                    <span>@IntL["DecisionLog:Details:SourceBranch"]</span>
+                                    <strong>@detailItem.SourceBranchName</strong>
+                                </div>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(detailItem.TargetBranchName))
+                            {
+                                <div class="dl-detail-field">
+                                    <span>@IntL["DecisionLog:Details:TargetBranch"]</span>
+                                    <strong>@detailItem.TargetBranchName</strong>
+                                </div>
+                            }
+                        </div>
+                    </section>
+
+                    @if (detailItem.Status != DecisionLogStatuses.Pending
+                         || !string.IsNullOrWhiteSpace(detailItem.Outcome))
+                    {
+                        <section class="dl-detail-section">
+                            <div class="dl-detail-section-title">
+                                <SoftIcon Icon="@Icons.Material.Outlined.FactCheck" Size="Size.Small" />
+                                <span>@IntL["DecisionLog:Details:Resolution"]</span>
+                            </div>
+                            <div class="dl-detail-info-grid">
+                                @if (detailItem.AcknowledgedByUserId.HasValue)
+                                {
+                                    <div class="dl-detail-field">
+                                        <span>@IntL["DecisionLog:Details:HandledBy"]</span>
+                                        <strong>@ResolveUserName(detailItem.AcknowledgedByUserId)</strong>
+                                    </div>
+                                }
+                                @if (detailItem.AcknowledgedAt.HasValue)
+                                {
+                                    <div class="dl-detail-field">
+                                        <span>@IntL["DecisionLog:Details:HandledAt"]</span>
+                                        <strong><BrowserLocalTime Value="@detailItem.AcknowledgedAt.Value" Display="BrowserTimeDisplay.DateTime" /></strong>
+                                    </div>
+                                }
+                                @if (!string.IsNullOrWhiteSpace(detailItem.Outcome))
+                                {
+                                    <div class="dl-detail-field">
+                                        <span>@IntL["DecisionLog:Details:Outcome"]</span>
+                                        <strong>@IntL[$"Outcome:{detailItem.Outcome}"]</strong>
+                                    </div>
+                                }
+                                @if (detailItem.OutcomeEvaluatedAt.HasValue)
+                                {
+                                    <div class="dl-detail-field">
+                                        <span>@IntL["DecisionLog:Details:OutcomeAt"]</span>
+                                        <strong><BrowserLocalTime Value="@detailItem.OutcomeEvaluatedAt.Value" Display="BrowserTimeDisplay.DateTime" /></strong>
+                                    </div>
+                                }
+                            </div>
+
+                            @if (detailItem.Status == DecisionLogStatuses.Executed
+                                 && detailItem.ExecutedActionType == DecisionActionTypes.StockAdjustment)
+                            {
+                                <div class="dl-detail-linked-action">
+                                    <SoftIcon Icon="@Icons.Material.Outlined.DeleteSweep" Size="Size.Small" />
+                                    <span>@IntL["DecisionLog:Details:LinkedAction"]</span>
+                                    <strong>@IntL["DecisionLog:WrittenOff"]</strong>
+                                </div>
+                            }
+                            else if (detailItem.Status == DecisionLogStatuses.Executed
+                                     && detailItem.ExecutedActionId.HasValue
+                                     && !string.IsNullOrWhiteSpace(detailItem.ExecutedActionType))
+                            {
+                                <a class="dl-detail-linked-action dl-detail-linked-action--link"
+                                   href="@ActionLinkHref(detailItem.ExecutedActionType)">
+                                    <SoftIcon Icon="@ActionLinkIcon(detailItem.ExecutedActionType)" Size="Size.Small" />
+                                    <span>@IntL["DecisionLog:Details:LinkedAction"]</span>
+                                    <strong>@ActionLinkLabel(detailItem.ExecutedActionType)</strong>
+                                </a>
+                            }
+                        </section>
+                    }
+                </SoftCardContent>
+
+                <SoftDivider />
+                <div class="dl-detail-footer">
+                    <SoftButton Variant="Variant.Text"
+                                OnClick="CloseDetails"
+                                Disabled="@(_busyId == detailItem.Id)">
+                        @L["Close"]
+                    </SoftButton>
+
+                    @if (_canAcknowledge && detailItem.Status == DecisionLogStatuses.Pending)
+                    {
+                        <div class="dl-detail-actions">
+                            <SoftButton Variant="Variant.Text"
+                                        Color="Color.Default"
+                                        StartIcon="@Icons.Material.Filled.Close"
+                                        OnClick="@(() => DismissAsync(detailItem))"
+                                        Disabled="@(_busyId == detailItem.Id)">
+                                @IntL["DecisionLog:Action:Dismiss"]
+                            </SoftButton>
+                            <SoftButton Variant="Variant.Outlined"
+                                        Color="Color.Success"
+                                        StartIcon="@Icons.Material.Filled.Check"
+                                        OnClick="@(() => AcknowledgeAsync(detailItem))"
+                                        Disabled="@(_busyId == detailItem.Id)">
+                                @IntL["DecisionLog:Action:Acknowledge"]
+                            </SoftButton>
+                            <SoftButton Variant="Variant.Filled"
+                                        Color="Color.Primary"
+                                        StartIcon="@Icons.Material.Filled.PlayArrow"
+                                        OnClick="@(() => OpenExecuteDialogAsync(detailItem))"
+                                        Disabled="@(_busyId == detailItem.Id)">
+                                @IntL["DecisionLog:Action:Executed"]
+                            </SoftButton>
+                        </div>
+                    }
+                </div>
+            </SoftCard>
+        </div>
+    </div>
+}
 
 @if (_consolidateDialogVisible)
 {
@@ -583,43 +727,54 @@
     }
     .dl-card {
         display: grid;
-        grid-template-columns: 160px 1fr 220px;
-        gap: 18px;
-        padding: 16px 18px;
+        grid-template-columns: 48px minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 14px;
+        padding: 14px 16px;
         background: var(--surface);
         border: 1px solid var(--bd-1);
-        border-left: 3px solid var(--bd-2);
+        border-inline-start: 3px solid var(--bd-2);
         border-radius: var(--r-md);
         box-shadow: var(--shadow-sm);
-        transition: box-shadow .15s, border-color .15s;
+        transition: box-shadow .15s, border-color .15s, transform .15s;
     }
-    .dl-card:hover { box-shadow: var(--shadow-md); }
+    .dl-card:hover {
+        border-color: var(--bd-2);
+        box-shadow: var(--shadow-md);
+        transform: translateY(-1px);
+    }
     .dl-card.dl-status-pending {
         background: var(--bg-2);
-        border-left-color: var(--accent);
+        border-inline-start-color: var(--accent);
     }
-    .dl-card.dl-type-lowstockalert    { border-left-color: #c89c4f; }
-    .dl-card.dl-type-excessstockalert { border-left-color: #4a7da8; }
-    .dl-card.dl-type-deadstockflag    { border-left-color: #b3543a; }
-    .dl-card.dl-type-transfersuggestion { border-left-color: #4a8e8e; }
-    .dl-card.dl-type-stockoutrisk     { border-left-color: #a4313f; } /* crimson — distinct from amber LowStock and red DeadStock */
-    .dl-card.dl-type-expiryalert      { border-left-color: #7d4a8e; } /* plum — perishables / expiry family */
-    .dl-card.dl-type-wastewriteoff    { border-left-color: #8d6e63; } /* brown-grey — waste, distinct from ExpiryAlert plum and DeadStock red */
-    .dl-card.dl-type-stockreport      { border-left-color: #5c7a8a; } /* blue-grey — manual cashier report, distinct from ExcessStock blue */
+    .dl-card.dl-type-lowstockalert      { border-inline-start-color: #c89c4f; }
+    .dl-card.dl-type-excessstockalert   { border-inline-start-color: #4a7da8; }
+    .dl-card.dl-type-deadstockflag      { border-inline-start-color: #b3543a; }
+    .dl-card.dl-type-transfersuggestion { border-inline-start-color: #4a8e8e; }
+    .dl-card.dl-type-stockoutrisk       { border-inline-start-color: #a4313f; }
+    .dl-card.dl-type-expiryalert        { border-inline-start-color: #7d4a8e; }
+    .dl-card.dl-type-wastewriteoff      { border-inline-start-color: #8d6e63; }
+    .dl-card.dl-type-stockreport        { border-inline-start-color: #5c7a8a; }
     .dl-card.dl-status-acknowledged,
     .dl-card.dl-status-dismissed,
     .dl-card.dl-status-executed {
-        opacity: 0.82;
+        opacity: 0.86;
     }
 
-    .dl-card-left {
+    .dl-card-icon,
+    .dl-detail-icon {
         display: flex;
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 8px;
+        align-items: center;
+        justify-content: center;
+        flex: 0 0 auto;
+        width: 46px;
+        height: 46px;
+        border: 1px solid var(--bd-1);
+        border-radius: var(--r-sm);
+        background: var(--hover);
     }
     .dl-type-icon {
-        font-size: 28px;
+        font-size: 25px;
     }
     .dl-type-lowstockalert    .dl-type-icon { color: #c89c4f; }
     .dl-type-excessstockalert .dl-type-icon { color: #4a7da8; }
@@ -630,60 +785,165 @@
     .dl-type-wastewriteoff    .dl-type-icon { color: #8d6e63; }
     .dl-type-stockreport      .dl-type-icon { color: #5c7a8a; }
 
-    .dl-card-center { min-width: 0; }
-    .dl-reasoning {
-        font-family: var(--font-serif);
-        font-size: 16px;
-        font-weight: 500;
-        color: var(--fg-1);
-        line-height: 1.4;
-        margin-bottom: 8px;
-    }
-    .dl-meta {
+    .dl-card-copy { min-width: 0; }
+    .dl-card-tags {
         display: flex;
+        align-items: center;
         flex-wrap: wrap;
         gap: 6px;
-        margin-bottom: 6px;
+        margin-bottom: 5px;
     }
-    .dl-meta-pill {
-        display: inline-flex;
-        align-items: center;
-        gap: 4px;
-        font-size: 12px;
-        color: var(--fg-2);
-        background: var(--hover);
-        padding: 2px 8px;
-        border-radius: 999px;
-    }
-    .dl-meta-pill .mud-icon-root { font-size: 14px; }
-    .dl-suggested {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        margin-top: 6px;
-        padding: 4px 10px;
-        background: var(--accent-soft);
-        border: 1px solid var(--accent-line);
-        border-radius: var(--r-sm);
-        font-size: 13px;
+    .dl-card-title {
+        font-family: var(--font-serif);
+        font-size: 17px;
+        font-weight: 600;
         color: var(--fg-1);
+        line-height: 1.35;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
     }
-    .dl-suggested .mud-icon-root { color: var(--accent); font-size: 16px; }
-    .dl-snapshot {
+    .dl-card-context {
         display: flex;
-        gap: 16px;
-        margin-top: 6px;
-        font-size: 12px;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 6px 14px;
+        margin-top: 5px;
         color: var(--fg-3);
+        font-size: 12.5px;
     }
+    .dl-card-context span {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+    }
+    .dl-card-context .mud-icon-root { font-size: 15px; }
 
-    .dl-card-right {
+    .dl-card-side {
         display: flex;
         flex-direction: column;
-        align-items: flex-end;
-        gap: 6px;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        min-width: 118px;
     }
-    .dl-time { font-size: 12px; color: var(--fg-3); }
+    .dl-card-side .mud-button-root { min-width: 112px; }
+
+    .dl-detail-modal { overflow: hidden; }
+    .dl-detail-header { background: var(--surface-2); }
+    .dl-detail-heading,
+    .dl-detail-header-actions,
+    .dl-detail-section-title,
+    .dl-detail-linked-action,
+    .dl-detail-footer,
+    .dl-detail-actions {
+        display: flex;
+        align-items: center;
+    }
+    .dl-detail-heading { gap: 12px; min-width: 0; }
+    .dl-detail-heading-copy { min-width: 0; }
+    .dl-detail-subtitle {
+        margin-top: 2px;
+        color: var(--fg-3);
+        font-size: 12.5px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .dl-detail-header-actions { gap: 8px; }
+    .dl-detail-body {
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+    }
+    .dl-detail-section {
+        padding: 15px 16px;
+        border: 1px solid var(--bd-1);
+        border-radius: var(--r-md);
+        background: var(--surface);
+    }
+    .dl-detail-overview-section { background: var(--surface-2); }
+    .dl-detail-section-title {
+        gap: 7px;
+        margin-bottom: 11px;
+        color: var(--fg-2);
+        font-size: 12px;
+        font-weight: 750;
+        text-transform: uppercase;
+        letter-spacing: .04em;
+    }
+    .dl-detail-section-title .mud-icon-root {
+        color: var(--accent);
+        font-size: 18px;
+    }
+    .dl-detail-overview,
+    .dl-detail-info-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+    }
+    .dl-detail-overview { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .dl-detail-field {
+        min-width: 0;
+        padding: 10px 12px;
+        border: 1px solid var(--bd-1);
+        border-radius: var(--r-sm);
+        background: var(--surface-2);
+    }
+    .dl-detail-field > span {
+        display: block;
+        margin-bottom: 3px;
+        color: var(--fg-3);
+        font-size: 11px;
+    }
+    .dl-detail-field > strong {
+        display: block;
+        color: var(--fg-1);
+        font-size: 13.5px;
+        font-weight: 700;
+        line-height: 1.45;
+        overflow-wrap: anywhere;
+    }
+    .dl-detail-reasoning,
+    .dl-detail-recommendation p {
+        margin: 0;
+        color: var(--fg-1);
+        font-size: 14px;
+        line-height: 1.75;
+        white-space: pre-line;
+    }
+    .dl-detail-recommendation {
+        border-color: var(--accent-line);
+        background: var(--accent-soft);
+    }
+    .dl-detail-linked-action {
+        gap: 8px;
+        margin-top: 12px;
+        padding: 9px 12px;
+        border: 1px solid var(--accent-line);
+        border-radius: var(--r-sm);
+        background: var(--accent-soft);
+        color: var(--fg-2);
+        font-size: 12.5px;
+        text-decoration: none;
+    }
+    .dl-detail-linked-action .mud-icon-root { color: var(--accent); }
+    .dl-detail-linked-action strong {
+        color: var(--accent);
+        font-weight: 700;
+    }
+    .dl-detail-linked-action--link:hover { background: var(--hover); }
+    .dl-detail-footer {
+        justify-content: space-between;
+        gap: 12px;
+        padding: 12px 16px;
+    }
+    .dl-detail-actions {
+        justify-content: flex-end;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
     .dl-action-link {
         display: inline-flex;
         align-items: center;
@@ -699,14 +959,6 @@
     }
     .dl-action-link:hover { background: var(--hover); }
     .dl-action-link .mud-icon-root { font-size: 14px; }
-    .dl-ack  { font-size: 11px; color: var(--fg-3); text-align: right; max-width: 200px; }
-    .dl-actions {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 4px;
-        justify-content: flex-end;
-        margin-top: 4px;
-    }
 
     .dl-preview-grid {
         display: grid;
@@ -771,8 +1023,37 @@
     .dl-pager-text { font-size: 12px; margin-right: 8px; }
 
     @@media (max-width: 900px) {
-        .dl-card { grid-template-columns: 1fr; }
-        .dl-card-left, .dl-card-right { flex-direction: row; align-items: center; }
+        .dl-card { grid-template-columns: 46px minmax(0, 1fr); }
+        .dl-card-side {
+            grid-column: 1 / -1;
+            flex-direction: row;
+            justify-content: flex-end;
+            min-width: 0;
+            padding-inline-start: 60px;
+        }
+        .dl-detail-overview { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+
+    @@media (max-width: 640px) {
+        .dl-list { padding-inline: 16px; }
+        .dl-card { padding: 12px; }
+        .dl-card-side {
+            justify-content: space-between;
+            padding-inline-start: 0;
+        }
+        .dl-detail-overview,
+        .dl-detail-info-grid {
+            grid-template-columns: minmax(0, 1fr);
+        }
+        .dl-detail-footer {
+            align-items: stretch;
+            flex-direction: column;
+        }
+        .dl-detail-actions {
+            align-items: stretch;
+            flex-direction: column-reverse;
+        }
+        .dl-detail-actions .mud-button-root { width: 100%; }
     }
 </style>
 
@@ -782,6 +1063,7 @@
     private bool _loading;
     private bool _canAcknowledge;
     private Guid? _busyId;
+    private DecisionLogDto? _detailItem;
 
     private bool _consolidateDialogVisible;
     private bool _consolidating;
@@ -999,6 +1281,31 @@
             .Replace("{0}", ResolveUserName(userId), StringComparison.Ordinal)
             .Replace("{1}", "{0}", StringComparison.Ordinal);
 
+    private string DecisionTitle(DecisionLogDto item)
+        => !string.IsNullOrWhiteSpace(item.ProductName)
+            ? item.ProductName
+            : IntL[$"DecisionType:{item.DecisionType}"].Value;
+
+    private static string DecisionLocation(DecisionLogDto item)
+    {
+        if (!string.IsNullOrWhiteSpace(item.BranchName)) return item.BranchName;
+        if (!string.IsNullOrWhiteSpace(item.SourceBranchName)
+            && !string.IsNullOrWhiteSpace(item.TargetBranchName))
+        {
+            return $"{item.SourceBranchName} → {item.TargetBranchName}";
+        }
+
+        return item.TargetBranchName ?? item.SourceBranchName ?? "—";
+    }
+
+    private void OpenDetails(DecisionLogDto item) => _detailItem = item;
+
+    private void CloseDetails()
+    {
+        if (_detailItem != null && _busyId == _detailItem.Id) return;
+        _detailItem = null;
+    }
+
     private async Task OnFilterKeyUpAsync(KeyboardEventArgs e)
     {
         if (e.Key == "Enter")
@@ -1158,6 +1465,7 @@
 
             var index = _items.FindIndex(x => x.Id == item.Id);
             if (index >= 0) _items[index] = updated;
+            if (_detailItem?.Id == item.Id) _detailItem = updated;
 
             await LoadSummaryAsync();
 
@@ -1283,6 +1591,7 @@
 
             var index = _items.FindIndex(x => x.Id == item.Id);
             if (index >= 0) _items[index] = updated;
+            if (_detailItem?.Id == item.Id) _detailItem = updated;
 
             await LoadSummaryAsync();
             Snackbar.Add(L["SuccessfullySaved"], Severity.Success);
@@ -1301,7 +1610,7 @@
     {
         DecisionActionTypes.PurchaseOrder => "/operations/purchase-orders",
         DecisionActionTypes.StockTransfer => "/operations/stock-transfers",
-        DecisionActionTypes.BranchProductionRequest => "/production/branch-requests",
+        DecisionActionTypes.BranchProductionRequest => "/production/demand-planning?view=review",
         _ => "#"
     };
 

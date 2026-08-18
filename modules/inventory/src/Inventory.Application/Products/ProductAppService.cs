@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Inventory.Entities;
+using Inventory.Localization;
 using Inventory.Permissions;
 using Inventory.Settings;
 using Microsoft.AspNetCore.Authorization;
@@ -32,7 +33,7 @@ public class ProductAppService : InventoryAppService, IProductAppService
     public async Task<ProductDto> GetAsync(Guid id)
     {
         var product = await _productRepository.GetAsync(id);
-        var dto = ObjectMapper.Map<AppProduct, ProductDto>(product);
+        var dto = MapToDto(product);
         dto.Currency = await GetShopCurrencyAsync();
         return dto;
     }
@@ -55,7 +56,7 @@ public class ProductAppService : InventoryAppService, IProductAppService
         var currency = await GetShopCurrencyAsync();
         var dtos = items.ConvertAll(p =>
         {
-            var dto = ObjectMapper.Map<AppProduct, ProductDto>(p);
+            var dto = MapToDto(p);
             dto.Currency = currency;
             return dto;
         });
@@ -73,7 +74,7 @@ public class ProductAppService : InventoryAppService, IProductAppService
         var currency = await GetShopCurrencyAsync();
         return items.ConvertAll(p =>
         {
-            var dto = ObjectMapper.Map<AppProduct, ProductLookupDto>(p);
+            var dto = MapToLookupDto(p);
             dto.Currency = currency;
             return dto;
         });
@@ -85,11 +86,14 @@ public class ProductAppService : InventoryAppService, IProductAppService
         var currency = await GetShopCurrencyAsync();
         var product = await _productManager.CreateAsync(
             input.CategoryId,
-            input.Name,
+            input.NameAr,
+            input.NameEn,
             input.SKU,
-            input.Unit,
+            input.UnitAr,
+            input.UnitEn,
             input.DefaultSupplierId,
-            input.Description,
+            input.DescriptionAr,
+            input.DescriptionEn,
             input.CostPrice,
             input.SalePrice,
             currency,
@@ -103,7 +107,7 @@ public class ProductAppService : InventoryAppService, IProductAppService
             input.IsProducible);
 
         await _productRepository.InsertAsync(product, autoSave: true);
-        var dto = ObjectMapper.Map<AppProduct, ProductDto>(product);
+        var dto = MapToDto(product);
         dto.Currency = currency;
         return dto;
     }
@@ -120,9 +124,12 @@ public class ProductAppService : InventoryAppService, IProductAppService
         product.UpdateInfo(
             input.CategoryId,
             input.DefaultSupplierId,
-            input.Name,
-            input.Unit,
-            input.Description,
+            input.NameAr,
+            input.NameEn,
+            input.UnitAr,
+            input.UnitEn,
+            input.DescriptionAr,
+            input.DescriptionEn,
             input.CostPrice,
             input.SalePrice,
             currency,
@@ -136,7 +143,7 @@ public class ProductAppService : InventoryAppService, IProductAppService
             input.IsProducible);
 
         await _productRepository.UpdateAsync(product, autoSave: true);
-        var dto = ObjectMapper.Map<AppProduct, ProductDto>(product);
+        var dto = MapToDto(product);
         dto.Currency = currency;
         return dto;
     }
@@ -150,4 +157,21 @@ public class ProductAppService : InventoryAppService, IProductAppService
     private async Task<string> GetShopCurrencyAsync()
         => ShopCurrencySettings.Normalize(
             await _settingProvider.GetOrNullAsync(ShopCurrencySettings.Name));
+
+    private ProductDto MapToDto(AppProduct product)
+    {
+        var dto = ObjectMapper.Map<AppProduct, ProductDto>(product);
+        dto.Name = LocalizedBusinessText.Select(product.NameAr, product.NameEn);
+        dto.Description = LocalizedBusinessText.Select(product.DescriptionAr, product.DescriptionEn);
+        dto.Unit = LocalizedBusinessText.Select(product.UnitAr, product.UnitEn);
+        return dto;
+    }
+
+    private ProductLookupDto MapToLookupDto(AppProduct product)
+    {
+        var dto = ObjectMapper.Map<AppProduct, ProductLookupDto>(product);
+        dto.Name = LocalizedBusinessText.Select(product.NameAr, product.NameEn);
+        dto.Unit = LocalizedBusinessText.Select(product.UnitAr, product.UnitEn);
+        return dto;
+    }
 }
