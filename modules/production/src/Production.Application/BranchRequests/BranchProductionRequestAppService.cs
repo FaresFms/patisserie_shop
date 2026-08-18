@@ -195,7 +195,7 @@ public class BranchProductionRequestAppService : ProductionAppService, IBranchPr
             dtos.Add(new RequestableBranchLookupDto
             {
                 Id = branch.Id,
-                Name = branch.Name
+                Name = branch.DisplayName
             });
         }
 
@@ -252,7 +252,7 @@ public class BranchProductionRequestAppService : ProductionAppService, IBranchPr
         var dto = ObjectMapper.Map<AppBranchProductionRequest, BranchProductionRequestDto>(request);
 
         var branch = await _branchRepository.FindAsync(request.BranchId);
-        dto.BranchName = branch?.Name;
+        dto.BranchName = branch?.DisplayName;
 
         var productIds = new List<Guid>();
         foreach (var item in request.Items)
@@ -271,9 +271,9 @@ public class BranchProductionRequestAppService : ProductionAppService, IBranchPr
         {
             if (productById.TryGetValue(item.ProductId, out var product))
             {
-                item.ProductName = product.Name;
+                item.ProductName = product.DisplayName;
                 item.ProductSku = product.SKU;
-                item.ProductUnit = product.Unit;
+                item.ProductUnit = product.DisplayUnit;
             }
         }
 

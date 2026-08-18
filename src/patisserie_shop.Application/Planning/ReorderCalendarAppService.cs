@@ -94,7 +94,7 @@ public class ReorderCalendarAppService : patisserie_shopAppService, IReorderCale
         }
 
         var branchNames = (await _branchRepository.GetListAsync())
-            .ToDictionary(b => b.Id, b => b.Name);
+            .ToDictionary(b => b.Id, b => b.DisplayName);
 
         var events = new List<CalendarEventDto>();
         events.AddRange(await BuildStockoutEventsAsync(scope, branchNames, todayUtc, gridEnd));
@@ -214,14 +214,14 @@ public class ReorderCalendarAppService : patisserie_shopAppService, IReorderCale
 
         return rows.ConvertAll(r =>
         {
-            var branchName = r.Branch?.Name ?? branchNames.GetValueOrDefault(
+            var branchName = r.Branch?.DisplayName ?? branchNames.GetValueOrDefault(
                 r.Batch.BranchId,
                 _intelligenceLocalizer["ReorderCalendar:DeletedBranch"].Value);
             return new CalendarEventDto
             {
                 Date = r.Batch.ExpiryDate.Date,
                 EventType = CalendarEventTypes.Expiry,
-                Title = r.Product.Name,
+                Title = r.Product.DisplayName,
                 Detail = _intelligenceLocalizer[
                     "ReorderCalendar:Event:ExpiryDetail",
                     branchName,

@@ -299,7 +299,7 @@
                                                       ToValue="@(b => (Guid?)b.Id)"
                                                       ToLabel="@(b => b.Name)"
                                                       Value="_newToId"
-                                                      ValueChanged="@(v => { _newToId = v; _toError = false; })"
+                                                      ValueChanged="OnNewDestinationChanged"
                                                       Placeholder="@OpsL["ReceivingBranch"]"
                                                       Margin="Margin.Dense"
                                                       MaxHeight="240"
@@ -338,25 +338,25 @@
                                                           ToValue="@(p => (Guid?)p.Id)"
                                                           ToLabel="@(p => p.Name)"
                                                           Value="itemRow.ProductId"
-                                                          ValueChanged="@(v => { itemRow.ProductId = v; _itemsError = false; })"
+                                                          ValueChanged="@(v => OnNewItemProductChanged(itemRow, v))"
                                                           Placeholder="@OpsL["Product"]"
                                                           Margin="Margin.Dense"
                                                           MaxHeight="240" />
                                         <SoftNumericField T="int"
                                                           Value="itemRow.Quantity"
-                                                          ValueChanged="@(v => itemRow.Quantity = v)"
+                                                          ValueChanged="@(v => OnNewItemQuantityChanged(itemRow, v))"
                                                           Variant="Variant.Outlined"
                                                           Min="1"
                                                           Margin="Margin.Dense" />
                                         <SoftIconButton Icon="@Icons.Material.Filled.Close"
                                                         Size="Size.Small"
-                                                        OnClick="@(() => _newItems.Remove(itemRow))" />
+                                                        OnClick="@(() => RemoveNewItem(itemRow))" />
                                     </div>
                                 }
                                 <SoftButton Variant="Variant.Text" Size="Size.Small" FullWidth="true"
                                             Class="sts-add-row"
                                             StartIcon="@Icons.Material.Filled.Add"
-                                            OnClick="@(() => _newItems.Add(new NewTransferItemRow()))">
+                                            OnClick="AddNewItem">
                                     @OpsL["AddAnotherProduct"]
                                 </SoftButton>
                             </div>
@@ -368,6 +368,35 @@
                                 </div>
                             }
                         </div>
+
+                        @if (_canChooseBranches)
+                        {
+                            <div class="sts-suggestion-section">
+                                <div class="sts-suggestion-toolbar">
+                                    <div>
+                                        <SoftText Typo="Typo.subtitle2">@OpsL["SourceSuggestionsTitle"]</SoftText>
+                                        <SoftText Typo="Typo.caption" Class="sts-route-hint">@OpsL["SourceSuggestionBasis"]</SoftText>
+                                    </div>
+                                    <SoftButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small"
+                                                StartIcon="@Icons.Material.Filled.AutoAwesome"
+                                                OnClick="LoadNewTransferSourceSuggestionsAsync"
+                                                Disabled="@(!CanLoadNewTransferSourceSuggestions)">
+                                        @(_sourceSuggestionsVisible
+                                            ? OpsL["SourceSuggestionsRefresh"]
+                                            : OpsL["SourceSuggestionsSuggest"])
+                                    </SoftButton>
+                                </div>
+
+                                @if (_sourceSuggestionsVisible)
+                                {
+                                    <StockTransferSourceSuggestions Suggestions="_sourceSuggestions"
+                                                                    IsLoading="_sourceSuggestionsLoading"
+                                                                    ErrorText="@_sourceSuggestionsError"
+                                                                    SelectedSourceId="_newFromId"
+                                                                    SourceSelected="SelectSuggestedSource" />
+                                }
+                            </div>
+                        }
 
                         <SoftTextField T="string"
                                        Label="@OpsL["Notes"]"
@@ -542,6 +571,17 @@
         font-size: .78rem;
     }
     .sts-items-error .mud-icon-root { font-size: 16px; }
+    .sts-suggestion-section {
+        display: grid;
+        gap: 10px;
+        padding-top: 4px;
+    }
+    .sts-suggestion-toolbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+    }
     .sts-items-head {
         display: flex;
         gap: 8px;
@@ -962,6 +1002,16 @@
 
     private readonly List<NewTransferItemRow> _newItems = new();
     private List<ProductLookupDto> _productLookup = new();
+    private List<StockTransferSourceSuggestionDto> _sourceSuggestions = new();
+    private bool _sourceSuggestionsVisible;
+    private bool _sourceSuggestionsLoading;
+    private string? _sourceSuggestionsError;
+    private int _sourceSuggestionVersion;
+
+    private bool CanLoadNewTransferSourceSuggestions =>
+        !_sourceSuggestionsLoading
+        && _newToId.HasValue
+        && _newItems.Any(x => x.ProductId.HasValue && x.Quantity > 0);
 
     private Task OpenCreateDialog() => OpenCreateDialog(null, null);
 
@@ -985,6 +1035,7 @@
         _itemsError = false;
         _newItems.Clear();
         _newItems.Add(new NewTransferItemRow());
+        InvalidateNewTransferSourceSuggestions();
         _createVisible = true;
 
         if (_productLookup.Count == 0)
@@ -1010,6 +1061,105 @@
     {
         _newRequestedDate = value;
         _requestedDateError = !value.HasValue;
+    }
+
+    private void OnNewDestinationChanged(Guid? value)
+    {
+        _newToId = value;
+        _toError = false;
+        InvalidateNewTransferSourceSuggestions();
+    }
+
+    private void OnNewItemProductChanged(NewTransferItemRow row, Guid? value)
+    {
+        row.ProductId = value;
+        _itemsError = false;
+        InvalidateNewTransferSourceSuggestions();
+    }
+
+    private void OnNewItemQuantityChanged(NewTransferItemRow row, int value)
+    {
+        row.Quantity = value;
+        InvalidateNewTransferSourceSuggestions();
+    }
+
+    private void AddNewItem()
+    {
+        _newItems.Add(new NewTransferItemRow());
+        InvalidateNewTransferSourceSuggestions();
+    }
+
+    private void RemoveNewItem(NewTransferItemRow row)
+    {
+        _newItems.Remove(row);
+        InvalidateNewTransferSourceSuggestions();
+    }
+
+    private void InvalidateNewTransferSourceSuggestions()
+    {
+        _sourceSuggestionVersion++;
+        _sourceSuggestionsVisible = false;
+        _sourceSuggestionsLoading = false;
+        _sourceSuggestionsError = null;
+        _sourceSuggestions.Clear();
+    }
+
+    private async Task LoadNewTransferSourceSuggestionsAsync()
+    {
+        if (!CanLoadNewTransferSourceSuggestions || !_newToId.HasValue)
+        {
+            return;
+        }
+
+        var version = ++_sourceSuggestionVersion;
+        _sourceSuggestionsVisible = true;
+        _sourceSuggestionsLoading = true;
+        _sourceSuggestionsError = null;
+        _sourceSuggestions.Clear();
+
+        var input = new GetStockTransferSourceSuggestionsInput
+        {
+            ToBranchId = _newToId.Value
+        };
+        foreach (var row in _newItems)
+        {
+            if (row.ProductId is Guid productId && row.Quantity > 0)
+            {
+                input.Items.Add(new StockTransferSourceRequestItemDto
+                {
+                    ProductId = productId,
+                    RequestedQuantity = row.Quantity
+                });
+            }
+        }
+
+        try
+        {
+            var suggestions = await StockTransferAppService.GetSourceSuggestionsAsync(input);
+            if (version == _sourceSuggestionVersion)
+            {
+                _sourceSuggestions = suggestions;
+            }
+        }
+        catch
+        {
+            if (version == _sourceSuggestionVersion)
+            {
+                _sourceSuggestionsError = OpsL["SourceSuggestionsLoadFailed"];
+            }
+        }
+        finally
+        {
+            if (version == _sourceSuggestionVersion)
+            {
+                _sourceSuggestionsLoading = false;
+            }
+        }
+    }
+
+    private void SelectSuggestedSource(Guid branchId)
+    {
+        _newFromId = branchId;
     }
 
     private async Task ConfirmCreateAsync()

@@ -125,7 +125,7 @@ public class ProductionWasteRepository
                     .FirstOrDefault(),
                 TopProductName = rows.GroupBy(r => r.ProductId)
                     .OrderByDescending(g => g.Sum(x => x.TotalCost))
-                    .Select(g => productById.TryGetValue(g.Key, out var product) ? product.Name : null)
+                    .Select(g => productById.TryGetValue(g.Key, out var product) ? product.DisplayName : null)
                     .FirstOrDefault()
             }
         };
@@ -160,9 +160,9 @@ public class ProductionWasteRepository
                 return new ProductionWasteProductRow
                 {
                     ProductId = g.Key,
-                    ProductName = product?.Name ?? g.Key.ToString(),
+                    ProductName = product?.DisplayName ?? g.Key.ToString(),
                     ProductSku = product?.SKU ?? string.Empty,
-                    ProductUnit = product?.Unit ?? string.Empty,
+                    ProductUnit = product?.DisplayUnit ?? string.Empty,
                     Quantity = g.Sum(x => x.Quantity),
                     Cost = g.Sum(x => x.TotalCost)
                 };
@@ -276,11 +276,11 @@ public class ProductionWasteRepository
                 ProductionOrderId = r.ProductionOrderId,
                 ProductionOrderNumber = orderNumber,
                 KitchenBranchId = r.KitchenBranchId,
-                KitchenBranchName = branch?.Name ?? r.KitchenBranchId.ToString(),
+                KitchenBranchName = branch?.DisplayName ?? r.KitchenBranchId.ToString(),
                 ProductId = r.ProductId,
-                ProductName = product?.Name ?? r.ProductId.ToString(),
+                ProductName = product?.DisplayName ?? r.ProductId.ToString(),
                 ProductSku = product?.SKU ?? string.Empty,
-                ProductUnit = product?.Unit ?? string.Empty,
+                ProductUnit = product?.DisplayUnit ?? string.Empty,
                 WasteType = r.WasteType,
                 Quantity = r.Quantity,
                 UnitCost = r.UnitCost,

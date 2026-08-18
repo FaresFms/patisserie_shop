@@ -41,9 +41,11 @@ public class ProductionFlowTests : IntegrationTestBase
         var rawMaterial = await productService.CreateAsync(new CreateProductDto
         {
             CategoryId = category.Id,
-            Name = NextName("Flour"),
+            NameAr = NextName("Flour"),
+            NameEn = NextName("Flour"),
             SKU = NextName("RAW"),
-            Unit = "g",
+            UnitAr = "غ",
+            UnitEn = "g",
             CostPrice = 1m,
             SalePrice = 1m,
             ProductType = ProductTypes.RawMaterial,
@@ -54,9 +56,11 @@ public class ProductionFlowTests : IntegrationTestBase
         var finishedProduct = await productService.CreateAsync(new CreateProductDto
         {
             CategoryId = category.Id,
-            Name = NextName("Cake"),
+            NameAr = NextName("Cake"),
+            NameEn = NextName("Cake"),
             SKU = NextName("FIN"),
-            Unit = "pcs",
+            UnitAr = "قطعة",
+            UnitEn = "pcs",
             CostPrice = 2m,
             SalePrice = 5m,
             ProductType = ProductTypes.FinishedGood,
@@ -67,18 +71,21 @@ public class ProductionFlowTests : IntegrationTestBase
         });
         var kitchen = await branchService.CreateAsync(new CreateBranchDto
         {
-            Name = NextName("Main kitchen"),
+            NameAr = NextName("Main kitchen"),
+            NameEn = NextName("Main kitchen"),
             BranchType = BranchTypes.MainKitchen
         });
         var salesBranch = await branchService.CreateAsync(new CreateBranchDto
         {
-            Name = NextName("Sales branch"),
+            NameAr = NextName("Sales branch"),
+            NameEn = NextName("Sales branch"),
             BranchType = BranchTypes.SalesBranch,
             ManagerUserId = currentUserId
         });
         var otherSalesBranch = await branchService.CreateAsync(new CreateBranchDto
         {
-            Name = NextName("Other sales branch"),
+            NameAr = NextName("Other sales branch"),
+            NameEn = NextName("Other sales branch"),
             BranchType = BranchTypes.SalesBranch
         });
 

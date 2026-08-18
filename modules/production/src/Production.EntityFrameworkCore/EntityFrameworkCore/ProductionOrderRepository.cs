@@ -153,11 +153,11 @@ public class ProductionOrderRepository
                 Id = h.Id,
                 OrderNumber = h.OrderNumber,
                 KitchenBranchId = h.KitchenBranchId,
-                KitchenBranchName = branch?.Name ?? h.KitchenBranchId.ToString(),
+                KitchenBranchName = branch?.DisplayName ?? h.KitchenBranchId.ToString(),
                 FinishedProductId = h.FinishedProductId,
-                FinishedProductName = product?.Name ?? h.FinishedProductId.ToString(),
+                FinishedProductName = product?.DisplayName ?? h.FinishedProductId.ToString(),
                 FinishedProductSku = product?.SKU ?? string.Empty,
-                Unit = product?.Unit ?? string.Empty,
+                Unit = product?.DisplayUnit ?? string.Empty,
                 Status = h.Status,
                 Priority = h.Priority,
                 PlannedOutputQuantity = h.PlannedOutputQuantity,
@@ -517,7 +517,7 @@ public class ProductionOrderRepository
                 return new ProductionProductFocusRow
                 {
                     ProductId = g.Key,
-                    ProductName = product?.Name ?? g.Key.ToString(),
+                    ProductName = product?.DisplayName ?? g.Key.ToString(),
                     ProductSku = product?.SKU ?? string.Empty,
                     AcceptedQuantity = accepted,
                     RejectedQuantity = rejected,

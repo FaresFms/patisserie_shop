@@ -9,10 +9,13 @@
         "--project", "src/patisserie_shop.Blazor/patisserie_shop.Blazor.csproj",
         "--no-build",
         "--",
-        "--urls", "https://localhost:44387",
-        "--environment", "Development"
+        "--urls", "https://localhost:44390",
+        "--environment", "Development",
+        "--App:SelfUrl", "https://localhost:44390",
+        "--App:RedirectAllowedUrls", "https://localhost:44390",
+        "--AuthServer:Authority", "https://localhost:44390"
       ],
-      "port": 44387
+      "port": 44390
     }
   ]
 }

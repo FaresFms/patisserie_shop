@@ -103,7 +103,7 @@ public class BranchProductionRequestRepository
                 Id = h.Id,
                 RequestNumber = h.RequestNumber,
                 BranchId = h.BranchId,
-                BranchName = branch?.Name ?? h.BranchId.ToString(),
+                BranchName = branch?.DisplayName ?? h.BranchId.ToString(),
                 NeededByDate = h.NeededByDate,
                 Priority = h.Priority,
                 Status = h.Status,
@@ -290,7 +290,7 @@ public class BranchProductionRequestRepository
             foreach (var item in request.Items
                          .Where(i => i.ApprovedQuantity > i.PlannedQuantity)
                          .OrderBy(i => productById.TryGetValue(i.ProductId, out var product)
-                             ? product.Name
+                             ? product.DisplayName
                              : i.ProductId.ToString(), StringComparer.OrdinalIgnoreCase))
             {
                 productById.TryGetValue(item.ProductId, out var product);
@@ -310,13 +310,13 @@ public class BranchProductionRequestRepository
                     RequestItemId = item.Id,
                     RequestNumber = request.RequestNumber,
                     BranchId = request.BranchId,
-                    BranchName = branch?.Name ?? request.BranchId.ToString(),
+                    BranchName = branch?.DisplayName ?? request.BranchId.ToString(),
                     NeededByDate = request.NeededByDate,
                     Priority = request.Priority,
                     ProductId = item.ProductId,
-                    ProductName = product?.Name ?? item.ProductId.ToString(),
+                    ProductName = product?.DisplayName ?? item.ProductId.ToString(),
                     ProductSku = product?.SKU ?? string.Empty,
-                    Unit = product?.Unit ?? string.Empty,
+                    Unit = product?.DisplayUnit ?? string.Empty,
                     ApprovedQuantity = item.ApprovedQuantity,
                     PlannedQuantity = item.PlannedQuantity,
                     FulfilledQuantity = item.FulfilledQuantity,

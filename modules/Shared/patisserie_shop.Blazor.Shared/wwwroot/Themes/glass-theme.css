@@ -452,8 +452,12 @@ body.abp-application-layout .mud-typography-h6 {
 
 /* Toasts must float ABOVE the custom modal backdrop (z 1400); MudBlazor's
    default snackbar z-index also lands at 1400 and, being earlier in the DOM,
-   gets covered by the backdrop. Lift the whole snackbar layer above it. */
+   gets covered by the backdrop. Lift the whole snackbar layer above it.
+   MudBlazor renders the container with a location class (.mud-snackbar-location-*)
+   rather than .mud-snackbar-provider, so that selector alone never matched and
+   business-rule toasts stayed hidden behind any open modal. */
 .mud-snackbar-provider,
+[class*="mud-snackbar-location"],
 .mud-snackbar {
     z-index: 1500 !important;
 }
@@ -908,9 +912,9 @@ body.abp-application-layout .page-flat .mud-card-content {
 .page-flat .toolbar {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 12px;
     margin: 0 32px;
-    padding: 10px 0;
+    padding: 14px 0;
     border-top: 1px solid var(--bd-1);
     border-bottom: 1px solid var(--bd-1);
 }
@@ -920,21 +924,24 @@ body.abp-application-layout .page-flat .mud-card-content {
     gap: 6px;
 }
 
-/* Compact filter chip — wraps an existing MudSelect/SoftLookupSelect */
+/* List-page filter control — wraps an existing MudSelect/SoftLookupSelect */
 .page-flat .filter-chip,
 .page-flat .filter-chip.mud-input-control,
 .page-flat .filter-chip .mud-input-outlined-border {
     border: 0 !important;
 }
+.page-flat .filter-chip {
+    min-width: 172px;
+}
 .page-flat .filter-chip .mud-input-slot,
 .page-flat .filter-chip .mud-select .mud-input-slot {
-    height: 30px !important;
-    min-height: 30px !important;
-    padding: 0 12px !important;
-    background: transparent !important;
-    border: 1px dashed var(--bd-2) !important;
+    height: 40px !important;
+    min-height: 40px !important;
+    padding: 0 16px !important;
+    background: var(--surface) !important;
+    border: 1px solid var(--bd-3) !important;
     border-radius: 999px !important;
-    font-size: 12.5px !important;
+    font-size: 13.5px !important;
     transition: background .12s, border-color .12s;
 }
 .page-flat .filter-chip .mud-input-slot:hover,
@@ -951,11 +958,11 @@ body.abp-application-layout .page-flat .mud-card-content {
 
 /* Search wrapper */
 .page-flat .toolbar-search .mud-input-slot {
-    height: 32px !important;
-    min-height: 32px !important;
+    height: 40px !important;
+    min-height: 40px !important;
     padding: 0 10px !important;
-    background: transparent !important;
-    border: 1px solid transparent !important;
+    background: var(--surface) !important;
+    border: 1px solid var(--bd-2) !important;
     border-radius: var(--r-sm) !important;
 }
 .page-flat .toolbar-search .mud-input-slot:hover {
@@ -970,6 +977,26 @@ body.abp-application-layout .page-flat .mud-card-content {
 .page-flat .toolbar-search .mud-input-label {
     display: none !important;
 }
+.page-flat .toolbar-search .mud-input-adornment {
+    color: var(--accent) !important;
+}
+
+@media (max-width: 760px) {
+    .page-flat .toolbar {
+        align-items: stretch;
+        flex-wrap: wrap;
+        margin-inline: 16px;
+    }
+
+    .page-flat .toolbar-search {
+        flex: 1 1 100%;
+        max-width: none !important;
+    }
+
+    .page-flat .filter-chip {
+        flex: 1 1 160px;
+    }
+}
 
 /* Flat table — no card wrap, hairline rows */
 .page-flat .mud-table,
@@ -980,6 +1007,28 @@ body.abp-application-layout .page-flat .mud-card-content {
     box-shadow: none !important;
     margin: 0 32px;
     width: calc(100% - 64px) !important;
+}
+
+/* Wide tables (dispatch, workboard) scroll sideways on a narrow window, which used to
+   push the Actions column out of reach. Pin the last column so the row's primary
+   button is always clickable no matter how far the table is scrolled. */
+.page-flat .mud-table-container {
+    overflow-x: auto;
+}
+.page-flat .mud-table-container .mud-table-row > .mud-table-cell:last-child,
+.page-flat .mud-table-container .mud-table-head .mud-table-cell:last-child {
+    position: sticky;
+    right: 0;
+    z-index: 2;
+    background: var(--bg) !important;
+    box-shadow: -8px 0 8px -8px rgb(0 0 0 / 18%);
+}
+.page-flat .mud-table-container .mud-table-row:hover > .mud-table-cell:last-child {
+    background: var(--hover) !important;
+}
+/* Row actions are hover-revealed elsewhere; in a pinned cell they must stay visible. */
+.page-flat .mud-table-container .mud-table-cell:last-child .row-actions {
+    opacity: 1;
 }
 .page-flat .mud-table-head .mud-table-cell {
     background: transparent !important;
@@ -1077,11 +1126,11 @@ body.abp-application-layout .mud-nav-link.mud-nav-link-active .mud-nav-link-icon
     display: block !important;
     position: static !important;
     transform: none !important;
-    font-size: 10.5px !important;
-    font-weight: 600 !important;
+    font-size: 12px !important;
+    font-weight: 700 !important;
     text-transform: uppercase !important;
     letter-spacing: 0.06em !important;
-    color: var(--fg-3) !important;
+    color: var(--fg-2) !important;
     margin-bottom: 4px !important;
     padding: 0 !important;
 }
@@ -1095,6 +1144,9 @@ body.abp-application-layout .mud-nav-link.mud-nav-link-active .mud-nav-link-icon
     background: transparent !important;
     box-shadow: none !important;
 }
+.page-flat .filter-chip {
+    min-width: 172px;
+}
 
 /* Kill the inner MudBlazor outlined-border so only our pill border shows */
 .page-flat .filter-chip .mud-input-outlined-border {
@@ -1103,13 +1155,13 @@ body.abp-application-layout .mud-nav-link.mud-nav-link-active .mud-nav-link-icon
 
 /* Pill itself */
 .page-flat .filter-chip .mud-input-slot {
-    height: 32px !important;
-    min-height: 32px !important;
-    padding: 0 14px !important;
-    background: transparent !important;
-    border: 1px dashed var(--bd-2) !important;
+    height: 40px !important;
+    min-height: 40px !important;
+    padding: 0 16px !important;
+    background: var(--surface) !important;
+    border: 1px solid var(--bd-3) !important;
     border-radius: 999px !important;
-    font-size: 12.5px !important;
+    font-size: 13.5px !important;
 }
 .page-flat .filter-chip .mud-input-slot:hover {
     background: var(--hover) !important;

@@ -65,7 +65,7 @@ public class CashierShiftVarianceEventHandler
 
         var branch = await _branchRepository.FindAsync(eventData.BranchId);
         var cashier = await _userRepository.FindAsync(eventData.CashierUserId);
-        var branchName = branch?.Name ?? eventData.BranchId.ToString();
+        var branchName = branch?.DisplayName ?? eventData.BranchId.ToString();
         var cashierName = cashier?.UserName ?? eventData.CashierUserId.ToString();
         var varianceKind = eventData.Variance > 0
             ? _localizer["CashierVariance:Over"]

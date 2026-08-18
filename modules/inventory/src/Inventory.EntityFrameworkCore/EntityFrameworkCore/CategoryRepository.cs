@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Inventory.Categories;
 using Inventory.Entities;
+using Inventory.Localization;
 using Microsoft.EntityFrameworkCore;
 using Volo.Abp.Domain.Repositories.EntityFrameworkCore;
 using Volo.Abp.EntityFrameworkCore;
@@ -55,7 +56,11 @@ public class CategoryRepository
         if (!string.IsNullOrWhiteSpace(filter))
         {
             var f = filter.Trim().ToLower();
-            query = query.Where(c => c.Name.ToLower().Contains(f));
+            query = query.Where(c =>
+                c.NameAr.ToLower().Contains(f) ||
+                c.NameEn.ToLower().Contains(f) ||
+                (c.DescriptionAr != null && c.DescriptionAr.ToLower().Contains(f)) ||
+                (c.DescriptionEn != null && c.DescriptionEn.ToLower().Contains(f)));
         }
 
         if (isActive.HasValue)
@@ -67,5 +72,30 @@ public class CategoryRepository
     }
 
     private static string ResolveSorting(string? sorting)
-        => string.IsNullOrWhiteSpace(sorting) ? nameof(AppCategory.Name) : sorting.Trim();
+    {
+        var localizedName = LocalizedBusinessText.IsArabic
+            ? nameof(AppCategory.NameAr)
+            : nameof(AppCategory.NameEn);
+        var localizedDescription = LocalizedBusinessText.IsArabic
+            ? nameof(AppCategory.DescriptionAr)
+            : nameof(AppCategory.DescriptionEn);
+
+        if (string.IsNullOrWhiteSpace(sorting))
+        {
+            return localizedName;
+        }
+
+        var value = sorting.Trim();
+        if (value.StartsWith("Name", StringComparison.OrdinalIgnoreCase))
+        {
+            return value.Replace("Name", localizedName, StringComparison.OrdinalIgnoreCase);
+        }
+
+        if (value.StartsWith("Description", StringComparison.OrdinalIgnoreCase))
+        {
+            return value.Replace("Description", localizedDescription, StringComparison.OrdinalIgnoreCase);
+        }
+
+        return value;
+    }
 }

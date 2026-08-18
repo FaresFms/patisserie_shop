@@ -170,6 +170,77 @@ public class ProductionOrderManager : DomainService
         return result;
     }
 
+    /// <summary>
+    /// Direct path from an approved branch-request line to a cook order, skipping the
+    /// demand-planning plan. The order is allocated entirely to the originating request
+    /// line, so dispatch after completion routes back to the branch that asked for it.
+    /// </summary>
+    public async Task<AppProductionOrder> CreateForRequestItemAsync(
+        Guid kitchenBranchId,
+        Guid requestId,
+        Guid requestItemId,
+        int quantity,
+        Guid? createdByUserId,
+        string? notes)
+    {
+        using var contentCulture = CultureHelper.Use("ar-SY", "ar-SY");
+
+        if (quantity <= 0)
+        {
+            throw new BusinessException(ProductionErrorCodes.InvalidOrderQuantity)
+                .WithData("PlannedOutputQuantity", quantity);
+        }
+
+        var request = await _requestRepository.GetWithItemsAsync(requestId);
+        if (!BranchProductionRequestStatuses.IsApprovedDemand(request.Status))
+        {
+            throw new BusinessException(ProductionErrorCodes.InvalidRequestStatusTransition)
+                .WithData("CurrentStatus", request.Status);
+        }
+
+        var item = request.Items.FirstOrDefault(x => x.Id == requestItemId)
+            ?? throw new BusinessException(ProductionErrorCodes.RequestItemNotFound)
+                .WithData("RequestItemId", requestItemId);
+
+        // Guards a stale page: if the line was planned or fulfilled meanwhile there is
+        // nothing left to cook for it, and an unallocated order would just confuse.
+        var remainingUnplanned = item.ApprovedQuantity - item.PlannedQuantity;
+        if (remainingUnplanned <= 0)
+        {
+            throw new BusinessException(ProductionErrorCodes.RequestPlannedQuantityExceeded)
+                .WithData("ApprovedQuantity", item.ApprovedQuantity)
+                .WithData("PlannedQuantity", item.PlannedQuantity);
+        }
+
+        var orderNotes = string.IsNullOrWhiteSpace(notes)
+            ? _localizer["ProductionOrderFromRequestNote", request.RequestNumber].Value
+            : $"{_localizer["ProductionOrderFromRequestNote", request.RequestNumber].Value} {notes.Trim()}";
+
+        var order = await CreateAsync(
+            kitchenBranchId,
+            productionPlanId: null,
+            productionPlanLineId: null,
+            item.ProductId,
+            quantity,
+            request.Priority,
+            createdByUserId,
+            orderNotes);
+
+        // Reserve only what this request line still needs; anything above that is
+        // buffer stock and stays unallocated so it can be dispatched freely later.
+        var reserved = Math.Min(quantity, remainingUnplanned);
+        request.ReservePlannedQuantity(requestItemId, reserved);
+        order.AddAllocation(
+            GuidGenerator.Create(),
+            request.BranchId,
+            request.Id,
+            requestItemId,
+            reserved);
+        await _requestRepository.UpdateAsync(request);
+
+        return order;
+    }
+
     public async Task ApplyAllocationReleasesAsync(
         IEnumerable<AppProductionOrder.AllocationReleaseLine> releaseLines)
     {
@@ -364,9 +435,9 @@ public class ProductionOrderManager : DomainService
             result.Add(new ProductionIngredientAvailability
             {
                 IngredientProductId = ingredient.IngredientProductId,
-                IngredientName = product?.Name ?? ingredient.IngredientProductId.ToString(),
+                IngredientName = product?.DisplayName ?? ingredient.IngredientProductId.ToString(),
                 IngredientSku = product?.SKU ?? string.Empty,
-                Unit = product?.Unit ?? string.Empty,
+                Unit = product?.DisplayUnit ?? string.Empty,
                 RequiredQuantity = ingredient.RequiredQuantity,
                 AvailableQuantity = inventory == null || product == null
                     ? 0

@@ -18,6 +18,8 @@ public class patisserie_shopDbMigratorModule : AbpModule
     {
         var configuration = context.Services.GetConfiguration();
         var seedDemoData = configuration.GetValue<bool>("DataSeeding:SeedDemoData");
+        var seedProductionData = configuration.GetValue<bool?>("DataSeeding:SeedProductionData")
+            ?? seedDemoData;
 
         Configure<AbpDataSeedOptions>(options =>
         {
@@ -31,9 +33,13 @@ public class patisserie_shopDbMigratorModule : AbpModule
             options.Contributors.Remove<GraduationOperationsSeedContributor>();
             options.Contributors.Add<IdentityDataSeedContributor>();
             options.Contributors.Add<PatisserieDataSeedContributor>();
-            if (seedDemoData)
+            if (seedProductionData)
             {
                 options.Contributors.Add<ProductionDemoSeedContributor>();
+            }
+
+            if (seedDemoData)
+            {
                 options.Contributors.Add<SalesHistorySeedContributor>();
                 options.Contributors.Add<GraduationOperationsSeedContributor>();
             }

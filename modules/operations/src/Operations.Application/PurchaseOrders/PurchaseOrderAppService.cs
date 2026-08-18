@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Inventory;
 using Inventory.BranchInventory;
 using Inventory.Entities;
+using Inventory.Localization;
 using Inventory.Settings;
 using Microsoft.AspNetCore.Authorization;
 using Operations.Entities;
@@ -124,8 +125,8 @@ public class PurchaseOrderAppService : OperationsAppService, IPurchaseOrderAppSe
     {
         if (ids.Count == 0) return new Dictionary<Guid, string>();
         var q = await _branchRepository.GetQueryableAsync();
-        var rows = await AsyncExecuter.ToListAsync(q.Where(x => ids.Contains(x.Id)).Select(x => new { x.Id, x.Name }));
-        return rows.ToDictionary(r => r.Id, r => r.Name);
+        var rows = await AsyncExecuter.ToListAsync(q.Where(x => ids.Contains(x.Id)).Select(x => new { x.Id, x.NameAr, x.NameEn }));
+        return rows.ToDictionary(r => r.Id, r => LocalizedBusinessText.Select(r.NameAr, r.NameEn));
     }
 
     [Authorize(OperationsPermissions.PurchaseOrders.Create)]
@@ -271,7 +272,7 @@ public class PurchaseOrderAppService : OperationsAppService, IPurchaseOrderAppSe
             _manager.EnsureReceiptExpiryIsUsable(
                 product.ShelfLifeDays.HasValue,
                 product.Id,
-                product.Name,
+                product.DisplayName,
                 line.ExpiryDate,
                 today);
         }
@@ -336,7 +337,7 @@ public class PurchaseOrderAppService : OperationsAppService, IPurchaseOrderAppSe
             SupplierId = po.SupplierId,
             SupplierName = supplier.Name,
             DestBranchId = po.DestBranchId,
-            DestBranchName = branch.Name,
+            DestBranchName = branch.DisplayName,
             OrderDate = po.OrderDate,
             ExpectedDeliveryDate = po.ExpectedDeliveryDate,
             ActualDeliveryDate = po.ActualDeliveryDate,
@@ -363,9 +364,9 @@ public class PurchaseOrderAppService : OperationsAppService, IPurchaseOrderAppSe
         {
             Id = item.Id,
             ProductId = item.ProductId,
-            ProductName = product?.Name ?? "(deleted product)",
+            ProductName = product?.DisplayName ?? "(deleted product)",
             ProductSKU = product?.SKU ?? "-",
-            ProductUnit = product?.Unit ?? "-",
+            ProductUnit = product?.DisplayUnit ?? "-",
             OrderedQuantity = item.OrderedQuantity,
             ReceivedQuantity = item.ReceivedQuantity,
             UnitPrice = item.UnitPrice,

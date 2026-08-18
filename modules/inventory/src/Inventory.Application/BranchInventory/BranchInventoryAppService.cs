@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Inventory.Entities;
+using Inventory.Localization;
 using Inventory.Permissions;
 using Inventory.StockBatches;
 using Microsoft.AspNetCore.Authorization;
@@ -120,11 +121,11 @@ public class BranchInventoryAppService : InventoryAppService, IBranchInventoryAp
         return [.. rows.Select(row => new ProductBranchStockDto
         {
             BranchId = row.Inventory.BranchId,
-            BranchName = row.Branch.Name,
+            BranchName = LocalizedBusinessText.Select(row.Branch.NameAr, row.Branch.NameEn),
             QuantityOnHand = row.Inventory.QuantityOnHand,
             MinimumStock = row.Inventory.MinimumStock,
             MaximumStock = row.Inventory.MaximumStock,
-            ProductUnit = product.Unit
+            ProductUnit = LocalizedBusinessText.Select(product.UnitAr, product.UnitEn)
         })];
     }
 
@@ -225,9 +226,9 @@ public class BranchInventoryAppService : InventoryAppService, IBranchInventoryAp
     private BranchInventoryDto Project(BranchInventoryWithProduct row, int expiredQuantity = 0)
     {
         var dto = ObjectMapper.Map<AppBranchInventory, BranchInventoryDto>(row.Inventory);
-        dto.ProductName = row.Product.Name;
+        dto.ProductName = LocalizedBusinessText.Select(row.Product.NameAr, row.Product.NameEn);
         dto.ProductSKU = row.Product.SKU;
-        dto.ProductUnit = row.Product.Unit;
+        dto.ProductUnit = LocalizedBusinessText.Select(row.Product.UnitAr, row.Product.UnitEn);
         dto.ProductIsActive = row.Product.IsActive;
         dto.ExpiredQuantity = expiredQuantity;
         return dto;

@@ -152,7 +152,7 @@ public class AdminDashboardAppService : patisserie_shopAppService, IAdminDashboa
             return new BranchStockSummaryDto
             {
                 BranchId = b.Id,
-                BranchName = b.Name,
+                BranchName = b.DisplayName,
                 TotalProducts = rows.Count,
                 LowStockCount = low,
                 ExcessStockCount = excess,
@@ -173,7 +173,7 @@ public class AdminDashboardAppService : patisserie_shopAppService, IAdminDashboa
             return new BranchPerformanceDto
             {
                 BranchId = b.Id,
-                BranchName = b.Name,
+                BranchName = b.DisplayName,
                 SalesToday = todayAmt,
                 SalesThisWeek = weekAmt,
                 PendingAlerts = pending,
@@ -214,7 +214,7 @@ public class AdminDashboardAppService : patisserie_shopAppService, IAdminDashboa
             return new TopProductDto
             {
                 ProductId = p.ProductId,
-                ProductName = product?.Name ?? "(deleted product)",
+                ProductName = product?.DisplayName ?? "(deleted product)",
                 SKU = product?.SKU ?? string.Empty,
                 TotalQuantitySold = p.TotalQuantitySold,
                 TotalRevenue = p.TotalRevenue
@@ -227,13 +227,13 @@ public class AdminDashboardAppService : patisserie_shopAppService, IAdminDashboa
             productLookup.TryGetValue(d.ProductId, out var product);
             string? branchName = null;
             if (d.BranchId.HasValue && branchLookup.TryGetValue(d.BranchId.Value, out var br))
-                branchName = br.Name;
+                branchName = br.DisplayName;
             return new RecentDecisionDto
             {
                 Id = d.Id,
                 DecisionType = d.DecisionType,
                 Reasoning = d.Reasoning,
-                ProductName = product?.Name,
+                ProductName = product?.DisplayName,
                 BranchName = branchName,
                 Status = d.Status,
                 CreationTime = d.CreationTime,
@@ -244,8 +244,8 @@ public class AdminDashboardAppService : patisserie_shopAppService, IAdminDashboa
         var recentMovements = recentMovementRows.Take(RecentMovementsLimit).Select(m => new RecentMovementDto
         {
             MovementType = m.Movement.MovementType,
-            ProductName = m.Product.Name,
-            BranchName = m.Branch.Name,
+            ProductName = m.Product.DisplayName,
+            BranchName = m.Branch.DisplayName,
             Quantity = m.Movement.Quantity,
             QuantityAfter = m.Movement.QuantityAfter,
             CreationTime = m.Movement.CreationTime

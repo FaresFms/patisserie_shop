@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Inventory.BranchInventory;
 using Inventory.Entities;
+using Inventory.Localization;
 using Microsoft.EntityFrameworkCore;
 using Volo.Abp.Domain.Entities;
 using Volo.Abp.Domain.Repositories.EntityFrameworkCore;
@@ -106,8 +107,11 @@ public class BranchInventoryRepository
             includeInactiveProducts: false,
             onlySellable: true);
 
+        query = LocalizedBusinessText.IsArabic
+            ? query.OrderBy(row => row.Product.NameAr)
+            : query.OrderBy(row => row.Product.NameEn);
+
         return await query
-            .OrderBy(row => row.Product.Name)
             .ToListAsync(GetCancellationToken(cancellationToken));
     }
 
@@ -147,8 +151,11 @@ public class BranchInventoryRepository
             query = query.Where(x => branchIdScope.Contains(x.Inventory.BranchId));
         }
 
+        query = LocalizedBusinessText.IsArabic
+            ? query.OrderBy(x => x.Branch.NameAr)
+            : query.OrderBy(x => x.Branch.NameEn);
+
         return await query
-            .OrderBy(x => x.Branch.Name)
             .ToListAsync(GetCancellationToken(cancellationToken));
     }
 
@@ -172,6 +179,49 @@ public class BranchInventoryRepository
         return await query.ToListAsync(GetCancellationToken(cancellationToken));
     }
 
+    public async Task<List<TransferSourceStockRow>> GetTransferSourceStockAsync(
+        Guid destinationBranchId,
+        IReadOnlyCollection<Guid> productIds,
+        IReadOnlyCollection<Guid>? sourceBranchIdScope = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (productIds.Count == 0)
+        {
+            return new List<TransferSourceStockRow>();
+        }
+
+        var dbContext = await GetDbContextAsync();
+        var branches = dbContext.Set<AppBranch>()
+            .Where(branch => branch.IsActive && branch.Id != destinationBranchId);
+        if (sourceBranchIdScope != null)
+        {
+            branches = branches.Where(branch => sourceBranchIdScope.Contains(branch.Id));
+        }
+
+        var query =
+            from branch in branches
+            from product in dbContext.Set<AppProduct>()
+            where productIds.Contains(product.Id)
+            join inventory in dbContext.Set<AppBranchInventory>()
+                on new { BranchId = branch.Id, ProductId = product.Id }
+                equals new { inventory.BranchId, inventory.ProductId }
+                into inventoryRows
+            from inventory in inventoryRows.DefaultIfEmpty()
+            select new TransferSourceStockRow
+            {
+                BranchId = branch.Id,
+                BranchNameAr = branch.NameAr,
+                BranchNameEn = branch.NameEn,
+                ProductId = product.Id,
+                ProductNameAr = product.NameAr,
+                ProductNameEn = product.NameEn,
+                QuantityOnHand = inventory == null ? 0 : inventory.QuantityOnHand,
+                MinimumStock = inventory == null ? product.ReorderLevel : inventory.MinimumStock
+            };
+
+        return await query.ToListAsync(GetCancellationToken(cancellationToken));
+    }
+
     public async Task<List<InventoryStockRow>> GetAvailableProductsAsync(
         Guid branchId,
         bool onlySellable = false,
@@ -191,21 +241,26 @@ public class BranchInventoryRepository
             query = query.Where(x => x.Product.IsSellable);
         }
 
+        query = LocalizedBusinessText.IsArabic
+            ? query.OrderBy(x => x.Product.NameAr)
+            : query.OrderBy(x => x.Product.NameEn);
+
         return await query
-            .OrderBy(x => x.Product.Name)
             .ToListAsync(GetCancellationToken(cancellationToken));
     }
 
     private static string ResolveSorting(string? sorting)
     {
-        if (string.IsNullOrWhiteSpace(sorting)) return $"{nameof(BranchInventoryWithProduct.Product)}.{nameof(AppProduct.Name)}";
+        var nameProperty = LocalizedBusinessText.IsArabic ? nameof(AppProduct.NameAr) : nameof(AppProduct.NameEn);
+        var unitProperty = LocalizedBusinessText.IsArabic ? nameof(AppProduct.UnitAr) : nameof(AppProduct.UnitEn);
+        if (string.IsNullOrWhiteSpace(sorting)) return $"{nameof(BranchInventoryWithProduct.Product)}.{nameProperty}";
         var s = sorting.Trim();
         if (s.StartsWith("ProductName", StringComparison.OrdinalIgnoreCase))
-            return s.Replace("ProductName", $"{nameof(BranchInventoryWithProduct.Product)}.{nameof(AppProduct.Name)}", StringComparison.OrdinalIgnoreCase);
+            return s.Replace("ProductName", $"{nameof(BranchInventoryWithProduct.Product)}.{nameProperty}", StringComparison.OrdinalIgnoreCase);
         if (s.StartsWith("ProductSKU", StringComparison.OrdinalIgnoreCase))
             return s.Replace("ProductSKU", $"{nameof(BranchInventoryWithProduct.Product)}.{nameof(AppProduct.SKU)}", StringComparison.OrdinalIgnoreCase);
         if (s.StartsWith("ProductUnit", StringComparison.OrdinalIgnoreCase))
-            return s.Replace("ProductUnit", $"{nameof(BranchInventoryWithProduct.Product)}.{nameof(AppProduct.Unit)}", StringComparison.OrdinalIgnoreCase);
+            return s.Replace("ProductUnit", $"{nameof(BranchInventoryWithProduct.Product)}.{unitProperty}", StringComparison.OrdinalIgnoreCase);
         return $"{nameof(BranchInventoryWithProduct.Inventory)}.{s}";
     }
 
@@ -229,7 +284,8 @@ public class BranchInventoryRepository
         {
             var f = filter.Trim().ToLower();
             query = query.Where(x =>
-                x.Product.Name.ToLower().Contains(f) ||
+                x.Product.NameAr.ToLower().Contains(f) ||
+                x.Product.NameEn.ToLower().Contains(f) ||
                 x.Product.SKU.ToLower().Contains(f));
         }
 

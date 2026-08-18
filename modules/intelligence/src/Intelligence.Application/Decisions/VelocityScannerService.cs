@@ -363,8 +363,8 @@ public class VelocityScannerService : ITransientDependency
 
                 reasoning = _localizer[
                     "DecisionReasoning:StockoutRisk:FlatWithProduct",
-                    product.Name,
-                    branch.Name,
+                    product.DisplayName,
+                    branch.DisplayName,
                     sellableQty,
                     Math.Round(daysOfCover, 1),
                     thresholdDays,
@@ -384,8 +384,8 @@ public class VelocityScannerService : ITransientDependency
 
                 reasoning = _localizer[
                     "DecisionReasoning:StockoutRisk:WithProduct",
-                    product.Name,
-                    branch.Name,
+                    product.DisplayName,
+                    branch.DisplayName,
                     sellableQty,
                     depletionDay,
                     thresholdDays,

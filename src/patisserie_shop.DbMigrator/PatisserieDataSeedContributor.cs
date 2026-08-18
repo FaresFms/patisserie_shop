@@ -98,12 +98,12 @@ public class PatisserieDataSeedContributor : IDataSeedContributor, ITransientDep
     /// </summary>
     private static readonly Dictionary<string, int> ShelfLifeBySku = new()
     {
-        ["VN-001"] = 2, ["VN-002"] = 2, ["VN-003"] = 3, ["VN-004"] = 3,
-        ["CT-001"] = 3, ["CT-002"] = 4, ["CT-003"] = 3, ["CT-004"] = 4, ["CT-005"] = 3,
-        ["BR-001"] = 2, ["BR-002"] = 3, ["BR-003"] = 3, ["BR-004"] = 2,
-        ["PF-001"] = 7, ["PF-002"] = 7, ["PF-003"] = 7, ["PF-004"] = 10, ["PF-005"] = 7,
+        ["VN-001"] = 2, ["VN-002"] = 2, ["VN-003"] = 2, ["VN-004"] = 3,
+        ["CT-001"] = 3, ["CT-002"] = 3, ["CT-003"] = 2, ["CT-004"] = 3, ["CT-005"] = 3,
+        ["BR-001"] = 1, ["BR-002"] = 2, ["BR-003"] = 3, ["BR-004"] = 2,
+        ["PF-001"] = 14, ["PF-002"] = 14, ["PF-003"] = 14, ["PF-004"] = 7, ["PF-005"] = 10,
         ["CB-001"] = 14, ["CB-002"] = 10, ["CB-003"] = 14,
-        ["SS-001"] = 21, ["SS-002"] = 7, ["SS-003"] = 90,
+        ["SS-001"] = 21, ["SS-002"] = 2, ["SS-003"] = 2,
     };
 
     [UnitOfWork]
@@ -133,25 +133,25 @@ public class PatisserieDataSeedContributor : IDataSeedContributor, ITransientDep
         {
             _logger.LogInformation("[Seed] Categories already exist — skipping.");
             var existing = await _categoryRepo.GetListAsync();
-            return existing.ToDictionary(c => c.Name);
+            return existing.ToDictionary(c => c.NameAr);
         }
 
         var defs = new[]
         {
-            ("المعجنات المورّقة",   "معجنات مورّقة مثل الكرواسون وبان أو شوكولا"),
-            ("الكيك والتارت",       "كيك بالحجم الكامل وأفراد، وفطائر الفاكهة (تارت)"),
-            ("الخبز",               "خبز حرفي يومي وأرغفة الباغيت"),
-            ("الحلويات الصغيرة",    "حلويات بحجم اللقمة، ماكارون، وإكلير صغير"),
-            ("الكوكيز والبسكويت",   "كوكيز بالزبدة، سابليه، وبسكوتي"),
-            ("الأصناف الموسمية",    "أصناف موسمية واحتفالية متجدّدة"),
+            ("المعجنات المورّقة", "Viennoiseries", "معجنات مورّقة مثل الكرواسون وبان أو شوكولا", "Laminated pastries such as croissants and pain au chocolat"),
+            ("الكيك والتارت", "Cakes and Tarts", "كيك بالحجم الكامل وأفراد، وفطائر الفاكهة (تارت)", "Whole cakes, individual slices, and fruit tarts"),
+            ("الخبز", "Bread", "خبز حرفي يومي وأرغفة الباغيت", "Daily artisan bread and baguettes"),
+            ("الحلويات الصغيرة", "Petit Fours", "حلويات بحجم اللقمة، ماكارون، وإكلير صغير", "Bite-sized pastries, macarons, and mini eclairs"),
+            ("الكوكيز والبسكويت", "Cookies and Biscuits", "كوكيز بالزبدة، سابليه، وبسكوتي", "Butter cookies, sable biscuits, and biscotti"),
+            ("الأصناف الموسمية", "Seasonal Items", "أصناف موسمية واحتفالية متجدّدة", "Rotating seasonal and celebration items"),
         };
 
         var result = new Dictionary<string, AppCategory>();
-        foreach (var (name, desc) in defs)
+        foreach (var (nameAr, nameEn, descriptionAr, descriptionEn) in defs)
         {
-            var cat = await _categoryManager.CreateAsync(name, desc);
+            var cat = await _categoryManager.CreateAsync(nameAr, nameEn, descriptionAr, descriptionEn);
             await _categoryRepo.InsertAsync(cat, autoSave: true);
-            result[name] = cat;
+            result[nameAr] = cat;
         }
 
         _logger.LogInformation("[Seed] Seeded {Count} categories.", result.Count);
@@ -217,42 +217,76 @@ public class PatisserieDataSeedContributor : IDataSeedContributor, ITransientDep
         var defs = new (string Sku, string Name, string Unit, Guid CatId, Guid SupId, decimal Cost, decimal Sale, int Reorder)[]
         {
             // Viennoiseries
-            ("VN-001", "كرواسون بالزبدة الكلاسيكي",       "قطعة", viennoiseries, moulins, 0.85m,  2.50m, 20),
-            ("VN-002", "بان أو شوكولا",                   "قطعة", viennoiseries, moulins, 0.95m,  2.75m, 20),
-            ("VN-003", "كرواسون باللوز",                  "قطعة", viennoiseries, moulins, 1.20m,  3.50m, 15),
-            ("VN-004", "رغيف بريوش",                      "قطعة", viennoiseries, moulins, 1.50m,  4.00m, 10),
+            ("VN-001", "كرواسون بالجبنة",                 "قطعة", viennoiseries, moulins, 0.85m,  2.50m, 20),
+            ("VN-002", "كرواسون بالشوكولا",               "قطعة", viennoiseries, moulins, 0.95m,  2.75m, 20),
+            ("VN-003", "كرواسون بالزعتر",                 "قطعة", viennoiseries, moulins, 0.75m,  2.25m, 15),
+            ("VN-004", "معروك بالتمر",                    "قطعة", viennoiseries, moulins, 1.10m,  3.25m, 10),
             // Cakes & Tarts
-            ("CT-001", "تارت الفراولة الكلاسيكي",         "قطعة", cakesTarts, beurre, 3.50m,  8.50m,  5),
-            ("CT-002", "شريحة كيك أوبرا",                 "قطعة", cakesTarts, beurre, 2.80m,  6.50m,  8),
-            ("CT-003", "تارت المرنغ بالليمون",            "قطعة", cakesTarts, beurre, 3.00m,  7.50m,  5),
-            ("CT-004", "فوندان الشوكولا",                 "قطعة", cakesTarts, beurre, 2.50m,  6.00m,  8),
-            ("CT-005", "كيك احتفال كامل",                 "قطعة", cakesTarts, beurre, 12.00m, 35.00m, 2),
+            ("CT-001", "قطعة كاتو شوكولا",                "قطعة", cakesTarts, beurre, 2.50m,  6.00m,  8),
+            ("CT-002", "قطعة كاتو فانيلا وفواكه",         "قطعة", cakesTarts, beurre, 2.80m,  6.50m,  8),
+            ("CT-003", "تارت بالفراولة",                  "قطعة", cakesTarts, beurre, 3.00m,  7.50m,  5),
+            ("CT-004", "تشيز كيك لوتس",                   "قطعة", cakesTarts, beurre, 3.25m,  8.00m,  6),
+            ("CT-005", "قالب كاتو شوكولا",                "قطعة", cakesTarts, beurre, 12.00m, 35.00m, 2),
             // Breads
-            ("BR-001", "باغيت تقليدي",                    "قطعة", breads, moulins, 0.60m,  1.80m, 30),
-            ("BR-002", "خبز العجين المخمّر",              "قطعة", breads, moulins, 1.20m,  3.50m, 10),
-            ("BR-003", "رغيف متعدد الحبوب",               "قطعة", breads, moulins, 1.40m,  4.00m,  8),
-            ("BR-004", "فوكاتشيا بالزيتون",               "قطعة", breads, moulins, 1.60m,  4.50m,  6),
+            ("BR-001", "خبز صمون",                        "قطعة", breads, moulins, 0.35m,  1.00m, 30),
+            ("BR-002", "خبز فرنسي",                       "قطعة", breads, moulins, 0.60m,  1.80m, 20),
+            ("BR-003", "خبز نخالة",                       "قطعة", breads, moulins, 0.70m,  2.00m, 15),
+            ("BR-004", "خبز بالحليب",                     "قطعة", breads, moulins, 0.85m,  2.50m, 12),
             // Petit Fours
-            ("PF-001", "علبة ماكارون متنوّع (12 قطعة)",    "علبة", petitFours, choco, 6.00m, 18.00m, 10),
-            ("PF-002", "طقم إكلير صغير (6 قطع)",          "طقم",  petitFours, choco, 4.50m, 12.00m,  8),
-            ("PF-003", "كانليه (4 قطع)",                  "علبة", petitFours, choco, 3.00m,  8.00m,  8),
-            ("PF-004", "مادلين (6 قطع)",                  "علبة", petitFours, choco, 2.50m,  6.50m, 10),
-            ("PF-005", "برج البروفيترول",                 "قطعة", petitFours, choco, 5.00m, 14.00m,  4),
+            ("PF-001", "علبة برازق شامية",                "علبة", petitFours, choco, 4.00m, 11.00m, 10),
+            ("PF-002", "تشكيلة معمول",                    "طقم",  petitFours, choco, 5.00m, 14.00m,  8),
+            ("PF-003", "علبة غريبة شامية",                "علبة", petitFours, choco, 3.50m, 10.00m,  8),
+            ("PF-004", "علبة بيتيفور مشكل",               "علبة", petitFours, choco, 4.50m, 12.00m, 10),
+            ("PF-005", "عش البلبل بالفستق",               "قطعة", petitFours, choco, 1.50m,  4.00m, 12),
             // Cookies & Biscuits
-            ("CB-001", "علبة سابليه بالزبدة",             "علبة", cookies, beurre, 3.50m,  9.00m, 10),
-            ("CB-002", "كوكيز دبل شوكولا (6 قطع)",        "علبة", cookies, beurre, 2.80m,  7.00m, 12),
-            ("CB-003", "كيس بسكوتي باللوز",               "قطعة", cookies, beurre, 2.00m,  5.50m, 10),
+            ("CB-001", "علبة بسكويت باليانسون",           "علبة", cookies, beurre, 2.50m,  7.00m, 10),
+            ("CB-002", "علبة كوكيز بالشوكولا",            "علبة", cookies, beurre, 3.00m,  8.00m, 12),
+            ("CB-003", "سابليه بالمربى",                  "قطعة", cookies, beurre, 0.60m,  1.75m, 20),
             // Seasonal Specials
-            ("SS-001", "علبة معمول بالفستق الحلبي",        "علبة", seasonal, choco, 5.00m, 15.00m, 3),
-            ("SS-002", "كيكة تمر وقرفة عائلية",            "قطعة", seasonal, choco, 8.00m, 25.00m, 2),
-            ("SS-003", "علبة شوكولا العيد الفاخرة",        "علبة", seasonal, choco, 4.50m, 12.00m, 5),
+            ("SS-001", "علبة معمول العيد بالتمر",          "علبة", seasonal, choco, 4.50m, 13.00m, 6),
+            ("SS-002", "معروك رمضان بالقشطة",              "قطعة", seasonal, choco, 1.40m,  4.00m, 8),
+            ("SS-003", "علبة قطايف بالجوز",                "علبة", seasonal, choco, 4.00m, 11.00m, 6),
+        };
+
+        var englishNames = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["VN-001"] = "Cheese Croissant",
+            ["VN-002"] = "Chocolate Croissant",
+            ["VN-003"] = "Zaatar Croissant",
+            ["VN-004"] = "Date Maarouk",
+            ["CT-001"] = "Chocolate Gateau Slice",
+            ["CT-002"] = "Vanilla Fruit Gateau Slice",
+            ["CT-003"] = "Strawberry Tart",
+            ["CT-004"] = "Lotus Cheesecake",
+            ["CT-005"] = "Whole Chocolate Gateau",
+            ["BR-001"] = "Samoon Bread",
+            ["BR-002"] = "French Bread",
+            ["BR-003"] = "Bran Bread",
+            ["BR-004"] = "Milk Bread",
+            ["PF-001"] = "Damascene Barazek Box",
+            ["PF-002"] = "Assorted Maamoul",
+            ["PF-003"] = "Damascene Ghraybeh Box",
+            ["PF-004"] = "Assorted Petit Four Box",
+            ["PF-005"] = "Pistachio Osh El Bulbul",
+            ["CB-001"] = "Anise Biscuit Box",
+            ["CB-002"] = "Chocolate Cookie Box",
+            ["CB-003"] = "Jam Sable Biscuit",
+            ["SS-001"] = "Eid Date Maamoul Box",
+            ["SS-002"] = "Ramadan Cream Maarouk",
+            ["SS-003"] = "Walnut Qatayef Box"
         };
 
         var result = new Dictionary<string, AppProduct>();
         foreach (var d in defs)
         {
+            var unitEn = d.Unit switch
+            {
+                "علبة" => "box",
+                "طقم" => "set",
+                _ => "piece"
+            };
             var p = await _productManager.CreateAsync(
-                d.CatId, d.Name, d.Sku, d.Unit, d.SupId,
+                d.CatId, d.Name, englishNames[d.Sku], d.Sku, d.Unit, unitEn, d.SupId,
                 costPrice: d.Cost, salePrice: d.Sale,
                 currency: "USD", reorderLevel: d.Reorder,
                 shelfLifeDays: ShelfLifeBySku.TryGetValue(d.Sku, out var shelf) ? shelf : null);
@@ -296,8 +330,21 @@ public class PatisserieDataSeedContributor : IDataSeedContributor, ITransientDep
         {
             _logger.LogInformation("[Seed] Branches already exist — skipping.");
             var existing = await _branchRepo.GetListAsync();
-            return existing.ToDictionary(b => b.Name);
+            return existing.ToDictionary(b => b.NameAr);
         }
+
+        var englishBranches = new Dictionary<string, (string Name, string Address)>
+        {
+            ["فرع المزة"] = ("Mazzeh Branch", "Mazzeh Highway, beside Al Jalaa City, Damascus"),
+            ["فرع المالكي"] = ("Malki Branch", "Abdel Moneim Riad Street, Malki, Damascus"),
+            ["فرع أبو رمانة"] = ("Abu Rummaneh Branch", "Nazem Pasha Avenue, Abu Rummaneh, Damascus"),
+            ["فرع كفرسوسة"] = ("Kafr Sousa Branch", "Al Baraem Street, Kafr Sousa, Damascus"),
+            ["فرع الشعلان"] = ("Shaalan Branch", "Al Hamra Street, Shaalan, Damascus"),
+            ["فرع مشروع دمر"] = ("Dummar Project Branch", "Sixth Island, Dummar Project, Damascus"),
+            ["فرع باب توما"] = ("Bab Touma Branch", "Bab Touma Square, Old Damascus"),
+            ["فرع جرمانا"] = ("Jaramana Branch", "Municipality Street, Jaramana, Rural Damascus"),
+            [GraduationSeedData.MainKitchenName] = ("Central Kitchen", "Industrial Area, Southern Damascus Entrance")
+        };
 
         var result = new Dictionary<string, AppBranch>();
         foreach (var spec in GraduationSeedData.RetailBranches.Append(GraduationSeedData.MainKitchen))
@@ -306,9 +353,12 @@ public class PatisserieDataSeedContributor : IDataSeedContributor, ITransientDep
                 ?? throw new InvalidOperationException(
                     $"Presentation manager '{spec.ManagerUserName}' must be created before branches.");
 
+            var english = englishBranches[spec.Name];
             var branch = await _branchManager.CreateAsync(
                 spec.Name,
+                english.Name,
                 spec.Address,
+                english.Address,
                 spec.Phone,
                 spec.Email,
                 manager.Id,

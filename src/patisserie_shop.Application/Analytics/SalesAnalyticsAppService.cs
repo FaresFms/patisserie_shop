@@ -56,11 +56,11 @@ public class SalesAnalyticsAppService : patisserie_shopAppService, ISalesAnalyti
         // Reference data for display names (small sets — same in-memory
         // dictionary composition the dashboards use).
         var branchNames = (await _branchRepository.GetListAsync())
-            .ToDictionary(b => b.Id, b => b.Name);
+            .ToDictionary(b => b.Id, b => b.DisplayName);
         var productLookup = (await _productRepository.GetListAsync())
             .ToDictionary(p => p.Id, p => p);
         var categoryNames = (await _categoryRepository.GetListAsync())
-            .ToDictionary(c => c.Id, c => c.Name);
+            .ToDictionary(c => c.Id, c => c.DisplayName);
 
         var totalRevenue = daily.Sum(d => d.TotalAmount);
         var totalSales = daily.Sum(d => d.SaleCount);
@@ -191,7 +191,7 @@ public class SalesAnalyticsAppService : patisserie_shopAppService, ISalesAnalyti
         return new ProductSalesRowDto
         {
             ProductId = aggregate.ProductId,
-            ProductName = product?.Name ?? "(deleted product)",
+            ProductName = product?.DisplayName ?? "(deleted product)",
             SKU = product?.SKU ?? string.Empty,
             QuantitySold = aggregate.TotalQuantitySold,
             Revenue = aggregate.TotalRevenue

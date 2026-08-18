@@ -121,9 +121,9 @@ public class SaleAppService : OperationsAppService, ISaleAppService
         return rows.ConvertAll(r => new SaleProductLookupDto
         {
             ProductId = r.Product.Id,
-            Name = r.Product.Name,
+            Name = r.Product.DisplayName,
             SKU = r.Product.SKU,
-            Unit = r.Product.Unit,
+            Unit = r.Product.DisplayUnit,
             SalePrice = r.Product.SalePrice,
             Currency = currency,
             QuantityOnHand = StockBatchManager.GetUsableQuantity(r.Product, r.Inventory, nonExpired)
@@ -188,7 +188,7 @@ public class SaleAppService : OperationsAppService, ISaleAppService
         var blockedProducts = sale.Items
             .Where(i => productById[i.ProductId].ShelfLifeDays.HasValue
                 && stockSnapshot.GetValueOrDefault(i.ProductId) < i.Quantity)
-            .Select(i => productById[i.ProductId].Name)
+            .Select(i => productById[i.ProductId].DisplayName)
             .ToList();
         if (blockedProducts.Count > 0)
         {
@@ -252,7 +252,7 @@ public class SaleAppService : OperationsAppService, ISaleAppService
             {
                 throw new BusinessException(OperationsErrorCodes.SaleBatchHistoryMissing)
                     .WithData("ProductId", missingBatchHistory.ProductId)
-                    .WithData("ProductName", productById[missingBatchHistory.ProductId].Name);
+                    .WithData("ProductName", productById[missingBatchHistory.ProductId].DisplayName);
             }
 
             foreach (var item in sale.Items)
@@ -330,7 +330,7 @@ public class SaleAppService : OperationsAppService, ISaleAppService
             Id = sale.Id,
             InvoiceNumber = sale.InvoiceNumber,
             BranchId = sale.BranchId,
-            BranchName = branch.Name,
+            BranchName = branch.DisplayName,
             SaleDate = sale.SaleDate,
             TotalAmount = sale.TotalAmount,
             Currency = currency,
@@ -347,9 +347,9 @@ public class SaleAppService : OperationsAppService, ISaleAppService
     {
         Id = item.Id,
         ProductId = item.ProductId,
-        ProductName = product?.Name ?? "(deleted product)",
+        ProductName = product?.DisplayName ?? "(deleted product)",
         ProductSKU = product?.SKU ?? "-",
-        ProductUnit = product?.Unit ?? "-",
+        ProductUnit = product?.DisplayUnit ?? "-",
         Quantity = item.Quantity,
         UnitPrice = item.UnitPrice,
         Subtotal = item.Subtotal
@@ -359,7 +359,7 @@ public class SaleAppService : OperationsAppService, ISaleAppService
     {
         if (ids.Count == 0) return new Dictionary<Guid, string>();
         var branches = await _branchRepository.GetListAsync(b => ids.Contains(b.Id));
-        return branches.ToDictionary(b => b.Id, b => b.Name);
+        return branches.ToDictionary(b => b.Id, b => b.DisplayName);
     }
 
     private async Task<Dictionary<Guid, string>> GetUserNamesAsync(List<Guid> ids)

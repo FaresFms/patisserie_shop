@@ -90,7 +90,7 @@ public class BranchProductionRequestManager : DomainService
         }
 
         branches.Sort((left, right) =>
-            string.Compare(left.Name, right.Name, StringComparison.CurrentCultureIgnoreCase));
+            string.Compare(left.DisplayName, right.DisplayName, StringComparison.CurrentCultureIgnoreCase));
         return branches;
     }
 

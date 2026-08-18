@@ -62,7 +62,7 @@ public class KitchenAccessChecker : ITransientDependency
             branch.IsActive &&
             branch.BranchType == BranchTypes.MainKitchen &&
             (canManageAll || branch.ManagerUserId == userId!.Value));
-        kitchens.Sort((left, right) => string.Compare(left.Name, right.Name, StringComparison.CurrentCulture));
+        kitchens.Sort((left, right) => string.Compare(left.DisplayName, right.DisplayName, StringComparison.CurrentCulture));
         return kitchens;
     }
 

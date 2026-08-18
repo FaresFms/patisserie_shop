@@ -261,11 +261,47 @@
                                                           Label="@ProdL["Operator"]" Clearable="false" />
                                     </SoftGridItem>
                                 </SoftGrid>
+                                @* A one-line grey caption was too easy to miss, so pressing
+                                   "Schedule order" looked like it did nothing. Spell the
+                                   result out: when, where, who — and what to do next. *@
                                 @if (_detail.ScheduledStartTime.HasValue)
                                 {
-                                    <SoftText Typo="Typo.caption" Color="Color.Default">
-                                        @ProdL["ScheduledFor"] @_detail.ScheduledStartTime.Value.ToString("g") · @_detail.AssignedOperatorName
-                                    </SoftText>
+                                    <SoftAlert Severity="Severity.Success" Variant="Variant.Outlined"
+                                               Icon="@Icons.Material.Filled.EventAvailable" Class="mt-2">
+                                        <div class="stats">
+                                            <div>
+                                                <div class="stat-label">@ProdL["ScheduledFor"]</div>
+                                                <div class="stat-value">
+                                                    <BrowserLocalTime Value="@_detail.ScheduledStartTime"
+                                                                      Display="BrowserTimeDisplay.DateTime" Fallback="-" />
+                                                    @if (_detail.ScheduledEndTime.HasValue)
+                                                    {
+                                                        <text> → </text>
+                                                        <BrowserLocalTime Value="@_detail.ScheduledEndTime"
+                                                                          Display="BrowserTimeDisplay.Time" Fallback="-" />
+                                                    }
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <div class="stat-label">@ProdL["WorkCenter"]</div>
+                                                <div class="stat-value">@(_detail.WorkCenterCode ?? "-")</div>
+                                            </div>
+                                            <div>
+                                                <div class="stat-label">@ProdL["Shift"]</div>
+                                                <div class="stat-value">@(_detail.ShiftCode ?? "-")</div>
+                                            </div>
+                                            <div>
+                                                <div class="stat-label">@ProdL["Operator"]</div>
+                                                <div class="stat-value">@(_detail.AssignedOperatorName ?? "-")</div>
+                                            </div>
+                                        </div>
+                                        @if (_detail.Status == ProductionOrderStatuses.ReadyToCook)
+                                        {
+                                            <SoftText Typo="Typo.body2" Class="mt-2">
+                                                @ProdL["ScheduledNowPressStart"]
+                                            </SoftText>
+                                        }
+                                    </SoftAlert>
                                 }
                             </div>
                         }
@@ -522,6 +558,10 @@
     [Parameter, SupplyParameterFromQuery(Name = "stage")]
     public string? Stage { get; set; }
 
+    /// <summary>Deep-link target: opens this order's detail modal on arrival.</summary>
+    [Parameter, SupplyParameterFromQuery(Name = "orderId")]
+    public Guid? OrderId { get; set; }
+
     private bool _detailVisible;
     private ProductionOrderDto? _detail;
     private ProductionControlProfileDto _controlProfile = new();
@@ -592,6 +632,18 @@
         ];
         ApplyInitialStage();
         _reasonOptions = BuildReasonOptions();
+
+        if (OrderId.HasValue)
+        {
+            try
+            {
+                await OpenDetailAsync(OrderId.Value);
+            }
+            catch (Exception ex)
+            {
+                await HandleErrorAsync(ex);
+            }
+        }
     }
 
     private async Task<GridData<ProductionOrderListItemDto>> LoadServerData(GridState<ProductionOrderListItemDto> state, CancellationToken cancellationToken)
@@ -715,7 +767,10 @@
                 OperatorUserId = operatorRow.Id,
                 OperatorName = operatorRow.Name
             });
-            Snackbar.Add(ProdL["OrderScheduled"], Severity.Success);
+            // Name what was booked — "Scheduled" alone left people unsure it worked.
+            Snackbar.Add(
+                ProdL["OrderScheduledDetail", center.Name, shiftStart.ToString("t"), operatorRow.Name],
+                Severity.Success);
             await ReloadAsync();
         }
         catch (Exception ex)

@@ -80,7 +80,7 @@ public class CashierReportAppService : patisserie_shopAppService, ICashierReport
 
         var branchName = await ResolveBranchNameAsync(input.BranchId) ?? input.BranchId.ToString();
 
-        var reasoning = L["CashierReport:Reasoning", product.Name, branchName, qty];
+        var reasoning = L["CashierReport:Reasoning", product.DisplayName, branchName, qty];
 
         var log = new AppDecisionLog(
             id: GuidGenerator.Create(),
@@ -125,6 +125,6 @@ public class CashierReportAppService : patisserie_shopAppService, ICashierReport
     private async Task<string?> ResolveBranchNameAsync(Guid branchId)
     {
         var branch = await _branchRepository.FindAsync(branchId);
-        return branch?.Name;
+        return branch?.DisplayName;
     }
 }

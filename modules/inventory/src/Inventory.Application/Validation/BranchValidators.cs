@@ -9,11 +9,18 @@ public class CreateBranchDtoValidator : AbstractValidator<CreateBranchDto>
 {
     public CreateBranchDtoValidator(IStringLocalizer<InventoryResource> localizer)
     {
-        RuleFor(x => x.Name)
+        RuleFor(x => x.NameAr)
             .NotEmpty().WithMessage(_ => localizer["Validation:NameRequired"])
             .MaximumLength(128).WithMessage(_ => localizer["Validation:NameMax128"]);
 
-        RuleFor(x => x.Address)
+        RuleFor(x => x.NameEn)
+            .NotEmpty().WithMessage(_ => localizer["Validation:NameRequired"])
+            .MaximumLength(128).WithMessage(_ => localizer["Validation:NameMax128"]);
+
+        RuleFor(x => x.AddressAr)
+            .MaximumLength(512).WithMessage(_ => localizer["Validation:AddressMax512"]);
+
+        RuleFor(x => x.AddressEn)
             .MaximumLength(512).WithMessage(_ => localizer["Validation:AddressMax512"]);
 
         RuleFor(x => x.Phone)
@@ -34,11 +41,18 @@ public class UpdateBranchDtoValidator : AbstractValidator<UpdateBranchDto>
 {
     public UpdateBranchDtoValidator(IStringLocalizer<InventoryResource> localizer)
     {
-        RuleFor(x => x.Name)
+        RuleFor(x => x.NameAr)
             .NotEmpty().WithMessage(_ => localizer["Validation:NameRequired"])
             .MaximumLength(128).WithMessage(_ => localizer["Validation:NameMax128"]);
 
-        RuleFor(x => x.Address)
+        RuleFor(x => x.NameEn)
+            .NotEmpty().WithMessage(_ => localizer["Validation:NameRequired"])
+            .MaximumLength(128).WithMessage(_ => localizer["Validation:NameMax128"]);
+
+        RuleFor(x => x.AddressAr)
+            .MaximumLength(512).WithMessage(_ => localizer["Validation:AddressMax512"]);
+
+        RuleFor(x => x.AddressEn)
             .MaximumLength(512).WithMessage(_ => localizer["Validation:AddressMax512"]);
 
         RuleFor(x => x.Phone)

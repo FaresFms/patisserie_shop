@@ -1,4 +1,6 @@
 using System;
+using System.ComponentModel.DataAnnotations.Schema;
+using Inventory.Localization;
 using Volo.Abp;
 using Volo.Abp.Domain.Entities.Auditing;
 
@@ -6,8 +8,12 @@ namespace Inventory.Entities;
 
 public class AppBranch : FullAuditedAggregateRoot<Guid>
 {
-    public string Name { get; internal set; } = null!;
-    public string? Address { get; private set; }
+    public string NameAr { get; internal set; } = null!;
+    public string NameEn { get; internal set; } = null!;
+    public string? AddressAr { get; private set; }
+    public string? AddressEn { get; private set; }
+    [NotMapped] public string DisplayName => LocalizedBusinessText.Select(NameAr, NameEn);
+    [NotMapped] public string DisplayAddress => LocalizedBusinessText.Select(AddressAr, AddressEn);
     public string? Phone { get; private set; }
     public string? Email { get; private set; }
     public Guid? ManagerUserId { get; private set; }
@@ -23,8 +29,10 @@ public class AppBranch : FullAuditedAggregateRoot<Guid>
 
     internal AppBranch(
         Guid id,
-        string name,
-        string? address = null,
+        string nameAr,
+        string nameEn,
+        string? addressAr = null,
+        string? addressEn = null,
         string? phone = null,
         string? email = null,
         Guid? managerUserId = null,
@@ -32,8 +40,9 @@ public class AppBranch : FullAuditedAggregateRoot<Guid>
         string branchType = BranchTypes.SalesBranch)
         : base(id)
     {
-        SetName(name);
-        Address = address;
+        SetNames(nameAr, nameEn);
+        AddressAr = NormalizeOptional(addressAr);
+        AddressEn = NormalizeOptional(addressEn);
         Phone = phone;
         Email = email;
         ManagerUserId = managerUserId;
@@ -42,14 +51,16 @@ public class AppBranch : FullAuditedAggregateRoot<Guid>
     }
 
     public void UpdateInfo(
-        string? address,
+        string? addressAr,
+        string? addressEn,
         string? phone,
         string? email,
         Guid? managerUserId,
         bool isActive,
         string branchType = BranchTypes.SalesBranch)
     {
-        Address = address;
+        AddressAr = NormalizeOptional(addressAr);
+        AddressEn = NormalizeOptional(addressEn);
         Phone = phone;
         Email = email;
         ManagerUserId = managerUserId;
@@ -68,8 +79,12 @@ public class AppBranch : FullAuditedAggregateRoot<Guid>
         BranchType = branchType;
     }
 
-    internal void SetName(string name)
+    internal void SetNames(string nameAr, string nameEn)
     {
-        Name = Check.NotNullOrWhiteSpace(name, nameof(name)).Trim();
+        NameAr = Check.NotNullOrWhiteSpace(nameAr, nameof(nameAr), maxLength: 128).Trim();
+        NameEn = Check.NotNullOrWhiteSpace(nameEn, nameof(nameEn), maxLength: 128).Trim();
     }
+
+    private static string? NormalizeOptional(string? value)
+        => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 }

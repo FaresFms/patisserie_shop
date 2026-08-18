@@ -142,7 +142,7 @@ public class TransferSuggestionScannerService : ITransientDependency
             {
                 var lowInv = lowRow.Inventory;
                 var threshold = rule.ThresholdValue!.Value;
-                var lowBranchName = branchById[lowInv.BranchId].Name;
+                var lowBranchName = branchById[lowInv.BranchId].DisplayName;
 
                 foreach (var excessRow in excesses)
                 {
@@ -161,10 +161,10 @@ public class TransferSuggestionScannerService : ITransientDependency
                         continue;
                     }
 
-                    var excessBranchName = branchById[excessInv.BranchId].Name;
+                    var excessBranchName = branchById[excessInv.BranchId].DisplayName;
                     var reasoning = _localizer[
                         "DecisionReasoning:TransferSuggestion",
-                        lowRow.Product.Name,
+                        lowRow.Product.DisplayName,
                         lowBranchName,
                         lowInv.QuantityOnHand,
                         threshold,

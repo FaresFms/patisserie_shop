@@ -99,8 +99,39 @@ public class ProductionOrderAppService : ProductionAppService, IProductionOrderA
             input.MaxResultCount);
 
         var dtos = items.ConvertAll(MapListItem);
+        await FillUsableKitchenStockAsync(dtos);
 
         return new PagedResultDto<ProductionOrderListItemDto>(totalCount, dtos);
+    }
+
+    /// <summary>
+    /// Overlays how much of each finished product is actually shippable today
+    /// (non-expired batches), so the dispatch screen can warn before a transfer is
+    /// attempted instead of failing at the ship step. One batch query per kitchen.
+    /// </summary>
+    private async Task FillUsableKitchenStockAsync(List<ProductionOrderListItemDto> dtos)
+    {
+        if (dtos.Count == 0)
+        {
+            return;
+        }
+
+        var today = Clock.Now.ToUniversalTime().Date;
+        var nonExpiredByKitchen = new Dictionary<Guid, Dictionary<Guid, int>>();
+        foreach (var kitchenId in dtos.Select(d => d.KitchenBranchId).Distinct())
+        {
+            nonExpiredByKitchen[kitchenId] =
+                await _stockBatchRepository.GetNonExpiredQuantitiesByProductAsync(kitchenId, today);
+        }
+
+        foreach (var dto in dtos)
+        {
+            dto.UsableKitchenStock =
+                nonExpiredByKitchen.TryGetValue(dto.KitchenBranchId, out var byProduct)
+                && byProduct.TryGetValue(dto.FinishedProductId, out var usable)
+                    ? usable
+                    : 0;
+        }
     }
 
     [Authorize(ProductionPermissions.Orders.Quality)]
@@ -126,6 +157,108 @@ public class ProductionOrderAppService : ProductionAppService, IProductionOrderA
         }
 
         return dtos;
+    }
+
+    [Authorize(ProductionPermissions.Orders.Create)]
+    public async Task<ProductionOrderForRequestResultDto> CreateForRequestItemAsync(
+        CreateProductionOrderForRequestDto input)
+    {
+        await _kitchenAccessChecker.EnsureAccessAsync(input.KitchenBranchId);
+        await _planManager.EnsureMainKitchenAsync(input.KitchenBranchId);
+
+        var order = await _orderManager.CreateForRequestItemAsync(
+            input.KitchenBranchId,
+            input.RequestId,
+            input.RequestItemId,
+            input.Quantity,
+            CurrentUser.Id,
+            input.Notes);
+
+        await _orderRepository.InsertAsync(order, autoSave: true);
+
+        // One-click means one click: schedule it on the default work center/shift so the
+        // baker can press Start immediately. Without this the order looks ready but
+        // Start is refused by RequireScheduleBeforeStart, with nothing on screen saying
+        // why. Best-effort — an unschedulable order is still a valid order.
+        var autoScheduled = await TryAutoScheduleAsync(order);
+
+        return new ProductionOrderForRequestResultDto
+        {
+            ProductionOrderId = order.Id,
+            OrderNumber = order.OrderNumber,
+            Status = order.Status,
+            PlannedOutputQuantity = order.PlannedOutputQuantity,
+            HasIngredientShortage = order.Status == ProductionOrderStatuses.WaitingForIngredients,
+            ReadyToStart = autoScheduled && order.Status == ProductionOrderStatuses.ReadyToCook
+        };
+    }
+
+    /// <summary>
+    /// Assigns the first active work center, shift and operator so a one-click cook
+    /// order satisfies the schedule/operator gates. Returns false when the shop has no
+    /// usable work center, shift or operator configured.
+    /// </summary>
+    private async Task<bool> TryAutoScheduleAsync(AppProductionOrder order)
+    {
+        var profile = await GetControlProfileAsync();
+
+        var workCenter = profile.WorkCenters.FirstOrDefault(center =>
+            center.IsActive
+            && (!center.KitchenBranchId.HasValue || center.KitchenBranchId == order.KitchenBranchId));
+        var shift = profile.Shifts.FirstOrDefault(item => item.IsActive);
+        if (workCenter == null || shift == null)
+        {
+            return false;
+        }
+
+        // Whoever pressed "cook this" is the operator — that is the whole point of the
+        // one-click path, and it avoids depending on a separate operator roster.
+        if (!CurrentUser.Id.HasValue)
+        {
+            return false;
+        }
+
+        var operatorName = CurrentUser.Name ?? CurrentUser.UserName ?? string.Empty;
+        var (start, end) = NextSlot(shift, workCenter.CapacityUnitsPerHour, order.PlannedOutputQuantity);
+
+        var used = await _orderRepository.CountOverlappingSchedulesAsync(
+            order.KitchenBranchId, workCenter.Code, start, end, order.Id);
+        if (used >= Math.Max(1, workCenter.ParallelSlots))
+        {
+            return false;
+        }
+
+        order.Schedule(workCenter.Code, shift.Code, start, end, CurrentUser.Id.Value, operatorName);
+        await _orderRepository.UpdateAsync(order, autoSave: true);
+        return true;
+    }
+
+    /// <summary>Earliest slot inside the shift that fits the batch, from now onward.</summary>
+    private (DateTime Start, DateTime End) NextSlot(
+        ProductionShiftDto shift,
+        int capacityUnitsPerHour,
+        int quantity)
+    {
+        var now = Clock.Now;
+        var start = now.Date.Add(shift.StartTime);
+        var shiftEnd = now.Date.Add(shift.EndTime);
+        if (shiftEnd <= start)
+        {
+            shiftEnd = shiftEnd.AddDays(1);
+        }
+
+        if (now > shiftEnd)
+        {
+            start = start.AddDays(1);
+        }
+        else if (now > start)
+        {
+            start = now;
+        }
+
+        var perHour = Math.Max(1, capacityUnitsPerHour);
+        var minutes = Math.Max(15, (int)Math.Ceiling(quantity / (decimal)perHour * 60m));
+        return (start, start.AddMinutes(minutes));
     }
 
     public async Task<ProductionOrderDto> RefreshAvailabilityAsync(Guid id)
@@ -597,7 +730,7 @@ public class ProductionOrderAppService : ProductionAppService, IProductionOrderA
         };
 
         var branch = await _branchRepository.FindAsync(order.KitchenBranchId);
-        dto.KitchenBranchName = branch?.Name;
+        dto.KitchenBranchName = branch?.DisplayName;
 
         var productIds = new List<Guid> { order.FinishedProductId };
         foreach (var ingredient in order.Ingredients)
@@ -631,9 +764,9 @@ public class ProductionOrderAppService : ProductionAppService, IProductionOrderA
 
         if (productById.TryGetValue(order.FinishedProductId, out var finishedProduct))
         {
-            dto.FinishedProductName = finishedProduct.Name;
+            dto.FinishedProductName = finishedProduct.DisplayName;
             dto.FinishedProductSku = finishedProduct.SKU;
-            dto.FinishedProductUnit = finishedProduct.Unit;
+            dto.FinishedProductUnit = finishedProduct.DisplayUnit;
         }
 
         foreach (var ingredient in order.Ingredients)
@@ -643,9 +776,9 @@ public class ProductionOrderAppService : ProductionAppService, IProductionOrderA
             {
                 Id = ingredient.Id,
                 IngredientProductId = ingredient.IngredientProductId,
-                IngredientName = ingredientProduct?.Name,
+                IngredientName = ingredientProduct?.DisplayName,
                 IngredientSku = ingredientProduct?.SKU,
-                Unit = ingredientProduct?.Unit,
+                Unit = ingredientProduct?.DisplayUnit,
                 RequiredQuantity = ingredient.RequiredQuantity,
                 ConsumedQuantity = ingredient.ConsumedQuantity,
                 UnitCostSnapshot = ingredient.UnitCostSnapshot,
@@ -659,7 +792,7 @@ public class ProductionOrderAppService : ProductionAppService, IProductionOrderA
             dto.IngredientLots.Add(new ProductionIngredientLotDto
             {
                 IngredientProductId = lot.IngredientProductId,
-                IngredientName = ingredientProduct?.Name,
+                IngredientName = ingredientProduct?.DisplayName,
                 BatchId = lot.BatchId,
                 BatchNumber = lot.BatchNumber,
                 ExpiryDate = lot.ExpiryDate,

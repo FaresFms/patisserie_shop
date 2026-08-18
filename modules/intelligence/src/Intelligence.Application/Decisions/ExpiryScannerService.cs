@@ -165,8 +165,8 @@ public class ExpiryScannerService : ITransientDependency
 
             string reasoning = _localizer[
                 "DecisionReasoning:ExpiryAlert",
-                product.Name,
-                branch.Name,
+                product.DisplayName,
+                branch.DisplayName,
                 earliest.QuantityRemaining,
                 earliest.BatchNumber,
                 DescribeExpiry(earliest.ExpiryDate, today),
@@ -271,8 +271,8 @@ public class ExpiryScannerService : ITransientDependency
 
             var reasoning = _localizer[
                 "DecisionReasoning:WasteWriteOff",
-                product.Name,
-                branch.Name,
+                product.DisplayName,
+                branch.DisplayName,
                 expiredQty,
                 ordered.Count,
                 oldest.BatchNumber,

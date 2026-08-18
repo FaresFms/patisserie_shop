@@ -192,8 +192,8 @@ public class CashierAppService : OperationsAppService, ICashierAppService
         return new CashierBranchDto
         {
             Id = branch.Id,
-            Name = branch.Name,
-            Address = branch.Address
+            Name = branch.DisplayName,
+            Address = branch.DisplayAddress
         };
     }
 
@@ -206,12 +206,12 @@ public class CashierAppService : OperationsAppService, ICashierAppService
         var branches = await _branchRepository.GetListAsync(b => b.IsActive);
 
         return branches
-            .OrderBy(b => b.Name)
+            .OrderBy(b => b.DisplayName)
             .Select(b => new CashierBranchDto
             {
                 Id = b.Id,
-                Name = b.Name,
-                Address = b.Address
+                Name = b.DisplayName,
+                Address = b.DisplayAddress
             })
             .ToList();
     }
@@ -242,9 +242,9 @@ public class CashierAppService : OperationsAppService, ICashierAppService
         return rows.ConvertAll(r => new CashierProductDto
         {
             ProductId = r.Product.Id,
-            Name = r.Product.Name,
+            Name = r.Product.DisplayName,
             SKU = r.Product.SKU,
-            Description = r.Product.Description,
+            Description = r.Product.DisplayDescription,
             SalePrice = r.Product.SalePrice,
             ImageUrl = r.Product.ImageUrl,
             QuantityOnHand = StockBatchManager.GetUsableQuantity(r.Product, r.Inventory, nonExpired),
@@ -288,7 +288,7 @@ public class CashierAppService : OperationsAppService, ICashierAppService
         foreach (var line in input.Lines)
         {
             var product = await _productRepository.GetAsync(line.ProductId);
-            receiptNames[product.Id] = product.Name;
+            receiptNames[product.Id] = product.DisplayName;
             productById[product.Id] = product;
             sale.AddItem(GuidGenerator.Create(), product.Id, line.Quantity, product.SalePrice);
         }
@@ -494,7 +494,7 @@ public class CashierAppService : OperationsAppService, ICashierAppService
         {
             throw new BusinessException(OperationsErrorCodes.SaleBatchHistoryMissing)
                 .WithData("ProductId", missingBatchHistory.ProductId)
-                .WithData("ProductName", productById[missingBatchHistory.ProductId].Name);
+                .WithData("ProductName", productById[missingBatchHistory.ProductId].DisplayName);
         }
 
         foreach (var item in sale.Items)
@@ -616,7 +616,7 @@ public class CashierAppService : OperationsAppService, ICashierAppService
         var dto = MapShift(shift, totals);
 
         var branch = await _branchRepository.FindAsync(shift.BranchId);
-        dto.BranchName = branch?.Name;
+        dto.BranchName = branch?.DisplayName;
 
         var user = await _userRepository.FindAsync(shift.CashierUserId);
         dto.CashierUserName = user?.UserName;
@@ -644,7 +644,7 @@ public class CashierAppService : OperationsAppService, ICashierAppService
             Id = sale.Id,
             InvoiceNumber = sale.InvoiceNumber,
             BranchId = sale.BranchId,
-            BranchName = branch.Name,
+            BranchName = branch.DisplayName,
             SaleDate = sale.SaleDate,
             TotalAmount = sale.TotalAmount,
             Currency = await GetDefaultCurrencyAsync(),
@@ -661,9 +661,9 @@ public class CashierAppService : OperationsAppService, ICashierAppService
     {
         Id = item.Id,
         ProductId = item.ProductId,
-        ProductName = product?.Name ?? "(deleted product)",
+        ProductName = product?.DisplayName ?? "(deleted product)",
         ProductSKU = product?.SKU ?? "-",
-        ProductUnit = product?.Unit ?? "-",
+        ProductUnit = product?.DisplayUnit ?? "-",
         Quantity = item.Quantity,
         UnitPrice = item.UnitPrice,
         Subtotal = item.Subtotal
@@ -704,7 +704,7 @@ public class CashierAppService : OperationsAppService, ICashierAppService
     {
         if (ids.Count == 0) return new Dictionary<Guid, string>();
         var branches = await _branchRepository.GetListAsync(b => ids.Contains(b.Id));
-        return branches.ToDictionary(b => b.Id, b => b.Name);
+        return branches.ToDictionary(b => b.Id, b => b.DisplayName);
     }
 
     private async Task<Dictionary<Guid, string>> GetUserNamesAsync(List<Guid> ids)

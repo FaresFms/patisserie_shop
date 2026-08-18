@@ -110,7 +110,7 @@ public class ProductionPlanRepository
                 Id = h.Id,
                 PlanNumber = h.PlanNumber,
                 KitchenBranchId = h.KitchenBranchId,
-                KitchenBranchName = branch?.Name ?? h.KitchenBranchId.ToString(),
+                KitchenBranchName = branch?.DisplayName ?? h.KitchenBranchId.ToString(),
                 ProductionDate = h.ProductionDate,
                 Status = h.Status,
                 LineCount = h.LineCount,
@@ -223,9 +223,9 @@ public class ProductionPlanRepository
             var suggestion = new ProductionPlanSuggestion
             {
                 ProductId = productId,
-                ProductName = product.Name,
+                ProductName = product.DisplayName,
                 ProductSku = product.SKU,
-                Unit = product.Unit,
+                Unit = product.DisplayUnit,
                 RequestedQuantity = requested,
                 ForecastQuantity = forecast,
                 CurrentKitchenStock = stock,
@@ -284,7 +284,7 @@ public class ProductionPlanRepository
         return products.Select(product => new ProductionForecastSnapshot
         {
             ProductId = product.Id,
-            ProductName = product.Name,
+            ProductName = product.DisplayName,
             ProductSku = product.SKU,
             ForecastQuantity = forecasts.GetValueOrDefault(product.Id)
         }).ToList();

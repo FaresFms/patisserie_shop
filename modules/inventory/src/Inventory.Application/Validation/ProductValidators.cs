@@ -12,7 +12,11 @@ public class CreateProductDtoValidator : AbstractValidator<CreateProductDto>
         RuleFor(x => x.CategoryId)
             .NotEmpty().WithMessage(_ => localizer["Validation:CategoryRequired"]);
 
-        RuleFor(x => x.Name)
+        RuleFor(x => x.NameAr)
+            .NotEmpty().WithMessage(_ => localizer["Validation:NameRequired"])
+            .MaximumLength(128).WithMessage(_ => localizer["Validation:NameMax128"]);
+
+        RuleFor(x => x.NameEn)
             .NotEmpty().WithMessage(_ => localizer["Validation:NameRequired"])
             .MaximumLength(128).WithMessage(_ => localizer["Validation:NameMax128"]);
 
@@ -21,10 +25,17 @@ public class CreateProductDtoValidator : AbstractValidator<CreateProductDto>
             .MaximumLength(64).WithMessage(_ => localizer["Validation:SkuMax64"])
             .Matches("^[A-Za-z0-9._-]+$").WithMessage(_ => localizer["Validation:SkuFormat"]);
 
-        RuleFor(x => x.Description)
+        RuleFor(x => x.DescriptionAr)
             .MaximumLength(1024).WithMessage(_ => localizer["Validation:DescriptionMax1024"]);
 
-        RuleFor(x => x.Unit)
+        RuleFor(x => x.DescriptionEn)
+            .MaximumLength(1024).WithMessage(_ => localizer["Validation:DescriptionMax1024"]);
+
+        RuleFor(x => x.UnitAr)
+            .NotEmpty().WithMessage(_ => localizer["Validation:UnitRequired"])
+            .MaximumLength(32).WithMessage(_ => localizer["Validation:UnitMax32"]);
+
+        RuleFor(x => x.UnitEn)
             .NotEmpty().WithMessage(_ => localizer["Validation:UnitRequired"])
             .MaximumLength(32).WithMessage(_ => localizer["Validation:UnitMax32"]);
 
@@ -62,7 +73,11 @@ public class UpdateProductDtoValidator : AbstractValidator<UpdateProductDto>
         RuleFor(x => x.CategoryId)
             .NotEmpty().WithMessage(_ => localizer["Validation:CategoryRequired"]);
 
-        RuleFor(x => x.Name)
+        RuleFor(x => x.NameAr)
+            .NotEmpty().WithMessage(_ => localizer["Validation:NameRequired"])
+            .MaximumLength(128).WithMessage(_ => localizer["Validation:NameMax128"]);
+
+        RuleFor(x => x.NameEn)
             .NotEmpty().WithMessage(_ => localizer["Validation:NameRequired"])
             .MaximumLength(128).WithMessage(_ => localizer["Validation:NameMax128"]);
 
@@ -71,10 +86,17 @@ public class UpdateProductDtoValidator : AbstractValidator<UpdateProductDto>
             .MaximumLength(64).WithMessage(_ => localizer["Validation:SkuMax64"])
             .Matches("^[A-Za-z0-9._-]+$").WithMessage(_ => localizer["Validation:SkuFormat"]);
 
-        RuleFor(x => x.Description)
+        RuleFor(x => x.DescriptionAr)
             .MaximumLength(1024).WithMessage(_ => localizer["Validation:DescriptionMax1024"]);
 
-        RuleFor(x => x.Unit)
+        RuleFor(x => x.DescriptionEn)
+            .MaximumLength(1024).WithMessage(_ => localizer["Validation:DescriptionMax1024"]);
+
+        RuleFor(x => x.UnitAr)
+            .NotEmpty().WithMessage(_ => localizer["Validation:UnitRequired"])
+            .MaximumLength(32).WithMessage(_ => localizer["Validation:UnitMax32"]);
+
+        RuleFor(x => x.UnitEn)
             .NotEmpty().WithMessage(_ => localizer["Validation:UnitRequired"])
             .MaximumLength(32).WithMessage(_ => localizer["Validation:UnitMax32"]);
 

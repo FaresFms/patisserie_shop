@@ -24,7 +24,7 @@ public class ProductionKitchenAppService : ProductionAppService, IProductionKitc
             result.Add(new KitchenBranchLookupDto
             {
                 Id = kitchen.Id,
-                Name = kitchen.Name
+                Name = kitchen.DisplayName
             });
         }
 

@@ -48,23 +48,34 @@
         }
         else
         {
-            <section class="control-section">
+            <section class="control-section" id="control-rules">
                 <header>
                     <h2>@ProdL["Control:Rules"]</h2>
                     <p>@ProdL["Control:RulesSubtitle"]</p>
                 </header>
+                @* Each switch costs the kitchen a step on every batch, so say plainly
+                   what turning it off means rather than just naming it. *@
                 <SoftGrid Spacing="2">
                     <SoftGridItem xs="12" md="4">
                         <SoftCheckBox T="bool" @bind-Value="_profile.RequireScheduleBeforeStart"
                                       Label="@ProdL["RequireScheduleBeforeStart"]" Color="Color.Primary" />
+                        <SoftText Typo="Typo.caption" Color="Color.Default">
+                            @ProdL["RequireScheduleBeforeStart:Hint"]
+                        </SoftText>
                     </SoftGridItem>
                     <SoftGridItem xs="12" md="4">
                         <SoftCheckBox T="bool" @bind-Value="_profile.RequireOperatorBeforeStart"
                                       Label="@ProdL["RequireOperatorBeforeStart"]" Color="Color.Primary" />
+                        <SoftText Typo="Typo.caption" Color="Color.Default">
+                            @ProdL["RequireOperatorBeforeStart:Hint"]
+                        </SoftText>
                     </SoftGridItem>
                     <SoftGridItem xs="12" md="4">
                         <SoftCheckBox T="bool" @bind-Value="_profile.RequireQualityReleaseBeforeDispatch"
                                       Label="@ProdL["RequireQualityReleaseBeforeDispatch"]" Color="Color.Primary" />
+                        <SoftText Typo="Typo.caption" Color="Color.Default">
+                            @ProdL["RequireQualityReleaseBeforeDispatch:Hint"]
+                        </SoftText>
                     </SoftGridItem>
                     <SoftGridItem xs="12" md="4">
                         <SoftNumericField T="decimal" @bind-Value="_profile.ForecastSafetyPercent"

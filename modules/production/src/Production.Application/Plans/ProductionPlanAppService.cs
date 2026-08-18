@@ -161,7 +161,7 @@ public class ProductionPlanAppService : ProductionAppService, IProductionPlanApp
         var dto = ObjectMapper.Map<AppProductionPlan, ProductionPlanDto>(plan);
 
         var branch = await _branchRepository.FindAsync(plan.KitchenBranchId);
-        dto.KitchenBranchName = branch?.Name;
+        dto.KitchenBranchName = branch?.DisplayName;
 
         var productIds = new List<Guid>();
         foreach (var line in plan.Lines)
@@ -183,9 +183,9 @@ public class ProductionPlanAppService : ProductionAppService, IProductionPlanApp
 
             if (productById.TryGetValue(line.ProductId, out var product))
             {
-                line.ProductName = product.Name;
+                line.ProductName = product.DisplayName;
                 line.ProductSku = product.SKU;
-                line.ProductUnit = product.Unit;
+                line.ProductUnit = product.DisplayUnit;
             }
         }
 

@@ -1,4 +1,6 @@
 using System;
+using System.ComponentModel.DataAnnotations.Schema;
+using Inventory.Localization;
 using Volo.Abp;
 using Volo.Abp.Domain.Entities.Auditing;
 
@@ -8,10 +10,16 @@ public class AppProduct : FullAuditedAggregateRoot<Guid>
 {
     public Guid CategoryId { get; private set; }
     public Guid? DefaultSupplierId { get; private set; }
-    public string Name { get; private set; } = null!;
+    public string NameAr { get; private set; } = null!;
+    public string NameEn { get; private set; } = null!;
     public string SKU { get; internal set; } = null!;
-    public string? Description { get; private set; }
-    public string Unit { get; private set; } = null!;
+    public string? DescriptionAr { get; private set; }
+    public string? DescriptionEn { get; private set; }
+    public string UnitAr { get; private set; } = null!;
+    public string UnitEn { get; private set; } = null!;
+    [NotMapped] public string DisplayName => LocalizedBusinessText.Select(NameAr, NameEn);
+    [NotMapped] public string DisplayDescription => LocalizedBusinessText.Select(DescriptionAr, DescriptionEn);
+    [NotMapped] public string DisplayUnit => LocalizedBusinessText.Select(UnitAr, UnitEn);
     public decimal CostPrice { get; private set; }
     public decimal SalePrice { get; private set; }
     public string Currency { get; private set; } = "USD";
@@ -46,11 +54,14 @@ public class AppProduct : FullAuditedAggregateRoot<Guid>
     internal AppProduct(
         Guid id,
         Guid categoryId,
-        string name,
+        string nameAr,
+        string nameEn,
         string sku,
-        string unit,
+        string unitAr,
+        string unitEn,
         Guid? defaultSupplierId = null,
-        string? description = null,
+        string? descriptionAr = null,
+        string? descriptionEn = null,
         decimal costPrice = 0m,
         decimal salePrice = 0m,
         string currency = "USD",
@@ -69,9 +80,12 @@ public class AppProduct : FullAuditedAggregateRoot<Guid>
         UpdateInfo(
             categoryId,
             defaultSupplierId,
-            name,
-            unit,
-            description,
+            nameAr,
+            nameEn,
+            unitAr,
+            unitEn,
+            descriptionAr,
+            descriptionEn,
             costPrice,
             salePrice,
             currency,
@@ -88,9 +102,12 @@ public class AppProduct : FullAuditedAggregateRoot<Guid>
     public void UpdateInfo(
         Guid categoryId,
         Guid? defaultSupplierId,
-        string name,
-        string unit,
-        string? description,
+        string nameAr,
+        string nameEn,
+        string unitAr,
+        string unitEn,
+        string? descriptionAr,
+        string? descriptionEn,
         decimal costPrice,
         decimal salePrice,
         string currency,
@@ -103,8 +120,10 @@ public class AppProduct : FullAuditedAggregateRoot<Guid>
         bool isPurchasable = true,
         bool isProducible = false)
     {
-        Check.NotNullOrWhiteSpace(name, nameof(name));
-        Check.NotNullOrWhiteSpace(unit, nameof(unit));
+        Check.NotNullOrWhiteSpace(nameAr, nameof(nameAr));
+        Check.NotNullOrWhiteSpace(nameEn, nameof(nameEn));
+        Check.NotNullOrWhiteSpace(unitAr, nameof(unitAr));
+        Check.NotNullOrWhiteSpace(unitEn, nameof(unitEn));
         Check.NotNullOrWhiteSpace(currency, nameof(currency));
         if (costPrice < 0) throw new ArgumentOutOfRangeException(nameof(costPrice));
         if (salePrice < 0) throw new ArgumentOutOfRangeException(nameof(salePrice));
@@ -112,9 +131,12 @@ public class AppProduct : FullAuditedAggregateRoot<Guid>
 
         CategoryId = categoryId;
         DefaultSupplierId = defaultSupplierId;
-        Name = name.Trim();
-        Unit = unit.Trim();
-        Description = description;
+        NameAr = nameAr.Trim();
+        NameEn = nameEn.Trim();
+        UnitAr = unitAr.Trim();
+        UnitEn = unitEn.Trim();
+        DescriptionAr = NormalizeOptional(descriptionAr);
+        DescriptionEn = NormalizeOptional(descriptionEn);
         CostPrice = costPrice;
         SalePrice = salePrice;
         Currency = currency.Trim();
@@ -124,6 +146,9 @@ public class AppProduct : FullAuditedAggregateRoot<Guid>
         SetShelfLifeDays(shelfLifeDays);
         SetClassification(productType, isSellable, isPurchasable, isProducible);
     }
+
+    private static string? NormalizeOptional(string? value)
+        => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     public void SetClassification(string productType, bool isSellable, bool isPurchasable, bool isProducible)
     {

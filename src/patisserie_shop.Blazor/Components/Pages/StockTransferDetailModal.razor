@@ -185,8 +185,28 @@
                     @if (_transfer.Status == StockTransferStatuses.Pending && _canApprove && !_transfer.FromBranchId.HasValue)
                     {
                         <div class="sts-source-assign">
-                            <SoftText Typo="Typo.overline" Color="Color.Primary">@OpsL["AssignSourceBranch"]</SoftText>
-                            <SoftText Typo="Typo.caption" Color="Color.Default">@OpsL["ChooseSourceBranchHint"]</SoftText>
+                            <div class="sts-source-assign-head">
+                                <div>
+                                    <SoftText Typo="Typo.overline" Color="Color.Primary">@OpsL["AssignSourceBranch"]</SoftText>
+                                    <SoftText Typo="Typo.caption" Color="Color.Default">@OpsL["ChooseSourceBranchHint"]</SoftText>
+                                </div>
+                                <SoftButton Variant="Variant.Text" Color="Color.Primary" Size="Size.Small"
+                                            StartIcon="@Icons.Material.Filled.Refresh"
+                                            OnClick="LoadDetailSourceSuggestionsAsync"
+                                            Disabled="_sourceSuggestionsLoading">
+                                    @OpsL["SourceSuggestionsRefresh"]
+                                </SoftButton>
+                            </div>
+
+                            <StockTransferSourceSuggestions Suggestions="_sourceSuggestions"
+                                                            IsLoading="_sourceSuggestionsLoading"
+                                                            ErrorText="@_sourceSuggestionsError"
+                                                            SelectedSourceId="_sourceBranchId"
+                                                            SourceSelected="SelectSuggestedSource" />
+
+                            <SoftText Typo="Typo.caption" Class="sts-source-manual-label">
+                                @OpsL["SourceSuggestionManualOverride"]
+                            </SoftText>
                             <SoftLookupSelect TItem="BranchLookupDto" TValue="Guid?"
                                               Items="AvailableSourceBranches"
                                               ToValue="@(b => (Guid?)b.Id)"
@@ -885,6 +905,16 @@
         border-radius: var(--r-md);
         background: var(--surface-2);
     }
+    .sts-source-assign-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 12px;
+    }
+    .sts-source-manual-label {
+        margin-top: 2px;
+        color: var(--fg-3);
+    }
 
     .sts-status {
         display: inline-flex; align-items: center; gap: 6px;
@@ -979,6 +1009,9 @@
     private readonly Dictionary<Guid, int> _approvedEdits = new();
     private List<BranchLookupDto> _branches = new();
     private Guid? _sourceBranchId;
+    private List<StockTransferSourceSuggestionDto> _sourceSuggestions = new();
+    private bool _sourceSuggestionsLoading;
+    private string? _sourceSuggestionsError;
     private List<BranchLookupDto> AvailableSourceBranches =>
         _transfer is null
             ? _branches
@@ -1129,11 +1162,14 @@
                     : (i.ApprovedQuantity ?? i.RequestedQuantity);
             }
 
-            // Suggest the Main Kitchen as the source — it fulfils almost every request.
             if (_sourceBranchId == null && _canApprove && _transfer.Status == StockTransferStatuses.Pending)
             {
-                _sourceBranchId = _branches
-                    .FirstOrDefault(b => b.BranchType == BranchTypes.MainKitchen && b.Id != _transfer.ToBranchId)?.Id;
+                await LoadDetailSourceSuggestionsAsync();
+            }
+            else
+            {
+                _sourceSuggestions.Clear();
+                _sourceSuggestionsError = null;
             }
         }
         catch (Exception ex)
@@ -1150,6 +1186,55 @@
 
     private int GetApprovedEdit(StockTransferItemDto item)
         => _approvedEdits.TryGetValue(item.Id, out var v) ? v : (item.ApprovedQuantity ?? item.RequestedQuantity);
+
+    private async Task LoadDetailSourceSuggestionsAsync()
+    {
+        if (_transfer == null
+            || _transfer.Status != StockTransferStatuses.Pending
+            || _transfer.FromBranchId.HasValue
+            || !_canApprove)
+        {
+            return;
+        }
+
+        _sourceSuggestionsLoading = true;
+        _sourceSuggestionsError = null;
+        _sourceSuggestions.Clear();
+
+        var input = new GetStockTransferSourceSuggestionsInput
+        {
+            ToBranchId = _transfer.ToBranchId
+        };
+        foreach (var item in _transfer.Items)
+        {
+            if (item.RequestedQuantity > 0)
+            {
+                input.Items.Add(new StockTransferSourceRequestItemDto
+                {
+                    ProductId = item.ProductId,
+                    RequestedQuantity = item.RequestedQuantity
+                });
+            }
+        }
+
+        try
+        {
+            _sourceSuggestions = await StockTransferAppService.GetSourceSuggestionsAsync(input);
+        }
+        catch
+        {
+            _sourceSuggestionsError = OpsL["SourceSuggestionsLoadFailed"];
+        }
+        finally
+        {
+            _sourceSuggestionsLoading = false;
+        }
+    }
+
+    private void SelectSuggestedSource(Guid branchId)
+    {
+        _sourceBranchId = branchId;
+    }
 
     private async Task CloseAsync()
     {

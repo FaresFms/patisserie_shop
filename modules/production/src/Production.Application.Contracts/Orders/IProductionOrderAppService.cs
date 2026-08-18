@@ -12,6 +12,7 @@ public interface IProductionOrderAppService : IApplicationService
     Task<PagedResultDto<ProductionOrderListItemDto>> GetListAsync(GetProductionOrdersInput input);
     Task<List<ProductionOrderListItemDto>> GetQualityQueueAsync(Guid? kitchenBranchId = null);
     Task<List<ProductionOrderDto>> CreateFromPlanAsync(Guid planId);
+    Task<ProductionOrderForRequestResultDto> CreateForRequestItemAsync(CreateProductionOrderForRequestDto input);
     Task<ProductionOrderDto> RefreshAvailabilityAsync(Guid id);
     Task<ProductionOrderDto> ScheduleAsync(Guid id, ScheduleProductionOrderDto input);
     Task<CreateSubProductionOrdersResultDto> CreateSubProductionOrdersAsync(Guid id);

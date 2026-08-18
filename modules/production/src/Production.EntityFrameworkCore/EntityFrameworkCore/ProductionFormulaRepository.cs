@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Inventory;
 using Inventory.Entities;
+using Inventory.Localization;
 using Microsoft.EntityFrameworkCore;
 using Production.Entities;
 using Production.Formulas;
@@ -90,8 +91,8 @@ public class ProductionFormulaRepository
             {
                 Id = h.Id,
                 FinishedProductId = h.FinishedProductId,
-                FinishedProductName = product?.Name ?? h.FinishedProductId.ToString(),
-                FinishedProductUnit = product?.Unit ?? string.Empty,
+                FinishedProductName = product?.DisplayName ?? h.FinishedProductId.ToString(),
+                FinishedProductUnit = product?.DisplayUnit ?? string.Empty,
                 FormulaName = h.FormulaName,
                 Version = h.Version,
                 OutputQuantity = h.OutputQuantity,
@@ -176,8 +177,11 @@ public class ProductionFormulaRepository
         query = query.Where(p => p.IsActive && p.IsProducible);
         query = ApplyProductFilter(query, filter);
 
+        query = LocalizedBusinessText.IsArabic
+            ? query.OrderBy(p => p.NameAr)
+            : query.OrderBy(p => p.NameEn);
+
         var products = await query
-            .OrderBy(p => p.Name)
             .Take(maxResults)
             .ToListAsync(ct);
 
@@ -198,8 +202,11 @@ public class ProductionFormulaRepository
                 || p.ProductType == ProductTypes.SemiFinished));
         query = ApplyProductFilter(query, filter);
 
+        query = LocalizedBusinessText.IsArabic
+            ? query.OrderBy(p => p.NameAr)
+            : query.OrderBy(p => p.NameEn);
+
         var products = await query
-            .OrderBy(p => p.Name)
             .Take(maxResults)
             .ToListAsync(ct);
 
@@ -239,7 +246,10 @@ public class ProductionFormulaRepository
         if (!string.IsNullOrWhiteSpace(filter))
         {
             var f = filter.Trim().ToLower();
-            query = query.Where(p => p.Name.ToLower().Contains(f) || p.SKU.ToLower().Contains(f));
+            query = query.Where(p =>
+                p.NameAr.ToLower().Contains(f) ||
+                p.NameEn.ToLower().Contains(f) ||
+                p.SKU.ToLower().Contains(f));
         }
         return query;
     }
@@ -247,9 +257,9 @@ public class ProductionFormulaRepository
     private static ProductionProductLookup MapLookup(AppProduct p) => new()
     {
         Id = p.Id,
-        Name = p.Name,
+        Name = p.DisplayName,
         SKU = p.SKU,
-        Unit = p.Unit,
+        Unit = p.DisplayUnit,
         ProductType = p.ProductType,
         CostPrice = p.CostPrice,
         Currency = p.Currency

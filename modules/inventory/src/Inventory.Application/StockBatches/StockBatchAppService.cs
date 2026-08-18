@@ -2,6 +2,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Inventory.BranchInventory;
 using Inventory.Entities;
+using Inventory.Localization;
 using Inventory.Permissions;
 using Microsoft.AspNetCore.Authorization;
 using Volo.Abp.Application.Dtos;
@@ -53,10 +54,10 @@ public class StockBatchAppService : InventoryAppService, IStockBatchAppService
     private StockBatchDto Project(StockBatchWithDetails row)
     {
         var dto = ObjectMapper.Map<AppStockBatch, StockBatchDto>(row.Batch);
-        dto.ProductName = row.Product.Name;
+        dto.ProductName = LocalizedBusinessText.Select(row.Product.NameAr, row.Product.NameEn);
         dto.ProductSKU = row.Product.SKU;
-        dto.ProductUnit = row.Product.Unit;
-        dto.BranchName = row.Branch.Name;
+        dto.ProductUnit = LocalizedBusinessText.Select(row.Product.UnitAr, row.Product.UnitEn);
+        dto.BranchName = LocalizedBusinessText.Select(row.Branch.NameAr, row.Branch.NameEn);
         return dto;
     }
 }

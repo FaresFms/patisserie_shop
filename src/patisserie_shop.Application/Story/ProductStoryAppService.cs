@@ -132,9 +132,9 @@ public class ProductStoryAppService : patisserie_shopAppService, IProductStoryAp
         {
             ProductId = product.Id,
             BranchId = branch.Id,
-            ProductName = product.Name,
+            ProductName = product.DisplayName,
             SKU = product.SKU,
-            BranchName = branch.Name,
+            BranchName = branch.DisplayName,
             CurrentStock = inventory?.QuantityOnHand ?? 0,
             TotalSold30Days = sold30,
             BatchCount = batches.Count,

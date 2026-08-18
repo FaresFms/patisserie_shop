@@ -310,7 +310,11 @@ namespace patisserie_shop.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<string>("Address")
+                    b.Property<string>("AddressAr")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<string>("AddressEn")
                         .HasMaxLength(512)
                         .HasColumnType("character varying(512)");
 
@@ -371,7 +375,12 @@ namespace patisserie_shop.Migrations
                     b.Property<Guid?>("ManagerUserId")
                         .HasColumnType("uuid");
 
-                    b.Property<string>("Name")
+                    b.Property<string>("NameAr")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("NameEn")
                         .IsRequired()
                         .HasMaxLength(128)
                         .HasColumnType("character varying(128)");
@@ -478,7 +487,11 @@ namespace patisserie_shop.Migrations
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("DeletionTime");
 
-                    b.Property<string>("Description")
+                    b.Property<string>("DescriptionAr")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<string>("DescriptionEn")
                         .HasMaxLength(512)
                         .HasColumnType("character varying(512)");
 
@@ -504,7 +517,12 @@ namespace patisserie_shop.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("LastModifierId");
 
-                    b.Property<string>("Name")
+                    b.Property<string>("NameAr")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("NameEn")
                         .IsRequired()
                         .HasMaxLength(128)
                         .HasColumnType("character varying(128)");
@@ -559,7 +577,11 @@ namespace patisserie_shop.Migrations
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("DeletionTime");
 
-                    b.Property<string>("Description")
+                    b.Property<string>("DescriptionAr")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
+                    b.Property<string>("DescriptionEn")
                         .HasMaxLength(1024)
                         .HasColumnType("character varying(1024)");
 
@@ -598,7 +620,12 @@ namespace patisserie_shop.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("LastModifierId");
 
-                    b.Property<string>("Name")
+                    b.Property<string>("NameAr")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("NameEn")
                         .IsRequired()
                         .HasMaxLength(128)
                         .HasColumnType("character varying(128)");
@@ -622,7 +649,12 @@ namespace patisserie_shop.Migrations
                     b.Property<int?>("ShelfLifeDays")
                         .HasColumnType("integer");
 
-                    b.Property<string>("Unit")
+                    b.Property<string>("UnitAr")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("UnitEn")
                         .IsRequired()
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");

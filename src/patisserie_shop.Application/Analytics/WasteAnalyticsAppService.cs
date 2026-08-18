@@ -62,7 +62,7 @@ public class WasteAnalyticsAppService : patisserie_shopAppService, IWasteAnalyti
         // Reference data for display names (small sets — same in-memory
         // dictionary composition the dashboards use).
         var branchNames = (await _branchRepository.GetListAsync())
-            .ToDictionary(b => b.Id, b => b.Name);
+            .ToDictionary(b => b.Id, b => b.DisplayName);
         var productLookup = (await _productRepository.GetListAsync())
             .ToDictionary(p => p.Id, p => p);
 
@@ -104,7 +104,7 @@ public class WasteAnalyticsAppService : patisserie_shopAppService, IWasteAnalyti
                 return new ProductWasteRowDto
                 {
                     ProductId = g.Key,
-                    ProductName = product?.Name ?? "(deleted product)",
+                    ProductName = product?.DisplayName ?? "(deleted product)",
                     SKU = product?.SKU ?? string.Empty,
                     Units = g.Sum(r => r.Units),
                     Cost = g.Sum(r => r.Cost)

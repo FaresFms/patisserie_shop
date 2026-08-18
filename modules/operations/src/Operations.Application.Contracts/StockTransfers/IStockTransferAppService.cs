@@ -11,6 +11,9 @@ public interface IStockTransferAppService : IApplicationService
     Task<StockTransferDto> GetAsync(Guid id);
     Task<PagedResultDto<StockTransferDto>> GetListAsync(GetStockTransfersInput input);
 
+    Task<List<StockTransferSourceSuggestionDto>> GetSourceSuggestionsAsync(
+        GetStockTransferSourceSuggestionsInput input);
+
     Task<StockTransferDto> CreateAsync(CreateStockTransferDto input);
 
     Task<StockTransferItemDto> AddItemAsync(Guid id, AddStockTransferItemDto input);
